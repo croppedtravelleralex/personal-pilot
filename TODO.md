@@ -6,19 +6,23 @@
 - [x] 建立周期执行协议（EXECUTION_PROTOCOL）
 - [x] 建立自动执行内核基础文件（STATE_MACHINE / CHECKLIST / ROUND_RESULT template）
 - [x] 建立轮次调度器设计（ROUND_SCHEDULER）
-- [ ] 初始化 Rust 工程（Cargo）
-- [ ] 设计任务数据模型（Task / Run / Artifact / Log）
-- [ ] 设计 SQLite schema
-- [ ] 定义 REST API 最小接口
-- [ ] 实现内存任务队列
-- [ ] 实现 fake runner
+- [x] 初始化 Rust 工程（Cargo）
+- [x] 设计任务数据模型（Task / Run / Artifact / Log）
+- [x] 设计 SQLite schema
+- [x] 定义 REST API 最小接口
+- [x] 实现内存任务队列
+- [x] 实现 fake runner
 - [ ] 打通创建任务 -> 入队 -> 执行 -> 状态更新 -> 查询结果
+- [x] 打通创建任务 -> 查询任务 的最小闭环
+- [x] 增加数据库初始化入口
 
 ## P1
 
-- [ ] 增加任务取消 / 超时 / 重试机制
-- [ ] 增加结构化日志
-- [ ] 增加执行历史与审计字段
+- [x] 增加任务取消机制
+- [x] 增加任务重试机制
+- [x] 增加任务超时模拟分支
+- [x] 增加结构化日志
+- [x] 增加执行历史与审计字段
 - [ ] 设计 runner trait / adapter interface
 - [ ] 为 `lightpanda-io/browser` 预留适配层
 - [ ] 设计浏览器指纹能力边界
@@ -32,6 +36,7 @@
 - [ ] 设计可用代理比例 40%-60% 的动态控制策略
 - [ ] 设计磁盘使用监控与落盘上限策略
 - [ ] 设计 artifact / log 的保留、清理与归档策略
+- [x] 增加数据库目录自动创建
 - [ ] 设计高并发下的性能优化与写放大控制策略
 
 ## P2
@@ -39,7 +44,9 @@
 - [ ] 增加并发控制
 - [ ] 增加资源限制
 - [ ] 增加 API 鉴权
-- [ ] 增加基础监控指标
+- [x] 增加运行历史与日志查询接口
+- [x] 清理 README / STATUS / PROGRESS 中过时静态状态
+- [x] 增加基础监控指标
 - [ ] 增加集成测试
 - [ ] 设计身份画像系统（Identity Profile）
 - [ ] 设计指纹一致性校验器

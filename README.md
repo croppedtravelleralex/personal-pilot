@@ -2,39 +2,21 @@
 
 高性能浏览器自动化系统，运行在 Ubuntu 上。
 
-## Progress
+## 项目摘要
 
-- 当前状态：规划中 → 骨架初始化 → 文档驱动阶段 → 周期执行协议已落地
-- 当前轮次：Round 78
-- 当前轮次类型：plan（已完成）
-- 当前目标：进入 build 轮，新增具体 SQLite schema 设计文档
-- 调度器状态：running
-- 当前焦点：先补自动执行内核与轮次调度器，并进行 mini-cycle 试运行
-- 最近结论：已完成新一轮 plan，下一步细化 SQLite schema 草案
+当前项目已经完成 **最小可运行原型**：
+- **任务创建 / 查询**
+- **SQLite 持久化**
+- **内存任务队列**
+- **fake runner 执行**
+- **success / fail / timeout 分支**
+- **重试 / 取消（queued）**
+- **run history / logs 记录与查询**
+- **health / status 摘要输出**
 
-### 已完成
-
-- 建立项目目录与基础文档体系
-- 明确技术方向：Rust + SQLite + REST API + 内存任务队列 + fake runner
-- 初始化 Cargo 工程与模块骨架
-- 建立周期执行协议、状态机、执行日志与调度器机制
-- 明确真实浏览器引擎方向：lightpanda-io/browser
-
-### 当前未完成
-
-- 数据库 schema 设计
-- REST API 路由定义
-- 任务模型与状态流转
-- fake runner 实现
-- 与真实浏览器引擎的适配层
-
-### 下一步
-
-1. 细化 SQLite schema 草案
-2. 明确任务模型与状态流转
-3. 定义最小 REST API
-4. 完善 fake runner
-5. 跑通最小闭环
+更完整进展请看：
+- `PROGRESS.md` — **已实现 / 正在做 / 未来将实现**
+- `STATUS.md` — **当前状态摘要、风险、下一步**
 
 ## 项目目标
 
@@ -50,14 +32,16 @@
 
 ## 当前阶段
 
-当前处于项目骨架与架构定义阶段。
+当前已从“文档驱动 + 工程骨架阶段”推进到：
+
+> **最小后端原型已跑通，正在向更完整的控制面、观测面和真实执行器演进。**
 
 ## 关键文档
 
 - `PROGRESS.md` — 已实现 / 正在做 / 未来将实现的统一进展文档
+- `STATUS.md` — 当前状态、风险、下一步
 - `VISION.md` — 最终效果与最终功能定义
 - `ROADMAP.md` — 过去 / 现在 / 未来的滚动路线图
-- `STATUS.md` — 当前状态、风险、下一步
 - `TODO.md` — 任务分层清单
 - `EXECUTION_LOG.md` — 每轮执行记录
 - `RUN_STATE.json` — 自动推进的轮次状态
@@ -65,7 +49,7 @@
 - `CURRENT_DIRECTION.md` — 当前阶段方向说明
 - `DESIGN_NETWORK_IDENTITY.md` — 指纹 / 代理池 / 任务网络策略设计
 - `LONG_TERM_ROADMAP.md` — 中长期功能方向与演进顺序
-- `GOLDEN_FEATURES.md` — 高价值金子功能建议与难度/成功率评估
+- `GOLDEN_FEATURES.md` — 高价值功能建议与难度/成功率评估
 - `EXECUTION_PROTOCOL.md` — 每5分钟/8小时周期执行协议
 - `EXECUTION_STATE_MACHINE.md` — 自动执行状态机
 - `EXECUTION_CHECKLIST.md` — 每轮执行检查清单
@@ -82,19 +66,18 @@
 
 ## 后续目标
 
-1. 借鉴开源项目并形成参考清单
-2. 完成最小可运行后端骨架
-3. 打通任务创建 / 入队 / 执行 / 状态更新链路
-4. 用 fake runner 跑通端到端流程
-5. 接入真实浏览器引擎
-6. 补齐观测、重试、资源隔离与稳定性能力
+1. 增强 API 鉴权与控制面完整性
+2. 增强 `runs / logs / status` 的可观测性与分页能力
+3. 为真实浏览器执行器接入预留 runner adapter
+4. 补齐更完整的失败恢复、取消控制与稳定性策略
+5. 推进真实执行器 `lightpanda-io/browser` 集成
 
 ## 当前主任务
 
-当前优先任务不是直接堆实现，而是：
+当前优先任务不是重新堆文档，而是：
 
-- 借鉴开源项目
-- 完善工程文档
-- 再根据工程文档推进 app
+- 在现有最小原型基础上继续增强控制面与观测面
+- 为真实执行器接入做接口与架构预留
+- 持续清理文档，确保描述和代码能力一致
 
 详见 `CURRENT_TASK.md`。

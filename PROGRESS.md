@@ -3,9 +3,9 @@
 `lightpanda-automation` 项目进展记录。
 
 目标：用一份简洁文档持续说明三件事：
-- 已经实现了什么
-- 现在正在做什么
-- 后面将要实现什么
+- **已经实现了什么**
+- **现在正在做什么**
+- **后面将要实现什么**
 
 ---
 
@@ -57,7 +57,93 @@
 - `src/runner/`
 - `src/network_identity/`
 
-### 1.5 长期设计方向已明确
+### 1.5 SQLite schema 与核心数据模型草案已落地
+已补齐首批数据库与领域层骨架：
+- `src/db/schema.rs`
+- `src/db/models.rs`
+- `src/domain/task.rs`
+- `src/domain/run.rs`
+- `src/domain/state_machine.rs`
+
+当前已定义最小核心对象：
+- `tasks`
+- `runs`
+- `artifacts`
+- `logs`
+- `TaskStatus` 状态流转规则
+
+### 1.6 最小 REST API 已落地
+已新增最小 API 能力：
+- `GET /health`
+- `GET /status`
+- `POST /tasks`
+- `GET /tasks/:id`
+- `POST /tasks/:id/retry`
+- `POST /tasks/:id/cancel`
+- `GET /tasks/:id/runs`
+- `GET /tasks/:id/logs`
+
+### 1.7 数据库初始化与目录自创建已落地
+已支持：
+- 启动时初始化 SQLite 连接池
+- 启动时执行首批 schema SQL
+- 启动前自动创建 SQLite 父目录
+- 将数据库连接注入应用状态
+
+### 1.8 内存任务队列已落地
+已支持：
+- 创建任务后自动入队
+- 队列长度统计
+- 队列内任务移除（支持 queued cancel）
+
+### 1.9 fake runner 第一版已落地
+已支持：
+- 后台循环消费内存队列
+- success / fail / timeout 三种模拟结果
+- 任务状态回写：`queued -> running -> succeeded/failed/timeout`
+- `started_at / finished_at / result_json / error_message` 回写
+
+### 1.10 run history 已落地
+已支持：
+- `runs` 表写入最小执行历史
+- `attempt` 按运行次数自动递增
+- 执行结果关联 `run_id`
+
+### 1.11 logs 已落地
+已支持：
+- 关键执行节点写入 `logs` 表
+- 记录 `task_id / run_id / level / message / created_at`
+- success / fail / timeout 分别写入不同级别日志
+
+### 1.12 重试机制第一版已落地
+已支持：
+- 对 `failed / timeout` 任务执行重试
+- 重试后重新置为 `queued`
+- 重新入队并再次执行
+
+### 1.13 取消机制第一版已落地
+已支持：
+- 对 `queued` 任务执行取消
+- 从内存队列中移除任务
+- 任务状态更新为 `cancelled`
+
+### 1.14 健康与状态汇总能力已落地
+已支持：
+- `GET /health` 返回：
+  - 队列长度
+  - 任务状态统计
+- `GET /status` 返回：
+  - 队列长度
+  - 任务状态统计
+  - 最近 5 条任务摘要
+
+### 1.15 执行明细查询能力已落地
+已支持：
+- `GET /tasks/:id/runs`
+- `GET /tasks/:id/logs`
+- 可直接查看指定任务的运行历史与执行日志
+
+### 1.16 长期设计方向已明确
 已明确以下关键方向，并沉淀到文档：
 - 任务生命周期管理
 - fake runner / real runner 统一抽象
@@ -78,79 +164,58 @@
 
 ### 2.1 当前所处阶段
 当前处于：
-- 文档驱动阶段
-- 工程骨架阶段
-- 周期执行协议已落地后的继续推进阶段
+- **最小可运行原型已跑通阶段**
+- **控制面与观测面增强阶段**
+- **为真实执行器接入做准备阶段**
 
 ### 2.2 当前正在推进的主题
-当前重点不是堆业务功能，而是继续补齐以下基础：
-- 自动执行内核
-- 轮次调度器
-- mini-cycle 试运行
-- SQLite schema 细化
-- fingerprint / proxy / validation / allocation 相关数据模型
-
-### 2.3 当前轮次状态（按现有运行状态）
-- 当前轮次：`Round 78`
-- 当前状态：`plan completed`
-- 下一轮类型：`build`
-- 当前下一步重点：细化 SQLite schema 草案，并继续为自动推进内核提供更具体的落地方向
+当前重点不是重新补骨架，而是继续补齐这些增强项：
+- API 鉴权
+- 查询分页 / limit / 控量
+- 更完整的任务控制（尤其是 running cancel）
+- fake runner 到 real runner 的 adapter 预留
+- 文档与代码能力持续对齐
 
 ---
 
 ## 3. 尚未完成但明确要做的功能
 
-### 3.1 核心后端闭环
-- 任务创建
-- 任务入队
-- 任务执行
-- 状态更新
-- 结果查询
-- 取消 / 重试
+### 3.1 控制面增强
+- API 鉴权
+- running cancel 设计与实现
+- 更完整的重试策略（如上限、退避、策略控制）
 
-### 3.2 数据层
-- Task / Run / Artifact / Log 数据模型
-- SQLite schema 真正落地
-- 执行记录表设计
-- 状态流转规则落地
+### 3.2 观测面增强
+- `runs / logs` 分页与 limit 控制
+- 更细粒度的统计查询
+- 更丰富的 service status 输出
 
-### 3.3 API 层
-- 健康检查接口
-- 创建任务接口
-- 查询任务状态接口
-- 查询结果接口
-- 查询执行历史接口
-- 取消 / 重试接口
-
-### 3.4 执行层
-- fake runner 真正实现
-- runner trait / interface 抽象
+### 3.3 执行层增强
+- runner trait / adapter interface
 - real runner adapter
 - 对 `lightpanda-io/browser` 的接入准备
 
-### 3.5 网络与身份层
+### 3.4 网络与身份层
 - 指纹模板 / 策略模型落地
 - 代理抓取后的清洗、验证、候选入池联动
 - 代理分配与轮换策略落地
 - 代理失败剔除机制
 - 地区代理基础存量维持机制
 
-### 3.6 稳定性与观测
-- 结构化日志
-- 错误分类
-- smoke test
-- artifact / log 管理策略
-- 磁盘占用与清理策略
+### 3.5 稳定性与工程化
+- 更完整的错误分类
+- smoke test / 集成测试
+- artifact / log 的保留、清理与归档策略
+- 高并发下的性能与写放大控制
 
 ---
 
 ## 4. 未来将要实现的功能
 
 ### 4.1 中期目标
-- 跑通最小可运行闭环
-- 用 fake runner 完成端到端验证
-- 建立最小可验证 API 服务
-- 建立最小任务系统
+- 将 fake runner 原型升级为更真实的执行框架
+- 建立更完整的任务控制面和运维观测面
+- 为真实浏览器执行器接入提供稳定边界
 
 ### 4.2 后期目标
 - 接入真实浏览器执行引擎 `lightpanda-io/browser`
@@ -174,13 +239,13 @@
 
 ## 5. 当前一句话总结
 
-当前项目**已经把方向、文档、执行协议、调度框架和 Rust 骨架搭起来了**，但**真正的业务闭环能力（数据库、API、任务执行、fake runner、真实引擎接入）还在建设中**。
+当前项目**已经完成最小可运行原型**：具备任务创建、排队、执行、状态流转、重试、取消、运行历史、执行日志和状态摘要能力；下一阶段重点是**安全性、可观测性增强以及真实执行器接入准备**。
 
 ---
 
 ## 6. 维护规则
 
 后续每次推进时，优先同步更新：
-- `已实现`：只有真正落地的功能才能写进来
-- `正在做`：只写当前阶段真实推进重点
-- `未来将实现`：只保留中长期确定方向，避免空泛堆砌
+- **已实现**：只有真正落地的功能才能写进来
+- **正在做**：只写当前阶段真实推进重点
+- **未来将实现**：只保留中长期确定方向，避免空泛堆砌
