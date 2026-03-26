@@ -1,46 +1,38 @@
 # STATUS.md
 
-## 当前状态
+## 当前状态摘要
 
 - 状态：规划中 → 骨架初始化 → 文档驱动阶段 → 周期执行协议已落地
 - 日期：2026-03-26
+- 当前轮次：Round 78
+- 当前轮次状态：plan completed
+- 下一轮：build
+- 当前焦点：继续补自动执行内核、轮次调度器与 SQLite schema 细化
 
-## 已完成
+## 本文件用途
 
-- 建立项目目录
-- 建立 README / STATUS / TODO 基础文档
-- 明确核心技术方向：Rust + SQLite + REST API + 内存任务队列 + fake runner
-- 明确后续真实执行引擎：`lightpanda-io/browser`
+`STATUS.md` 只保留：
+- 当前状态
+- 当前风险
+- 当前下一步
 
-## 当前未完成
+更完整的进展说明请看：
+- `PROGRESS.md` — 已实现 / 正在做 / 未来将实现
+- `ROADMAP.md` — 过去 / 现在 / 未来的滚动路线图
+- `EXECUTION_LOG.md` — 每轮执行记录
+- `RUN_STATE.json` — 当前轮次与调度状态
 
-- Rust 工程初始化
-- 数据库 schema 设计
-- REST API 路由定义
-- 任务模型与状态流转
-- fake runner 实现
-- 与真实浏览器引擎的适配层
+## 当前风险
 
-## 风险与注意点
+- 任务模型尚未完全落地，若继续并行推进 API / DB / runner，后续容易返工
+- fake runner 与 real runner 的统一抽象仍需尽早锁定
+- SQLite 适合当前阶段，但后续若并发与吞吐提高，需要提前考虑边界
+- 自动轮次推进虽已运行，但单轮有效增量需要持续盯住，避免空转
 
-- 需要尽早定义任务模型，否则 API / DB / runner 会反复返工
-- 需要预留 fake runner 与 real runner 的统一接口
-- SQLite 适合当前阶段，但后续若并发/吞吐升高要提前考虑边界
+## 当前下一步
 
-## 建议的下一步
-
-1. 先产出开源项目参考清单与借鉴点
-2. 初始化 Cargo 项目
-3. 定义任务表与执行记录表
-4. 定义 REST API 最小集合
-5. 落一个 fake runner
-6. 跑通最小闭环
-
-## 当前任务补充
-
-当前主任务已明确为：
-- 借鉴开源项目
-- 完善工程文档
-- 再根据工程文档推进 app
-
-详见 `CURRENT_TASK.md`。
+1. 进入 build 轮
+2. 细化 SQLite schema 草案
+3. 补 fingerprint / proxy / validation / allocation 数据模型
+4. 推进自动执行内核与 mini-cycle 试运行
+5. 继续为最小可运行闭环打基础
