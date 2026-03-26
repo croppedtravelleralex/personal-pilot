@@ -10,7 +10,7 @@
 - 建立项目目录
 - 建立 README / STATUS / TODO 基础文档
 - 明确核心技术方向：Rust + SQLite + REST API + 内存任务队列 + fake runner
-- 明确后续真实执行引擎：`AutoOpenBroswer-io/browser`
+- 明确后续真实执行引擎：`AutoOpenBrowser-io/browser`
 
 ## 当前未完成
 

@@ -1,3 +1,3 @@
 fn main() {
-    println!("AutoOpenBroswer bootstrap");
+    println!("AutoOpenBrowser bootstrap");
 }

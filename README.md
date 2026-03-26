@@ -1,4 +1,4 @@
-# AutoOpenBroswer
+# AutoOpenBrowser
 
 高性能浏览器自动化系统，运行在 Ubuntu 上。
 
@@ -12,7 +12,7 @@
 - 内存任务队列
 - fake runner
 
-后续将接入 `AutoOpenBroswer-io/browser` 作为真实浏览器执行引擎。
+后续将接入 `AutoOpenBrowser-io/browser` 作为真实浏览器执行引擎。
 
 ## 当前阶段
 

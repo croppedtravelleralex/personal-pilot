@@ -10,7 +10,7 @@
 
 ## 最终效果
 
-`AutoOpenBroswer` 最终应当是一个：
+`AutoOpenBrowser` 最终应当是一个：
 
 - 运行在 Ubuntu 上
 - 主要供个人**学习与研发**使用
@@ -50,7 +50,7 @@
 - 模块职责清晰
 
 ### 演进阶段能力
-- 接入 `AutoOpenBroswer-io/browser`
+- 接入 `AutoOpenBrowser-io/browser`
 - 支持真实浏览器自动化
 - 支持更高稳定性与更强观测能力
 

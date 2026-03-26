@@ -1,6 +1,6 @@
 # EXECUTION_STATE_MACHINE.md
 
-`AutoOpenBroswer` 自动执行状态机定义。
+`AutoOpenBrowser` 自动执行状态机定义。
 
 ## 目标
 

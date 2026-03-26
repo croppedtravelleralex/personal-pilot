@@ -1,6 +1,6 @@
 # EXECUTION_PROTOCOL.md
 
-`AutoOpenBroswer` 的周期执行协议。
+`AutoOpenBrowser` 的周期执行协议。
 
 目标：把“每 5 分钟执行一次，持续 8 小时”的想法，落成一个可执行、可检查、可汇总、可防跑偏的项目推进协议。
 

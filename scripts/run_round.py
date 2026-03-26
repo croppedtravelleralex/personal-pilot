@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-BASE = Path('/root/.openclaw/workspace/AutoOpenBroswer')
+BASE = Path('/root/.openclaw/workspace/AutoOpenBrowser')
 RUN_STATE = BASE / 'RUN_STATE.json'
 EXEC_LOG = BASE / 'EXECUTION_LOG.md'
 ROUND_DIR = BASE / 'round-results'
@@ -61,7 +61,7 @@ def detect_next_round(state):
 def run_build(state, round_id, cycle_id):
     changed = []
     cargo = BASE / 'Cargo.toml'
-    ensure_file(cargo, '[package]\nname = "AutoOpenBroswer"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\nserde = { version = "1", features = ["derive"] }\nserde_json = "1"\nanyhow = "1"\ntokio = { version = "1", features = ["rt-multi-thread", "macros"] }\naxum = "0.7"\nsqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }\n')
+    ensure_file(cargo, '[package]\nname = "AutoOpenBrowser"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\nserde = { version = "1", features = ["derive"] }\nserde_json = "1"\nanyhow = "1"\ntokio = { version = "1", features = ["rt-multi-thread", "macros"] }\naxum = "0.7"\nsqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }\n')
     changed.append('Cargo.toml')
     src = BASE / 'src'
     for d in ['app','api','domain','db','queue','runner','network_identity']:
@@ -70,7 +70,7 @@ def run_build(state, round_id, cycle_id):
         changed.append(str(p.relative_to(BASE)))
     ensure_file(src / 'lib.rs', 'pub mod app;\npub mod api;\npub mod domain;\npub mod db;\npub mod queue;\npub mod runner;\npub mod network_identity;\n')
     changed.append('src/lib.rs')
-    ensure_file(src / 'main.rs', 'fn main() {\n    println!("AutoOpenBroswer bootstrap");\n}\n')
+    ensure_file(src / 'main.rs', 'fn main() {\n    println!("AutoOpenBrowser bootstrap");\n}\n')
     changed.append('src/main.rs')
     # update current direction hint
     status = 'completed'
