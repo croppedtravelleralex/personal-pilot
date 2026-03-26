@@ -24,5 +24,5 @@
     "建立 src/api, src/db, src/queue, src/runner, src/network_identity 模块骨架",
     "继续补 proxy harvester 设计文档"
   ],
-  "northStar": "构建一个运行在 Ubuntu 上、基于 Rust + SQLite + REST API + 内存任务队列、可先用 fake runner 跑通闭环、后续接入 AutoOpenBrowser-io/browser 的高性能浏览器自动化系统"
+  "northStar": "构建一个运行在 Ubuntu 上、基于 Rust + SQLite + REST API + 内存任务队列、可先用 fake runner 跑通闭环、后续接入 lightpanda-io/browser 的高性能浏览器自动化系统"
 }

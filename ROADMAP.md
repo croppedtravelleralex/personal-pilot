@@ -13,7 +13,7 @@
 - 对外提供清晰稳定的 REST API
 - 能接收自动化任务、排队、执行、追踪状态、返回结果
 - 在早期可通过 fake runner 跑通闭环
-- 在后期可无缝切换到 `AutoOpenBrowser-io/browser` 真实浏览器执行引擎
+- 在后期可无缝切换到 `lightpanda-io/browser` 真实浏览器执行引擎
 - 有明确的任务模型、执行记录、日志、artifact 管理方式
 - 具备基本的 bug 检查、功能验证与阶段汇总机制
 - 文档与代码保持同步，不靠“脑补架构”推进
@@ -33,7 +33,7 @@
 
 ### 1.2 执行引擎抽象
 - fake runner：用于开发期闭环验证
-- real runner adapter：用于接入 `AutoOpenBrowser-io/browser`
+- real runner adapter：用于接入 `lightpanda-io/browser`
 - runner trait / interface 保持统一
 
 ### 1.3 数据持久化
@@ -93,7 +93,7 @@
 - 已创建项目目录
 - 已创建基础文档：`README.md` / `STATUS.md` / `TODO.md`
 - 已明确总体技术方向：Rust + SQLite + REST API + 内存任务队列 + fake runner
-- 已明确未来真实执行引擎：`AutoOpenBrowser-io/browser`
+- 已明确未来真实执行引擎：`lightpanda-io/browser`
 - 已确认需要把“最终效果 / 最终功能”写入文档，避免项目推进跑偏
 
 ---
@@ -147,7 +147,7 @@
 
 ### 阶段 E：真实引擎接入
 1. 抽象 runner trait
-2. 接入 `AutoOpenBrowser-io/browser`
+2. 接入 `lightpanda-io/browser`
 3. 验证 fake runner -> real runner 的切换能力
 
 ---

@@ -12,7 +12,7 @@
 - 内存任务队列
 - fake runner
 
-后续将接入 `AutoOpenBrowser-io/browser` 作为真实浏览器执行引擎。
+后续将接入 `lightpanda-io/browser` 作为真实浏览器执行引擎。
 
 ## 当前阶段
 

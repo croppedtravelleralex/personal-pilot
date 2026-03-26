@@ -80,7 +80,7 @@
 ### P2
 9. 跑通最小闭环
 10. 开始 bug 检查与功能验证
-11. 为 `AutoOpenBrowser-io/browser` 接入预留适配层
+11. 为 `lightpanda-io/browser` 接入预留适配层
 
 ---
 

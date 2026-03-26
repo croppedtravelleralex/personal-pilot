@@ -20,7 +20,7 @@
 - [ ] 增加结构化日志
 - [ ] 增加执行历史与审计字段
 - [ ] 设计 runner trait / adapter interface
-- [ ] 为 `AutoOpenBrowser-io/browser` 预留适配层
+- [ ] 为 `lightpanda-io/browser` 预留适配层
 - [ ] 设计浏览器指纹能力边界
 - [ ] 设计高级指纹下的性能预算与性能开销控制策略
 - [ ] 设计持续抓取代理的工具（优先基于开源项目改造）
