@@ -28,6 +28,38 @@ fn sanitize_limit(limit: Option<i64>, default_value: i64, max_value: i64) -> i64
     }
 }
 
+async fn insert_task_log(
+    state: &AppState,
+    task_id: &str,
+    run_id: Option<&str>,
+    level: &str,
+    message: &str,
+) -> Result<(), (StatusCode, String)> {
+    let log_id = format!("log-{}", Uuid::new_v4());
+    let created_at = now_ts_string();
+    sqlx::query(
+        r#"
+        INSERT INTO logs (id, task_id, run_id, level, message, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(log_id)
+    .bind(task_id)
+    .bind(run_id)
+    .bind(level)
+    .bind(message)
+    .bind(created_at)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to insert cancel log: {err}"),
+        )
+    })?;
+    Ok(())
+}
+
 async fn load_counts(state: &AppState) -> Result<TaskStatusCounts, (StatusCode, String)> {
     let total = sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM tasks"#)
         .fetch_one(&state.db)
@@ -357,9 +389,11 @@ pub async fn cancel_task(
             ));
         }
 
-        sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ? WHERE id = ?"#)
+        let finished_at = now_ts_string();
+        sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ?, error_message = ? WHERE id = ?"#)
             .bind("cancelled")
-            .bind(now_ts_string())
+            .bind(&finished_at)
+            .bind("task cancelled while queued")
             .bind(&task_id)
             .execute(&state.db)
             .await
@@ -369,6 +403,15 @@ pub async fn cancel_task(
                     format!("failed to cancel task: {err}"),
                 )
             })?;
+
+        insert_task_log(
+            &state,
+            &task_id,
+            None,
+            "warn",
+            "task cancelled while queued",
+        )
+        .await?;
 
         return Ok(Json(CancelTaskResponse {
             id: task_id,
@@ -383,9 +426,10 @@ pub async fn cancel_task(
             return Err((StatusCode::CONFLICT, cancel.message));
         }
 
+        let finished_at = now_ts_string();
         sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ?, error_message = ? WHERE id = ?"#)
             .bind("cancelled")
-            .bind(now_ts_string())
+            .bind(&finished_at)
             .bind("task cancelled while running")
             .bind(&task_id)
             .execute(&state.db)
@@ -396,6 +440,53 @@ pub async fn cancel_task(
                     format!("failed to mark running task as cancelled: {err}"),
                 )
             })?;
+
+        let latest_run_id = sqlx::query_scalar::<_, String>(
+            r#"SELECT id FROM runs WHERE task_id = ? ORDER BY attempt DESC LIMIT 1"#,
+        )
+        .bind(&task_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to fetch latest run for cancel: {err}"),
+            )
+        })?;
+
+        if let Some(run_id) = latest_run_id.as_deref() {
+            sqlx::query(r#"UPDATE runs SET status = ?, finished_at = ?, error_message = ? WHERE id = ?"#)
+                .bind("cancelled")
+                .bind(&finished_at)
+                .bind("task cancelled while running")
+                .bind(run_id)
+                .execute(&state.db)
+                .await
+                .map_err(|err| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to mark latest run as cancelled: {err}"),
+                    )
+                })?;
+
+            insert_task_log(
+                &state,
+                &task_id,
+                Some(run_id),
+                "warn",
+                &format!("task cancelled while running; {}", cancel.message),
+            )
+            .await?;
+        } else {
+            insert_task_log(
+                &state,
+                &task_id,
+                None,
+                "warn",
+                &format!("task cancelled while running; {}", cancel.message),
+            )
+            .await?;
+        }
 
         return Ok(Json(CancelTaskResponse {
             id: task_id,

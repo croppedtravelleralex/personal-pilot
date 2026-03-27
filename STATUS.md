@@ -22,7 +22,7 @@
 ## 当前风险
 
 - **API Key 鉴权已具备可选能力**，但默认未开启，当前仍更适合本地开发和原型验证，不适合裸暴露
-- **running cancel 已进入第一版接线阶段**，当前已可从 API 层把 running 状态取消请求转发到 runner，但还需要继续验证状态回写与边界行为
+- **running cancel 已完成第一轮一致性收口**，当前 queued/running cancel 都会写日志，running cancel 也会同步回写最近 run 为 `cancelled`；但仍需继续验证真实进程终止后的边界行为
 - **`status / runs / logs` 已增加 limit 与上限控制第一版**，但后续如数据量继续增大，仍可能需要 offset / cursor 等更强分页策略
 - **`LightpandaRunner` 已接入最小真实执行第一版**，但当前仍偏 V1 形态，结果结构、错误语义与稳定性还需要继续打磨
 - **runner 通用执行层刚完成第一轮抽离**，仍需继续检查职责边界与接口稳定性

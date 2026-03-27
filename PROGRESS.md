@@ -54,6 +54,8 @@
 
 - **2026.3.28-01:18:00** 完成了 **`LightpandaRunner` 稳定性收口第一轮**，补齐缺失二进制/非法输入/非 0 退出/timeout 的错误分类与最小测试覆盖，并在 timeout 分支增加真实子进程终止处理。
 
+- **2026.3.28-01:24:00** 完成了 **running cancel 一致性收口第一轮**，让 queued/running cancel 都写入日志，并在 running cancel 时同步回写最近一条 run 为 `cancelled`，降低 task/run/log 状态漂移风险。
+
 ## 1. 已经实现 / 已经落地
 
 ### 1.1 项目方向与北极星已定义
