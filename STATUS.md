@@ -31,6 +31,7 @@
 
 1. **完成 `LightpandaRunner` 最小真实执行第一版后的 bug / 结构校准**
 2. **打磨本地二进制执行链路（stdout/stderr/timeout/exit code）**
-3. **继续验证并打磨 `runs / logs / status` 的分页与查询控制**
-4. **继续验证并打磨 `running cancel` 第一版状态回写与边界行为**
-5. **保持文档与代码能力同步更新**
+3. **补 `LightpandaRunner` 最小验证覆盖（非法输入 / 缺失二进制 / 非 0 退出 / timeout）**
+4. **继续验证并打磨 `runs / logs / status` 的分页与查询控制**
+5. **继续验证并打磨 `running cancel` 第一版状态回写与边界行为**
+6. **保持文档与代码能力同步更新**
