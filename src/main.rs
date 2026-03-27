@@ -9,7 +9,7 @@ use AutoOpenBrowser::{
     app::state::AppState,
     db::init::init_db,
     queue::memory::MemoryTaskQueue,
-    runner::fake::spawn_fake_runner_loop,
+    runner::{fake::FakeRunner, lightpanda::LightpandaRunner, spawn_runner_loop, RunnerKind},
 };
 
 #[tokio::main]
@@ -23,7 +23,10 @@ async fn main() -> Result<()> {
         .filter(|value| !value.is_empty());
     let state = AppState { db, queue, api_key };
 
-    spawn_fake_runner_loop(state.clone()).await;
+    match RunnerKind::from_env() {
+        RunnerKind::Fake => spawn_runner_loop(state.clone(), FakeRunner).await,
+        RunnerKind::Lightpanda => spawn_runner_loop(state.clone(), LightpandaRunner).await,
+    }
 
     let app = build_router(state);
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
@@ -31,6 +34,7 @@ async fn main() -> Result<()> {
 
     println!("AutoOpenBrowser listening on http://{}", addr);
     println!("Database initialized at {}", database_url);
+    println!("Runner kind: {:?}", RunnerKind::from_env());
     serve(listener, app).await?;
 
     Ok(())

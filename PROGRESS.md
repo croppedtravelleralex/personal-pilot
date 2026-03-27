@@ -32,6 +32,9 @@
 - **2026.3.26-13:51:00** 实现了 **`runs / logs` 查询接口**，支持查看指定任务的运行历史和执行日志。
 - **2026.3.26-14:03:00** 完成了 **README / STATUS / PROGRESS 文档清理**，让文档描述与当前代码能力重新对齐。
 - **2026.3.26-15:09:13** 实现了 **API Key 鉴权（可选）**，支持 `x-api-key` / `Authorization: Bearer` 头校验。
+- **2026.3.26-16:51:52** 实现了 **runner trait / adapter interface 第一版**，将 fake runner 纳入统一 `TaskRunner` 抽象，并将启动入口改为通过统一 runner loop 启动。
+- **2026.3.26-17:27:00** 实现了 **Lightpanda runner 占位适配层与 runner kind 切换入口**，新增 `LightpandaRunner` 占位实现，并支持通过 `AUTO_OPEN_BROWSER_RUNNER` 在 `fake / lightpanda` 间切换。
+- **2026.3.27-11:15:00** 完成了 **标准项目文档入口层补齐**，新增 `AI.md` / `PLAN.md` / `FEATURES.md`，并在 `README.md` 增加标准接手入口，统一项目接手路径。
 
 ---
 
@@ -44,6 +47,9 @@
 
 ### 1.2 文档体系已建立
 已建立并持续维护以下核心文档：
+- `AI.md`
+- `PLAN.md`
+- `FEATURES.md`
 - `README.md`
 - `STATUS.md`
 - `TODO.md`
@@ -129,6 +135,7 @@
 - success / fail / timeout 三种模拟结果
 - 任务状态回写：`queued -> running -> succeeded/failed/timeout`
 - `started_at / finished_at / result_json / error_message` 回写
+- 已实现 `TaskRunner` 统一抽象，fake runner 已转为该抽象下的一个实现
 
 ### 1.10 run history 已落地
 已支持：
@@ -197,10 +204,10 @@
 
 ### 2.2 当前正在推进的主题
 当前重点不是重新补骨架，而是继续补齐这些增强项：
-- API 鉴权
+- runner trait / adapter interface 稳定化
+- Lightpanda runner 从占位适配层向真实接入推进
 - 查询分页 / limit / 控量
 - 更完整的任务控制（尤其是 running cancel）
-- fake runner 到 real runner 的 adapter 预留
 - 文档与代码能力持续对齐
 
 ---
