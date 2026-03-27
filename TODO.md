@@ -60,6 +60,7 @@
 - [x] 清理 README / STATUS / PROGRESS 中过时静态状态
 - [x] 增加基础监控指标
 - [ ] 增加集成测试
+- [x] 增加最小 smoke test 脚本
 - [ ] 设计身份画像系统（Identity Profile）
 - [ ] 设计指纹一致性校验器
 - [ ] 设计代理质量评分系统

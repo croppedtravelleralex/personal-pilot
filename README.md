@@ -103,6 +103,30 @@
 
 如果宿主机未安装 `lightpanda`，请先安装 nightly binary，或将二进制路径写入 `LIGHTPANDA_BIN`。
 
+## Smoke Test
+
+已新增最小冒烟脚本：`scripts/smoke_test.sh`
+
+默认用途：
+- 检查 `health`
+- 创建一个最小任务
+- 轮询任务直到结束
+- 拉取 `runs / logs / status`
+
+示例：
+
+```bash
+AUTO_OPEN_BROWSER_BASE_URL=http://127.0.0.1:3000 \
+AUTO_OPEN_BROWSER_RUNNER=fake \
+scripts/smoke_test.sh
+```
+
+如启用了 API Key，可同时传入：
+
+```bash
+AUTO_OPEN_BROWSER_API_KEY=your-key scripts/smoke_test.sh
+```
+
 ## 当前主任务
 
 当前优先任务不是重新堆文档，而是：

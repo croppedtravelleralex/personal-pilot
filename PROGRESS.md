@@ -56,6 +56,8 @@
 
 - **2026.3.28-01:24:00** 完成了 **running cancel 一致性收口第一轮**，让 queued/running cancel 都写入日志，并在 running cancel 时同步回写最近一条 run 为 `cancelled`，降低 task/run/log 状态漂移风险。
 
+- **2026.3.28-01:28:00** 完成了 **最小 smoke test 脚本第一版**，新增 `scripts/smoke_test.sh` 用于串行验证 `health -> create task -> poll task -> runs/logs/status` 主链路，便于后续做最小回归检查。
+
 ## 1. 已经实现 / 已经落地
 
 ### 1.1 项目方向与北极星已定义
