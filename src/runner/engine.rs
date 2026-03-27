@@ -176,6 +176,19 @@ where
         .bind(&task_id)
         .execute(&state.db)
         .await?;
+    } else {
+        insert_log(
+            state,
+            &format!("log-{}", Uuid::new_v4()),
+            &task_id,
+            Some(&run_id),
+            "warn",
+            &format!(
+                "{} runner finished after cancel; terminal task overwrite skipped, attempt={attempt}",
+                runner.name()
+            ),
+        )
+        .await?;
     }
 
     insert_log(

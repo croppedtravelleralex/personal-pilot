@@ -30,6 +30,7 @@
 - [x] 接入 `LightpandaRunner` 最小真实执行第一版（`LIGHTPANDA_BIN` + `fetch`）
 - [x] 收紧 `LightpandaRunner` 结果结构与错误语义
 - [x] 增加 `status / runs / logs` 查询控制与分页（第一版）
+- [x] 增加 `status / runs / logs` 的 `offset` 分页（第二版）
 - [x] 设计 `running cancel` 的正确演进边界
 - [x] 增加 runner cancel 抽象层（第一版）
 - [x] 为 `LightpandaRunner` 增加取消句柄注册表（第一版）
@@ -61,6 +62,7 @@
 - [x] 增加基础监控指标
 - [ ] 增加集成测试
 - [x] 增加最小 smoke test 脚本
+- [x] 增加 lightpanda 专项验证脚本入口
 - [ ] 设计身份画像系统（Identity Profile）
 - [ ] 设计指纹一致性校验器
 - [ ] 设计代理质量评分系统

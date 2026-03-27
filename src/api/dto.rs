@@ -39,6 +39,7 @@ pub struct CreateTaskRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaginationQuery {
     pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

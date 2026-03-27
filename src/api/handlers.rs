@@ -28,6 +28,13 @@ fn sanitize_limit(limit: Option<i64>, default_value: i64, max_value: i64) -> i64
     }
 }
 
+fn sanitize_offset(offset: Option<i64>) -> i64 {
+    match offset {
+        Some(value) if value > 0 => value,
+        _ => 0,
+    }
+}
+
 async fn insert_task_log(
     state: &AppState,
     task_id: &str,
@@ -119,10 +126,12 @@ pub async fn status(
 ) -> Result<Json<StatusResponse>, (StatusCode, String)> {
     let counts = load_counts(&state).await?;
     let limit = sanitize_limit(query.limit, 5, 100);
+    let offset = sanitize_offset(query.offset);
     let rows = sqlx::query_as::<_, (String, String, String, i32)>(
-        r#"SELECT id, kind, status, priority FROM tasks ORDER BY created_at DESC LIMIT ?"#,
+        r#"SELECT id, kind, status, priority FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?"#,
     )
     .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .map_err(|err| {
@@ -244,11 +253,13 @@ pub async fn get_task_runs(
     Query(query): Query<PaginationQuery>,
 ) -> Result<Json<Vec<RunResponse>>, (StatusCode, String)> {
     let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
     let rows = sqlx::query_as::<_, (String, String, String, i32, String, Option<String>, Option<String>, Option<String>)>(
-        r#"SELECT id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message FROM runs WHERE task_id = ? ORDER BY attempt DESC LIMIT ?"#,
+        r#"SELECT id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message FROM runs WHERE task_id = ? ORDER BY attempt DESC LIMIT ? OFFSET ?"#,
     )
     .bind(&task_id)
     .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .map_err(|err| {
@@ -282,11 +293,13 @@ pub async fn get_task_logs(
     Query(query): Query<PaginationQuery>,
 ) -> Result<Json<Vec<LogResponse>>, (StatusCode, String)> {
     let limit = sanitize_limit(query.limit, 50, 500);
+    let offset = sanitize_offset(query.offset);
     let rows = sqlx::query_as::<_, (String, String, Option<String>, String, String, String)>(
-        r#"SELECT id, task_id, run_id, level, message, created_at FROM logs WHERE task_id = ? ORDER BY created_at DESC LIMIT ?"#,
+        r#"SELECT id, task_id, run_id, level, message, created_at FROM logs WHERE task_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"#,
     )
     .bind(&task_id)
     .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .map_err(|err| {

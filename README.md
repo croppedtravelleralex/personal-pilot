@@ -127,6 +127,13 @@ scripts/smoke_test.sh
 AUTO_OPEN_BROWSER_API_KEY=your-key scripts/smoke_test.sh
 ```
 
+查询接口当前已支持 `limit` + `offset`：
+- `/status?limit=20&offset=20`
+- `/tasks/:id/runs?limit=20&offset=20`
+- `/tasks/:id/logs?limit=50&offset=100`
+
+已新增 `scripts/lightpanda_verify.sh` 作为 lightpanda 专项验证脚本入口，用于后续验证非法输入、缺失二进制、非 0 退出、timeout 等边界场景。
+
 ## 当前主任务
 
 当前优先任务不是重新堆文档，而是：
