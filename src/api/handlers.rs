@@ -336,6 +336,38 @@ pub async fn retry_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<RetryTaskResponse>, (StatusCode, String)> {
+    let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+        .bind(&task_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to read task status before retry: {err}"),
+            )
+        })?;
+
+    let Some(status) = current_status else {
+        return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
+    };
+
+    if status == TASK_STATUS_QUEUED {
+        let _ = state.queue.push_unique(task_id.clone());
+        return Ok(Json(RetryTaskResponse {
+            id: task_id,
+            status: TASK_STATUS_QUEUED.to_string(),
+            message: "task already queued; retry treated as idempotent".to_string(),
+        }));
+    }
+
+    if status != TASK_STATUS_FAILED && status != TASK_STATUS_TIMED_OUT {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("task status does not allow retry now: {status}"),
+        ));
+    }
+
+    let pushed = state.queue.push_unique(task_id.clone());
     let queued_at = now_ts_string();
     let retry_sql = format!(
         "UPDATE tasks SET status = ?, queued_at = ?, started_at = NULL, finished_at = NULL, result_json = NULL, error_message = NULL WHERE id = ? AND status IN ('{}', '{}')",
@@ -346,15 +378,26 @@ pub async fn retry_task(
         .bind(&queued_at)
         .bind(&task_id)
         .execute(&state.db)
-        .await
-        .map_err(|err| {
-            (
+        .await;
+
+    let result = match result {
+        Ok(result) => result,
+        Err(err) => {
+            if pushed {
+                let _ = state.queue.remove(&task_id);
+            }
+            return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("failed to retry task: {err}"),
-            )
-        })?;
+            ));
+        }
+    };
 
     if result.rows_affected() == 0 {
+        if pushed {
+            let _ = state.queue.remove(&task_id);
+        }
+
         let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
             .bind(&task_id)
             .fetch_optional(&state.db)
@@ -370,13 +413,21 @@ pub async fn retry_task(
             return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
         };
 
+        if status == TASK_STATUS_QUEUED {
+            let _ = state.queue.push_unique(task_id.clone());
+            return Ok(Json(RetryTaskResponse {
+                id: task_id,
+                status: TASK_STATUS_QUEUED.to_string(),
+                message: "task already queued after retry race; treated as idempotent".to_string(),
+            }));
+        }
+
         return Err((
             StatusCode::CONFLICT,
             format!("task status does not allow retry now: {status}"),
         ));
     }
 
-    let pushed = state.queue.push_unique(task_id.clone());
     let message = if pushed {
         "task re-queued for retry".to_string()
     } else {
