@@ -187,13 +187,33 @@ where
     let result_json = execution.result_json.map(|value| value.to_string());
     let error_message = execution.error_message;
 
-    sqlx::query(r#"UPDATE runs SET status = ?, finished_at = ?, error_message = ? WHERE id = ?"#)
-        .bind(run_status)
-        .bind(&finished_at)
-        .bind(&error_message)
-        .bind(&run_id)
-        .execute(&state.db)
+    let run_update = sqlx::query(
+        &format!(
+            "UPDATE runs SET status = ?, finished_at = ?, error_message = ? WHERE id = ? AND status = '{}'",
+            RUN_STATUS_RUNNING,
+        ),
+    )
+    .bind(run_status)
+    .bind(&finished_at)
+    .bind(&error_message)
+    .bind(&run_id)
+    .execute(&state.db)
+    .await?;
+
+    if run_update.rows_affected() == 0 {
+        insert_log(
+            state,
+            &format!("log-{}", Uuid::new_v4()),
+            &task_id,
+            Some(&run_id),
+            "warn",
+            &format!(
+                "{} runner finished but run terminal overwrite skipped because run was no longer running, attempt={attempt}",
+                runner.name()
+            ),
+        )
         .await?;
+    }
 
     let current_task_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
         .bind(&task_id)

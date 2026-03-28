@@ -92,6 +92,8 @@
 
 - **2026.3.28-14:15:00** 完成了 **running cancel 目标 run 选择收口第一轮**，将 `cancel_task` 从按最新 attempt 选取 run，调整为优先选取当前 `running` 状态的 run 再回写 `cancelled`，降低 cancel 误伤非当前执行 run 的竞态风险。
 
+- **2026.3.28-14:23:00** 完成了 **worker finish/run 覆盖竞态收口第一轮**，将 `runner/engine.rs` 中 run 终态回写改为仅允许从 `running` 状态收尾；若 `cancel_task` 已先将 run 标记为 `cancelled`，worker 将跳过覆盖并记录 warning log，降低取消后 run 终态被执行结果反向覆盖的风险。
+
 ## 1. 已经实现 / 已经落地
 
 ### 1.1 项目方向与北极星已定义
