@@ -102,6 +102,8 @@
 
 - **2026.3.28-19:33:00** 完成了 **runner 结果结构测试锁定第一轮**，为 `FakeRunner` 新增最小结果字段断言，并在 `LightpandaRunner` 现有测试中补齐 `task_id / attempt / kind / payload` 等共享字段校验，降低 runner 结果结构再次漂移的风险。
 
+- **2026.3.28-19:51:00** 完成了 **工具链验证收口与 timed_out retry 测试补强**，在恢复 Rust 工具链并跑通 `cargo check` / `cargo test` 后，补充 `timed_out -> retry` 集成测试，并通过 crate 级属性清理当前 `AutoOpenBrowser` 的非 snake_case 命名 warning，继续提高可验证性与测试覆盖。
+
 ## 1. 已经实现 / 已经落地
 
 ### 1.1 项目方向与北极星已定义

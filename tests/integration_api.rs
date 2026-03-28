@@ -4,7 +4,7 @@ use axum::{body::Body, http::{Request, StatusCode}};
 use AutoOpenBrowser::{
     build_test_app,
     domain::task::{
-        TASK_STATUS_FAILED, TASK_STATUS_QUEUED, TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED,
+        TASK_STATUS_FAILED, TASK_STATUS_QUEUED, TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
     },
 };
 use serde_json::Value;
@@ -109,6 +109,28 @@ async fn fake_runner_success_flow_is_visible_across_endpoints() {
     )
     .await;
     assert!(status_json.get("latest_tasks").and_then(|v| v.as_array()).map(|a| !a.is_empty()).unwrap_or(false));
+}
+
+#[tokio::test]
+async fn retry_flow_requeues_timed_out_fake_task() {
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let task_id = create_task(&app, "timeout").await;
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_TIMED_OUT));
+
+    let (retry_status, retry_json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/tasks/{task_id}/retry"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(retry_status, StatusCode::OK);
+    assert_eq!(retry_json.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_QUEUED));
 }
 
 #[tokio::test]
