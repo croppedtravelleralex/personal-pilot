@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use sqlx::{sqlite::{SqliteConnectOptions, SqlitePoolOptions}, ConnectOptions, Pool, Sqlite};
+use sqlx::{sqlite::{SqliteConnectOptions, SqlitePoolOptions}, Pool, Sqlite};
 use tokio::fs;
 
 use super::schema::ALL_SCHEMA_SQL;
