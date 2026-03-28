@@ -135,7 +135,7 @@ where
     .await?;
 
     sqlx::query(r#"UPDATE tasks SET status = ?, started_at = ? WHERE id = ? AND status = 'queued'"#)
-        .bind(RUN_STATUS_RUNNING)
+        .bind(TASK_STATUS_RUNNING)
         .bind(&started_at)
         .bind(&task_id)
         .execute(&state.db)
