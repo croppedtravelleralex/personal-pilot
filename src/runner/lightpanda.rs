@@ -485,6 +485,10 @@ exit 7",
         assert!(matches!(result.status, RunnerOutcomeStatus::Failed));
         let json = result.result_json.expect("result json");
         assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("non_zero_exit"));
+        assert_eq!(json.get("task_id").and_then(|v| v.as_str()), Some("task-test"));
+        assert_eq!(json.get("attempt").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(json.get("kind").and_then(|v| v.as_str()), Some("open_page"));
+        assert_eq!(json.get("payload").and_then(|v| v.get("url")).and_then(|v| v.as_str()), Some("https://example.com"));
         assert_eq!(json.get("exit_code").and_then(|v| v.as_i64()), Some(7));
         assert_eq!(json.get("stdout_preview").and_then(|v| v.as_str()), Some("bad-output"));
         assert_eq!(json.get("stderr_preview").and_then(|v| v.as_str()), Some("bad-error"));
@@ -504,5 +508,9 @@ echo should-not-print",
         let json = result.result_json.expect("result json");
         assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("timeout"));
         assert_eq!(json.get("status").and_then(|v| v.as_str()), Some("timed_out"));
+        assert_eq!(json.get("task_id").and_then(|v| v.as_str()), Some("task-test"));
+        assert_eq!(json.get("attempt").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(json.get("kind").and_then(|v| v.as_str()), Some("open_page"));
+        assert_eq!(json.get("payload").and_then(|v| v.get("url")).and_then(|v| v.as_str()), Some("https://example.com"));
     }
 }

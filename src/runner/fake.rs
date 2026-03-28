@@ -100,3 +100,60 @@ impl TaskRunner for FakeRunner {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn execute_success_exposes_aligned_result_fields() {
+        let runner = FakeRunner;
+        let task = RunnerTask {
+            task_id: "task-fake-success".to_string(),
+            attempt: 2,
+            kind: "open_page".to_string(),
+            payload: json!({"url": "https://example.com", "foo": "bar"}),
+            timeout_seconds: Some(7),
+        };
+
+        let result = runner.execute(task.clone()).await;
+        let json = result.result_json.expect("result json");
+
+        assert!(matches!(result.status, RunnerOutcomeStatus::Succeeded));
+        assert_eq!(json.get("runner").and_then(|v| v.as_str()), Some("fake"));
+        assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("simulate"));
+        assert_eq!(json.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(json.get("status").and_then(|v| v.as_str()), Some(RUN_STATUS_SUCCEEDED));
+        assert_eq!(json.get("task_id").and_then(|v| v.as_str()), Some("task-fake-success"));
+        assert_eq!(json.get("attempt").and_then(|v| v.as_i64()), Some(2));
+        assert_eq!(json.get("kind").and_then(|v| v.as_str()), Some("open_page"));
+        assert_eq!(json.get("url").and_then(|v| v.as_str()), Some("https://example.com"));
+        assert_eq!(json.get("timeout_seconds").and_then(|v| v.as_u64()), Some(7));
+        assert_eq!(json.get("payload").and_then(|v| v.get("foo")).and_then(|v| v.as_str()), Some("bar"));
+        assert!(json.get("bin").is_some());
+        assert!(json.get("exit_code").is_some());
+        assert!(json.get("stdout_preview").is_some());
+        assert!(json.get("stderr_preview").is_some());
+    }
+
+    #[tokio::test]
+    async fn execute_timeout_exposes_timed_out_status_and_error_kind() {
+        let runner = FakeRunner;
+        let task = RunnerTask {
+            task_id: "task-fake-timeout".to_string(),
+            attempt: 1,
+            kind: "timeout".to_string(),
+            payload: json!({"url": "https://example.com"}),
+            timeout_seconds: Some(3),
+        };
+
+        let result = runner.execute(task).await;
+        let json = result.result_json.expect("result json");
+
+        assert!(matches!(result.status, RunnerOutcomeStatus::TimedOut));
+        assert_eq!(json.get("status").and_then(|v| v.as_str()), Some(RUN_STATUS_TIMED_OUT));
+        assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("timeout"));
+    }
+}
