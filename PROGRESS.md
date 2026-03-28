@@ -98,6 +98,8 @@
 
 - **2026.3.28-19:29:00** 完成了 **fake/lightpanda 结果结构对齐第一轮**，为 `FakeRunner` 补齐与 `LightpandaRunner` 更接近的最小结果字段集合，统一输出 `runner / action / ok / status / error_kind / task_id / attempt / kind / payload / message`，降低不同 runner 返回结构分叉带来的接口与测试复杂度。
 
+- **2026.3.28-19:31:00** 完成了 **runner 结果字段超集对齐第一轮**，进一步将 `FakeRunner` 与 `LightpandaRunner` 的 `result_json` 收敛到接近同一字段超集：`task_id / attempt / kind / payload / url / timeout_seconds / bin / exit_code / stdout_preview / stderr_preview` 等字段在两类 runner 中都具备可消费位置（缺失场景以 `null` 表达），继续降低上层消费分支复杂度。
+
 ## 1. 已经实现 / 已经落地
 
 ### 1.1 项目方向与北极星已定义

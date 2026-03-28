@@ -29,6 +29,7 @@ fn result_payload(
     ok: bool,
     status: &str,
     error_kind: Option<&str>,
+    task: &RunnerTask,
     url: Option<&str>,
     timeout_seconds: Option<u64>,
     bin: Option<&str>,
@@ -43,6 +44,10 @@ fn result_payload(
         "ok": ok,
         "status": status,
         "error_kind": error_kind,
+        "task_id": task.task_id,
+        "attempt": task.attempt,
+        "kind": task.kind,
+        "payload": task.payload,
         "url": url,
         "timeout_seconds": timeout_seconds,
         "bin": bin,
@@ -58,6 +63,7 @@ fn build_result(
     ok: bool,
     status: &str,
     error_kind: Option<&str>,
+    task: &RunnerTask,
     url: Option<&str>,
     timeout_seconds: Option<u64>,
     bin: Option<&str>,
@@ -75,6 +81,7 @@ fn build_result(
             ok,
             status,
             error_kind,
+            task,
             url,
             timeout_seconds,
             bin,
@@ -87,12 +94,13 @@ fn build_result(
     }
 }
 
-fn invalid_input(message: &str, url: Option<&str>) -> RunnerExecutionResult {
+fn invalid_input(task: &RunnerTask, message: &str, url: Option<&str>) -> RunnerExecutionResult {
     build_result(
         RunnerOutcomeStatus::Failed,
         false,
         "failed",
         Some("invalid_input"),
+        task,
         url,
         None,
         None,
@@ -251,6 +259,7 @@ impl TaskRunner for LightpandaRunner {
             Some(url) => url,
             None => {
                 return invalid_input(
+                    &task,
                     "lightpanda runner requires a non-empty url in task payload",
                     None,
                 )
@@ -259,6 +268,7 @@ impl TaskRunner for LightpandaRunner {
 
         if !looks_like_url(&url) {
             return invalid_input(
+                &task,
                 "lightpanda runner currently only accepts http:// or https:// urls",
                 Some(&url),
             );
@@ -286,6 +296,7 @@ impl TaskRunner for LightpandaRunner {
                     false,
                     "failed",
                     Some(classify_spawn_error(&err)),
+                    &task,
                     Some(&url),
                     Some(timeout_seconds),
                     Some(&bin),
@@ -310,6 +321,7 @@ impl TaskRunner for LightpandaRunner {
                     RunnerOutcomeStatus::Succeeded,
                     "succeeded",
                     None,
+                    &task,
                     "lightpanda fetch completed successfully".to_string(),
                     status.code(),
                 ),
@@ -317,6 +329,7 @@ impl TaskRunner for LightpandaRunner {
                     RunnerOutcomeStatus::Failed,
                     "failed",
                     Some("non_zero_exit"),
+                    &task,
                     "lightpanda fetch exited with non-zero status".to_string(),
                     status.code(),
                 ),
@@ -324,6 +337,7 @@ impl TaskRunner for LightpandaRunner {
                     RunnerOutcomeStatus::Failed,
                     "failed",
                     Some("process_wait_failed"),
+                    &task,
                     format!("lightpanda process wait failed: {err}"),
                     None,
                 ),
@@ -338,6 +352,7 @@ impl TaskRunner for LightpandaRunner {
                     RunnerOutcomeStatus::TimedOut,
                     RUN_STATUS_TIMED_OUT,
                     Some("timeout"),
+                    &task,
                     format!("lightpanda fetch timed out after {timeout_seconds}s ({kill_note})"),
                     None,
                 )
@@ -356,6 +371,7 @@ impl TaskRunner for LightpandaRunner {
             matches!(outcome, RunnerOutcomeStatus::Succeeded),
             status_text,
             error_kind,
+            &task,
             Some(&url),
             Some(timeout_seconds),
             Some(&bin),

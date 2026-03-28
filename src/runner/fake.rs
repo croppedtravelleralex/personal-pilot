@@ -16,6 +16,15 @@ fn result_payload(
     task: &RunnerTask,
     message: &str,
 ) -> Value {
+    let url = task
+        .payload
+        .get("url")
+        .and_then(|value| value.as_str())
+        .map(str::to_owned);
+    let timeout_seconds = task
+        .timeout_seconds
+        .and_then(|value| u64::try_from(value).ok());
+
     json!({
         "runner": "fake",
         "action": "simulate",
@@ -26,6 +35,12 @@ fn result_payload(
         "attempt": task.attempt,
         "kind": task.kind,
         "payload": task.payload,
+        "url": url,
+        "timeout_seconds": timeout_seconds,
+        "bin": Value::Null,
+        "exit_code": Value::Null,
+        "stdout_preview": Value::Null,
+        "stderr_preview": Value::Null,
         "message": message,
     })
 }
@@ -55,7 +70,6 @@ impl TaskRunner for FakeRunner {
     }
 
     async fn execute(&self, task: RunnerTask) -> RunnerExecutionResult {
-        let _ = task.timeout_seconds;
         sleep(Duration::from_millis(300)).await;
 
         match task.kind.as_str() {
