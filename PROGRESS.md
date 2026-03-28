@@ -96,6 +96,8 @@
 
 - **2026.3.28-18:51:00** 完成了 **worker finish/task 覆盖竞态收口第一轮**，将 `runner/engine.rs` 中 task 终态回写改为仅允许从 `running` 状态收尾；若任务已被其他路径改出 `running`（例如取消竞态），worker 将跳过覆盖并记录 warning log，进一步降低 task 终态被晚到执行结果反向覆盖的风险。
 
+- **2026.3.28-19:29:00** 完成了 **fake/lightpanda 结果结构对齐第一轮**，为 `FakeRunner` 补齐与 `LightpandaRunner` 更接近的最小结果字段集合，统一输出 `runner / action / ok / status / error_kind / task_id / attempt / kind / payload / message`，降低不同 runner 返回结构分叉带来的接口与测试复杂度。
+
 ## 1. 已经实现 / 已经落地
 
 ### 1.1 项目方向与北极星已定义

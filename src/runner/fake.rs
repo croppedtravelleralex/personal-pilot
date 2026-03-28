@@ -1,10 +1,52 @@
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 use tokio::time::{sleep, Duration};
 
-use crate::runner::{RunnerExecutionResult, RunnerOutcomeStatus, RunnerTask, TaskRunner};
+use crate::{
+    domain::run::{RUN_STATUS_FAILED, RUN_STATUS_SUCCEEDED, RUN_STATUS_TIMED_OUT},
+    runner::{RunnerExecutionResult, RunnerOutcomeStatus, RunnerTask, TaskRunner},
+};
 
 pub struct FakeRunner;
+
+fn result_payload(
+    ok: bool,
+    status: &str,
+    error_kind: Option<&str>,
+    task: &RunnerTask,
+    message: &str,
+) -> Value {
+    json!({
+        "runner": "fake",
+        "action": "simulate",
+        "ok": ok,
+        "status": status,
+        "error_kind": error_kind,
+        "task_id": task.task_id,
+        "attempt": task.attempt,
+        "kind": task.kind,
+        "payload": task.payload,
+        "message": message,
+    })
+}
+
+fn build_result(
+    outcome: RunnerOutcomeStatus,
+    ok: bool,
+    status: &str,
+    error_kind: Option<&str>,
+    task: &RunnerTask,
+    message: impl Into<String>,
+) -> RunnerExecutionResult {
+    let message = message.into();
+    let is_error = matches!(outcome, RunnerOutcomeStatus::Failed | RunnerOutcomeStatus::TimedOut);
+
+    RunnerExecutionResult {
+        status: outcome,
+        result_json: Some(result_payload(ok, status, error_kind, task, &message)),
+        error_message: is_error.then_some(message),
+    }
+}
 
 #[async_trait]
 impl TaskRunner for FakeRunner {
@@ -17,27 +59,30 @@ impl TaskRunner for FakeRunner {
         sleep(Duration::from_millis(300)).await;
 
         match task.kind.as_str() {
-            "fail" => RunnerExecutionResult {
-                status: RunnerOutcomeStatus::Failed,
-                result_json: None,
-                error_message: Some("simulated failure by fake runner".to_string()),
-            },
-            "timeout" => RunnerExecutionResult {
-                status: RunnerOutcomeStatus::TimedOut,
-                result_json: None,
-                error_message: Some("simulated timeout by fake runner".to_string()),
-            },
-            _ => RunnerExecutionResult {
-                status: RunnerOutcomeStatus::Succeeded,
-                result_json: Some(json!({
-                    "runner": self.name(),
-                    "message": "task completed by fake runner",
-                    "task_id": task.task_id,
-                    "attempt": task.attempt,
-                    "payload": task.payload,
-                })),
-                error_message: None,
-            },
+            "fail" => build_result(
+                RunnerOutcomeStatus::Failed,
+                false,
+                RUN_STATUS_FAILED,
+                Some("simulated_failure"),
+                &task,
+                "simulated failure by fake runner",
+            ),
+            "timeout" => build_result(
+                RunnerOutcomeStatus::TimedOut,
+                false,
+                RUN_STATUS_TIMED_OUT,
+                Some("timeout"),
+                &task,
+                "simulated timeout by fake runner",
+            ),
+            _ => build_result(
+                RunnerOutcomeStatus::Succeeded,
+                true,
+                RUN_STATUS_SUCCEEDED,
+                None,
+                &task,
+                "task completed by fake runner",
+            ),
         }
     }
 }
