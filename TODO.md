@@ -61,6 +61,7 @@
 - [x] 清理 README / STATUS / PROGRESS 中过时静态状态
 - [x] 增加基础监控指标
 - [ ] 增加集成测试
+- [x] 增加集成测试骨架第一版（fake runner + retry）
 - [x] 增加最小 smoke test 脚本
 - [x] 增加 lightpanda 专项验证脚本入口
 - [ ] 设计身份画像系统（Identity Profile）

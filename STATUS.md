@@ -37,3 +37,5 @@
 5. **继续验证并打磨 `running cancel` 第一版状态回写与边界行为**
 6. **恢复 Rust 工具链，完成真实 `cargo test` / `cargo check`**
 7. **保持文档与代码能力同步更新**
+
+- **集成测试骨架第一版已落地**，当前先覆盖 fake runner 成功闭环与 retry 基本状态流转；真实可执行性仍待宿主机 Rust 工具链恢复后跑通 `cargo test` 验证。
