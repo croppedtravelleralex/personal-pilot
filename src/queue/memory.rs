@@ -17,6 +17,16 @@ impl MemoryTaskQueue {
         guard.push_back(task_id);
     }
 
+    pub fn push_unique(&self, task_id: String) -> bool {
+        let mut guard = self.inner.lock().expect("memory queue poisoned");
+        if guard.iter().any(|id| id == &task_id) {
+            false
+        } else {
+            guard.push_back(task_id);
+            true
+        }
+    }
+
     pub fn pop(&self) -> Option<String> {
         let mut guard = self.inner.lock().expect("memory queue poisoned");
         guard.pop_front()

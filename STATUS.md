@@ -41,3 +41,5 @@
 - **集成测试骨架第一版已落地**，当前先覆盖 fake runner 成功闭环与 retry 基本状态流转；真实可执行性仍待宿主机 Rust 工具链恢复后跑通 `cargo test` 验证。
 
 - **并发控制第一版骨架已落地**，当前已支持通过 `AUTO_OPEN_BROWSER_RUNNER_CONCURRENCY` 启动多 worker 共享队列；但最小一致性保护与并发测试仍需继续补齐。
+
+- **最小一致性保护第一轮已落地**，当前已对 retry 重复入队、cancel 后 run 终态覆盖、以及 `status/logs` 并发排序抖动做了最小收口；但更完整的事务化/claim 机制仍未实现。

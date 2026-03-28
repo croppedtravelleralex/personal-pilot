@@ -82,3 +82,4 @@
 - [ ] `GOLDEN_FEATURES.md` 中哪些能力应前置到中期优先级
 
 - [x] 增加并发控制第一版骨架（多 worker + 并发度配置）
+- [x] 增加最小一致性保护第一轮（retry 防重 + cancel 保护 run）

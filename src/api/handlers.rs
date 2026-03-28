@@ -128,7 +128,7 @@ pub async fn status(
     let limit = sanitize_limit(query.limit, 5, 100);
     let offset = sanitize_offset(query.offset);
     let rows = sqlx::query_as::<_, (String, String, String, i32)>(
-        r#"SELECT id, kind, status, priority FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?"#,
+        r#"SELECT id, kind, status, priority FROM tasks ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
     )
     .bind(limit)
     .bind(offset)
@@ -295,7 +295,7 @@ pub async fn get_task_logs(
     let limit = sanitize_limit(query.limit, 50, 500);
     let offset = sanitize_offset(query.offset);
     let rows = sqlx::query_as::<_, (String, String, Option<String>, String, String, String)>(
-        r#"SELECT id, task_id, run_id, level, message, created_at FROM logs WHERE task_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"#,
+        r#"SELECT id, task_id, run_id, level, message, created_at FROM logs WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
     )
     .bind(&task_id)
     .bind(limit)
@@ -327,31 +327,9 @@ pub async fn retry_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<RetryTaskResponse>, (StatusCode, String)> {
-    let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
-        .bind(&task_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("failed to read task status: {err}"),
-            )
-        })?;
-
-    let Some(status) = current_status else {
-        return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
-    };
-
-    if status != "failed" && status != "timeout" {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("task status does not allow retry: {status}"),
-        ));
-    }
-
     let queued_at = now_ts_string();
-    sqlx::query(
-        r#"UPDATE tasks SET status = ?, queued_at = ?, started_at = NULL, finished_at = NULL, result_json = NULL, error_message = NULL WHERE id = ?"#,
+    let result = sqlx::query(
+        r#"UPDATE tasks SET status = ?, queued_at = ?, started_at = NULL, finished_at = NULL, result_json = NULL, error_message = NULL WHERE id = ? AND status IN ('failed', 'timeout')"#,
     )
     .bind("queued")
     .bind(&queued_at)
@@ -365,7 +343,35 @@ pub async fn retry_task(
         )
     })?;
 
-    state.queue.push(task_id.clone());
+    if result.rows_affected() == 0 {
+        let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to read task status after retry conflict: {err}"),
+                )
+            })?;
+
+        let Some(status) = current_status else {
+            return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
+        };
+
+        return Err((
+            StatusCode::CONFLICT,
+            format!("task status does not allow retry now: {status}"),
+        ));
+    }
+
+    let pushed = state.queue.push_unique(task_id.clone());
+    if !pushed {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("task already queued for retry: {task_id}"),
+        ));
+    }
 
     Ok(Json(RetryTaskResponse {
         id: task_id,
