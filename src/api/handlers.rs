@@ -521,8 +521,11 @@ pub async fn cancel_task(
                 )
             })?;
 
-        let latest_run_id = sqlx::query_scalar::<_, String>(
-            r#"SELECT id FROM runs WHERE task_id = ? ORDER BY attempt DESC LIMIT 1"#,
+        let running_run_id = sqlx::query_scalar::<_, String>(
+            &format!(
+                "SELECT id FROM runs WHERE task_id = ? AND status = '{}' ORDER BY attempt DESC LIMIT 1",
+                RUN_STATUS_RUNNING,
+            ),
         )
         .bind(&task_id)
         .fetch_optional(&state.db)
@@ -530,11 +533,11 @@ pub async fn cancel_task(
         .map_err(|err| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("failed to fetch latest run for cancel: {err}"),
+                format!("failed to fetch running run for cancel: {err}"),
             )
         })?;
 
-        if let Some(run_id) = latest_run_id.as_deref() {
+        if let Some(run_id) = running_run_id.as_deref() {
             sqlx::query(r#"UPDATE runs SET status = ?, finished_at = ?, error_message = ? WHERE id = ?"#)
                 .bind(RUN_STATUS_CANCELLED)
                 .bind(&finished_at)
