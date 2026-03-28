@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
+use sqlx::{sqlite::{SqliteConnectOptions, SqlitePoolOptions}, ConnectOptions, Pool, Sqlite};
 use tokio::fs;
 
 use super::schema::ALL_SCHEMA_SQL;
@@ -23,9 +23,13 @@ async fn ensure_sqlite_parent_dir(database_url: &str) -> Result<()> {
 pub async fn init_db(database_url: &str) -> Result<DbPool> {
     ensure_sqlite_parent_dir(database_url).await?;
 
+    let options = database_url
+        .parse::<SqliteConnectOptions>()?
+        .create_if_missing(true);
+
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
-        .connect(database_url)
+        .connect_with(options)
         .await?;
 
     for stmt in ALL_SCHEMA_SQL {
