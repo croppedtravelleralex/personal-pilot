@@ -112,6 +112,18 @@ async fn fake_runner_success_flow_is_visible_across_endpoints() {
 }
 
 #[tokio::test]
+async fn queued_task_runs_even_if_memory_queue_entry_is_removed() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let task_id = create_task(&app, "open_page").await;
+    let _ = state.queue.remove(&task_id);
+
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
+}
+
+#[tokio::test]
 async fn retry_flow_requeues_timed_out_fake_task() {
     let db_url = unique_db_url();
     let (_state, app) = build_test_app(&db_url).await.expect("build app");

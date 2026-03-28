@@ -30,10 +30,10 @@
 
 ## 当前下一步
 
-1. **将 worker loop 从内存 pop 驱动推进到 DB-first claim 驱动**
-2. **为 queued -> running 增加原子 claim 语义与测试**
-3. **让内存队列降级为唤醒/提示层，而不再承担状态真相源角色**
-4. **继续补 cancel / retry / claim 的集成测试覆盖**
+1. **继续打磨 DB-first claim：补 runner_id / lease / reclaim 的最小实现**
+2. **继续补 cancel / retry / claim 的集成测试覆盖**
+3. **让内存队列进一步降级为唤醒/提示层，而不再参与执行真相判断**
+4. **继续清理 worker loop、claim SQL 与状态机边界**
 5. **保持文档与代码能力同步更新**
 
 - **集成测试骨架第一版已落地**，当前先覆盖 fake runner 成功闭环与 retry 基本状态流转；真实可执行性仍待宿主机 Rust 工具链恢复后跑通 `cargo test` 验证。

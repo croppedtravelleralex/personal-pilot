@@ -50,54 +50,106 @@ async fn insert_log(
     Ok(())
 }
 
+struct ClaimedTask {
+    task_id: String,
+    task_kind: String,
+    input_json: String,
+    attempt: i64,
+    run_id: String,
+    started_at: String,
+}
+
+async fn claim_next_task<R>(state: &AppState, runner: &R) -> Result<Option<ClaimedTask>>
+where
+    R: TaskRunner + ?Sized,
+{
+    for _ in 0..8 {
+        let candidate = sqlx::query_as::<_, (String, String, String)>(
+            r#"
+            SELECT id, kind, input_json
+            FROM tasks
+            WHERE status = ?
+            ORDER BY priority DESC, COALESCE(queued_at, created_at) ASC, created_at ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(TASK_STATUS_QUEUED)
+        .fetch_optional(&state.db)
+        .await?;
+
+        let Some((task_id, task_kind, input_json)) = candidate else {
+            return Ok(None);
+        };
+
+        let started_at = now_ts_string();
+        let run_id = format!("run-{}", Uuid::new_v4());
+
+        let mut tx = state.db.begin().await?;
+        let claim = sqlx::query(
+            r#"UPDATE tasks SET status = ?, started_at = ? WHERE id = ? AND status = ?"#,
+        )
+        .bind(TASK_STATUS_RUNNING)
+        .bind(&started_at)
+        .bind(&task_id)
+        .bind(TASK_STATUS_QUEUED)
+        .execute(&mut *tx)
+        .await?;
+
+        if claim.rows_affected() == 0 {
+            tx.rollback().await?;
+            continue;
+        }
+
+        let attempt = sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM runs WHERE task_id = ?"#)
+            .bind(&task_id)
+            .fetch_one(&mut *tx)
+            .await?
+            + 1;
+
+        sqlx::query(
+            r#"
+            INSERT INTO runs (id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
+            "#,
+        )
+        .bind(&run_id)
+        .bind(&task_id)
+        .bind(RUN_STATUS_RUNNING)
+        .bind(attempt)
+        .bind(runner.name())
+        .bind(&started_at)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        return Ok(Some(ClaimedTask {
+            task_id,
+            task_kind,
+            input_json,
+            attempt,
+            run_id,
+            started_at,
+        }));
+    }
+
+    Ok(None)
+}
+
 pub async fn run_one_task_with_runner<R>(state: &AppState, runner: &R) -> Result<bool>
 where
     R: TaskRunner + ?Sized,
 {
-    let Some(task_id) = state.queue.pop() else {
+    let Some(claimed) = claim_next_task(state, runner).await? else {
         return Ok(false);
     };
 
-    let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
-        .bind(&task_id)
-        .fetch_optional(&state.db)
-        .await?;
-
-    let Some(current_status) = current_status else {
-        return Ok(false);
-    };
-
-    if current_status != TASK_STATUS_QUEUED {
-        insert_log(
-            state,
-            &format!("log-{}", Uuid::new_v4()),
-            &task_id,
-            None,
-            "warn",
-            &format!(
-                "task popped from queue but skipped because current status is {}",
-                current_status
-            ),
-        )
-        .await?;
-        return Ok(false);
-    }
-
-    let run_id = format!("run-{}", Uuid::new_v4());
-    let started_at = now_ts_string();
-
-    let (task_kind, input_json) = sqlx::query_as::<_, (String, String)>(
-        r#"SELECT kind, input_json FROM tasks WHERE id = ?"#,
-    )
-    .bind(&task_id)
-    .fetch_one(&state.db)
-    .await?;
-
-    let attempt = sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM runs WHERE task_id = ?"#)
-        .bind(&task_id)
-        .fetch_one(&state.db)
-        .await?
-        + 1;
+    let task_id = claimed.task_id;
+    let task_kind = claimed.task_kind;
+    let input_json = claimed.input_json;
+    let attempt = claimed.attempt;
+    let run_id = claimed.run_id;
+    let _started_at = claimed.started_at;
 
     insert_log(
         state,
@@ -105,23 +157,8 @@ where
         &task_id,
         None,
         "info",
-        "task popped from in-memory queue",
+        "task claimed from database queue",
     )
-    .await?;
-
-    sqlx::query(
-        r#"
-        INSERT INTO runs (id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message)
-        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
-        "#,
-    )
-    .bind(&run_id)
-    .bind(&task_id)
-    .bind(RUN_STATUS_RUNNING)
-    .bind(attempt)
-    .bind(runner.name())
-    .bind(&started_at)
-    .execute(&state.db)
     .await?;
 
     insert_log(
@@ -133,13 +170,6 @@ where
         &format!("{} runner started task execution, attempt={attempt}", runner.name()),
     )
     .await?;
-
-    sqlx::query(&format!("UPDATE tasks SET status = ?, started_at = ? WHERE id = ? AND status = '{}'", TASK_STATUS_QUEUED))
-        .bind(TASK_STATUS_RUNNING)
-        .bind(&started_at)
-        .bind(&task_id)
-        .execute(&state.db)
-        .await?;
 
     let payload: Value = serde_json::from_str(&input_json).unwrap_or_else(|_| {
         json!({
