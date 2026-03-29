@@ -249,6 +249,67 @@ async fn queued_cancel_succeeds_even_if_memory_queue_entry_is_missing() {
     assert_eq!(cancel_json.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_CANCELLED));
 }
 
+
+#[tokio::test]
+async fn reclaimed_task_can_run_again_to_terminal_state() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let task_id = "task-reclaim-rerun".to_string();
+    let run_id = "run-reclaim-rerun".to_string();
+    sqlx::query(
+        r#"INSERT INTO tasks (id, kind, status, input_json, network_policy_json, fingerprint_profile_json, priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at, result_json, error_message)
+           VALUES (?, 'open_page', ?, '{"url":"https://example.com","timeout_seconds":5}', NULL, NULL, 0, '1', '1', '1', NULL, 'fake-0', NULL, NULL, NULL)"#,
+    )
+    .bind(&task_id)
+    .bind(TASK_STATUS_RUNNING)
+    .execute(&state.db)
+    .await
+    .expect("insert stale task");
+
+    sqlx::query(
+        r#"INSERT INTO runs (id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message)
+           VALUES (?, ?, ?, 1, 'fake', '1', NULL, NULL)"#,
+    )
+    .bind(&run_id)
+    .bind(&task_id)
+    .bind(RUN_STATUS_RUNNING)
+    .execute(&state.db)
+    .await
+    .expect("insert stale run");
+
+    let reclaimed = reclaim_stale_running_tasks(&state, 1).await.expect("reclaim");
+    assert_eq!(reclaimed, 1);
+
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
+}
+
+#[tokio::test]
+async fn retry_on_already_queued_task_returns_idempotent_success() {
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let task_id = create_task(&app, "open_page").await;
+
+    let (retry_status, retry_json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/tasks/{task_id}/retry"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(retry_status, StatusCode::OK);
+    assert_eq!(retry_json.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_QUEUED));
+    assert!(retry_json
+        .get("message")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .contains("already queued"));
+}
+
 #[tokio::test]
 async fn retry_flow_requeues_timed_out_fake_task() {
     let db_url = unique_db_url();
