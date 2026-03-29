@@ -211,7 +211,6 @@ pub async fn create_task(
         )
     })?;
 
-    state.queue.push(task_id.clone());
 
     Ok((
         StatusCode::CREATED,
@@ -352,7 +351,6 @@ pub async fn retry_task(
     };
 
     if status == TASK_STATUS_QUEUED {
-        let _ = state.queue.push_unique(task_id.clone());
         return Ok(Json(RetryTaskResponse {
             id: task_id,
             status: TASK_STATUS_QUEUED.to_string(),
@@ -367,7 +365,6 @@ pub async fn retry_task(
         ));
     }
 
-    let pushed = state.queue.push_unique(task_id.clone());
     let queued_at = now_ts_string();
     let retry_sql = format!(
         "UPDATE tasks SET status = ?, queued_at = ?, started_at = NULL, finished_at = NULL, runner_id = NULL, heartbeat_at = NULL, result_json = NULL, error_message = NULL WHERE id = ? AND status IN ('{}', '{}')",
@@ -383,9 +380,6 @@ pub async fn retry_task(
     let result = match result {
         Ok(result) => result,
         Err(err) => {
-            if pushed {
-                let _ = state.queue.remove(&task_id);
-            }
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("failed to retry task: {err}"),
@@ -394,9 +388,6 @@ pub async fn retry_task(
     };
 
     if result.rows_affected() == 0 {
-        if pushed {
-            let _ = state.queue.remove(&task_id);
-        }
 
         let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
             .bind(&task_id)
@@ -414,7 +405,6 @@ pub async fn retry_task(
         };
 
         if status == TASK_STATUS_QUEUED {
-            let _ = state.queue.push_unique(task_id.clone());
             return Ok(Json(RetryTaskResponse {
                 id: task_id,
                 status: TASK_STATUS_QUEUED.to_string(),
@@ -428,11 +418,7 @@ pub async fn retry_task(
         ));
     }
 
-    let message = if pushed {
-        "task re-queued for retry".to_string()
-    } else {
-        "task already present in queue; retry treated as idempotent".to_string()
-    };
+    let message = "task re-queued for retry".to_string();
 
     Ok(Json(RetryTaskResponse {
         id: task_id,
@@ -461,8 +447,6 @@ pub async fn cancel_task(
     };
 
     if status == TASK_STATUS_QUEUED {
-        let _ = state.queue.remove(&task_id);
-
         let finished_at = now_ts_string();
         sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ?, runner_id = NULL, heartbeat_at = NULL, error_message = ? WHERE id = ?"#)
             .bind(TASK_STATUS_CANCELLED)

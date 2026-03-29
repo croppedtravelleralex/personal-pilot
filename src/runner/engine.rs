@@ -204,7 +204,6 @@ pub async fn reclaim_stale_running_tasks(state: &AppState, stale_after_seconds: 
         )
         .await?;
 
-        let _ = state.queue.push_unique(task_id.clone());
         reclaimed += 1;
     }
 
