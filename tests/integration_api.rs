@@ -6,7 +6,7 @@ use AutoOpenBrowser::{
     domain::{
         run::{RUN_STATUS_FAILED, RUN_STATUS_RUNNING},
         task::{
-            TASK_STATUS_FAILED, TASK_STATUS_QUEUED, TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
+            TASK_STATUS_CANCELLED, TASK_STATUS_FAILED, TASK_STATUS_QUEUED, TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
         },
     },
     runner::engine::reclaim_stale_running_tasks,
@@ -226,6 +226,27 @@ async fn queued_task_runs_even_if_memory_queue_entry_is_removed() {
 
     let task = wait_for_terminal_status(&app, &task_id).await;
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
+}
+
+#[tokio::test]
+async fn queued_cancel_succeeds_even_if_memory_queue_entry_is_missing() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let task_id = create_task(&app, "open_page").await;
+    let _ = state.queue.remove(&task_id);
+
+    let (cancel_status, cancel_json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/tasks/{task_id}/cancel"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(cancel_status, StatusCode::OK);
+    assert_eq!(cancel_json.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_CANCELLED));
 }
 
 #[tokio::test]

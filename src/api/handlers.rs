@@ -124,7 +124,7 @@ pub async fn health(
     Ok(Json(HealthResponse {
         status: "ok".to_string(),
         service: "AutoOpenBrowser".to_string(),
-        queue_len: state.queue.len(),
+        queue_len: counts.queued as usize,
         counts,
     }))
 }
@@ -162,7 +162,7 @@ pub async fn status(
 
     Ok(Json(StatusResponse {
         service: "AutoOpenBrowser".to_string(),
-        queue_len: state.queue.len(),
+        queue_len: counts.queued as usize,
         counts,
         latest_tasks,
     }))
@@ -461,13 +461,7 @@ pub async fn cancel_task(
     };
 
     if status == TASK_STATUS_QUEUED {
-        let removed = state.queue.remove(&task_id);
-        if !removed {
-            return Err((
-                StatusCode::CONFLICT,
-                format!("task not found in queue: {task_id}"),
-            ));
-        }
+        let _ = state.queue.remove(&task_id);
 
         let finished_at = now_ts_string();
         sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ?, runner_id = NULL, heartbeat_at = NULL, error_message = ? WHERE id = ?"#)

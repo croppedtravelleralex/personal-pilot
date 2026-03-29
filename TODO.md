@@ -53,6 +53,7 @@
 - [x] 设计下一步 queue claim / durable queue 方案（DB-first claim 第一版）
 - [x] 落地 runner_id / stale-running reclaim 最小实现
 - [x] 落地 heartbeat_at / lease-style reclaim 判定最小实现
+- [x] 修复 DB-first claim 后 queue_len / queued cancel 的内存队列漂移问题
 - [ ] 设计高并发下的性能优化与写放大控制策略
 
 ## P2

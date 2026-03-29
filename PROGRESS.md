@@ -362,3 +362,5 @@
 - **2026.3.29-01:13:00** 完成了 **runner_id / stale-running reclaim 最小实现**，为 tasks 增加 `runner_id` 持有者字段，让 DB-first claim 在抢占时写入执行者标识；同时新增 stale-running reclaim 逻辑，可将超时未收尾的 `running` 任务回收为 `queued` 并将悬挂 run 标记为失败，还补了一条集成测试覆盖该回收链路。
 
 - **2026.3.29-08:45:00** 完成了 **heartbeat_at / lease-style reclaim 最小实现**，为 running 任务增加 `heartbeat_at` 字段与执行期心跳刷新逻辑，让 reclaim 优先基于 `heartbeat_at` 而不是仅靠 `started_at` 粗判；同时补了一条集成测试，验证带新鲜 heartbeat 的 running 任务不会被误回收。
+
+- **2026.3.29-09:18:00** 完成了 **DB-first claim 后的队列语义收口第一轮**，修复 `health/status` 仍读取内存队列长度导致 `queue_len` 失真的问题，并补齐 queued cancel 在内存队列条目缺失时仍应按 DB 状态成功取消的回归测试，降低内存队列从真相源降级后的残余语义冲突。
