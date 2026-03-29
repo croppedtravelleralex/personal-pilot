@@ -219,7 +219,7 @@ async fn running_task_with_fresh_heartbeat_is_not_reclaimed() {
 #[tokio::test]
 async fn queued_task_runs_even_if_memory_queue_entry_is_removed() {
     let db_url = unique_db_url();
-    let (state, app) = build_test_app(&db_url).await.expect("build app");
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
 
     let task_id = create_task(&app, "open_page").await;
     let task = wait_for_terminal_status(&app, &task_id).await;
@@ -229,7 +229,7 @@ async fn queued_task_runs_even_if_memory_queue_entry_is_removed() {
 #[tokio::test]
 async fn queued_cancel_succeeds_even_if_memory_queue_entry_is_missing() {
     let db_url = unique_db_url();
-    let (state, app) = build_test_app(&db_url).await.expect("build app");
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
 
     let task_id = create_task(&app, "open_page").await;
     let (cancel_status, cancel_json) = json_response(
@@ -249,7 +249,7 @@ async fn queued_cancel_succeeds_even_if_memory_queue_entry_is_missing() {
 #[tokio::test]
 async fn reclaimed_task_can_run_again_to_terminal_state() {
     let db_url = unique_db_url();
-    let (state, app) = build_test_app(&db_url).await.expect("build app");
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
 
     let task_id = "task-reclaim-rerun".to_string();
     let run_id = "run-reclaim-rerun".to_string();
@@ -310,7 +310,7 @@ async fn retry_on_already_queued_task_returns_idempotent_success() {
 #[tokio::test]
 async fn reclaimed_task_retry_endpoint_is_idempotent_and_task_still_completes() {
     let db_url = unique_db_url();
-    let (state, app) = build_test_app(&db_url).await.expect("build app");
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
 
     let task_id = "task-reclaim-retry".to_string();
     let run_id = "run-reclaim-retry".to_string();

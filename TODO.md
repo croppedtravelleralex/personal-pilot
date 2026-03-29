@@ -54,6 +54,7 @@
 - [x] 落地 runner_id / stale-running reclaim 最小实现
 - [x] 落地 heartbeat_at / lease-style reclaim 判定最小实现
 - [x] 修复 DB-first claim 后 queue_len / queued cancel 的内存队列漂移问题
+- [x] 将内存队列降级为兼容层，不再参与真实调度语义
 - [ ] 设计高并发下的性能优化与写放大控制策略
 
 ## P2
