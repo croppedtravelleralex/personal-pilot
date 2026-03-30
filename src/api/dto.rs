@@ -24,6 +24,10 @@ pub struct WorkerStatusResponse {
     pub worker_count: usize,
     pub queue_mode: String,
     pub reclaim_after_seconds: Option<u64>,
+    pub heartbeat_interval_seconds: u64,
+    pub claim_retry_limit: u32,
+    pub idle_backoff_min_ms: u64,
+    pub idle_backoff_max_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

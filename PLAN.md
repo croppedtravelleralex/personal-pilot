@@ -100,3 +100,8 @@
   - `AUTO_OPEN_BROWSER_RUNNER_HEARTBEAT_SECONDS`
   - `AUTO_OPEN_BROWSER_RUNNER_CLAIM_RETRY_LIMIT`
 - 当前更适合继续推进的方向是：claim SQL 原子化增强、worker 退避、以及 reclaim / retry / cancel 并发竞争收口。
+
+- claim / reclaim 并发收口第二版已落地：
+  - `claim_next_task()` 使用单条 `CTE + UPDATE ... RETURNING` 原子抢占
+  - worker 空闲与错误场景采用 idle exponential backoff
+  - `/status.worker` 可见 heartbeat / claim retry / idle backoff 参数

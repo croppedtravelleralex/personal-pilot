@@ -14,7 +14,10 @@ use crate::{
             TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
         },
     },
-    runner::{RunnerFingerprintProfile, RunnerOutcomeStatus, RunnerTask, TaskRunner},
+    runner::{
+        runner_claim_retry_limit_from_env, runner_heartbeat_interval_seconds_from_env,
+        RunnerFingerprintProfile, RunnerOutcomeStatus, RunnerTask, TaskRunner,
+    },
 };
 
 fn now_ts_string() -> String {
@@ -51,8 +54,6 @@ async fn insert_log(
     Ok(())
 }
 
-const HEARTBEAT_INTERVAL_SECONDS: u64 = 5;
-
 struct ClaimedTask {
     task_id: String,
     task_kind: String,
@@ -69,50 +70,50 @@ async fn claim_next_task<R>(state: &AppState, runner: &R, worker_label: &str) ->
 where
     R: TaskRunner + ?Sized,
 {
-    for _ in 0..8 {
-        let candidate = sqlx::query_as::<_, (String, String, String, Option<String>, Option<i64>, Option<String>)>(
+    for _ in 0..runner_claim_retry_limit_from_env() {
+        let started_at = now_ts_string();
+        let run_id = format!("run-{}", Uuid::new_v4());
+
+        let mut tx = state.db.begin().await?;
+        let claimed = sqlx::query_as::<_, (String, String, String, Option<String>, Option<i64>, Option<String>)>(
             r#"
-            SELECT t.id, t.kind, t.input_json, t.fingerprint_profile_id, t.fingerprint_profile_version, fp.profile_json
-            FROM tasks t
-            LEFT JOIN fingerprint_profiles fp
-              ON fp.id = t.fingerprint_profile_id
-             AND fp.status = 'active'
-             AND fp.version = t.fingerprint_profile_version
-            WHERE t.status = ?
-            ORDER BY t.priority DESC, COALESCE(t.queued_at, t.created_at) ASC, t.created_at ASC
-            LIMIT 1
+            WITH next_task AS (
+                SELECT id
+                FROM tasks
+                WHERE status = ?
+                ORDER BY priority DESC, COALESCE(queued_at, created_at) ASC, created_at ASC
+                LIMIT 1
+            )
+            UPDATE tasks
+            SET status = ?, started_at = ?, runner_id = ?, heartbeat_at = ?
+            WHERE id = (SELECT id FROM next_task)
+              AND status = ?
+            RETURNING id, kind, input_json, fingerprint_profile_id, fingerprint_profile_version,
+                (
+                    SELECT fp.profile_json
+                    FROM fingerprint_profiles fp
+                    WHERE fp.id = tasks.fingerprint_profile_id
+                      AND fp.status = 'active'
+                      AND fp.version = tasks.fingerprint_profile_version
+                ) as profile_json
             "#,
         )
         .bind(TASK_STATUS_QUEUED)
-        .fetch_optional(&state.db)
-        .await?;
-
-        let Some((task_id, task_kind, input_json, fingerprint_profile_id, fingerprint_profile_version, fingerprint_profile_json)) = candidate else {
-            return Ok(None);
-        };
-
-        let started_at = now_ts_string();
-        let run_id = format!("run-{}", Uuid::new_v4());
-        let requested_fingerprint_profile_id = fingerprint_profile_id.clone();
-        let requested_fingerprint_profile_version = fingerprint_profile_version;
-
-        let mut tx = state.db.begin().await?;
-        let claim = sqlx::query(
-            r#"UPDATE tasks SET status = ?, started_at = ?, runner_id = ?, heartbeat_at = ? WHERE id = ? AND status = ?"#,
-        )
         .bind(TASK_STATUS_RUNNING)
         .bind(&started_at)
         .bind(worker_label)
         .bind(&started_at)
-        .bind(&task_id)
         .bind(TASK_STATUS_QUEUED)
-        .execute(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await?;
 
-        if claim.rows_affected() == 0 {
+        let Some((task_id, task_kind, input_json, fingerprint_profile_id, fingerprint_profile_version, fingerprint_profile_json)) = claimed else {
             tx.rollback().await?;
-            continue;
-        }
+            return Ok(None);
+        };
+
+        let requested_fingerprint_profile_id = fingerprint_profile_id.clone();
+        let requested_fingerprint_profile_version = fingerprint_profile_version;
 
         let attempt = sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM runs WHERE task_id = ?"#)
             .bind(&task_id)
@@ -230,12 +231,13 @@ pub async fn reclaim_stale_running_tasks(state: &AppState, stale_after_seconds: 
 }
 
 fn spawn_task_heartbeat(state: AppState, task_id: String, worker_label: String) -> (oneshot::Sender<()>, JoinHandle<()>) {
+    let heartbeat_interval_seconds = runner_heartbeat_interval_seconds_from_env();
     let (stop_tx, mut stop_rx) = oneshot::channel();
     let handle = tokio::spawn(async move {
         loop {
             tokio::select! {
                 _ = &mut stop_rx => break,
-                _ = tokio::time::sleep(Duration::from_secs(HEARTBEAT_INTERVAL_SECONDS)) => {
+                _ = tokio::time::sleep(Duration::from_secs(heartbeat_interval_seconds)) => {
                     let heartbeat_at = now_ts_string();
                     let _ = sqlx::query(
                         r#"UPDATE tasks SET heartbeat_at = ? WHERE id = ? AND status = ? AND runner_id = ?"#,

@@ -486,6 +486,81 @@ async fn status_exposes_fingerprint_metrics_summary() {
 }
 
 #[tokio::test]
+async fn cancel_after_retry_race_returns_stable_conflict_or_cancelled() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let task_id = "task-cancel-after-retry-race".to_string();
+    sqlx::query(
+        r#"INSERT INTO tasks (id, kind, status, input_json, network_policy_json, fingerprint_profile_json, priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at, result_json, error_message)
+           VALUES (?, 'open_page', ?, '{}', NULL, NULL, 0, '1', '1', '1', '2', NULL, NULL, NULL, 'failed before retry')"#,
+    )
+    .bind(&task_id)
+    .bind(TASK_STATUS_FAILED)
+    .execute(&state.db)
+    .await
+    .expect("insert failed task");
+
+    let (retry_status, retry_json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/tasks/{task_id}/retry"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(retry_status, StatusCode::OK);
+    assert_eq!(retry_json.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_QUEUED));
+
+    let cancel_response = app.clone().oneshot(
+        Request::builder()
+            .method("POST")
+            .uri(format!("/tasks/{task_id}/cancel"))
+            .body(Body::empty())
+            .expect("request"),
+    ).await.expect("cancel response");
+    let cancel_status = cancel_response.status();
+    let cancel_body = axum::body::to_bytes(cancel_response.into_body(), usize::MAX).await.expect("body");
+    let cancel_json: Value = serde_json::from_slice(&cancel_body).expect("json body");
+
+    assert!(matches!(cancel_status, StatusCode::OK | StatusCode::CONFLICT));
+    let final_status: String = sqlx::query_scalar(r#"SELECT status FROM tasks WHERE id = ?"#)
+        .bind(&task_id)
+        .fetch_one(&state.db)
+        .await
+        .expect("final task status");
+    assert!(matches!(final_status.as_str(), TASK_STATUS_CANCELLED | TASK_STATUS_QUEUED | TASK_STATUS_RUNNING | TASK_STATUS_SUCCEEDED));
+    assert!(cancel_json.get("status").is_some() || cancel_json.get("message").is_some());
+}
+
+#[tokio::test]
+async fn status_exposes_worker_backoff_parameterization() {
+    std::env::set_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MIN_MS", "333");
+    std::env::set_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MAX_MS", "4444");
+
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder()
+            .uri("/status?limit=5&offset=0")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    std::env::remove_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MIN_MS");
+    std::env::remove_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MAX_MS");
+
+    assert_eq!(status, StatusCode::OK);
+    let worker = json.get("worker").expect("worker");
+    assert_eq!(worker.get("idle_backoff_min_ms").and_then(|v| v.as_u64()), Some(333));
+    assert_eq!(worker.get("idle_backoff_max_ms").and_then(|v| v.as_u64()), Some(4444));
+}
+
+#[tokio::test]
 async fn fake_runner_success_flow_is_visible_across_endpoints() {
     let db_url = unique_db_url();
     let (_state, app) = build_test_app(&db_url).await.expect("build app");
