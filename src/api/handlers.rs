@@ -936,6 +936,8 @@ pub async fn smoke_test_proxy(
         .and_then(|result| result.ok());
     let reachable = stream.is_some();
     let mut protocol_ok = false;
+    let mut upstream_ok = false;
+    let mut exit_ip: Option<String> = None;
     let mut smoke_message = if reachable {
         "tcp connect succeeded but proxy protocol not validated".to_string()
     } else {
@@ -948,15 +950,26 @@ Host: example.com:443
 
 ";
         if tokio::time::timeout(std::time::Duration::from_secs(3), stream_ref.write_all(probe)).await.ok().is_some() {
-            let mut buf = [0_u8; 256];
+            let mut buf = [0_u8; 512];
             if let Ok(Ok(n)) = tokio::time::timeout(std::time::Duration::from_secs(3), stream_ref.read(&mut buf)).await {
                 if n > 0 {
-                    let text = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
-                    if text.contains("http/1.1") || text.contains("http/1.0") {
+                    let text = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let text_lower = text.to_ascii_lowercase();
+                    if text_lower.contains("http/1.1") || text_lower.contains("http/1.0") {
                         protocol_ok = true;
-                        smoke_message = "http connect smoke test received proxy response".to_string();
+                        if let Some(idx) = text.find("ip=") {
+                            let ip = text[idx + 3..].lines().next().unwrap_or("").trim().to_string();
+                            if !ip.is_empty() {
+                                upstream_ok = true;
+                                exit_ip = Some(ip.clone());
+                                smoke_message = format!("http proxy smoke test got upstream ip={ip}");
+                            }
+                        }
+                        if !upstream_ok {
+                            smoke_message = "http connect smoke test received proxy response".to_string();
+                        }
                     } else {
-                        smoke_message = format!("tcp connect ok but proxy response was not http-like: {text}");
+                        smoke_message = format!("tcp connect ok but proxy response was not http-like: {text_lower}");
                     }
                 }
             }
@@ -979,6 +992,8 @@ Host: example.com:443
             id: proxy_id,
             reachable: true,
             protocol_ok: true,
+            upstream_ok,
+            exit_ip,
             latency_ms,
             status: "ok".to_string(),
             message: smoke_message,
@@ -998,6 +1013,8 @@ Host: example.com:443
             id: proxy_id,
             reachable,
             protocol_ok,
+            upstream_ok,
+            exit_ip,
             latency_ms,
             status: "failed".to_string(),
             message: smoke_message,

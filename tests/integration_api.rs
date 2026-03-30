@@ -12,6 +12,7 @@ use AutoOpenBrowser::{
     runner::engine::reclaim_stale_running_tasks,
 };
 use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::ServiceExt;
 
 fn unique_db_url() -> String {
@@ -1251,6 +1252,7 @@ async fn proxy_smoke_test_marks_unreachable_proxy_failed() {
     assert_eq!(smoke_status, StatusCode::OK);
     assert_eq!(smoke_json.get("reachable").and_then(|v| v.as_bool()), Some(false));
     assert_eq!(smoke_json.get("protocol_ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(smoke_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(false));
 
     let (failure_count, last_checked_at, cooldown_until): (i64, Option<String>, Option<String>) =
         sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until FROM proxies WHERE id = 'proxy-smoke-dead'"#)
@@ -1350,14 +1352,16 @@ async fn proxy_smoke_test_accepts_http_like_proxy_response() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind listener");
     let addr = listener.local_addr().expect("local addr");
     tokio::spawn(async move {
-        if let Ok((socket, _)) = listener.accept().await {
+        if let Ok((mut socket, _)) = listener.accept().await {
             let mut buf = [0_u8; 256];
-            let _ = socket.readable().await;
-            let _ = socket.try_read(&mut buf);
-            let _ = socket.writable().await;
-            let _ = socket.try_write(b"HTTP/1.1 200 Connection Established
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established
 
-");
+ip=203.0.113.8
+"),
+            ).await;
         }
     });
 
@@ -1386,6 +1390,8 @@ async fn proxy_smoke_test_accepts_http_like_proxy_response() {
     assert_eq!(smoke_status, StatusCode::OK);
     assert_eq!(smoke_json.get("reachable").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(smoke_json.get("protocol_ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(smoke_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("203.0.113.8"));
 
     let (failure_count, last_checked_at, cooldown_until): (i64, Option<String>, Option<String>) =
         sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until FROM proxies WHERE id = 'proxy-smoke-http'"#)
