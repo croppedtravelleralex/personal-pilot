@@ -121,6 +121,7 @@
 - **2026.3.30-23:32:00** 完成了 **代理健康回写第一版**，runner 执行完成后会按结果回写 `proxies.success_count / failure_count / last_used_at / last_checked_at / cooldown_until / updated_at`；当前策略为成功清空冷却，失败写入短冷却，超时写入更长冷却，并补了一条成功+超时的回归测试。
 - **2026.3.31-00:19:00** 完成了 **代理选择策略第一版增强**，为执行前代理解析补上 `provider` 过滤、`cooldown_until` 过滤与最小版 `sticky_session` 复用；fallback 顺序也改成优先 sticky，其次按 `provider / region / min_score` 筛选，再按 `score DESC + last_used_at ASC + created_at ASC` 选取，并补了对应回归测试。
 - **2026.3.31-00:39:00** 完成了 **代理观测面增强 + smoke test 第一版**，任务详情与 `/status` 现在会暴露 `proxy_id / proxy_provider / proxy_region / proxy_resolution_status` 以及 `proxy_metrics` 聚合；同时新增 `POST /proxies/:id/smoke` 做最小 TCP 连通性探测，并按结果回写 `last_checked_at / failure_count / cooldown_until`。
+- **2026.3.31-00:49:00** 完成了 **sticky/provider 正式映射结构第一版**，新增 `proxy_session_bindings` 表承载 `sticky_session -> proxy_id` 绑定关系，并在执行完成后 upsert 绑定、执行前优先按绑定命中再做有效性校验（active / expires_at / cooldown / provider / region / min_score）；sticky 逻辑不再依赖历史任务 `result_json` 回溯。
 
 ## 1. 已经实现 / 已经落地
 

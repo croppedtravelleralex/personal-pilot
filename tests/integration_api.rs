@@ -1260,3 +1260,44 @@ async fn proxy_smoke_test_marks_unreachable_proxy_failed() {
     assert!(last_checked_at.is_some());
     assert!(cooldown_until.is_some());
 }
+
+
+#[tokio::test]
+async fn sticky_session_binding_table_is_written_and_reused() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-bind-1', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.91, 0, 0, NULL, NULL, NULL, '1', '1')"#).execute(&state.db).await.expect("insert bind proxy 1");
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-bind-2', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.99, 0, 0, NULL, NULL, NULL, '1', '1')"#).execute(&state.db).await.expect("insert bind proxy 2");
+
+    let sticky = "session-bind-alpha";
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/1",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-a", "sticky_session": sticky}
+    });
+    let (_, json1) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request")).await;
+    let task_id1 = json1.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let _ = wait_for_terminal_status(&app, &task_id1).await;
+
+    let (bound_proxy_id, bound_provider): (String, Option<String>) = sqlx::query_as(r#"SELECT proxy_id, provider FROM proxy_session_bindings WHERE session_key = ?"#)
+        .bind(sticky)
+        .fetch_one(&state.db)
+        .await
+        .expect("load sticky binding");
+    assert!(["proxy-bind-1", "proxy-bind-2"].contains(&bound_proxy_id.as_str()));
+    assert_eq!(bound_provider.as_deref(), Some("pool-a"));
+
+    let payload2 = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/2",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-a", "sticky_session": sticky}
+    });
+    let (_, json2) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload2.to_string())).expect("request")).await;
+    let task_id2 = json2.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let task2 = wait_for_terminal_status(&app, &task_id2).await;
+    assert_eq!(task2.get("proxy_id").and_then(|v| v.as_str()), Some(bound_proxy_id.as_str()));
+    assert_eq!(task2.get("proxy_resolution_status").and_then(|v| v.as_str()), Some("resolved_sticky"));
+}

@@ -59,13 +59,14 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 "#;
 
-pub const ALL_SCHEMA_SQL: [&str; 6] = [
+pub const ALL_SCHEMA_SQL: [&str; 7] = [
     CREATE_TASKS_TABLE_SQL,
     CREATE_RUNS_TABLE_SQL,
     CREATE_ARTIFACTS_TABLE_SQL,
     CREATE_LOGS_TABLE_SQL,
     CREATE_FINGERPRINT_PROFILES_TABLE_SQL,
     CREATE_PROXIES_TABLE_SQL,
+    CREATE_PROXY_SESSION_BINDINGS_TABLE_SQL,
 ];
 
 
@@ -103,5 +104,20 @@ CREATE TABLE IF NOT EXISTS proxies (
     cooldown_until TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+"#;
+
+
+pub const CREATE_PROXY_SESSION_BINDINGS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS proxy_session_bindings (
+    session_key TEXT PRIMARY KEY,
+    proxy_id TEXT NOT NULL,
+    provider TEXT,
+    region TEXT,
+    last_used_at TEXT NOT NULL,
+    expires_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(proxy_id) REFERENCES proxies(id)
 );
 "#;

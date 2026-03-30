@@ -103,34 +103,28 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         .await?
     } else if let Some(sticky_session) = sticky_session {
         sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
-            r#"SELECT id, scheme, host, port, username, password, region, country, provider, score
-               FROM proxies
-               WHERE status = 'active'
-                 AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
-                 AND (? IS NULL OR provider = ?)
-                 AND (? IS NULL OR region = ?)
-                 AND score >= ?
-                 AND id = (
-                    SELECT json_extract(result_json, '$.proxy.id')
-                    FROM tasks
-                    WHERE result_json IS NOT NULL
-                      AND json_extract(input_json, '$.network_policy_json.sticky_session') = ?
-                      AND json_extract(result_json, '$.proxy.id') IS NOT NULL
-                    ORDER BY finished_at DESC
-                    LIMIT 1
-                 )
+            r#"SELECT p.id, p.scheme, p.host, p.port, p.username, p.password, p.region, p.country, p.provider, p.score
+               FROM proxy_session_bindings b
+               JOIN proxies p ON p.id = b.proxy_id
+               WHERE b.session_key = ?
+                 AND p.status = 'active'
+                 AND (b.expires_at IS NULL OR CAST(b.expires_at AS INTEGER) > CAST(? AS INTEGER))
+                 AND (p.cooldown_until IS NULL OR CAST(p.cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+                 AND (? IS NULL OR p.provider = ?)
+                 AND (? IS NULL OR p.region = ?)
+                 AND p.score >= ?
                LIMIT 1"#,
         )
+        .bind(sticky_session)
+        .bind(&now)
         .bind(&now)
         .bind(provider)
         .bind(provider)
         .bind(region)
         .bind(region)
         .bind(min_score)
-        .bind(sticky_session)
         .fetch_optional(&state.db)
         .await?
-        .or_else(|| None)
     } else {
         None
     };
@@ -164,6 +158,61 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
     } else {
         policy_obj.insert("proxy_resolution_status".to_string(), json!("unresolved"));
     }
+    Ok(())
+}
+
+async fn upsert_proxy_session_binding(
+    state: &AppState,
+    payload: &Value,
+    proxy: Option<&RunnerProxySelection>,
+) -> Result<()> {
+    let Some(sticky_session) = payload
+        .get("network_policy_json")
+        .and_then(|v| v.get("sticky_session"))
+        .and_then(|v| v.as_str())
+    else {
+        return Ok(());
+    };
+    let Some(proxy) = proxy else {
+        return Ok(());
+    };
+
+    let provider = payload
+        .get("network_policy_json")
+        .and_then(|v| v.get("provider"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+        .or_else(|| proxy.provider.clone());
+    let region = payload
+        .get("network_policy_json")
+        .and_then(|v| v.get("region"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+        .or_else(|| proxy.region.clone());
+
+    let now = now_ts_string();
+    let expires_at = (now.parse::<u64>().unwrap_or(0) + 86400).to_string();
+    sqlx::query(
+        r#"INSERT INTO proxy_session_bindings (session_key, proxy_id, provider, region, last_used_at, expires_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(session_key) DO UPDATE SET
+             proxy_id = excluded.proxy_id,
+             provider = excluded.provider,
+             region = excluded.region,
+             last_used_at = excluded.last_used_at,
+             expires_at = excluded.expires_at,
+             updated_at = excluded.updated_at"#,
+    )
+    .bind(sticky_session)
+    .bind(&proxy.id)
+    .bind(&provider)
+    .bind(&region)
+    .bind(&now)
+    .bind(&expires_at)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
     Ok(())
 }
 
@@ -470,6 +519,7 @@ where
         .and_then(|value| value.as_i64())
         .filter(|value| *value > 0);
 
+    let payload_for_binding = payload.clone();
     let proxy_for_health = proxy.clone();
     let execution = runner
         .execute(RunnerTask {
@@ -486,6 +536,7 @@ where
     let _ = heartbeat_stop.send(());
     let _ = heartbeat_handle.await;
 
+    upsert_proxy_session_binding(state, &payload_for_binding, proxy_for_health.as_ref()).await?;
     update_proxy_health_after_execution(state, proxy_for_health.as_ref(), execution.status).await?;
 
     let finished_at = now_ts_string();

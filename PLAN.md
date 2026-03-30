@@ -133,3 +133,9 @@
   - `/tasks/:id` 与 `/status.latest_tasks` 暴露 `proxy_id / proxy_provider / proxy_region / proxy_resolution_status`
   - `/status` 新增 `proxy_metrics` 聚合
   - `POST /proxies/:id/smoke` 做最小 TCP smoke test，并回写 `last_checked_at / failure_count / cooldown_until`
+
+- sticky/provider 正式映射结构第一版已落地：
+  - 新增 `proxy_session_bindings` 表
+  - 执行完成后 upsert `sticky_session -> proxy_id` 绑定
+  - 执行前优先按 binding 命中，并校验 `expires_at / cooldown / provider / region / min_score`
+  - sticky 不再走历史任务 `result_json` 回溯
