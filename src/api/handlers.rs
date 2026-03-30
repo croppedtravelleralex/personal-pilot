@@ -938,6 +938,7 @@ pub async fn smoke_test_proxy(
     let mut protocol_ok = false;
     let mut upstream_ok = false;
     let mut exit_ip: Option<String> = None;
+    let mut anonymity_level: Option<String> = None;
     let mut smoke_message = if reachable {
         "tcp connect succeeded but proxy protocol not validated".to_string()
     } else {
@@ -957,6 +958,9 @@ Host: example.com:443
                     let text_lower = text.to_ascii_lowercase();
                     if text_lower.contains("http/1.1") || text_lower.contains("http/1.0") {
                         protocol_ok = true;
+                        let has_via = text_lower.contains("via:");
+                        let has_forwarded = text_lower.contains("forwarded:") || text_lower.contains("x-forwarded-for:");
+                        anonymity_level = Some(if has_forwarded { "transparent".to_string() } else if has_via { "anonymous".to_string() } else { "elite".to_string() });
                         if let Some(idx) = text.find("ip=") {
                             let ip = text[idx + 3..].lines().next().unwrap_or("").trim().to_string();
                             if !ip.is_empty() {
@@ -994,6 +998,7 @@ Host: example.com:443
             protocol_ok: true,
             upstream_ok,
             exit_ip,
+            anonymity_level,
             latency_ms,
             status: "ok".to_string(),
             message: smoke_message,
@@ -1015,6 +1020,7 @@ Host: example.com:443
             protocol_ok,
             upstream_ok,
             exit_ip,
+            anonymity_level,
             latency_ms,
             status: "failed".to_string(),
             message: smoke_message,

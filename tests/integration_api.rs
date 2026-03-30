@@ -1253,6 +1253,7 @@ async fn proxy_smoke_test_marks_unreachable_proxy_failed() {
     assert_eq!(smoke_json.get("reachable").and_then(|v| v.as_bool()), Some(false));
     assert_eq!(smoke_json.get("protocol_ok").and_then(|v| v.as_bool()), Some(false));
     assert_eq!(smoke_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), None);
 
     let (failure_count, last_checked_at, cooldown_until): (i64, Option<String>, Option<String>) =
         sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until FROM proxies WHERE id = 'proxy-smoke-dead'"#)
@@ -1392,6 +1393,7 @@ ip=203.0.113.8
     assert_eq!(smoke_json.get("protocol_ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(smoke_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("203.0.113.8"));
+    assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), Some("elite"));
 
     let (failure_count, last_checked_at, cooldown_until): (i64, Option<String>, Option<String>) =
         sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until FROM proxies WHERE id = 'proxy-smoke-http'"#)
@@ -1401,4 +1403,51 @@ ip=203.0.113.8
     assert_eq!(failure_count, 0);
     assert!(last_checked_at.is_some());
     assert!(cooldown_until.is_none());
+}
+
+
+#[tokio::test]
+async fn proxy_smoke_test_classifies_transparent_proxy_response() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind listener");
+    let addr = listener.local_addr().expect("local addr");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established
+X-Forwarded-For: 198.51.100.7
+
+ip=198.51.100.20
+"),
+            ).await;
+        }
+    });
+
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+    let proxy_payload = serde_json::json!({
+        "id": "proxy-smoke-transparent",
+        "scheme": "http",
+        "host": addr.ip().to_string(),
+        "port": addr.port(),
+        "region": "local",
+        "country": "ZZ",
+        "provider": "smoke",
+        "score": 0.5
+    });
+    let (create_status, _) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(create_status, StatusCode::CREATED);
+
+    let (smoke_status, smoke_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/proxy-smoke-transparent/smoke").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(smoke_status, StatusCode::OK);
+    assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), Some("transparent"));
+    assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("198.51.100.20"));
 }

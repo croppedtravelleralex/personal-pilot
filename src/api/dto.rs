@@ -194,6 +194,7 @@ pub struct ProxySmokeResponse {
     pub protocol_ok: bool,
     pub upstream_ok: bool,
     pub exit_ip: Option<String>,
+    pub anonymity_level: Option<String>,
     pub latency_ms: Option<u128>,
     pub status: String,
     pub message: String,
