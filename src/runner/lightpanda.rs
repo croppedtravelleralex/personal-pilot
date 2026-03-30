@@ -118,6 +118,17 @@ fn result_payload(
         "version": profile.version,
         "profile": profile.profile_json,
     }));
+    let proxy_json = task.proxy.as_ref().map(|proxy| json!({
+        "id": proxy.id,
+        "scheme": proxy.scheme,
+        "host": proxy.host,
+        "port": proxy.port,
+        "region": proxy.region,
+        "country": proxy.country,
+        "provider": proxy.provider,
+        "score": proxy.score,
+        "resolution_status": proxy.resolution_status,
+    }));
 
     let fingerprint_runtime_json = fingerprint_runtime.map(|runtime| json!({
         "env_keys": runtime.envs.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>(),
@@ -141,6 +152,7 @@ fn result_payload(
         "url": url,
         "timeout_seconds": timeout_seconds,
         "fingerprint_profile": fingerprint_profile,
+        "proxy": proxy_json,
         "fingerprint_runtime": fingerprint_runtime_json,
         "bin": bin,
         "exit_code": exit_code,
@@ -386,6 +398,18 @@ impl TaskRunner for LightpandaRunner {
         if let Some(runtime) = &fingerprint_runtime {
             for (key, value) in &runtime.envs {
                 cmd.env(key, value);
+            }
+        }
+        if let Some(proxy) = &task.proxy {
+            cmd.env("LIGHTPANDA_PROXY_ID", &proxy.id)
+                .env("LIGHTPANDA_PROXY_SCHEME", &proxy.scheme)
+                .env("LIGHTPANDA_PROXY_HOST", &proxy.host)
+                .env("LIGHTPANDA_PROXY_PORT", proxy.port.to_string());
+            if let Some(username) = &proxy.username {
+                cmd.env("LIGHTPANDA_PROXY_USERNAME", username);
+            }
+            if let Some(password) = &proxy.password {
+                cmd.env("LIGHTPANDA_PROXY_PASSWORD", password);
             }
         }
 

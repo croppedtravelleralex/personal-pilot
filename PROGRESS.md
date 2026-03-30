@@ -119,6 +119,7 @@
 - **2026.3.30-23:12:00** 完成了 **DB-first claim / reclaim 并发收口第三版**，为 reclaim 增加 `runner_id IS NOT NULL` 安全条件，避免误回收半脏 running 记录；同时明确 `running` 状态下的 retry 返回 `409 CONFLICT`，并补齐对应回归测试。
 - **2026.3.30-23:25:00** 完成了 **代理池 V1 骨架 + 执行链代理解析第一版**，新增 `proxies` 表、`/proxies` 管理接口、`CreateTaskRequest.network_policy_json` 持久化，以及 runner 执行前基于 `proxy_id` 或 `region + min_score` 的最小代理解析；fake/lightpanda 的 `result_json` 已开始回显 `proxy`，Lightpanda 进程也会收到 `LIGHTPANDA_PROXY_*` 环境变量。
 - **2026.3.30-23:32:00** 完成了 **代理健康回写第一版**，runner 执行完成后会按结果回写 `proxies.success_count / failure_count / last_used_at / last_checked_at / cooldown_until / updated_at`；当前策略为成功清空冷却，失败写入短冷却，超时写入更长冷却，并补了一条成功+超时的回归测试。
+- **2026.3.31-00:19:00** 完成了 **代理选择策略第一版增强**，为执行前代理解析补上 `provider` 过滤、`cooldown_until` 过滤与最小版 `sticky_session` 复用；fallback 顺序也改成优先 sticky，其次按 `provider / region / min_score` 筛选，再按 `score DESC + last_used_at ASC + created_at ASC` 选取，并补了对应回归测试。
 
 ## 1. 已经实现 / 已经落地
 

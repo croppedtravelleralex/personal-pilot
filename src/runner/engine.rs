@@ -81,17 +81,85 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         policy_obj.insert("proxy_resolution_status".to_string(), json!("direct"));
         return Ok(());
     }
+
+    let now = now_ts_string();
+    let sticky_session = policy_obj.get("sticky_session").and_then(|v| v.as_str());
+    let provider = policy_obj.get("provider").and_then(|v| v.as_str());
+    let region = policy_obj.get("region").and_then(|v| v.as_str());
+    let min_score = policy_obj.get("min_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
     let row = if let Some(proxy_id) = policy_obj.get("proxy_id").and_then(|v| v.as_str()) {
-        sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(r#"SELECT id, scheme, host, port, username, password, region, country, provider, score FROM proxies WHERE id = ? AND status = 'active' LIMIT 1"#)
-            .bind(proxy_id).fetch_optional(&state.db).await?
+        sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
+            r#"SELECT id, scheme, host, port, username, password, region, country, provider, score
+               FROM proxies
+               WHERE id = ?
+                 AND status = 'active'
+                 AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+               LIMIT 1"#,
+        )
+        .bind(proxy_id)
+        .bind(&now)
+        .fetch_optional(&state.db)
+        .await?
+    } else if let Some(sticky_session) = sticky_session {
+        sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
+            r#"SELECT id, scheme, host, port, username, password, region, country, provider, score
+               FROM proxies
+               WHERE status = 'active'
+                 AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+                 AND (? IS NULL OR provider = ?)
+                 AND (? IS NULL OR region = ?)
+                 AND score >= ?
+                 AND id = (
+                    SELECT json_extract(result_json, '$.proxy.id')
+                    FROM tasks
+                    WHERE result_json IS NOT NULL
+                      AND json_extract(input_json, '$.network_policy_json.sticky_session') = ?
+                      AND json_extract(result_json, '$.proxy.id') IS NOT NULL
+                    ORDER BY finished_at DESC
+                    LIMIT 1
+                 )
+               LIMIT 1"#,
+        )
+        .bind(&now)
+        .bind(provider)
+        .bind(provider)
+        .bind(region)
+        .bind(region)
+        .bind(min_score)
+        .bind(sticky_session)
+        .fetch_optional(&state.db)
+        .await?
+        .or_else(|| None)
     } else {
-        let region = policy_obj.get("region").and_then(|v| v.as_str());
-        let min_score = policy_obj.get("min_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(r#"SELECT id, scheme, host, port, username, password, region, country, provider, score FROM proxies WHERE status = 'active' AND (? IS NULL OR region = ?) AND score >= ? ORDER BY score DESC, created_at ASC LIMIT 1"#)
-            .bind(region).bind(region).bind(min_score).fetch_optional(&state.db).await?
+        None
     };
+
+    let row = match row {
+        Some(row) => Some(row),
+        None => sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
+            r#"SELECT id, scheme, host, port, username, password, region, country, provider, score
+               FROM proxies
+               WHERE status = 'active'
+                 AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+                 AND (? IS NULL OR provider = ?)
+                 AND (? IS NULL OR region = ?)
+                 AND score >= ?
+               ORDER BY score DESC, COALESCE(last_used_at, '0') ASC, created_at ASC
+               LIMIT 1"#,
+        )
+        .bind(&now)
+        .bind(provider)
+        .bind(provider)
+        .bind(region)
+        .bind(region)
+        .bind(min_score)
+        .fetch_optional(&state.db)
+        .await?,
+    };
+
     if let Some((id, scheme, host, port, username, password, region, country, provider, score)) = row {
-        policy_obj.insert("proxy_resolution_status".to_string(), json!("resolved"));
+        policy_obj.insert("proxy_resolution_status".to_string(), json!(if sticky_session.is_some() { "resolved_sticky" } else { "resolved" }));
         policy_obj.insert("resolved_proxy".to_string(), json!({"id": id, "scheme": scheme, "host": host, "port": port, "username": username, "password": password, "region": region, "country": country, "provider": provider, "score": score}));
     } else {
         policy_obj.insert("proxy_resolution_status".to_string(), json!("unresolved"));

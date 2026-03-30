@@ -122,3 +122,9 @@
   - success -> `success_count + 1`，刷新 `last_used_at / last_checked_at / updated_at`
   - failed -> `failure_count + 1`，写入短 `cooldown_until`
   - timed_out -> `failure_count + 1`，写入更长 `cooldown_until`
+
+- 代理选择策略第一版增强已落地：
+  - `provider` 过滤
+  - `cooldown_until` 过滤
+  - 最小版 `sticky_session` 复用
+  - fallback 顺序：sticky > `provider/region/min_score` > `score DESC + last_used_at ASC + created_at ASC`

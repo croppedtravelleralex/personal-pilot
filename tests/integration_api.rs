@@ -1108,3 +1108,66 @@ async fn proxy_health_is_updated_after_success_and_timeout() {
     assert_eq!(failure_count2, 1);
     assert!(cooldown_until2.is_some());
 }
+
+
+#[tokio::test]
+async fn proxy_selection_filters_provider_and_cooldown() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-cooldown', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.99, 0, 0, NULL, NULL, '9999999999', '1', '1')"#).execute(&state.db).await.expect("insert cooldown proxy");
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-allowed', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.90, 0, 0, NULL, NULL, NULL, '1', '1')"#).execute(&state.db).await.expect("insert allowed proxy");
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-other-provider', 'http', '127.0.0.3', 8082, NULL, NULL, 'us-east', 'US', 'pool-b', 'active', 0.95, 0, 0, NULL, NULL, NULL, '1', '1')"#).execute(&state.db).await.expect("insert other proxy");
+
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "region": "us-east", "provider": "pool-a", "min_score": 0.8}
+    });
+    let (_, json) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request")).await;
+    let task_id = json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let _ = wait_for_terminal_status(&app, &task_id).await;
+
+    let result_json_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#).bind(&task_id).fetch_one(&state.db).await.expect("load result");
+    let result_json: Value = serde_json::from_str(result_json_text.as_deref().expect("result json")).expect("parse result");
+    assert_eq!(result_json.get("proxy").and_then(|v| v.get("id")).and_then(|v| v.as_str()), Some("proxy-allowed"));
+}
+
+#[tokio::test]
+async fn proxy_selection_reuses_sticky_session_when_available() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-sticky-1', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.91, 0, 0, NULL, NULL, NULL, '1', '1')"#).execute(&state.db).await.expect("insert sticky proxy");
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-sticky-2', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.99, 0, 0, NULL, NULL, NULL, '1', '1')"#).execute(&state.db).await.expect("insert fallback proxy");
+
+    let sticky = "session-alpha";
+    let payload1 = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/1",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-a", "sticky_session": sticky}
+    });
+    let (_, json1) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload1.to_string())).expect("request")).await;
+    let task_id1 = json1.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let _ = wait_for_terminal_status(&app, &task_id1).await;
+
+    let result1_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#).bind(&task_id1).fetch_one(&state.db).await.expect("load result1");
+    let result1: Value = serde_json::from_str(result1_text.as_deref().expect("result1 json")).expect("parse result1");
+    let first_proxy_id = result1.get("proxy").and_then(|v| v.get("id")).and_then(|v| v.as_str()).expect("first proxy").to_string();
+
+    let payload2 = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/2",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-a", "sticky_session": sticky}
+    });
+    let (_, json2) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload2.to_string())).expect("request")).await;
+    let task_id2 = json2.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let _ = wait_for_terminal_status(&app, &task_id2).await;
+
+    let result2_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#).bind(&task_id2).fetch_one(&state.db).await.expect("load result2");
+    let result2: Value = serde_json::from_str(result2_text.as_deref().expect("result2 json")).expect("parse result2");
+    assert_eq!(result2.get("proxy").and_then(|v| v.get("id")).and_then(|v| v.as_str()), Some(first_proxy_id.as_str()));
+}

@@ -30,6 +30,17 @@ fn result_payload(
         "version": profile.version,
         "profile": profile.profile_json,
     }));
+    let proxy = task.proxy.as_ref().map(|proxy| json!({
+        "id": proxy.id,
+        "scheme": proxy.scheme,
+        "host": proxy.host,
+        "port": proxy.port,
+        "region": proxy.region,
+        "country": proxy.country,
+        "provider": proxy.provider,
+        "score": proxy.score,
+        "resolution_status": proxy.resolution_status,
+    }));
 
     json!({
         "runner": "fake",
@@ -44,6 +55,7 @@ fn result_payload(
         "url": url,
         "timeout_seconds": timeout_seconds,
         "fingerprint_profile": fingerprint_profile,
+        "proxy": proxy,
         "bin": Value::Null,
         "exit_code": Value::Null,
         "stdout_preview": Value::Null,
