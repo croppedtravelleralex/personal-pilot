@@ -25,6 +25,80 @@ pub struct LightpandaRunner {
     running_tasks: Arc<Mutex<HashMap<String, u32>>>,
 }
 
+#[derive(Debug, Clone)]
+struct LightpandaFingerprintRuntime {
+    envs: Vec<(String, String)>,
+    applied_fields: Vec<String>,
+    ignored_fields: Vec<String>,
+}
+
+fn profile_value_as_env_string(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(v) => {
+            let trimmed = v.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        }
+        Value::Bool(v) => Some(v.to_string()),
+        Value::Number(v) => Some(v.to_string()),
+        _ => None,
+    }
+}
+
+fn build_lightpanda_fingerprint_runtime(task: &RunnerTask) -> Option<LightpandaFingerprintRuntime> {
+    let profile = task.fingerprint_profile.as_ref()?;
+    let profile_obj = profile.profile_json.as_object()?;
+
+    let field_map = [
+        ("accept_language", "LIGHTPANDA_FP_ACCEPT_LANGUAGE"),
+        ("timezone", "LIGHTPANDA_FP_TIMEZONE"),
+        ("locale", "LIGHTPANDA_FP_LOCALE"),
+        ("platform", "LIGHTPANDA_FP_PLATFORM"),
+        ("user_agent", "LIGHTPANDA_FP_USER_AGENT"),
+        ("viewport_width", "LIGHTPANDA_FP_VIEWPORT_WIDTH"),
+        ("viewport_height", "LIGHTPANDA_FP_VIEWPORT_HEIGHT"),
+        ("screen_width", "LIGHTPANDA_FP_SCREEN_WIDTH"),
+        ("screen_height", "LIGHTPANDA_FP_SCREEN_HEIGHT"),
+        ("device_pixel_ratio", "LIGHTPANDA_FP_DEVICE_PIXEL_RATIO"),
+        ("hardware_concurrency", "LIGHTPANDA_FP_HARDWARE_CONCURRENCY"),
+        ("device_memory_gb", "LIGHTPANDA_FP_DEVICE_MEMORY_GB"),
+    ];
+
+    let mut envs = Vec::new();
+    let mut applied_fields = Vec::new();
+    let mut ignored_fields = Vec::new();
+
+    envs.push(("LIGHTPANDA_FP_PROFILE_ID".to_string(), profile.id.clone()));
+    envs.push(("LIGHTPANDA_FP_PROFILE_VERSION".to_string(), profile.version.to_string()));
+    applied_fields.push("profile_id".to_string());
+    applied_fields.push("profile_version".to_string());
+
+    for (field, env_name) in field_map {
+        match profile_obj.get(field) {
+            Some(value) => match profile_value_as_env_string(value) {
+                Some(value) => {
+                    envs.push((env_name.to_string(), value));
+                    applied_fields.push(field.to_string());
+                }
+                None => ignored_fields.push(field.to_string()),
+            },
+            None => {}
+        }
+    }
+
+    for key in profile_obj.keys() {
+        if !field_map.iter().any(|(field, _)| field == key) {
+            ignored_fields.push(key.clone());
+        }
+    }
+
+    Some(LightpandaFingerprintRuntime {
+        envs,
+        applied_fields,
+        ignored_fields,
+    })
+}
+
 fn result_payload(
     ok: bool,
     status: &str,
@@ -36,12 +110,22 @@ fn result_payload(
     exit_code: Option<i32>,
     stdout_preview: Option<String>,
     stderr_preview: Option<String>,
+    fingerprint_runtime: Option<&LightpandaFingerprintRuntime>,
     message: &str,
 ) -> Value {
     let fingerprint_profile = task.fingerprint_profile.as_ref().map(|profile| json!({
         "id": profile.id,
         "version": profile.version,
         "profile": profile.profile_json,
+    }));
+
+    let fingerprint_runtime_json = fingerprint_runtime.map(|runtime| json!({
+        "env_keys": runtime.envs.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>(),
+        "applied_fields": runtime.applied_fields,
+        "ignored_fields": runtime.ignored_fields,
+        "applied_count": runtime.applied_fields.len(),
+        "ignored_count": runtime.ignored_fields.len(),
+        "warning": (!runtime.ignored_fields.is_empty()).then_some("fingerprint profile contains fields that lightpanda does not currently consume"),
     }));
 
     json!({
@@ -57,6 +141,7 @@ fn result_payload(
         "url": url,
         "timeout_seconds": timeout_seconds,
         "fingerprint_profile": fingerprint_profile,
+        "fingerprint_runtime": fingerprint_runtime_json,
         "bin": bin,
         "exit_code": exit_code,
         "stdout_preview": stdout_preview,
@@ -77,6 +162,7 @@ fn build_result(
     exit_code: Option<i32>,
     stdout_preview: Option<String>,
     stderr_preview: Option<String>,
+    fingerprint_runtime: Option<&LightpandaFingerprintRuntime>,
     message: impl Into<String>,
 ) -> RunnerExecutionResult {
     let message = message.into();
@@ -95,6 +181,7 @@ fn build_result(
             exit_code,
             stdout_preview,
             stderr_preview,
+            fingerprint_runtime,
             &message,
         )),
         error_message: is_error.then_some(message),
@@ -109,6 +196,7 @@ fn invalid_input(task: &RunnerTask, message: &str, url: Option<&str>) -> RunnerE
         Some("invalid_input"),
         task,
         url,
+        None,
         None,
         None,
         None,
@@ -283,6 +371,7 @@ impl TaskRunner for LightpandaRunner {
 
         let timeout_seconds = task.timeout_seconds.unwrap_or(10).clamp(1, 120) as u64;
         let bin = lightpanda_bin();
+        let fingerprint_runtime = build_lightpanda_fingerprint_runtime(&task);
 
         let mut cmd = Command::new(&bin);
         cmd.arg("fetch")
@@ -293,6 +382,12 @@ impl TaskRunner for LightpandaRunner {
             .arg(&url)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        if let Some(runtime) = &fingerprint_runtime {
+            for (key, value) in &runtime.envs {
+                cmd.env(key, value);
+            }
+        }
 
         let mut child = match cmd.spawn() {
             Ok(child) => child,
@@ -310,6 +405,7 @@ impl TaskRunner for LightpandaRunner {
                     None,
                     None,
                     None,
+                    fingerprint_runtime.as_ref(),
                     message,
                 );
             }
@@ -369,6 +465,32 @@ impl TaskRunner for LightpandaRunner {
         let stdout_preview = preview_if_non_empty(stdout, 4000);
         let stderr_preview = preview_if_non_empty(stderr, 2000);
 
+        let message = if let Some(runtime) = fingerprint_runtime.as_ref() {
+            let ignored_note = if runtime.ignored_fields.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "; warning=fingerprint profile contains fields that lightpanda does not currently consume"
+                )
+            };
+            format!(
+                "{}; fingerprint_runtime: applied_fields={:?}, ignored_fields={:?}, applied_count={}, ignored_count={}{}",
+                message,
+                runtime.applied_fields,
+                runtime.ignored_fields,
+                runtime.applied_fields.len(),
+                runtime.ignored_fields.len(),
+                ignored_note,
+            )
+        } else if task.fingerprint_profile.is_some() {
+            format!(
+                "{}; fingerprint_runtime: profile present but no supported fields were mapped",
+                message,
+            )
+        } else {
+            message
+        };
+
         build_result(
             outcome,
             matches!(outcome, RunnerOutcomeStatus::Succeeded),
@@ -381,6 +503,7 @@ impl TaskRunner for LightpandaRunner {
             exit_code,
             stdout_preview,
             stderr_preview,
+            fingerprint_runtime.as_ref(),
             message,
         )
     }
@@ -441,6 +564,87 @@ mod tests {
             .await;
         std::env::remove_var("LIGHTPANDA_BIN");
         result
+    }
+
+    #[test]
+    fn build_lightpanda_fingerprint_runtime_maps_supported_fields_to_envs() {
+        let task = RunnerTask {
+            task_id: "task-test".to_string(),
+            attempt: 1,
+            kind: "open_page".to_string(),
+            payload: json!({"url": "https://example.com"}),
+            timeout_seconds: Some(5),
+            fingerprint_profile: Some(crate::runner::RunnerFingerprintProfile {
+                id: "fp-desktop".to_string(),
+                version: 3,
+                profile_json: json!({
+                    "accept_language": "en-US,en;q=0.9",
+                    "timezone": "Asia/Shanghai",
+                    "locale": "en-US",
+                    "viewport_width": 1440,
+                    "viewport_height": 900,
+                    "platform": "MacIntel",
+                    "unsupported_blob": {"x": 1}
+                }),
+            }),
+        };
+
+        let runtime = build_lightpanda_fingerprint_runtime(&task).expect("runtime");
+        let env_map: std::collections::HashMap<_, _> = runtime.envs.iter().cloned().collect();
+
+        assert_eq!(env_map.get("LIGHTPANDA_FP_PROFILE_ID").map(String::as_str), Some("fp-desktop"));
+        assert_eq!(env_map.get("LIGHTPANDA_FP_PROFILE_VERSION").map(String::as_str), Some("3"));
+        assert_eq!(env_map.get("LIGHTPANDA_FP_ACCEPT_LANGUAGE").map(String::as_str), Some("en-US,en;q=0.9"));
+        assert_eq!(env_map.get("LIGHTPANDA_FP_TIMEZONE").map(String::as_str), Some("Asia/Shanghai"));
+        assert_eq!(env_map.get("LIGHTPANDA_FP_VIEWPORT_WIDTH").map(String::as_str), Some("1440"));
+        assert!(runtime.applied_fields.iter().any(|f| f == "platform"));
+        assert!(runtime.ignored_fields.iter().any(|f| f == "unsupported_blob"));
+    }
+
+    #[tokio::test]
+    async fn execute_reports_fingerprint_runtime_when_profile_is_present() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        let script = write_script(
+            "fingerprint-env",
+            "echo \"$LIGHTPANDA_FP_PROFILE_ID|$LIGHTPANDA_FP_ACCEPT_LANGUAGE|$LIGHTPANDA_FP_TIMEZONE|$LIGHTPANDA_FP_VIEWPORT_WIDTH\"
+exit 0",
+        );
+        std::env::set_var("LIGHTPANDA_BIN", script.to_str().unwrap());
+        let runner = LightpandaRunner::default();
+        let result = runner
+            .execute(RunnerTask {
+                task_id: "task-test".to_string(),
+                attempt: 1,
+                kind: "open_page".to_string(),
+                payload: json!({"url": "https://example.com"}),
+                timeout_seconds: Some(5),
+                fingerprint_profile: Some(crate::runner::RunnerFingerprintProfile {
+                    id: "fp-desktop".to_string(),
+                    version: 3,
+                    profile_json: json!({
+                        "accept_language": "en-US,en;q=0.9",
+                        "timezone": "Asia/Shanghai",
+                        "viewport_width": 1440
+                    }),
+                }),
+            })
+            .await;
+        std::env::remove_var("LIGHTPANDA_BIN");
+        let _ = fs::remove_file(script);
+
+        assert!(matches!(result.status, RunnerOutcomeStatus::Succeeded));
+        let json = result.result_json.expect("result json");
+        assert_eq!(
+            json.get("fingerprint_runtime")
+                .and_then(|v| v.get("env_keys"))
+                .and_then(|v| v.as_array())
+                .map(|v| !v.is_empty()),
+            Some(true)
+        );
+        assert_eq!(
+            json.get("stdout_preview").and_then(|v| v.as_str()),
+            Some("fp-desktop|en-US,en;q=0.9|Asia/Shanghai|1440")
+        );
     }
 
     #[test]

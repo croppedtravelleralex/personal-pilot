@@ -20,9 +20,9 @@ use crate::{
 
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateTaskRequest,
-    FingerprintProfileResponse, HealthResponse, LogResponse, PaginationQuery,
-    RetryTaskResponse, RunResponse, StatusResponse, TaskResponse, TaskStatusCounts,
-    WorkerStatusResponse,
+    FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
+    PaginationQuery, RetryTaskResponse, RunResponse, StatusResponse, TaskResponse,
+    TaskStatusCounts, WorkerStatusResponse,
 };
 
 fn now_ts_string() -> String {
@@ -45,6 +45,65 @@ fn sanitize_offset(offset: Option<i64>) -> i64 {
         Some(value) if value > 0 => value,
         _ => 0,
     }
+}
+
+fn fingerprint_resolution_status(
+    fingerprint_profile_id: Option<&str>,
+    fingerprint_profile_version: Option<i64>,
+    result_json: Option<&str>,
+) -> Option<String> {
+    let profile_id = fingerprint_profile_id?;
+    let profile_version = fingerprint_profile_version?;
+
+    let parsed = result_json
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
+
+    if parsed
+        .as_ref()
+        .and_then(|json| json.get("fingerprint_profile"))
+        .and_then(|value| value.get("id"))
+        .and_then(|value| value.as_str())
+        == Some(profile_id)
+        && parsed
+            .as_ref()
+            .and_then(|json| json.get("fingerprint_profile"))
+            .and_then(|value| value.get("version"))
+            .and_then(|value| value.as_i64())
+            == Some(profile_version)
+    {
+        return Some("resolved".to_string());
+    }
+
+    if parsed
+        .as_ref()
+        .and_then(|json| json.get("fingerprint_profile"))
+        .map(|value| value.is_null())
+        == Some(true)
+    {
+        return Some("downgraded".to_string());
+    }
+
+    Some("pending".to_string())
+}
+
+fn build_fingerprint_metrics(tasks: &[TaskResponse]) -> FingerprintMetricsResponse {
+    let mut metrics = FingerprintMetricsResponse {
+        pending: 0,
+        resolved: 0,
+        downgraded: 0,
+        none: 0,
+    };
+
+    for task in tasks {
+        match task.fingerprint_resolution_status.as_deref() {
+            Some("pending") => metrics.pending += 1,
+            Some("resolved") => metrics.resolved += 1,
+            Some("downgraded") => metrics.downgraded += 1,
+            _ => metrics.none += 1,
+        }
+    }
+
+    metrics
 }
 
 async fn insert_task_log(
@@ -139,8 +198,8 @@ pub async fn status(
     let counts = load_counts(&state).await?;
     let limit = sanitize_limit(query.limit, 5, 100);
     let offset = sanitize_offset(query.offset);
-    let rows = sqlx::query_as::<_, (String, String, String, i32, Option<String>, Option<i64>)>(
-        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version FROM tasks ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
+    let rows = sqlx::query_as::<_, (String, String, String, i32, Option<String>, Option<i64>, Option<String>)>(
+        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json FROM tasks ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
     )
     .bind(limit)
     .bind(offset)
@@ -153,9 +212,14 @@ pub async fn status(
         )
     })?;
 
-    let latest_tasks = rows
+    let latest_tasks: Vec<TaskResponse> = rows
         .into_iter()
-        .map(|(id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version)| TaskResponse {
+        .map(|(id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)| TaskResponse {
+            fingerprint_resolution_status: fingerprint_resolution_status(
+                fingerprint_profile_id.as_deref(),
+                fingerprint_profile_version,
+                result_json.as_deref(),
+            ),
             id,
             kind,
             status,
@@ -164,6 +228,8 @@ pub async fn status(
             fingerprint_profile_version,
         })
         .collect();
+
+    let fingerprint_metrics = build_fingerprint_metrics(&latest_tasks);
 
     Ok(Json(StatusResponse {
         service: "AutoOpenBrowser".to_string(),
@@ -174,6 +240,7 @@ pub async fn status(
             queue_mode: "db_first_with_memory_compat".to_string(),
             reclaim_after_seconds: crate::runner::runner_reclaim_seconds_from_env(),
         },
+        fingerprint_metrics,
         latest_tasks,
     }))
 }
@@ -250,6 +317,7 @@ pub async fn create_task(
             priority,
             fingerprint_profile_id: payload.fingerprint_profile_id,
             fingerprint_profile_version: profile_version,
+            fingerprint_resolution_status: profile_version.map(|_| "pending".to_string()),
         }),
     ))
 }
@@ -262,8 +330,8 @@ pub async fn get_task(
         return Err((StatusCode::BAD_REQUEST, "task id is required".to_string()));
     }
 
-    let row = sqlx::query_as::<_, (String, String, String, i32, Option<String>, Option<i64>)>(
-        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version FROM tasks WHERE id = ?"#,
+    let row = sqlx::query_as::<_, (String, String, String, i32, Option<String>, Option<i64>, Option<String>)>(
+        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json FROM tasks WHERE id = ?"#,
     )
     .bind(&task_id)
     .fetch_optional(&state.db)
@@ -276,7 +344,12 @@ pub async fn get_task(
     })?;
 
     match row {
-        Some((id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version)) => Ok(Json(TaskResponse {
+        Some((id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)) => Ok(Json(TaskResponse {
+            fingerprint_resolution_status: fingerprint_resolution_status(
+                fingerprint_profile_id.as_deref(),
+                fingerprint_profile_version,
+                result_json.as_deref(),
+            ),
             id,
             kind,
             status,

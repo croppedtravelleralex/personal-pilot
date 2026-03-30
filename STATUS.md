@@ -32,8 +32,8 @@
 
 ## 当前下一步
 
-1. **定义并落地 Lightpanda 如何真实消费 fingerprint profile**（命令参数、环境变量或浏览器上下文映射）
-2. **继续打磨 DB-first claim：补 lease TTL / reclaim 策略细化与参数化**
+1. **继续做 DB-first claim / reclaim 的并发竞争收口**
+2. **继续细化 lease TTL / reclaim 策略与 worker 退避**
 3. **继续补 cancel / retry / claim / reclaim / heartbeat / fingerprint 的集成测试覆盖**
 4. **让内存队列进一步降级为唤醒/提示层，而不再参与执行真相判断**
 5. **继续清理 worker loop、claim SQL 与状态机边界**
@@ -51,3 +51,5 @@
 - **找 bug：** 本轮已修复一个真实链路 bug：创建任务时 `fingerprint_profile_version` 曾因 SQL 占位错误未正确落库，现已修复并补测试锁定。
 - **性能评分：** 当前阶段 **8.2/10**。优点是任务主链、runner 注入、异常降级和测试回归都已成形；扣分点是 Lightpanda 仍未真实消费 profile，claim/reclaim 参数化与高并发写放大控制也还没落地。
 - **改进建议：** 下一步优先把 profile 注入从“runner 已拿到”推进到“真实执行器已消费”，同时补 profile 命中/降级日志与 metrics，避免运行时黑盒。
+
+- **DB-first claim / reclaim 参数化第一版已落地**，当前 heartbeat 间隔与 claim 重试次数都已可配置，`/status.worker` 也能直接看到当前运行参数；但 claim 原子性、退避策略和更高并发下的一致性收口仍需继续加强。

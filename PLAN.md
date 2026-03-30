@@ -92,3 +92,11 @@
 - `CURRENT_TASK.md` / `CURRENT_DIRECTION.md`：保留为阶段性方向文件
 - `PLAN.md`：只做统一收口与当前优先级定义
 
+
+## 额外进展（2026-03-30）
+
+- claim / reclaim 参数化第一版已落地：
+  - `AUTO_OPEN_BROWSER_RUNNER_RECLAIM_SECONDS`
+  - `AUTO_OPEN_BROWSER_RUNNER_HEARTBEAT_SECONDS`
+  - `AUTO_OPEN_BROWSER_RUNNER_CLAIM_RETRY_LIMIT`
+- 当前更适合继续推进的方向是：claim SQL 原子化增强、worker 退避、以及 reclaim / retry / cancel 并发竞争收口。

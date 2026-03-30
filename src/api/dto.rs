@@ -27,11 +27,20 @@ pub struct WorkerStatusResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FingerprintMetricsResponse {
+    pub pending: i64,
+    pub resolved: i64,
+    pub downgraded: i64,
+    pub none: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub service: String,
     pub queue_len: usize,
     pub counts: TaskStatusCounts,
     pub worker: WorkerStatusResponse,
+    pub fingerprint_metrics: FingerprintMetricsResponse,
     pub latest_tasks: Vec<TaskResponse>,
 }
 
@@ -73,6 +82,7 @@ pub struct TaskResponse {
     pub priority: i32,
     pub fingerprint_profile_id: Option<String>,
     pub fingerprint_profile_version: Option<i64>,
+    pub fingerprint_resolution_status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

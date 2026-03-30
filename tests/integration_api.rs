@@ -271,6 +271,221 @@ async fn task_with_stale_fingerprint_profile_version_runs_without_injected_profi
 }
 
 #[tokio::test]
+async fn fingerprint_resolution_logs_are_recorded_for_resolved_and_missing_profiles() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let profile_payload = serde_json::json!({
+        "id": "fp-logging",
+        "name": "Logging Profile",
+        "profile_json": {
+            "timezone": "Asia/Shanghai",
+            "locale": "zh-CN"
+        }
+    });
+    let (profile_status, _) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/fingerprint-profiles")
+            .header("content-type", "application/json")
+            .body(Body::from(profile_payload.to_string()))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(profile_status, StatusCode::CREATED);
+
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com",
+        "timeout_seconds": 5,
+        "fingerprint_profile_id": "fp-logging"
+    });
+    let (status, json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/tasks")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let task_id = json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let _task = wait_for_terminal_status(&app, &task_id).await;
+
+    let resolved_logs: Vec<String> = sqlx::query_scalar(
+        r#"SELECT message FROM logs WHERE task_id = ? ORDER BY created_at ASC, id ASC"#,
+    )
+    .bind(&task_id)
+    .fetch_all(&state.db)
+    .await
+    .expect("load resolved logs");
+    assert!(
+        resolved_logs.iter().any(|msg| msg.contains("fingerprint profile resolved for runner execution")),
+        "resolved logs: {resolved_logs:?}"
+    );
+
+    let missing_task_id = "task-missing-fingerprint-log".to_string();
+    sqlx::query(
+        r#"INSERT INTO tasks (
+            id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
+            priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at,
+            fingerprint_profile_id, fingerprint_profile_version, result_json, error_message
+        ) VALUES (?, 'open_page', ?, '{"url":"https://example.com","timeout_seconds":5}', NULL, NULL,
+                  0, '1', '1', NULL, NULL, NULL, NULL, 'fp-missing-log', 9, NULL, NULL)"#,
+    )
+    .bind(&missing_task_id)
+    .bind(TASK_STATUS_QUEUED)
+    .execute(&state.db)
+    .await
+    .expect("insert missing profile task");
+
+    let _task = wait_for_terminal_status(&app, &missing_task_id).await;
+
+    let missing_logs: Vec<String> = sqlx::query_scalar(
+        r#"SELECT message FROM logs WHERE task_id = ? ORDER BY created_at ASC, id ASC"#,
+    )
+    .bind(&missing_task_id)
+    .fetch_all(&state.db)
+    .await
+    .expect("load missing logs");
+    assert!(
+        missing_logs.iter().any(|msg| msg.contains("fingerprint profile requested but not resolved at execution time")),
+        "missing logs: {missing_logs:?}"
+    );
+}
+
+#[tokio::test]
+async fn status_and_task_detail_expose_fingerprint_resolution_status() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let profile_payload = serde_json::json!({
+        "id": "fp-status",
+        "name": "Status Profile",
+        "profile_json": {
+            "timezone": "Asia/Shanghai",
+            "locale": "zh-CN"
+        }
+    });
+    let (profile_status, _) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/fingerprint-profiles")
+            .header("content-type", "application/json")
+            .body(Body::from(profile_payload.to_string()))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(profile_status, StatusCode::CREATED);
+
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com",
+        "timeout_seconds": 5,
+        "fingerprint_profile_id": "fp-status"
+    });
+    let (create_status, create_json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/tasks")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(create_status, StatusCode::CREATED);
+    assert_eq!(create_json.get("fingerprint_resolution_status").and_then(|v| v.as_str()), Some("pending"));
+    let task_id = create_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+
+    let _task = wait_for_terminal_status(&app, &task_id).await;
+
+    let (task_status, task_json) = json_response(
+        &app,
+        Request::builder()
+            .uri(format!("/tasks/{task_id}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(task_status, StatusCode::OK);
+    assert_eq!(task_json.get("fingerprint_resolution_status").and_then(|v| v.as_str()), Some("resolved"));
+
+    let (_, status_json) = json_response(
+        &app,
+        Request::builder()
+            .uri("/status?limit=10&offset=0")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    let latest = status_json.get("latest_tasks").and_then(|v| v.as_array()).expect("latest tasks");
+    assert!(latest.iter().any(|task| {
+        task.get("id").and_then(|v| v.as_str()) == Some(task_id.as_str())
+            && task.get("fingerprint_resolution_status").and_then(|v| v.as_str()) == Some("resolved")
+    }));
+
+    let downgraded_task_id = "task-status-downgraded".to_string();
+    sqlx::query(
+        r#"INSERT INTO tasks (
+            id, kind, status, input_json, network_policy_json, fingerprint_profile_json, priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at, fingerprint_profile_id, fingerprint_profile_version, result_json, error_message
+        ) VALUES (?, 'open_page', 'succeeded', '{"url":"https://example.com"}', NULL, NULL, 0, '1', '1', '1', '2', NULL, NULL, 'fp-missing-status', 7, '{"fingerprint_profile":null}', NULL)"#,
+    )
+    .bind(&downgraded_task_id)
+    .execute(&state.db)
+    .await
+    .expect("insert downgraded task");
+
+    let (_, downgraded_json) = json_response(
+        &app,
+        Request::builder()
+            .uri(format!("/tasks/{downgraded_task_id}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(downgraded_json.get("fingerprint_resolution_status").and_then(|v| v.as_str()), Some("downgraded"));
+}
+
+#[tokio::test]
+async fn status_exposes_fingerprint_metrics_summary() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(
+        r#"INSERT INTO tasks (id, kind, status, input_json, network_policy_json, fingerprint_profile_json, priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at, fingerprint_profile_id, fingerprint_profile_version, result_json, error_message)
+           VALUES
+           ('task-fp-pending', 'open_page', 'queued', '{}', NULL, NULL, 0, '4', '4', NULL, NULL, NULL, NULL, 'fp-a', 1, NULL, NULL),
+           ('task-fp-resolved', 'open_page', 'succeeded', '{}', NULL, NULL, 0, '3', '3', '3', '3', NULL, NULL, 'fp-b', 2, '{"fingerprint_profile":{"id":"fp-b","version":2}}', NULL),
+           ('task-fp-downgraded', 'open_page', 'succeeded', '{}', NULL, NULL, 0, '2', '2', '2', '2', NULL, NULL, 'fp-c', 3, '{"fingerprint_profile":null}', NULL),
+           ('task-fp-none', 'open_page', 'succeeded', '{}', NULL, NULL, 0, '1', '1', '1', '1', NULL, NULL, NULL, NULL, '{"ok":true}', NULL)"#,
+    )
+    .execute(&state.db)
+    .await
+    .expect("insert status metric tasks");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder()
+            .uri("/status?limit=10&offset=0")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let metrics = json.get("fingerprint_metrics").expect("fingerprint metrics");
+    assert_eq!(metrics.get("pending").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(metrics.get("resolved").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(metrics.get("downgraded").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(metrics.get("none").and_then(|v| v.as_i64()), Some(1));
+}
+
+#[tokio::test]
 async fn fake_runner_success_flow_is_visible_across_endpoints() {
     let db_url = unique_db_url();
     let (_state, app) = build_test_app(&db_url).await.expect("build app");
@@ -370,10 +585,11 @@ async fn running_task_with_fresh_heartbeat_is_not_reclaimed() {
 
     let task_id = "task-fresh-heartbeat".to_string();
     let run_id = "run-fresh-heartbeat".to_string();
-    let heartbeat_now = SystemTime::now()
+    let heartbeat_now = (SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+        + 5)
         .to_string();
 
     sqlx::query(

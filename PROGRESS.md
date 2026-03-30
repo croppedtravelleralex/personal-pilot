@@ -114,6 +114,7 @@
 - **2026.3.30-21:59:00** 完成了 **runner fingerprint profile 注入入口第一版**，`runner/engine.rs` 在 claim 任务时会联表读取 active fingerprint profile，并将 `id / version / profile_json` 注入 `RunnerTask`，让 fake/lightpanda runner 都能拿到统一的 profile 视图。
 - **2026.3.30-22:00:00** 完成了 **fingerprint 绑定链路 bug 修复第一版**，修正创建任务时 `fingerprint_profile_version` 写库占位错误，避免 profile 版本“算出来但没落库”的假闭环。
 - **2026.3.30-22:03:00** 完成了 **fingerprint 注入与异常场景集成测试补强**，新增 profile 注入成功、缺失 profile、inactive profile、stale version 四类集成测试；当前策略为：inactive profile 在创建阶段直接拒绝，缺失或版本不匹配的历史绑定在 runner 执行阶段按“无可用 profile”降级处理。
+- **2026.3.30-23:00:00** 完成了 **DB-first claim / reclaim 参数化第一版**，新增 `AUTO_OPEN_BROWSER_RUNNER_HEARTBEAT_SECONDS` 与 `AUTO_OPEN_BROWSER_RUNNER_CLAIM_RETRY_LIMIT` 环境变量，claim 重试次数与 heartbeat 间隔不再写死；`/status.worker` 现在会返回 `reclaim_after_seconds / heartbeat_interval_seconds / claim_retry_limit` 这组运行参数。
 
 ## 1. 已经实现 / 已经落地
 

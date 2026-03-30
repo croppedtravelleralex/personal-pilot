@@ -58,6 +58,8 @@ struct ClaimedTask {
     task_kind: String,
     input_json: String,
     fingerprint_profile: Option<RunnerFingerprintProfile>,
+    requested_fingerprint_profile_id: Option<String>,
+    requested_fingerprint_profile_version: Option<i64>,
     attempt: i64,
     run_id: String,
     started_at: String,
@@ -91,6 +93,8 @@ where
 
         let started_at = now_ts_string();
         let run_id = format!("run-{}", Uuid::new_v4());
+        let requested_fingerprint_profile_id = fingerprint_profile_id.clone();
+        let requested_fingerprint_profile_version = fingerprint_profile_version;
 
         let mut tx = state.db.begin().await?;
         let claim = sqlx::query(
@@ -145,6 +149,8 @@ where
             task_kind,
             input_json,
             fingerprint_profile,
+            requested_fingerprint_profile_id,
+            requested_fingerprint_profile_version,
             attempt,
             run_id,
             started_at,
@@ -260,6 +266,8 @@ where
     let input_json = claimed.input_json;
     let attempt = claimed.attempt;
     let fingerprint_profile = claimed.fingerprint_profile;
+    let requested_fingerprint_profile_id = claimed.requested_fingerprint_profile_id;
+    let requested_fingerprint_profile_version = claimed.requested_fingerprint_profile_version;
     let run_id = claimed.run_id;
     let _started_at = claimed.started_at;
     let (heartbeat_stop, heartbeat_handle) = spawn_task_heartbeat(state.clone(), task_id.clone(), worker_label.to_string());
@@ -283,6 +291,42 @@ where
         &format!("{} runner started task execution, attempt={attempt}", runner.name()),
     )
     .await?;
+
+    match (&requested_fingerprint_profile_id, requested_fingerprint_profile_version, &fingerprint_profile) {
+        (Some(profile_id), Some(version), Some(profile)) => {
+            insert_log(
+                state,
+                &format!("log-{}", Uuid::new_v4()),
+                &task_id,
+                Some(&run_id),
+                "info",
+                &format!(
+                    "fingerprint profile resolved for runner execution: requested_id={}, requested_version={}, resolved_id={}, resolved_version={}",
+                    profile_id,
+                    version,
+                    profile.id,
+                    profile.version
+                ),
+            )
+            .await?;
+        }
+        (Some(profile_id), Some(version), None) => {
+            insert_log(
+                state,
+                &format!("log-{}", Uuid::new_v4()),
+                &task_id,
+                Some(&run_id),
+                "warn",
+                &format!(
+                    "fingerprint profile requested but not resolved at execution time; runner will continue without injected profile: requested_id={}, requested_version={}",
+                    profile_id,
+                    version,
+                ),
+            )
+            .await?;
+        }
+        _ => {}
+    }
 
     let payload: Value = serde_json::from_str(&input_json).unwrap_or_else(|_| {
         json!({

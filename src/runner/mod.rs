@@ -48,6 +48,22 @@ pub fn runner_reclaim_seconds_from_env() -> Option<u64> {
         .filter(|value| *value > 0)
 }
 
+pub fn runner_heartbeat_interval_seconds_from_env() -> u64 {
+    std::env::var("AUTO_OPEN_BROWSER_RUNNER_HEARTBEAT_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(5)
+}
+
+pub fn runner_claim_retry_limit_from_env() -> u32 {
+    std::env::var("AUTO_OPEN_BROWSER_RUNNER_CLAIM_RETRY_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(8)
+}
+
 #[async_trait]
 pub trait TaskRunner: Send + Sync {
     fn name(&self) -> &'static str;
