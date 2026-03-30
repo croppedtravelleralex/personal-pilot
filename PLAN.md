@@ -128,3 +128,8 @@
   - `cooldown_until` 过滤
   - 最小版 `sticky_session` 复用
   - fallback 顺序：sticky > `provider/region/min_score` > `score DESC + last_used_at ASC + created_at ASC`
+
+- 代理观测面增强 + smoke test 第一版已落地：
+  - `/tasks/:id` 与 `/status.latest_tasks` 暴露 `proxy_id / proxy_provider / proxy_region / proxy_resolution_status`
+  - `/status` 新增 `proxy_metrics` 聚合
+  - `POST /proxies/:id/smoke` 做最小 TCP smoke test，并回写 `last_checked_at / failure_count / cooldown_until`

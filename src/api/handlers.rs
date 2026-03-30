@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{net::SocketAddr, time::{Instant, SystemTime, UNIX_EPOCH}};
 use uuid::Uuid;
 
 use crate::{
@@ -21,8 +21,8 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyResponse, RetryTaskResponse, RunResponse, StatusResponse,
-    TaskResponse, TaskStatusCounts, WorkerStatusResponse,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySmokeResponse, RetryTaskResponse,
+    RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
 fn now_ts_string() -> String {
@@ -128,6 +128,43 @@ fn fingerprint_resolution_status(
     }
 
     Some("pending".to_string())
+}
+
+fn proxy_resolution_status(result_json: Option<&str>) -> Option<String> {
+    let parsed = result_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())?;
+    parsed.get("proxy")
+        .and_then(|value| value.get("resolution_status"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string())
+        .or_else(|| parsed.get("payload")
+            .and_then(|value| value.get("network_policy_json"))
+            .and_then(|value| value.get("proxy_resolution_status"))
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string()))
+}
+
+fn proxy_identity(result_json: Option<&str>) -> (Option<String>, Option<String>, Option<String>) {
+    let parsed = result_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
+    let proxy = parsed.as_ref().and_then(|json| json.get("proxy"));
+    (
+        proxy.and_then(|value| value.get("id")).and_then(|value| value.as_str()).map(|v| v.to_string()),
+        proxy.and_then(|value| value.get("provider")).and_then(|value| value.as_str()).map(|v| v.to_string()),
+        proxy.and_then(|value| value.get("region")).and_then(|value| value.as_str()).map(|v| v.to_string()),
+    )
+}
+
+fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {
+    let mut metrics = ProxyMetricsResponse { direct: 0, resolved: 0, resolved_sticky: 0, unresolved: 0, none: 0 };
+    for task in tasks {
+        match task.proxy_resolution_status.as_deref() {
+            Some("direct") => metrics.direct += 1,
+            Some("resolved") => metrics.resolved += 1,
+            Some("resolved_sticky") => metrics.resolved_sticky += 1,
+            Some("unresolved") => metrics.unresolved += 1,
+            _ => metrics.none += 1,
+        }
+    }
+    metrics
 }
 
 fn build_fingerprint_metrics(tasks: &[TaskResponse]) -> FingerprintMetricsResponse {
@@ -258,22 +295,31 @@ pub async fn status(
 
     let latest_tasks: Vec<TaskResponse> = rows
         .into_iter()
-        .map(|(id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)| TaskResponse {
-            fingerprint_resolution_status: fingerprint_resolution_status(
-                fingerprint_profile_id.as_deref(),
+        .map(|(id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)| {
+            let proxy_resolution_status = proxy_resolution_status(result_json.as_deref());
+            let (proxy_id, proxy_provider, proxy_region) = proxy_identity(result_json.as_deref());
+            TaskResponse {
+                fingerprint_resolution_status: fingerprint_resolution_status(
+                    fingerprint_profile_id.as_deref(),
+                    fingerprint_profile_version,
+                    result_json.as_deref(),
+                ),
+                proxy_id,
+                proxy_provider,
+                proxy_region,
+                proxy_resolution_status,
+                id,
+                kind,
+                status,
+                priority,
+                fingerprint_profile_id,
                 fingerprint_profile_version,
-                result_json.as_deref(),
-            ),
-            id,
-            kind,
-            status,
-            priority,
-            fingerprint_profile_id,
-            fingerprint_profile_version,
+            }
         })
         .collect();
 
     let fingerprint_metrics = build_fingerprint_metrics(&latest_tasks);
+    let proxy_metrics = build_proxy_metrics(&latest_tasks);
 
     Ok(Json(StatusResponse {
         service: "AutoOpenBrowser".to_string(),
@@ -289,6 +335,7 @@ pub async fn status(
             idle_backoff_max_ms: crate::runner::runner_idle_backoff_max_ms_from_env(),
         },
         fingerprint_metrics,
+        proxy_metrics,
         latest_tasks,
     }))
 }
@@ -370,6 +417,10 @@ pub async fn create_task(
             fingerprint_profile_id: payload.fingerprint_profile_id,
             fingerprint_profile_version: profile_version,
             fingerprint_resolution_status: profile_version.map(|_| "pending".to_string()),
+            proxy_id: None,
+            proxy_provider: None,
+            proxy_region: None,
+            proxy_resolution_status: payload.network_policy_json.as_ref().and_then(|v| v.get("mode")).and_then(|v| v.as_str()).map(|mode| if mode == "direct" { "direct".to_string() } else { "pending".to_string() }),
         }),
     ))
 }
@@ -396,19 +447,27 @@ pub async fn get_task(
     })?;
 
     match row {
-        Some((id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)) => Ok(Json(TaskResponse {
-            fingerprint_resolution_status: fingerprint_resolution_status(
-                fingerprint_profile_id.as_deref(),
+        Some((id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)) => {
+            let proxy_resolution_status = proxy_resolution_status(result_json.as_deref());
+            let (proxy_id, proxy_provider, proxy_region) = proxy_identity(result_json.as_deref());
+            Ok(Json(TaskResponse {
+                fingerprint_resolution_status: fingerprint_resolution_status(
+                    fingerprint_profile_id.as_deref(),
+                    fingerprint_profile_version,
+                    result_json.as_deref(),
+                ),
+                proxy_id,
+                proxy_provider,
+                proxy_region,
+                proxy_resolution_status,
+                id,
+                kind,
+                status,
+                priority,
+                fingerprint_profile_id,
                 fingerprint_profile_version,
-                result_json.as_deref(),
-            ),
-            id,
-            kind,
-            status,
-            priority,
-            fingerprint_profile_id,
-            fingerprint_profile_version,
-        })),
+            }))
+        },
         None => Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}"))),
     }
 }
@@ -863,5 +922,73 @@ pub async fn get_proxy(
     match row {
         Some(row) => Ok(Json(map_proxy_row(row))),
         None => Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}"))),
+    }
+}
+
+
+pub async fn smoke_test_proxy(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxySmokeResponse>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, (String, i64)>(r#"SELECT host, port FROM proxies WHERE id = ?"#)
+        .bind(&proxy_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy for smoke test: {err}")))?;
+
+    let Some((host, port)) = row else {
+        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+    };
+
+    let addr: SocketAddr = format!("{host}:{port}")
+        .parse()
+        .map_err(|err| (StatusCode::BAD_REQUEST, format!("proxy address is invalid for smoke test: {err}")))?;
+
+    let started = Instant::now();
+    let reachable = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::net::TcpStream::connect(addr),
+    )
+    .await
+    .ok()
+    .and_then(|result| result.ok())
+    .is_some();
+    let latency_ms = Some(started.elapsed().as_millis());
+    let now = now_ts_string();
+
+    if reachable {
+        sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, cooldown_until = NULL, updated_at = ? WHERE id = ?"#)
+            .bind(&now)
+            .bind(&now)
+            .bind(&proxy_id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to update proxy after smoke success: {err}")))?;
+
+        Ok(Json(ProxySmokeResponse {
+            id: proxy_id,
+            reachable: true,
+            latency_ms,
+            status: "ok".to_string(),
+            message: "tcp smoke test succeeded".to_string(),
+        }))
+    } else {
+        let cooldown_until = (now.parse::<u64>().unwrap_or(0) + 60).to_string();
+        sqlx::query(r#"UPDATE proxies SET failure_count = failure_count + 1, last_checked_at = ?, cooldown_until = ?, updated_at = ? WHERE id = ?"#)
+            .bind(&now)
+            .bind(&cooldown_until)
+            .bind(&now)
+            .bind(&proxy_id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to update proxy after smoke failure: {err}")))?;
+
+        Ok(Json(ProxySmokeResponse {
+            id: proxy_id,
+            reachable: false,
+            latency_ms,
+            status: "failed".to_string(),
+            message: "tcp smoke test failed".to_string(),
+        }))
     }
 }

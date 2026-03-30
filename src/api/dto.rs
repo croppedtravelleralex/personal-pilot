@@ -39,12 +39,22 @@ pub struct FingerprintMetricsResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyMetricsResponse {
+    pub direct: i64,
+    pub resolved: i64,
+    pub resolved_sticky: i64,
+    pub unresolved: i64,
+    pub none: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub service: String,
     pub queue_len: usize,
     pub counts: TaskStatusCounts,
     pub worker: WorkerStatusResponse,
     pub fingerprint_metrics: FingerprintMetricsResponse,
+    pub proxy_metrics: ProxyMetricsResponse,
     pub latest_tasks: Vec<TaskResponse>,
 }
 
@@ -88,6 +98,10 @@ pub struct TaskResponse {
     pub fingerprint_profile_id: Option<String>,
     pub fingerprint_profile_version: Option<i64>,
     pub fingerprint_resolution_status: Option<String>,
+    pub proxy_id: Option<String>,
+    pub proxy_provider: Option<String>,
+    pub proxy_region: Option<String>,
+    pub proxy_resolution_status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,4 +184,14 @@ pub struct ProxyResponse {
     pub cooldown_until: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxySmokeResponse {
+    pub id: String,
+    pub reachable: bool,
+    pub latency_ms: Option<u128>,
+    pub status: String,
+    pub message: String,
 }

@@ -1171,3 +1171,92 @@ async fn proxy_selection_reuses_sticky_session_when_available() {
     let result2: Value = serde_json::from_str(result2_text.as_deref().expect("result2 json")).expect("parse result2");
     assert_eq!(result2.get("proxy").and_then(|v| v.get("id")).and_then(|v| v.as_str()), Some(first_proxy_id.as_str()));
 }
+
+
+#[tokio::test]
+async fn status_and_task_detail_expose_proxy_metrics_and_identity() {
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let proxy_payload = serde_json::json!({
+        "id": "proxy-observe-1",
+        "scheme": "http",
+        "host": "127.0.0.1",
+        "port": 8080,
+        "region": "us-east",
+        "country": "US",
+        "provider": "pool-observe",
+        "score": 0.95
+    });
+    let (proxy_status, _) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(proxy_status, StatusCode::CREATED);
+
+    let task_payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "proxy_id": "proxy-observe-1"}
+    });
+    let (create_status, create_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(task_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(create_status, StatusCode::CREATED);
+    let task_id = create_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+
+    let task_detail = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task_detail.get("proxy_id").and_then(|v| v.as_str()), Some("proxy-observe-1"));
+    assert_eq!(task_detail.get("proxy_provider").and_then(|v| v.as_str()), Some("pool-observe"));
+    assert_eq!(task_detail.get("proxy_region").and_then(|v| v.as_str()), Some("us-east"));
+    assert!(matches!(task_detail.get("proxy_resolution_status").and_then(|v| v.as_str()), Some("resolved") | Some("resolved_sticky")));
+
+    let (_, status_json) = json_response(
+        &app,
+        Request::builder().uri("/status?limit=10&offset=0").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status_json.get("proxy_metrics").and_then(|v| v.get("resolved")).and_then(|v| v.as_i64()), Some(1));
+    let latest = status_json.get("latest_tasks").and_then(|v| v.as_array()).expect("latest tasks");
+    assert!(latest.iter().any(|task| task.get("proxy_id").and_then(|v| v.as_str()) == Some("proxy-observe-1")));
+}
+
+
+#[tokio::test]
+async fn proxy_smoke_test_marks_unreachable_proxy_failed() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let proxy_payload = serde_json::json!({
+        "id": "proxy-smoke-dead",
+        "scheme": "http",
+        "host": "127.0.0.1",
+        "port": 65534,
+        "region": "local",
+        "country": "ZZ",
+        "provider": "smoke",
+        "score": 0.5
+    });
+    let (create_status, _) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(create_status, StatusCode::CREATED);
+
+    let (smoke_status, smoke_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/proxy-smoke-dead/smoke").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(smoke_status, StatusCode::OK);
+    assert_eq!(smoke_json.get("reachable").and_then(|v| v.as_bool()), Some(false));
+
+    let (failure_count, last_checked_at, cooldown_until): (i64, Option<String>, Option<String>) =
+        sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until FROM proxies WHERE id = 'proxy-smoke-dead'"#)
+            .fetch_one(&state.db)
+            .await
+            .expect("load proxy after smoke test");
+    assert_eq!(failure_count, 1);
+    assert!(last_checked_at.is_some());
+    assert!(cooldown_until.is_some());
+}
