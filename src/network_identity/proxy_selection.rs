@@ -10,6 +10,7 @@ pub struct ProxySelectionTuning {
     pub provider_failure_margin: i64,
     pub provider_region_failure_cluster_window_seconds: i64,
     pub provider_region_failure_cluster_count: i64,
+    pub raw_score_weight_tenths: i64,
 }
 
 impl Default for ProxySelectionTuning {
@@ -21,6 +22,7 @@ impl Default for ProxySelectionTuning {
             provider_failure_margin: 5,
             provider_region_failure_cluster_window_seconds: 3600,
             provider_region_failure_cluster_count: 2,
+            raw_score_weight_tenths: 10,
         }
     }
 }
@@ -165,6 +167,7 @@ mod tests {
         let tuning = default_proxy_selection_tuning();
         assert_eq!(tuning.stale_after_seconds, 3600);
         assert_eq!(tuning.provider_region_failure_cluster_count, 2);
+        assert_eq!(tuning.raw_score_weight_tenths, 10);
         let env_tuning = proxy_selection_tuning_from_env();
         assert!(env_tuning.stale_after_seconds > 0);
         assert_eq!(rules.len(), 4);
@@ -194,8 +197,9 @@ mod tests {
         assert!(tuned.contains("COUNT(*) >= 2"));
         let trust = proxy_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
         assert!(trust.contains("last_verify_status = 'ok' THEN 30"));
+        assert!(trust.contains("CAST(score * 10 AS INTEGER)"));
         let order_by = proxy_selection_order_by_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
-        assert!(order_by.contains("CAST(score * 10 AS INTEGER)"));
+        assert!(!order_by.contains("score DESC, score DESC"));
         assert!(sql.contains("{provider_region_recent_failure_decay}"));
         assert!(sql.contains("{long_term_weight}"));
         assert!(sql.contains("score DESC"));
@@ -390,6 +394,9 @@ pub fn proxy_selection_tuning_from_env() -> ProxySelectionTuning {
     if let Ok(value) = std::env::var("AOB_PROXY_PROVIDER_REGION_CLUSTER_COUNT") {
         if let Ok(parsed) = value.parse::<i64>() { tuning.provider_region_failure_cluster_count = parsed; }
     }
+    if let Ok(value) = std::env::var("AOB_PROXY_RAW_SCORE_WEIGHT_TENTHS") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.raw_score_weight_tenths = parsed; }
+    }
     tuning
 }
 
@@ -401,6 +408,7 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
     let provider_margin = tuning.provider_failure_margin;
     let cluster_window = tuning.provider_region_failure_cluster_window_seconds;
     let cluster_count = tuning.provider_region_failure_cluster_count;
+    let raw_score_weight_tenths = tuning.raw_score_weight_tenths;
     let individual_margin = provider_margin.saturating_sub(2).max(1);
     format!(
         "(CASE WHEN last_verify_status = 'ok' THEN 30 ELSE 0 END) +
@@ -423,7 +431,8 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
                     SELECT provider, region FROM proxies
                     WHERE provider IS NOT NULL AND region IS NOT NULL AND last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {cluster_window}
                     GROUP BY provider, region HAVING COUNT(*) >= {cluster_count}
-               ) THEN 12 ELSE 0 END)",
+               ) THEN 12 ELSE 0 END) +
+         CAST(score * {raw_score_weight_tenths} AS INTEGER)",
         stale = stale,
         heavy = heavy,
         light = light,
@@ -431,6 +440,7 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
         provider_margin = provider_margin,
         cluster_window = cluster_window,
         cluster_count = cluster_count,
+        raw_score_weight_tenths = raw_score_weight_tenths,
     )
 }
 
@@ -438,7 +448,7 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
 pub fn proxy_selection_order_by_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
     let trust = proxy_trust_score_sql_with_tuning(tuning);
     format!(
-        "(({trust}) + CAST(score * 10 AS INTEGER)) DESC, score DESC, COALESCE(last_used_at, '0') ASC, created_at ASC",
+        "({trust}) DESC, score DESC, COALESCE(last_used_at, '0') ASC, created_at ASC",
         trust = trust
     )
 }
