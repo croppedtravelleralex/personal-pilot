@@ -66,6 +66,7 @@ pub struct CreateTaskRequest {
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
     pub fingerprint_profile_id: Option<String>,
+    pub proxy_id: Option<String>,
     pub network_policy_json: Option<serde_json::Value>,
 }
 

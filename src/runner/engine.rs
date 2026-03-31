@@ -16,7 +16,7 @@ use crate::{
     },
     runner::{
         runner_claim_retry_limit_from_env, runner_heartbeat_interval_seconds_from_env,
-        RunnerFingerprintProfile, RunnerOutcomeStatus, RunnerProxySelection, RunnerTask,
+        RunnerExecutionResult, RunnerFingerprintProfile, RunnerOutcomeStatus, RunnerProxySelection, RunnerTask,
         TaskRunner,
     },
 };
@@ -527,17 +527,43 @@ where
 
     let payload_for_binding = payload.clone();
     let proxy_for_health = proxy.clone();
-    let execution = runner
-        .execute(RunnerTask {
-            task_id: task_id.clone(),
-            attempt,
-            kind: task_kind,
-            payload,
-            timeout_seconds,
-            fingerprint_profile,
-            proxy,
-        })
-        .await;
+    let execution = if task_kind == "verify_proxy" {
+        let proxy_id = payload
+            .get("proxy_id")
+            .and_then(|v| v.as_str())
+            .or_else(|| payload.get("network_policy_json").and_then(|v| v.get("proxy_id")).and_then(|v| v.as_str()));
+        match proxy_id {
+            Some(proxy_id) => match crate::api::handlers::run_proxy_verify_probe(state, proxy_id).await {
+                Ok(result) => RunnerExecutionResult {
+                    status: if result.status == "ok" { RunnerOutcomeStatus::Succeeded } else { RunnerOutcomeStatus::Failed },
+                    result_json: Some(serde_json::to_value(&result).unwrap_or_else(|_| json!({"proxy_id": proxy_id, "status": result.status}))),
+                    error_message: (result.status != "ok").then_some(result.message.clone()),
+                },
+                Err((_status, message)) => RunnerExecutionResult {
+                    status: RunnerOutcomeStatus::Failed,
+                    result_json: Some(json!({"proxy_id": proxy_id, "status": "failed", "message": message})),
+                    error_message: Some(message),
+                },
+            },
+            None => RunnerExecutionResult {
+                status: RunnerOutcomeStatus::Failed,
+                result_json: Some(json!({"status": "failed", "message": "verify_proxy task requires proxy_id"})),
+                error_message: Some("verify_proxy task requires proxy_id".to_string()),
+            },
+        }
+    } else {
+        runner
+            .execute(RunnerTask {
+                task_id: task_id.clone(),
+                attempt,
+                kind: task_kind,
+                payload,
+                timeout_seconds,
+                fingerprint_profile,
+                proxy,
+            })
+            .await
+    };
 
     let _ = heartbeat_stop.send(());
     let _ = heartbeat_handle.await;
@@ -568,7 +594,7 @@ where
         ),
     };
 
-    let result_json = execution.result_json.map(|value| value.to_string());
+    let result_json = execution.result_json.map(|value: serde_json::Value| value.to_string());
     let error_message = execution.error_message;
 
     let run_update = sqlx::query(

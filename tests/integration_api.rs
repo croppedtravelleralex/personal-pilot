@@ -644,6 +644,10 @@ async fn fake_runner_success_flow_is_visible_across_endpoints() {
 
     let task_id = create_task(&app, "open_page").await;
     let task = wait_for_terminal_status(&app, &task_id).await;
+    eprintln!("verify task result: {}", task);
+    let db = init_db(&db_url).await.expect("reopen db");
+    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
+    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 
     let (_, runs_json) = json_response(
@@ -793,6 +797,10 @@ async fn queued_task_runs_even_if_memory_queue_entry_is_removed() {
 
     let task_id = create_task(&app, "open_page").await;
     let task = wait_for_terminal_status(&app, &task_id).await;
+    eprintln!("verify task result: {}", task);
+    let db = init_db(&db_url).await.expect("reopen db");
+    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
+    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 }
 
@@ -848,6 +856,10 @@ async fn reclaimed_task_can_run_again_to_terminal_state() {
     assert_eq!(reclaimed, 1);
 
     let task = wait_for_terminal_status(&app, &task_id).await;
+    eprintln!("verify task result: {}", task);
+    let db = init_db(&db_url).await.expect("reopen db");
+    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
+    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 }
 
@@ -926,6 +938,10 @@ async fn reclaimed_task_retry_endpoint_is_idempotent_and_task_still_completes() 
         .contains("already queued"));
 
     let task = wait_for_terminal_status(&app, &task_id).await;
+    eprintln!("verify task result: {}", task);
+    let db = init_db(&db_url).await.expect("reopen db");
+    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
+    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 }
 
@@ -1596,4 +1612,64 @@ async fn proxy_selection_prefers_verified_proxy_health_signals() {
     let task_id = task_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
     let task = wait_for_terminal_status(&app, &task_id).await;
     assert_eq!(task.get("proxy_id").and_then(|v| v.as_str()), Some("proxy-verified-best"));
+}
+
+
+#[tokio::test]
+async fn verify_proxy_task_kind_executes_and_persists_result() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind listener");
+    let addr = listener.local_addr().expect("local addr");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established
+
+ip=203.0.113.9
+country=US
+region=Oregon
+"),
+            ).await;
+        }
+    });
+
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+    let proxy_payload = serde_json::json!({
+        "id": "proxy-task-verify",
+        "scheme": "http",
+        "host": addr.ip().to_string(),
+        "port": addr.port(),
+        "region": "us-west",
+        "country": "US",
+        "provider": "smoke",
+        "score": 0.5
+    });
+    let (create_status, _) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(create_status, StatusCode::CREATED);
+
+    let task_payload = serde_json::json!({
+        "kind": "verify_proxy",
+        "proxy_id": "proxy-task-verify",
+        "timeout_seconds": 5
+    });
+    let (_, task_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(task_payload.to_string())).expect("request"),
+    ).await;
+    let task_id = task_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
+
+    let (_, proxy_json) = json_response(
+        &app,
+        Request::builder().uri("/proxies/proxy-task-verify").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(proxy_json.get("last_verify_status").and_then(|v| v.as_str()), Some("ok"));
+    assert_eq!(proxy_json.get("last_exit_region").and_then(|v| v.as_str()), Some("Oregon"));
 }

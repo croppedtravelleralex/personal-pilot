@@ -81,6 +81,107 @@ struct ProxyRow {
 }
 
 
+pub async fn run_proxy_verify_probe(
+    state: &AppState,
+    proxy_id: &str,
+) -> Result<ProxyVerifyResponse, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, (String, i64, Option<String>)>(r#"SELECT host, port, country FROM proxies WHERE id = ?"#)
+        .bind(proxy_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy for verify: {err}")))?;
+
+    let Some((host, port, expected_country)) = row else {
+        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+    };
+
+    let addr: SocketAddr = format!("{host}:{port}")
+        .parse()
+        .map_err(|err| (StatusCode::BAD_REQUEST, format!("proxy address is invalid for verify: {err}")))?;
+
+    let started = Instant::now();
+    let mut stream = tokio::time::timeout(std::time::Duration::from_secs(5), tokio::net::TcpStream::connect(addr))
+        .await
+        .ok()
+        .and_then(|result| result.ok());
+    let reachable = stream.is_some();
+    let mut protocol_ok = false;
+    let mut upstream_ok = false;
+    let mut exit_ip: Option<String> = None;
+    let mut exit_country: Option<String> = None;
+    let mut exit_region: Option<String> = None;
+    let mut geo_match_ok: Option<bool> = None;
+    let mut anonymity_level: Option<String> = None;
+    let mut verify_message = if reachable {
+        "tcp connect succeeded but verify probe did not complete".to_string()
+    } else {
+        "proxy verify tcp connect failed".to_string()
+    };
+
+    if let Some(stream_ref) = stream.as_mut() {
+        let probe = b"CONNECT verify.example:443 HTTP/1.1
+Host: verify.example:443
+
+";
+        if tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.write_all(probe)).await.ok().is_some() {
+            let mut buf = [0_u8; 1024];
+            if let Ok(Ok(n)) = tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.read(&mut buf)).await {
+                if n > 0 {
+                    let text = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let text_lower = text.to_ascii_lowercase();
+                    if text_lower.contains("http/1.1") || text_lower.contains("http/1.0") {
+                        protocol_ok = true;
+                        let has_via = text_lower.contains("via:");
+                        let has_forwarded = text_lower.contains("forwarded:") || text_lower.contains("x-forwarded-for:");
+                        anonymity_level = Some(if has_forwarded { "transparent".to_string() } else if has_via { "anonymous".to_string() } else { "elite".to_string() });
+                        exit_ip = parse_probe_field(&text, "ip");
+                        exit_country = parse_probe_field(&text, "country");
+                        exit_region = parse_probe_field(&text, "region");
+                        upstream_ok = exit_ip.is_some() || exit_country.is_some() || exit_region.is_some();
+                        geo_match_ok = expected_country.as_ref().map(|expected| exit_country.as_ref().map(|actual| actual.eq_ignore_ascii_case(expected)).unwrap_or(false));
+                        verify_message = format!("proxy verify completed ip={:?} country={:?} region={:?}", exit_ip, exit_country, exit_region);
+                    } else {
+                        verify_message = format!("proxy verify got non-http response: {text_lower}");
+                    }
+                }
+            }
+        }
+    }
+
+    let latency_ms = Some(started.elapsed().as_millis());
+    let status = if reachable && protocol_ok && upstream_ok { "ok" } else { "failed" };
+    let now = now_ts_string();
+    sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, updated_at = ? WHERE id = ?"#)
+        .bind(&now)
+        .bind(status)
+        .bind(geo_match_ok.map(|v| if v { 1_i64 } else { 0_i64 }))
+        .bind(&exit_ip)
+        .bind(&exit_country)
+        .bind(&exit_region)
+        .bind(&anonymity_level)
+        .bind(&now)
+        .bind(&now)
+        .bind(proxy_id)
+        .execute(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist proxy verify result: {err}")))?;
+
+    Ok(ProxyVerifyResponse {
+        id: proxy_id.to_string(),
+        reachable,
+        protocol_ok,
+        upstream_ok,
+        exit_ip,
+        exit_country,
+        exit_region,
+        geo_match_ok,
+        anonymity_level,
+        latency_ms,
+        status: status.to_string(),
+        message: verify_message,
+    })
+}
+
 fn parse_probe_field(text: &str, key: &str) -> Option<String> {
     let needle = format!("{key}=");
     let idx = text.find(&needle)?;
@@ -387,6 +488,7 @@ pub async fn create_task(
         "timeout_seconds": payload.timeout_seconds,
         "fingerprint_profile_id": payload.fingerprint_profile_id,
         "fingerprint_profile_version": profile_version,
+        "proxy_id": payload.proxy_id,
         "network_policy_json": network_policy_value
     })
     .to_string();
@@ -1079,101 +1181,6 @@ pub async fn verify_proxy(
     State(state): State<AppState>,
     Path(proxy_id): Path<String>,
 ) -> Result<Json<ProxyVerifyResponse>, (StatusCode, String)> {
-    let row = sqlx::query_as::<_, (String, i64, Option<String>)>(r#"SELECT host, port, country FROM proxies WHERE id = ?"#)
-        .bind(&proxy_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy for verify: {err}")))?;
-
-    let Some((host, port, expected_country)) = row else {
-        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
-    };
-
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .map_err(|err| (StatusCode::BAD_REQUEST, format!("proxy address is invalid for verify: {err}")))?;
-
-    let started = Instant::now();
-    let mut stream = tokio::time::timeout(std::time::Duration::from_secs(5), tokio::net::TcpStream::connect(addr))
-        .await
-        .ok()
-        .and_then(|result| result.ok());
-    let reachable = stream.is_some();
-    let mut protocol_ok = false;
-    let mut upstream_ok = false;
-    let mut exit_ip: Option<String> = None;
-    let mut exit_country: Option<String> = None;
-    let mut exit_region: Option<String> = None;
-    let mut geo_match_ok: Option<bool> = None;
-    let mut anonymity_level: Option<String> = None;
-    let mut verify_message = if reachable {
-        "tcp connect succeeded but verify probe did not complete".to_string()
-    } else {
-        "proxy verify tcp connect failed".to_string()
-    };
-
-    if let Some(stream_ref) = stream.as_mut() {
-        let probe = b"CONNECT verify.example:443 HTTP/1.1
-Host: verify.example:443
-
-";
-        if tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.write_all(probe)).await.ok().is_some() {
-            let mut buf = [0_u8; 1024];
-            if let Ok(Ok(n)) = tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.read(&mut buf)).await {
-                if n > 0 {
-                    let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                    let text_lower = text.to_ascii_lowercase();
-                    if text_lower.contains("http/1.1") || text_lower.contains("http/1.0") {
-                        protocol_ok = true;
-                        let has_via = text_lower.contains("via:");
-                        let has_forwarded = text_lower.contains("forwarded:") || text_lower.contains("x-forwarded-for:");
-                        anonymity_level = Some(if has_forwarded { "transparent".to_string() } else if has_via { "anonymous".to_string() } else { "elite".to_string() });
-                        exit_ip = parse_probe_field(&text, "ip");
-                        exit_country = parse_probe_field(&text, "country");
-                        exit_region = parse_probe_field(&text, "region");
-                        upstream_ok = exit_ip.is_some() || exit_country.is_some() || exit_region.is_some();
-                        geo_match_ok = expected_country.as_ref().map(|expected| exit_country.as_ref().map(|actual| actual.eq_ignore_ascii_case(expected)).unwrap_or(false));
-                        verify_message = format!(
-                            "proxy verify completed ip={:?} country={:?} region={:?}",
-                            exit_ip, exit_country, exit_region
-                        );
-                    } else {
-                        verify_message = format!("proxy verify got non-http response: {text_lower}");
-                    }
-                }
-            }
-        }
-    }
-
-    let latency_ms = Some(started.elapsed().as_millis());
-    let status = if reachable && protocol_ok && upstream_ok { "ok" } else { "failed" };
-    let now = now_ts_string();
-    sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, updated_at = ? WHERE id = ?"#)
-        .bind(&now)
-        .bind(status)
-        .bind(geo_match_ok.map(|v| if v { 1_i64 } else { 0_i64 }))
-        .bind(&exit_ip)
-        .bind(&exit_country)
-        .bind(&exit_region)
-        .bind(&anonymity_level)
-        .bind(&now)
-        .bind(&now)
-        .bind(&proxy_id)
-        .execute(&state.db)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist proxy verify result: {err}")))?;
-    Ok(Json(ProxyVerifyResponse {
-        id: proxy_id,
-        reachable,
-        protocol_ok,
-        upstream_ok,
-        exit_ip,
-        exit_country,
-        exit_region,
-        geo_match_ok,
-        anonymity_level,
-        latency_ms,
-        status: status.to_string(),
-        message: verify_message,
-    }))
+    Ok(Json(run_proxy_verify_probe(&state, &proxy_id).await?))
 }
+
