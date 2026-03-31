@@ -2968,3 +2968,27 @@ async fn trust_cache_maintenance_endpoint_repairs_all_drift() {
     assert_eq!(json.get("remaining_drifted").and_then(|v| v.as_u64()), Some(0));
     assert_eq!(json.get("ok").and_then(|v| v.as_bool()), Some(true));
 }
+
+
+#[tokio::test]
+async fn trust_cache_scan_supports_limit_and_only_drifted_filters() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, cached_trust_score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('poolflt-a', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'poolflt', 'active', 0.8, 0, 5, 0, 'ok', 1, 1, '9999999999', '1', '1'),
+                  ('poolflt-b', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-west', 'US', 'poolflt', 'active', 0.2, 0, 0, 0, NULL, 0, 0, NULL, '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxies");
+    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db).await.expect("refresh risk snapshots");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().uri("/proxies/trust-cache-scan?only_drifted=true&limit=1&provider=poolflt").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(1));
+    assert_eq!(json.get("drifted").and_then(|v| v.as_u64()), Some(1));
+}

@@ -380,3 +380,11 @@ pub struct ProxyTrustCacheMaintenanceResponse {
     pub remaining_drifted: usize,
     pub ok: bool,
 }
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyTrustCacheScanQuery {
+    pub limit: Option<usize>,
+    pub only_drifted: Option<bool>,
+    pub provider: Option<String>,
+}

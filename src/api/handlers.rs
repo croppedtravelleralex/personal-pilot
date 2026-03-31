@@ -23,7 +23,7 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
@@ -716,10 +716,27 @@ async fn collect_trust_cache_scan_items(
     }).collect())
 }
 
+fn apply_trust_cache_scan_filters(
+    mut items: Vec<ProxyTrustCacheScanItem>,
+    query: &ProxyTrustCacheScanQuery,
+) -> Vec<ProxyTrustCacheScanItem> {
+    if query.only_drifted.unwrap_or(false) {
+        items.retain(|item| !item.in_sync);
+    }
+    if let Some(provider) = query.provider.as_deref() {
+        items.retain(|item| item.proxy_id.contains(provider));
+    }
+    if let Some(limit) = query.limit {
+        items.truncate(limit);
+    }
+    items
+}
+
 pub async fn scan_proxy_trust_cache(
     State(state): State<AppState>,
+    Query(query): Query<ProxyTrustCacheScanQuery>,
 ) -> Result<Json<ProxyTrustCacheScanResponse>, (StatusCode, String)> {
-    let items = collect_trust_cache_scan_items(&state).await?;
+    let items = apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
     let drifted = items.iter().filter(|item| !item.in_sync).count();
     Ok(Json(ProxyTrustCacheScanResponse {
         total: items.len(),
@@ -730,8 +747,9 @@ pub async fn scan_proxy_trust_cache(
 
 pub async fn maintain_proxy_trust_cache(
     State(state): State<AppState>,
+    Query(query): Query<ProxyTrustCacheScanQuery>,
 ) -> Result<Json<ProxyTrustCacheMaintenanceResponse>, (StatusCode, String)> {
-    let before = collect_trust_cache_scan_items(&state).await?;
+    let before = apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
     let drifted_before = before.iter().filter(|item| !item.in_sync).count();
     let mut repaired = 0usize;
     for item in before.iter().filter(|item| !item.in_sync) {
@@ -753,8 +771,9 @@ pub async fn maintain_proxy_trust_cache(
 
 pub async fn repair_proxy_trust_cache_batch(
     State(state): State<AppState>,
+    Query(query): Query<ProxyTrustCacheScanQuery>,
 ) -> Result<Json<ProxyTrustCacheRepairBatchResponse>, (StatusCode, String)> {
-    let before = collect_trust_cache_scan_items(&state).await?;
+    let before = apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
     let mut repaired = 0usize;
     for item in before.iter().filter(|item| !item.in_sync) {
         refresh_cached_trust_score_for_proxy(&state.db, &item.proxy_id)
