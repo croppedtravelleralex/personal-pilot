@@ -233,3 +233,15 @@
 - 更早的失败暂不吃这层近期惩罚
 
 这意味着系统不再只看“累计失败过多少次”，也开始看“失败是不是刚发生、风险是不是还很新鲜”。
+
+
+## Provider / Region 近期失败聚簇惩罚（当前已落地）
+
+当前 selection 已开始纳入 provider × region 维度的近期失败聚簇口径：
+
+- 若同一个 `provider + region` 组合下
+- 最近 **3600 秒** 内
+- 有 **2 条及以上代理** 出现 `last_verify_status = failed`
+- 则该 `provider + region` 组合会被整体后排
+
+这意味着系统不只会看单条代理是否失败、provider 是否长期不稳，也开始识别“某个 provider 在某个 region 最近是不是正在局部翻车”。

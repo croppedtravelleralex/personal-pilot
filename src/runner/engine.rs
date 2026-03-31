@@ -5,7 +5,7 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_sql, proxy_long_term_weight_sql, provider_long_term_weight_sql, proxy_recent_failure_decay_sql, resolved_proxy_json};
+use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_sql, proxy_long_term_weight_sql, provider_long_term_weight_sql, provider_region_recent_failure_decay_sql, proxy_recent_failure_decay_sql, resolved_proxy_json};
 use crate::{
     app::state::AppState,
     domain::{
@@ -141,6 +141,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
                  LIMIT 1",
                 proxy_selection_base_where_sql(),
                 proxy_selection_order_sql()
+                    .replace("{provider_region_recent_failure_decay}", provider_region_recent_failure_decay_sql())
                     .replace("{recent_failure_decay}", proxy_recent_failure_decay_sql())
                     .replace("{provider_long_term_weight}", provider_long_term_weight_sql())
                     .replace("{long_term_weight}", proxy_long_term_weight_sql())
@@ -152,6 +153,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
                 .bind(region)
                 .bind(region)
                 .bind(min_score)
+                .bind(&now)
                 .bind(&now)
                 .bind(&now)
                 .bind(&now)

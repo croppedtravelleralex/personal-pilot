@@ -86,6 +86,25 @@ pub fn proxy_recent_failure_decay_sql() -> &'static str {
     "#
 }
 
+pub fn provider_region_recent_failure_decay_sql() -> &'static str {
+    r#"
+                 CASE
+                   WHEN provider IS NOT NULL AND region IS NOT NULL AND (provider, region) IN (
+                       SELECT provider, region
+                       FROM proxies
+                       WHERE provider IS NOT NULL
+                         AND region IS NOT NULL
+                         AND last_verify_status = 'failed'
+                         AND last_verify_at IS NOT NULL
+                         AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 3600
+                       GROUP BY provider, region
+                       HAVING COUNT(*) >= 2
+                   ) THEN 1
+                   ELSE 0
+                 END ASC,
+    "#
+}
+
 pub fn proxy_selection_order_sql() -> &'static str {
     r#"
                  CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
@@ -134,6 +153,8 @@ mod tests {
         assert!(sql.contains("last_verify_status = 'failed'"));
         assert!(sql.contains("last_verify_at IS NULL"));
         let provider_weight = provider_long_term_weight_sql();
+        let provider_region_decay = provider_region_recent_failure_decay_sql();
+        assert!(provider_region_decay.contains("HAVING COUNT(*) >= 2"));
         let recent_decay = proxy_recent_failure_decay_sql();
         assert!(recent_decay.contains("CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 1800"));
         assert!(provider_weight.contains("HAVING SUM(failure_count) >= SUM(success_count) + 5"));
