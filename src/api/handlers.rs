@@ -76,6 +76,12 @@ struct ProxyRow {
     last_exit_country: Option<String>,
     last_exit_region: Option<String>,
     last_verify_at: Option<String>,
+    last_probe_latency_ms: Option<i64>,
+    last_probe_error: Option<String>,
+    last_probe_error_category: Option<String>,
+    last_verify_confidence: Option<f64>,
+    last_verify_score_delta: Option<i64>,
+    last_verify_source: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -112,6 +118,8 @@ pub async fn run_proxy_verify_probe(
     let mut exit_region: Option<String> = None;
     let mut geo_match_ok: Option<bool> = None;
     let mut anonymity_level: Option<String> = None;
+    let mut probe_error: Option<String> = if reachable { None } else { Some("proxy verify tcp connect failed".to_string()) };
+    let mut probe_error_category: Option<String> = if reachable { None } else { Some("connect_failed".to_string()) };
     let mut verify_message = if reachable {
         "tcp connect succeeded but verify probe did not complete".to_string()
     } else {
@@ -140,18 +148,48 @@ Host: verify.example:443
                         upstream_ok = exit_ip.is_some() || exit_country.is_some() || exit_region.is_some();
                         geo_match_ok = expected_country.as_ref().map(|expected| exit_country.as_ref().map(|actual| actual.eq_ignore_ascii_case(expected)).unwrap_or(false));
                         verify_message = format!("proxy verify completed ip={:?} country={:?} region={:?}", exit_ip, exit_country, exit_region);
+                        probe_error = None;
+                        probe_error_category = None;
                     } else {
                         verify_message = format!("proxy verify got non-http response: {text_lower}");
+                        probe_error = Some(verify_message.clone());
+                        probe_error_category = Some("protocol_invalid".to_string());
                     }
                 }
             }
         }
     }
 
+    if reachable && protocol_ok && !upstream_ok {
+        probe_error = Some("verify probe did not receive upstream identity fields".to_string());
+        probe_error_category = Some("upstream_missing".to_string());
+    }
     let latency_ms = Some(started.elapsed().as_millis());
+    let latency_ms_i64 = latency_ms.and_then(|v| i64::try_from(v).ok());
     let status = if reachable && protocol_ok && upstream_ok { "ok" } else { "failed" };
+    let verification_confidence = Some(if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) {
+        0.95
+    } else if reachable && protocol_ok && upstream_ok {
+        0.80
+    } else if reachable && protocol_ok {
+        0.45
+    } else if reachable {
+        0.20
+    } else {
+        0.05
+    });
+    let verification_score_delta = Some(
+        (if status == "ok" { 8 } else { -8 })
+        + (if geo_match_ok == Some(true) { 4 } else if geo_match_ok == Some(false) { -4 } else { 0 })
+        + match anonymity_level.as_deref() {
+            Some("elite") => 2,
+            Some("transparent") => -2,
+            _ => 0,
+        }
+    );
+    let verify_source = Some("local_verify".to_string());
     let now = now_ts_string();
-    sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, updated_at = ? WHERE id = ?"#)
+    sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, last_probe_latency_ms = ?, last_probe_error = ?, last_probe_error_category = ?, last_verify_confidence = ?, last_verify_score_delta = ?, last_verify_source = ?, updated_at = ? WHERE id = ?"#)
         .bind(&now)
         .bind(status)
         .bind(geo_match_ok.map(|v| if v { 1_i64 } else { 0_i64 }))
@@ -160,6 +198,12 @@ Host: verify.example:443
         .bind(&exit_region)
         .bind(&anonymity_level)
         .bind(&now)
+        .bind(&latency_ms_i64)
+        .bind(&probe_error)
+        .bind(&probe_error_category)
+        .bind(verification_confidence)
+        .bind(verification_score_delta)
+        .bind(&verify_source)
         .bind(&now)
         .bind(proxy_id)
         .execute(&state.db)
@@ -177,6 +221,11 @@ Host: verify.example:443
         geo_match_ok,
         anonymity_level,
         latency_ms,
+        probe_error,
+        probe_error_category,
+        verification_confidence,
+        verification_score_delta,
+        verify_source,
         status: status.to_string(),
         message: verify_message,
     })
@@ -217,6 +266,12 @@ fn map_proxy_row(row: ProxyRow) -> ProxyResponse {
         last_exit_country: row.last_exit_country,
         last_exit_region: row.last_exit_region,
         last_verify_at: row.last_verify_at,
+        last_probe_latency_ms: row.last_probe_latency_ms,
+        last_probe_error: row.last_probe_error,
+        last_probe_error_category: row.last_probe_error_category,
+        last_verify_confidence: row.last_verify_confidence,
+        last_verify_score_delta: row.last_verify_score_delta,
+        last_verify_source: row.last_verify_source,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }
@@ -282,6 +337,23 @@ fn proxy_identity(result_json: Option<&str>) -> (Option<String>, Option<String>,
         proxy.and_then(|value| value.get("provider")).and_then(|value| value.as_str()).map(|v| v.to_string()),
         proxy.and_then(|value| value.get("region")).and_then(|value| value.as_str()).map(|v| v.to_string()),
     )
+}
+
+fn selection_reason_summary(result_json: Option<&str>) -> Option<String> {
+    let parsed = result_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())?;
+    parsed.get("payload")
+        .and_then(|value| value.get("network_policy_json"))
+        .and_then(|value| value.get("selection_reason_summary"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string())
+}
+
+fn trust_score_total(result_json: Option<&str>) -> Option<i64> {
+    let parsed = result_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())?;
+    parsed.get("payload")
+        .and_then(|value| value.get("network_policy_json"))
+        .and_then(|value| value.get("trust_score_total"))
+        .and_then(|value| value.as_i64())
 }
 
 fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {
@@ -490,6 +562,8 @@ pub async fn status(
         .map(|(id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)| {
             let proxy_resolution_status = proxy_resolution_status(result_json.as_deref());
             let (proxy_id, proxy_provider, proxy_region) = proxy_identity(result_json.as_deref());
+            let trust_score_total = trust_score_total(result_json.as_deref());
+            let selection_reason_summary = selection_reason_summary(result_json.as_deref());
             TaskResponse {
                 fingerprint_resolution_status: fingerprint_resolution_status(
                     fingerprint_profile_id.as_deref(),
@@ -500,6 +574,8 @@ pub async fn status(
                 proxy_provider,
                 proxy_region,
                 proxy_resolution_status,
+                trust_score_total,
+                selection_reason_summary,
                 id,
                 kind,
                 status,
@@ -616,6 +692,8 @@ pub async fn create_task(
             proxy_provider: None,
             proxy_region: None,
             proxy_resolution_status: payload.network_policy_json.as_ref().and_then(|v| v.get("mode")).and_then(|v| v.as_str()).map(|mode| if mode == "direct" { "direct".to_string() } else { "pending".to_string() }),
+            trust_score_total: None,
+            selection_reason_summary: None,
         }),
     ))
 }
@@ -645,6 +723,8 @@ pub async fn get_task(
         Some((id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json)) => {
             let proxy_resolution_status = proxy_resolution_status(result_json.as_deref());
             let (proxy_id, proxy_provider, proxy_region) = proxy_identity(result_json.as_deref());
+            let trust_score_total = trust_score_total(result_json.as_deref());
+            let selection_reason_summary = selection_reason_summary(result_json.as_deref());
             Ok(Json(TaskResponse {
                 fingerprint_resolution_status: fingerprint_resolution_status(
                     fingerprint_profile_id.as_deref(),
@@ -655,6 +735,8 @@ pub async fn get_task(
                 proxy_provider,
                 proxy_region,
                 proxy_resolution_status,
+                trust_score_total,
+                selection_reason_summary,
                 id,
                 kind,
                 status,
@@ -1077,7 +1159,7 @@ pub async fn create_proxy(
     let now = now_ts_string();
     let status = payload.status.unwrap_or_else(|| "active".to_string());
     let score = payload.score.unwrap_or(1.0);
-    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)"#)
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)"#)
         .bind(&payload.id).bind(&payload.scheme).bind(&payload.host).bind(payload.port)
         .bind(&payload.username).bind(&payload.password).bind(&payload.region).bind(&payload.country).bind(&payload.provider)
         .bind(&status).bind(score).bind(&now).bind(&now)
@@ -1090,6 +1172,7 @@ pub async fn create_proxy(
         last_smoke_status: None, last_smoke_protocol_ok: None, last_smoke_upstream_ok: None,
         last_exit_ip: None, last_anonymity_level: None, last_smoke_at: None,
         last_verify_status: None, last_verify_geo_match_ok: None, last_exit_country: None, last_exit_region: None, last_verify_at: None,
+        last_probe_latency_ms: None, last_probe_error: None, last_probe_error_category: None, last_verify_confidence: None, last_verify_score_delta: None, last_verify_source: None,
         created_at: now.clone(), updated_at: now,
     })))
 }
@@ -1100,7 +1183,7 @@ pub async fn list_proxies(
 ) -> Result<Json<Vec<ProxyResponse>>, (StatusCode, String)> {
     let limit = sanitize_limit(query.limit, 20, 200);
     let offset = sanitize_offset(query.offset);
-    let rows = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at FROM proxies ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#)
+    let rows = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at FROM proxies ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#)
         .bind(limit)
         .bind(offset)
         .fetch_all(&state.db)
@@ -1113,7 +1196,7 @@ pub async fn get_proxy(
     State(state): State<AppState>,
     Path(proxy_id): Path<String>,
 ) -> Result<Json<ProxyResponse>, (StatusCode, String)> {
-    let row = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at FROM proxies WHERE id = ?"#)
+    let row = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at FROM proxies WHERE id = ?"#)
         .bind(&proxy_id)
         .fetch_optional(&state.db)
         .await

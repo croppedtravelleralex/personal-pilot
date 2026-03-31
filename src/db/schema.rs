@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 "#;
 
-pub const ALL_SCHEMA_SQL: [&str; 9] = [
+pub const ALL_SCHEMA_SQL: [&str; 12] = [
     CREATE_TASKS_TABLE_SQL,
     CREATE_RUNS_TABLE_SQL,
     CREATE_ARTIFACTS_TABLE_SQL,
@@ -69,6 +69,9 @@ pub const ALL_SCHEMA_SQL: [&str; 9] = [
     CREATE_PROXY_SESSION_BINDINGS_TABLE_SQL,
     CREATE_PROXIES_SELECTION_INDEX_SQL,
     CREATE_PROXY_SESSION_BINDINGS_LOOKUP_INDEX_SQL,
+    CREATE_PROXIES_VERIFY_STATE_INDEX_SQL,
+    CREATE_VERIFY_BATCHES_CREATED_AT_INDEX_SQL,
+    CREATE_TASKS_KIND_STATUS_INDEX_SQL,
 ];
 
 
@@ -115,6 +118,12 @@ CREATE TABLE IF NOT EXISTS proxies (
     last_exit_country TEXT,
     last_exit_region TEXT,
     last_verify_at TEXT,
+    last_probe_latency_ms INTEGER,
+    last_probe_error TEXT,
+    last_probe_error_category TEXT,
+    last_verify_confidence REAL,
+    last_verify_score_delta INTEGER,
+    last_verify_source TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -159,4 +168,20 @@ ON proxies(status, provider, region, score DESC, last_used_at, created_at);
 pub const CREATE_PROXY_SESSION_BINDINGS_LOOKUP_INDEX_SQL: &str = r#"
 CREATE INDEX IF NOT EXISTS idx_proxy_session_bindings_lookup
 ON proxy_session_bindings(proxy_id, provider, region, expires_at, last_used_at);
+"#;
+
+
+pub const CREATE_PROXIES_VERIFY_STATE_INDEX_SQL: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_proxies_verify_state
+ON proxies(status, last_verify_status, last_verify_at, cooldown_until);
+"#;
+
+pub const CREATE_VERIFY_BATCHES_CREATED_AT_INDEX_SQL: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_verify_batches_created_at
+ON verify_batches(created_at, id);
+"#;
+
+pub const CREATE_TASKS_KIND_STATUS_INDEX_SQL: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_tasks_kind_status
+ON tasks(kind, status, created_at, id);
 "#;

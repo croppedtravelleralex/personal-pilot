@@ -5,7 +5,7 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_by_trust_score_sql_with_tuning, resolved_proxy_json};
+use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_by_trust_score_sql_with_tuning, proxy_trust_score_sql_with_tuning, resolved_proxy_json};
 use crate::{
     app::state::AppState,
     domain::{
@@ -74,12 +74,40 @@ fn extract_proxy_selection(payload: &Value) -> Option<RunnerProxySelection> {
     })
 }
 
+async fn load_proxy_trust_score(state: &AppState, proxy_id: &str, now: &str) -> Result<Option<i64>> {
+    let query = format!(
+        "SELECT CAST(({}) AS INTEGER) FROM proxies WHERE id = ? LIMIT 1",
+        proxy_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
+    );
+    let value = sqlx::query_scalar::<_, i64>(&query)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(proxy_id)
+        .fetch_optional(&state.db)
+        .await?;
+    Ok(value)
+}
+
+fn selection_reason_summary_for_mode(mode: &str, trust_score_total: Option<i64>) -> String {
+    match (mode, trust_score_total) {
+        ("explicit", Some(score)) => format!("explicit proxy_id selected active proxy directly; current trust score snapshot={score}"),
+        ("sticky", Some(score)) => format!("sticky session reused an active proxy binding; current trust score snapshot={score}"),
+        ("auto", Some(score)) => format!("selected highest-ranked active proxy by trust score ordering; trust_score_total={score}"),
+        ("explicit", None) => "explicit proxy_id selected active proxy directly".to_string(),
+        ("sticky", None) => "sticky session reused an active proxy binding".to_string(),
+        _ => "selected highest-ranked active proxy by trust score ordering".to_string(),
+    }
+}
+
 async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) -> Result<()> {
     let Some(policy) = payload.get_mut("network_policy_json") else { return Ok(()); };
     let Some(policy_obj) = policy.as_object_mut() else { return Ok(()); };
     let mode = policy_obj.get("mode").and_then(|v| v.as_str()).unwrap_or("direct");
     if mode == "direct" {
         policy_obj.insert("proxy_resolution_status".to_string(), json!("direct"));
+        policy_obj.insert("selection_reason_summary".to_string(), json!("direct mode bypasses proxy pool selection"));
         return Ok(());
     }
 
@@ -89,7 +117,9 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
     let region = policy_obj.get("region").and_then(|v| v.as_str());
     let min_score = policy_obj.get("min_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
-    let row = if let Some(proxy_id) = policy_obj.get("proxy_id").and_then(|v| v.as_str()) {
+    let mut selection_mode = "auto";
+    let mut row = if let Some(proxy_id) = policy_obj.get("proxy_id").and_then(|v| v.as_str()) {
+        selection_mode = "explicit";
         sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
             r#"SELECT id, scheme, host, port, username, password, region, country, provider, score
                FROM proxies
@@ -103,6 +133,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         .fetch_optional(&state.db)
         .await?
     } else if let Some(ref sticky_session) = sticky_session {
+        selection_mode = "sticky";
         sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
             r#"SELECT p.id, p.scheme, p.host, p.port, p.username, p.password, p.region, p.country, p.provider, p.score
                FROM proxy_session_bindings b
@@ -130,42 +161,46 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         None
     };
 
-    let row = match row {
-        Some(row) => Some(row),
-        None => {
-            let query = format!(
-                "SELECT id, scheme, host, port, username, password, region, country, provider, score
-                 FROM proxies
-                 {}
-                 ORDER BY {}
-                 LIMIT 1",
-                proxy_selection_base_where_sql(),
-                proxy_selection_order_by_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
-            );
-            sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(&query)
-                .bind(&now)
-                .bind(provider)
-                .bind(provider)
-                .bind(region)
-                .bind(region)
-                .bind(min_score)
-                .bind(&now)
-                .bind(&now)
-                .bind(&now)
-                .bind(&now)
-                .fetch_optional(&state.db)
-                .await?
-        },
-    };
+    if row.is_none() && selection_mode != "explicit" {
+        selection_mode = "auto";
+        let query = format!(
+            "SELECT id, scheme, host, port, username, password, region, country, provider, score
+             FROM proxies
+             {}
+             ORDER BY {}
+             LIMIT 1",
+            proxy_selection_base_where_sql(),
+            proxy_selection_order_by_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
+        );
+        row = sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(&query)
+            .bind(&now)
+            .bind(provider)
+            .bind(provider)
+            .bind(region)
+            .bind(region)
+            .bind(min_score)
+            .bind(&now)
+            .bind(&now)
+            .bind(&now)
+            .bind(&now)
+            .fetch_optional(&state.db)
+            .await?;
+    }
 
     if let Some((id, scheme, host, port, username, password, region, country, provider, score)) = row {
-        apply_proxy_resolution_metadata(
-            policy_obj,
-            sticky_session.as_deref(),
-            Some(resolved_proxy_json(id, scheme, host, port, username, password, region, country, provider, score)),
-        );
+        let trust_score_total = load_proxy_trust_score(state, &id, &now).await?;
+        let mut resolved = resolved_proxy_json(id, scheme, host, port, username, password, region, country, provider, score);
+        if let Some(obj) = resolved.as_object_mut() {
+            obj.insert("trust_score_total".to_string(), trust_score_total.map_or(Value::Null, |v| json!(v)));
+        }
+        apply_proxy_resolution_metadata(policy_obj, sticky_session.as_deref(), Some(resolved));
+        policy_obj.insert("selection_reason_summary".to_string(), json!(selection_reason_summary_for_mode(selection_mode, trust_score_total)));
+        if let Some(score) = trust_score_total {
+            policy_obj.insert("trust_score_total".to_string(), json!(score));
+        }
     } else {
         apply_proxy_resolution_metadata(policy_obj, sticky_session.as_deref(), None);
+        policy_obj.insert("selection_reason_summary".to_string(), json!("no eligible active proxy matched the current policy filters"));
     }
     Ok(())
 }

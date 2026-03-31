@@ -112,6 +112,8 @@ pub struct TaskResponse {
     pub proxy_provider: Option<String>,
     pub proxy_region: Option<String>,
     pub proxy_resolution_status: Option<String>,
+    pub trust_score_total: Option<i64>,
+    pub selection_reason_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,6 +205,12 @@ pub struct ProxyResponse {
     pub last_exit_country: Option<String>,
     pub last_exit_region: Option<String>,
     pub last_verify_at: Option<String>,
+    pub last_probe_latency_ms: Option<i64>,
+    pub last_probe_error: Option<String>,
+    pub last_probe_error_category: Option<String>,
+    pub last_verify_confidence: Option<f64>,
+    pub last_verify_score_delta: Option<i64>,
+    pub last_verify_source: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -233,6 +241,11 @@ pub struct ProxyVerifyResponse {
     pub geo_match_ok: Option<bool>,
     pub anonymity_level: Option<String>,
     pub latency_ms: Option<u128>,
+    pub probe_error: Option<String>,
+    pub probe_error_category: Option<String>,
+    pub verification_confidence: Option<f64>,
+    pub verification_score_delta: Option<i64>,
+    pub verify_source: Option<String>,
     pub status: String,
     pub message: String,
 }
