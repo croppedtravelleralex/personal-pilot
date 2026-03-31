@@ -573,7 +573,7 @@ mod tests {
     }
 
     async fn execute_with_bin(bin: &str, payload: Value, timeout_seconds: Option<i64>) -> RunnerExecutionResult {
-        let _guard = env_lock().lock().expect("env lock poisoned");
+        let _guard = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var("LIGHTPANDA_BIN", bin);
         let runner = LightpandaRunner::default();
         let result = runner
@@ -629,7 +629,7 @@ mod tests {
 
     #[tokio::test]
     async fn execute_reports_fingerprint_runtime_when_profile_is_present() {
-        let _guard = env_lock().lock().expect("env lock poisoned");
+        let _guard = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let script = write_script(
             "fingerprint-env",
             "echo \"$LIGHTPANDA_FP_PROFILE_ID|$LIGHTPANDA_FP_ACCEPT_LANGUAGE|$LIGHTPANDA_FP_TIMEZONE|$LIGHTPANDA_FP_VIEWPORT_WIDTH\"

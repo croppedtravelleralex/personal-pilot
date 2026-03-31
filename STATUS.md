@@ -114,3 +114,5 @@
 - **trust score 接主链已补最小回归验证**：当前已新增直接排序层面的回归，用来验证在 trust score 规则下，更健康的代理能够压过 raw score 更高但状态更差的代理。
 
 - **trust score 核心化继续推进**：当前主排序已不再只是简单按 raw score 兜底，而是开始把 `score` 更明确地纳入 trust score 主排序表达，进一步收敛 selection 语义。
+
+- **第二轮稳定性清扫继续推进**：当前已进一步加固 lightpanda runner 中的 env lock poisoned 处理，避免该类锁异常直接触发 `expect(...)` panic。
