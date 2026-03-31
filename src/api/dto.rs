@@ -100,6 +100,13 @@ pub struct CancelTaskResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WinnerVsRunnerUpDiff {
+    pub better: Vec<String>,
+    pub worse: Vec<String>,
+    pub same: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskResponse {
     pub id: String,
     pub kind: String,
@@ -114,7 +121,7 @@ pub struct TaskResponse {
     pub proxy_resolution_status: Option<String>,
     pub trust_score_total: Option<i64>,
     pub selection_reason_summary: Option<String>,
-    pub winner_vs_runner_up_diff: Option<serde_json::Value>,
+    pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,7 +327,7 @@ pub struct ProxySelectionExplainResponse {
     pub selection_reason_summary: String,
     pub trust_score_components: serde_json::Value,
     pub candidate_rank_preview: Vec<serde_json::Value>,
-    pub winner_vs_runner_up_diff: Option<serde_json::Value>,
+    pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
 }
 
 

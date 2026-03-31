@@ -23,7 +23,7 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse, WinnerVsRunnerUpDiff,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
@@ -378,15 +378,16 @@ fn trust_score_total(result_json: Option<&str>) -> Option<i64> {
         .and_then(|value| value.as_i64())
 }
 
-fn winner_vs_runner_up_diff(result_json: Option<&str>) -> Option<serde_json::Value> {
+fn winner_vs_runner_up_diff(result_json: Option<&str>) -> Option<WinnerVsRunnerUpDiff> {
     let parsed = result_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())?;
-    parsed.get("payload")
+    let value = parsed.get("payload")
         .and_then(|value| value.get("network_policy_json"))
         .and_then(|value| value.get("candidate_rank_preview"))
         .and_then(|value| value.as_array())
         .and_then(|arr| arr.first())
         .and_then(|value| value.get("winner_vs_runner_up_diff"))
-        .cloned()
+        .cloned()?;
+    serde_json::from_value(value).ok()
 }
 
 fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {
@@ -918,7 +919,11 @@ pub async fn explain_proxy_selection(
         provider_region_cluster_hit != 0,
     );
 
-    let winner_vs_runner_up_diff = candidate_rank_preview.get(0).and_then(|v| v.get("winner_vs_runner_up_diff")).cloned();
+    let winner_vs_runner_up_diff = candidate_rank_preview
+        .get(0)
+        .and_then(|v| v.get("winner_vs_runner_up_diff"))
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok());
     Ok(Json(ProxySelectionExplainResponse {
         proxy_id: id,
         trust_score_total,
