@@ -182,6 +182,12 @@ pub struct ProxyResponse {
     pub last_checked_at: Option<String>,
     pub last_used_at: Option<String>,
     pub cooldown_until: Option<String>,
+    pub last_smoke_status: Option<String>,
+    pub last_smoke_protocol_ok: Option<bool>,
+    pub last_smoke_upstream_ok: Option<bool>,
+    pub last_exit_ip: Option<String>,
+    pub last_anonymity_level: Option<String>,
+    pub last_smoke_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

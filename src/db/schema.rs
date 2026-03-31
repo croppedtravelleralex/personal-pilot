@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS proxies (
     last_checked_at TEXT,
     last_used_at TEXT,
     cooldown_until TEXT,
+    last_smoke_status TEXT,
+    last_smoke_protocol_ok INTEGER,
+    last_smoke_upstream_ok INTEGER,
+    last_exit_ip TEXT,
+    last_anonymity_level TEXT,
+    last_smoke_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

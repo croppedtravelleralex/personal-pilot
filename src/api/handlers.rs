@@ -65,6 +65,12 @@ struct ProxyRow {
     last_checked_at: Option<String>,
     last_used_at: Option<String>,
     cooldown_until: Option<String>,
+    last_smoke_status: Option<String>,
+    last_smoke_protocol_ok: Option<i64>,
+    last_smoke_upstream_ok: Option<i64>,
+    last_exit_ip: Option<String>,
+    last_anonymity_level: Option<String>,
+    last_smoke_at: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -86,6 +92,12 @@ fn map_proxy_row(row: ProxyRow) -> ProxyResponse {
         last_checked_at: row.last_checked_at,
         last_used_at: row.last_used_at,
         cooldown_until: row.cooldown_until,
+        last_smoke_status: row.last_smoke_status,
+        last_smoke_protocol_ok: row.last_smoke_protocol_ok.map(|v| v != 0),
+        last_smoke_upstream_ok: row.last_smoke_upstream_ok.map(|v| v != 0),
+        last_exit_ip: row.last_exit_ip,
+        last_anonymity_level: row.last_anonymity_level,
+        last_smoke_at: row.last_smoke_at,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }
@@ -867,7 +879,7 @@ pub async fn create_proxy(
     let now = now_ts_string();
     let status = payload.status.unwrap_or_else(|| "active".to_string());
     let score = payload.score.unwrap_or(1.0);
-    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, ?, ?)"#)
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)"#)
         .bind(&payload.id).bind(&payload.scheme).bind(&payload.host).bind(payload.port)
         .bind(&payload.username).bind(&payload.password).bind(&payload.region).bind(&payload.country).bind(&payload.provider)
         .bind(&status).bind(score).bind(&now).bind(&now)
@@ -876,7 +888,10 @@ pub async fn create_proxy(
     Ok((StatusCode::CREATED, Json(ProxyResponse {
         id: payload.id, scheme: payload.scheme, host: payload.host, port: payload.port, username: payload.username,
         region: payload.region, country: payload.country, provider: payload.provider, status, score, success_count: 0, failure_count: 0,
-        last_checked_at: None, last_used_at: None, cooldown_until: None, created_at: now.clone(), updated_at: now,
+        last_checked_at: None, last_used_at: None, cooldown_until: None,
+        last_smoke_status: None, last_smoke_protocol_ok: None, last_smoke_upstream_ok: None,
+        last_exit_ip: None, last_anonymity_level: None, last_smoke_at: None,
+        created_at: now.clone(), updated_at: now,
     })))
 }
 
@@ -886,7 +901,7 @@ pub async fn list_proxies(
 ) -> Result<Json<Vec<ProxyResponse>>, (StatusCode, String)> {
     let limit = sanitize_limit(query.limit, 20, 200);
     let offset = sanitize_offset(query.offset);
-    let rows = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at FROM proxies ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#)
+    let rows = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, created_at, updated_at FROM proxies ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#)
         .bind(limit)
         .bind(offset)
         .fetch_all(&state.db)
@@ -899,7 +914,7 @@ pub async fn get_proxy(
     State(state): State<AppState>,
     Path(proxy_id): Path<String>,
 ) -> Result<Json<ProxyResponse>, (StatusCode, String)> {
-    let row = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at FROM proxies WHERE id = ?"#)
+    let row = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, created_at, updated_at FROM proxies WHERE id = ?"#)
         .bind(&proxy_id)
         .fetch_optional(&state.db)
         .await
@@ -984,7 +999,13 @@ Host: example.com:443
     let now = now_ts_string();
 
     if reachable && protocol_ok {
-        sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, cooldown_until = NULL, updated_at = ? WHERE id = ?"#)
+        sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, cooldown_until = NULL, last_smoke_status = ?, last_smoke_protocol_ok = ?, last_smoke_upstream_ok = ?, last_exit_ip = ?, last_anonymity_level = ?, last_smoke_at = ?, updated_at = ? WHERE id = ?"#)
+            .bind(&now)
+            .bind("ok")
+            .bind(1_i64)
+            .bind(if upstream_ok { 1_i64 } else { 0_i64 })
+            .bind(&exit_ip)
+            .bind(&anonymity_level)
             .bind(&now)
             .bind(&now)
             .bind(&proxy_id)
@@ -1005,9 +1026,15 @@ Host: example.com:443
         }))
     } else {
         let cooldown_until = (now.parse::<u64>().unwrap_or(0) + 60).to_string();
-        sqlx::query(r#"UPDATE proxies SET failure_count = failure_count + 1, last_checked_at = ?, cooldown_until = ?, updated_at = ? WHERE id = ?"#)
+        sqlx::query(r#"UPDATE proxies SET failure_count = failure_count + 1, last_checked_at = ?, cooldown_until = ?, last_smoke_status = ?, last_smoke_protocol_ok = ?, last_smoke_upstream_ok = ?, last_exit_ip = ?, last_anonymity_level = ?, last_smoke_at = ?, updated_at = ? WHERE id = ?"#)
             .bind(&now)
             .bind(&cooldown_until)
+            .bind("failed")
+            .bind(if protocol_ok { 1_i64 } else { 0_i64 })
+            .bind(if upstream_ok { 1_i64 } else { 0_i64 })
+            .bind(&exit_ip)
+            .bind(&anonymity_level)
+            .bind(&now)
             .bind(&now)
             .bind(&proxy_id)
             .execute(&state.db)

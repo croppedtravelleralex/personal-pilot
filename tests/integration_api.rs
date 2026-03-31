@@ -1255,14 +1255,17 @@ async fn proxy_smoke_test_marks_unreachable_proxy_failed() {
     assert_eq!(smoke_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(false));
     assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), None);
 
-    let (failure_count, last_checked_at, cooldown_until): (i64, Option<String>, Option<String>) =
-        sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until FROM proxies WHERE id = 'proxy-smoke-dead'"#)
+    let (failure_count, last_checked_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok): (i64, Option<String>, Option<String>, Option<String>, Option<i64>, Option<i64>) =
+        sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok FROM proxies WHERE id = 'proxy-smoke-dead'"#)
             .fetch_one(&state.db)
             .await
             .expect("load proxy after smoke test");
     assert_eq!(failure_count, 1);
     assert!(last_checked_at.is_some());
     assert!(cooldown_until.is_some());
+    assert_eq!(last_smoke_status.as_deref(), Some("failed"));
+    assert_eq!(last_smoke_protocol_ok, Some(0));
+    assert_eq!(last_smoke_upstream_ok, Some(0));
 }
 
 
@@ -1395,14 +1398,19 @@ ip=203.0.113.8
     assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("203.0.113.8"));
     assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), Some("elite"));
 
-    let (failure_count, last_checked_at, cooldown_until): (i64, Option<String>, Option<String>) =
-        sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until FROM proxies WHERE id = 'proxy-smoke-http'"#)
+    let (failure_count, last_checked_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level): (i64, Option<String>, Option<String>, Option<String>, Option<i64>, Option<i64>, Option<String>, Option<String>) =
+        sqlx::query_as(r#"SELECT failure_count, last_checked_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level FROM proxies WHERE id = 'proxy-smoke-http'"#)
             .fetch_one(&state.db)
             .await
             .expect("load proxy after smoke test success");
     assert_eq!(failure_count, 0);
     assert!(last_checked_at.is_some());
     assert!(cooldown_until.is_none());
+    assert_eq!(last_smoke_status.as_deref(), Some("ok"));
+    assert_eq!(last_smoke_protocol_ok, Some(1));
+    assert_eq!(last_smoke_upstream_ok, Some(1));
+    assert_eq!(last_exit_ip.as_deref(), Some("203.0.113.8"));
+    assert_eq!(last_anonymity_level.as_deref(), Some("elite"));
 }
 
 
