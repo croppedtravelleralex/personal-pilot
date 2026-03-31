@@ -65,14 +65,16 @@ Add to `proxies`:
 ## Suggested API evolution
 Current:
 - `POST /proxies/:id/smoke`
+- `POST /proxies/:id/verify`
+- `POST /proxies/verify-batch`
 
 Next:
 - keep `POST /proxies/:id/smoke` as fast check
-- add `POST /proxies/:id/verify` as slower external probe
-- optionally add `POST /proxies/verify-batch` later
+- keep `POST /proxies/:id/verify` as current slower probe entry
+- continue evolving `POST /proxies/verify-batch` from task fan-out into a more realistic external validation pipeline
 
 ## Recommended implementation order
-1. add external probe design + env vars
-2. add `verify` response DTO with country/region fields
-3. persist geo/anonymity signals
-4. hook verification score delta into proxy health score updates
+1. add configurable external probe endpoint + env vars
+2. extend verify persistence with latency / probe error / richer verdict fields
+3. hook verification score delta into proxy health / trust score updates
+4. make batch verify consume the richer slow-path validation chain instead of only today's light probe
