@@ -183,3 +183,21 @@
 - `proxy_selection_order_sql()`
 
 这表示 selection 的“硬过滤”和“排序优先级”已经开始从 engine 中拆分出来。
+
+
+## 当前阶段小结
+
+当前可以把这部分能力定位为：
+
+**Proxy Selection Strategy Layer V1**
+
+当前已经收拢到策略模块中的内容包括：
+
+- 规则分层概念（tier）
+- 规则清单（rule）
+- 基础筛选口径（base where）
+- 排序优先级口径（order sql）
+- sticky / resolved_sticky / unresolved 解析状态口径
+- `resolved_proxy` 的结果表达
+
+这说明 selection 已经开始从“engine 里的一组实现细节”，走向“可维护、可测试、可继续扩展的独立策略层”。

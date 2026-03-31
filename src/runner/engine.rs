@@ -5,7 +5,7 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::network_identity::proxy_selection::{proxy_selection_base_where_sql, proxy_selection_order_sql};
+use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_sql, resolved_proxy_json};
 use crate::{
     app::state::AppState,
     domain::{
@@ -84,7 +84,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
     }
 
     let now = now_ts_string();
-    let sticky_session = policy_obj.get("sticky_session").and_then(|v| v.as_str());
+    let sticky_session = policy_obj.get("sticky_session").and_then(|v| v.as_str()).map(|v| v.to_string());
     let provider = policy_obj.get("provider").and_then(|v| v.as_str());
     let region = policy_obj.get("region").and_then(|v| v.as_str());
     let min_score = policy_obj.get("min_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -102,7 +102,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         .bind(&now)
         .fetch_optional(&state.db)
         .await?
-    } else if let Some(sticky_session) = sticky_session {
+    } else if let Some(ref sticky_session) = sticky_session {
         sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
             r#"SELECT p.id, p.scheme, p.host, p.port, p.username, p.password, p.region, p.country, p.provider, p.score
                FROM proxy_session_bindings b
@@ -156,10 +156,13 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
     };
 
     if let Some((id, scheme, host, port, username, password, region, country, provider, score)) = row {
-        policy_obj.insert("proxy_resolution_status".to_string(), json!(if sticky_session.is_some() { "resolved_sticky" } else { "resolved" }));
-        policy_obj.insert("resolved_proxy".to_string(), json!({"id": id, "scheme": scheme, "host": host, "port": port, "username": username, "password": password, "region": region, "country": country, "provider": provider, "score": score}));
+        apply_proxy_resolution_metadata(
+            policy_obj,
+            sticky_session.as_deref(),
+            Some(resolved_proxy_json(id, scheme, host, port, username, password, region, country, provider, score)),
+        );
     } else {
-        policy_obj.insert("proxy_resolution_status".to_string(), json!("unresolved"));
+        apply_proxy_resolution_metadata(policy_obj, sticky_session.as_deref(), None);
     }
     Ok(())
 }

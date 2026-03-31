@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ProxySelectionTier {
@@ -91,5 +92,102 @@ mod tests {
         assert!(sql.contains("last_verify_status = 'failed'"));
         assert!(sql.contains("last_verify_at IS NULL"));
         assert!(sql.contains("score DESC"));
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ProxyResolutionMode {
+    Resolved,
+    ResolvedSticky,
+    Unresolved,
+}
+
+pub fn proxy_resolution_status(sticky_session: Option<&str>, resolved: bool) -> &'static str {
+    match (sticky_session.is_some(), resolved) {
+        (_, false) => "unresolved",
+        (true, true) => "resolved_sticky",
+        (false, true) => "resolved",
+    }
+}
+
+pub fn apply_proxy_resolution_metadata(
+    policy_obj: &mut Map<String, Value>,
+    sticky_session: Option<&str>,
+    resolved_proxy: Option<Value>,
+) {
+    let resolved = resolved_proxy.is_some();
+    policy_obj.insert(
+        "proxy_resolution_status".to_string(),
+        json!(proxy_resolution_status(sticky_session, resolved)),
+    );
+    if let Some(proxy) = resolved_proxy {
+        policy_obj.insert("resolved_proxy".to_string(), proxy);
+    }
+}
+
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    #[test]
+    fn proxy_resolution_status_matches_sticky_and_unresolved_modes() {
+        assert_eq!(proxy_resolution_status(None, false), "unresolved");
+        assert_eq!(proxy_resolution_status(None, true), "resolved");
+        assert_eq!(proxy_resolution_status(Some("sess-1"), true), "resolved_sticky");
+    }
+}
+
+
+#[allow(clippy::too_many_arguments)]
+pub fn resolved_proxy_json(
+    id: String,
+    scheme: String,
+    host: String,
+    port: i64,
+    username: Option<String>,
+    password: Option<String>,
+    region: Option<String>,
+    country: Option<String>,
+    provider: Option<String>,
+    score: f64,
+) -> Value {
+    json!({
+        "id": id,
+        "scheme": scheme,
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "region": region,
+        "country": country,
+        "provider": provider,
+        "score": score,
+    })
+}
+
+
+#[cfg(test)]
+mod json_tests {
+    use super::*;
+
+    #[test]
+    fn resolved_proxy_json_contains_core_fields() {
+        let value = resolved_proxy_json(
+            "proxy-1".to_string(),
+            "http".to_string(),
+            "127.0.0.1".to_string(),
+            8080,
+            None,
+            None,
+            Some("us-east".to_string()),
+            Some("US".to_string()),
+            Some("pool-a".to_string()),
+            0.9,
+        );
+        assert_eq!(value.get("id").and_then(|v| v.as_str()), Some("proxy-1"));
+        assert_eq!(value.get("port").and_then(|v| v.as_i64()), Some(8080));
+        assert_eq!(value.get("provider").and_then(|v| v.as_str()), Some("pool-a"));
     }
 }
