@@ -2472,6 +2472,7 @@ async fn proxy_trust_score_penalizes_missing_verify_even_against_much_higher_raw
     assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-verified-balanced-direct"));
 }
 
+
 #[tokio::test]
 async fn proxy_trust_score_prefers_healthier_proxy_in_direct_ordering() {
     let db_url = unique_db_url();

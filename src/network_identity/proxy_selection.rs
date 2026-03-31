@@ -11,6 +11,14 @@ pub struct ProxySelectionTuning {
     pub provider_region_failure_cluster_window_seconds: i64,
     pub provider_region_failure_cluster_count: i64,
     pub raw_score_weight_tenths: i64,
+    pub verify_ok_bonus: i64,
+    pub verify_geo_match_bonus: i64,
+    pub smoke_upstream_ok_bonus: i64,
+    pub verify_failed_heavy_penalty: i64,
+    pub verify_failed_light_penalty: i64,
+    pub verify_failed_base_penalty: i64,
+    pub missing_verify_penalty: i64,
+    pub stale_verify_penalty: i64,
 }
 
 impl Default for ProxySelectionTuning {
@@ -23,6 +31,14 @@ impl Default for ProxySelectionTuning {
             provider_region_failure_cluster_window_seconds: 3600,
             provider_region_failure_cluster_count: 2,
             raw_score_weight_tenths: 10,
+            verify_ok_bonus: 30,
+            verify_geo_match_bonus: 20,
+            smoke_upstream_ok_bonus: 10,
+            verify_failed_heavy_penalty: 30,
+            verify_failed_light_penalty: 15,
+            verify_failed_base_penalty: 10,
+            missing_verify_penalty: 12,
+            stale_verify_penalty: 8,
         }
     }
 }
@@ -168,6 +184,8 @@ mod tests {
         assert_eq!(tuning.stale_after_seconds, 3600);
         assert_eq!(tuning.provider_region_failure_cluster_count, 2);
         assert_eq!(tuning.raw_score_weight_tenths, 10);
+        assert_eq!(tuning.verify_ok_bonus, 30);
+        assert_eq!(tuning.missing_verify_penalty, 12);
         let env_tuning = proxy_selection_tuning_from_env();
         assert!(env_tuning.stale_after_seconds > 0);
         assert_eq!(rules.len(), 4);
@@ -197,6 +215,7 @@ mod tests {
         assert!(tuned.contains("COUNT(*) >= 2"));
         let trust = proxy_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
         assert!(trust.contains("last_verify_status = 'ok' THEN 30"));
+        assert!(trust.contains("last_verify_at IS NULL THEN 12"));
         assert!(trust.contains("CAST(score * 10 AS INTEGER)"));
         let order_by = proxy_selection_order_by_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
         assert!(!order_by.contains("score DESC, score DESC"));
@@ -204,6 +223,33 @@ mod tests {
         assert!(sql.contains("{long_term_weight}"));
         assert!(sql.contains("score DESC"));
     }
+
+    #[test]
+    fn trust_score_sql_uses_custom_tuning_weights() {
+        let tuning = ProxySelectionTuning {
+            verify_ok_bonus: 44,
+            verify_geo_match_bonus: 21,
+            smoke_upstream_ok_bonus: 13,
+            verify_failed_heavy_penalty: 31,
+            verify_failed_light_penalty: 17,
+            verify_failed_base_penalty: 9,
+            missing_verify_penalty: 19,
+            stale_verify_penalty: 11,
+            raw_score_weight_tenths: 7,
+            ..default_proxy_selection_tuning()
+        };
+        let trust = proxy_trust_score_sql_with_tuning(&tuning);
+        assert!(trust.contains("last_verify_status = 'ok' THEN 44"));
+        assert!(trust.contains("COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 21"));
+        assert!(trust.contains("COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 13"));
+        assert!(trust.contains("THEN 31"));
+        assert!(trust.contains("THEN 17"));
+        assert!(trust.contains("last_verify_status = 'failed' THEN 9"));
+        assert!(trust.contains("last_verify_at IS NULL THEN 19"));
+        assert!(trust.contains("THEN 11"));
+        assert!(trust.contains("CAST(score * 7 AS INTEGER)"));
+    }
+
 }
 
 
@@ -397,6 +443,30 @@ pub fn proxy_selection_tuning_from_env() -> ProxySelectionTuning {
     if let Ok(value) = std::env::var("AOB_PROXY_RAW_SCORE_WEIGHT_TENTHS") {
         if let Ok(parsed) = value.parse::<i64>() { tuning.raw_score_weight_tenths = parsed; }
     }
+    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_OK_BONUS") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_ok_bonus = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_GEO_MATCH_BONUS") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_geo_match_bonus = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_SMOKE_UPSTREAM_OK_BONUS") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.smoke_upstream_ok_bonus = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_HEAVY_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_failed_heavy_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_LIGHT_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_failed_light_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_BASE_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_failed_base_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_MISSING_VERIFY_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.missing_verify_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_STALE_VERIFY_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.stale_verify_penalty = parsed; }
+    }
     tuning
 }
 
@@ -409,17 +479,25 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
     let cluster_window = tuning.provider_region_failure_cluster_window_seconds;
     let cluster_count = tuning.provider_region_failure_cluster_count;
     let raw_score_weight_tenths = tuning.raw_score_weight_tenths;
+    let verify_ok_bonus = tuning.verify_ok_bonus;
+    let verify_geo_match_bonus = tuning.verify_geo_match_bonus;
+    let smoke_upstream_ok_bonus = tuning.smoke_upstream_ok_bonus;
+    let verify_failed_heavy_penalty = tuning.verify_failed_heavy_penalty;
+    let verify_failed_light_penalty = tuning.verify_failed_light_penalty;
+    let verify_failed_base_penalty = tuning.verify_failed_base_penalty;
+    let missing_verify_penalty = tuning.missing_verify_penalty;
+    let stale_verify_penalty = tuning.stale_verify_penalty;
     let individual_margin = provider_margin.saturating_sub(2).max(1);
     format!(
-        "(CASE WHEN last_verify_status = 'ok' THEN 30 ELSE 0 END) +
-         (CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 20 ELSE 0 END) +
-         (CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 10 ELSE 0 END) -
-         (CASE WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {heavy} THEN 30
-               WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {light} THEN 15
-               WHEN last_verify_status = 'failed' THEN 10
+        "(CASE WHEN last_verify_status = 'ok' THEN {verify_ok_bonus} ELSE 0 END) +
+         (CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN {verify_geo_match_bonus} ELSE 0 END) +
+         (CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN {smoke_upstream_ok_bonus} ELSE 0 END) -
+         (CASE WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {heavy} THEN {verify_failed_heavy_penalty}
+               WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {light} THEN {verify_failed_light_penalty}
+               WHEN last_verify_status = 'failed' THEN {verify_failed_base_penalty}
                ELSE 0 END) -
-         (CASE WHEN last_verify_at IS NULL THEN 12
-               WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - {stale} THEN 8
+         (CASE WHEN last_verify_at IS NULL THEN {missing_verify_penalty}
+               WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - {stale} THEN {stale_verify_penalty}
                ELSE 0 END) -
          (CASE WHEN failure_count >= success_count + {individual_margin} THEN 18
                WHEN failure_count > success_count THEN 8
@@ -441,6 +519,14 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
         cluster_window = cluster_window,
         cluster_count = cluster_count,
         raw_score_weight_tenths = raw_score_weight_tenths,
+        verify_ok_bonus = verify_ok_bonus,
+        verify_geo_match_bonus = verify_geo_match_bonus,
+        smoke_upstream_ok_bonus = smoke_upstream_ok_bonus,
+        verify_failed_heavy_penalty = verify_failed_heavy_penalty,
+        verify_failed_light_penalty = verify_failed_light_penalty,
+        verify_failed_base_penalty = verify_failed_base_penalty,
+        missing_verify_penalty = missing_verify_penalty,
+        stale_verify_penalty = stale_verify_penalty,
     )
 }
 
