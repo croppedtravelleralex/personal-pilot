@@ -154,3 +154,5 @@
   - worker 调度相关环境变量：heartbeat / reclaim / claim retry / idle backoff / jitter / error cap
   - 代理验证相关状态：reachable / protocol_ok / upstream_ok / exit_ip / anonymity_level
   - proxy 健康模型新增 smoke 写回字段
+
+- 能力清单文档已补齐：后续做阶段总结、对外说明、API 对齐时可直接复用 `CAPABILITIES.md` 作为主索引。

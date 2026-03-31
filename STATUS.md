@@ -73,3 +73,5 @@
 - **lease TTL / reclaim / worker backoff 再收口已落地**，当前 stale running 回收已经进一步 DB-first 化，worker 空闲退避也加入了轻量 jitter 与 error backoff 上限；调度内核的竞争窗口与同步抖动都比前一轮更稳。
 
 - **环境变量与状态暴露文档已收口**，当前 worker backoff / heartbeat / reclaim / claim retry 相关环境变量，以及代理验证与 smoke 结果字段的暴露口径已经整理清楚；后续更适合转向能力清单与更真实的匿名性/地区校验链。
+
+- **能力清单文档已补齐**，当前系统已明确区分：调度控制面、fingerprint、proxy pool、sticky binding、proxy verification、状态观测，以及仍属于 V1/临时方案的部分。
