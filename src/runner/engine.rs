@@ -165,9 +165,9 @@ pub fn summarize_component_advantages(components: &Value) -> String {
 pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> Value {
     let Some(baseline) = baseline else {
         return json!({
-            "better": [],
-            "worse": [],
-            "same": [],
+            "winner_advantages": [],
+            "runner_up_advantages": [],
+            "neutral_factors": [],
         });
     };
     let c = match current.as_object() { Some(v) => v, None => return Value::Null };
@@ -195,9 +195,9 @@ pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> 
         }
     }
     json!({
-        "better": better,
-        "worse": worse,
-        "same": same,
+        "winner_advantages": better,
+        "runner_up_advantages": worse,
+        "neutral_factors": same,
     })
 }
 
