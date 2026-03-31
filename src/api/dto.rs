@@ -100,12 +100,20 @@ pub struct CancelTaskResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WinnerVsRunnerUpDirection {
+    Winner,
+    RunnerUp,
+    Neutral,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WinnerVsRunnerUpFactor {
     pub factor: String,
     pub winner_value: i64,
     pub runner_up_value: i64,
     pub delta: i64,
-    pub direction: String,
+    pub direction: WinnerVsRunnerUpDirection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2570,6 +2570,7 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     assert!(task_json.get("winner_vs_runner_up_diff").is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).map(|v| !v.is_empty()).unwrap_or(false));
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).map(|v| v.len() <= 5).unwrap_or(false));
+    assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|v| v.get("direction")).and_then(|v| v.as_str()).map(|v| matches!(v, "winner" | "runner_up" | "neutral")).unwrap_or(false));
 
     let result_json_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#)
         .bind(&task_id)
@@ -2687,6 +2688,7 @@ async fn proxy_explain_endpoint_returns_components_and_preview() {
     assert!(json.get("winner_vs_runner_up_diff").is_some());
     assert!(json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).map(|v| !v.is_empty()).unwrap_or(false));
     assert!(json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).map(|v| v.len() <= 5).unwrap_or(false));
+    assert!(json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|v| v.get("direction")).and_then(|v| v.as_str()).map(|v| matches!(v, "winner" | "runner_up" | "neutral")).unwrap_or(false));
 }
 
 #[tokio::test]
