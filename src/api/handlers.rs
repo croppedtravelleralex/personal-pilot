@@ -22,7 +22,7 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySmokeResponse, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyMetricsResponse,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySmokeResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyMetricsResponse,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
@@ -1258,6 +1258,7 @@ pub async fn verify_batch_proxies(
 
     let mut accepted = 0_i64;
     let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
+    let mut per_provider_skipped = std::collections::BTreeMap::<String, i64>::new();
     for (proxy_id, provider) in &rows {
         if accepted >= requested {
             break;
@@ -1265,6 +1266,7 @@ pub async fn verify_batch_proxies(
         let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
         let current = *per_provider_counts.get(&provider_key).unwrap_or(&0);
         if current >= max_per_provider {
+            *per_provider_skipped.entry(provider_key).or_insert(0) += 1;
             continue;
         }
         let task_id = format!("task-{}", Uuid::new_v4());
@@ -1297,6 +1299,15 @@ pub async fn verify_batch_proxies(
         per_provider_counts.insert(provider_key, current + 1);
     }
 
+    let provider_summary = per_provider_counts
+        .into_iter()
+        .map(|(provider, accepted)| ProxyVerifyBatchProviderSummary {
+            skipped_due_to_cap: per_provider_skipped.get(&provider).copied().unwrap_or(0),
+            provider,
+            accepted,
+        })
+        .collect();
+
     Ok((
         StatusCode::ACCEPTED,
         Json(ProxyVerifyBatchResponse {
@@ -1305,6 +1316,7 @@ pub async fn verify_batch_proxies(
             skipped: requested - accepted,
             stale_after_seconds,
             task_timeout_seconds,
+            provider_summary,
             status: "scheduled".to_string(),
         }),
     ))

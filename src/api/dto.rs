@@ -253,11 +253,19 @@ pub struct ProxyVerifyBatchRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyVerifyBatchProviderSummary {
+    pub provider: String,
+    pub accepted: i64,
+    pub skipped_due_to_cap: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyVerifyBatchResponse {
     pub requested: i64,
     pub accepted: i64,
     pub skipped: i64,
     pub stale_after_seconds: i64,
     pub task_timeout_seconds: i64,
+    pub provider_summary: Vec<ProxyVerifyBatchProviderSummary>,
     pub status: String,
 }

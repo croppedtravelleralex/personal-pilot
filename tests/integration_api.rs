@@ -1705,6 +1705,7 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
     assert_eq!(batch_json.get("accepted").and_then(|v| v.as_i64()), Some(2));
     assert_eq!(batch_json.get("stale_after_seconds").and_then(|v| v.as_i64()), Some(7200));
     assert_eq!(batch_json.get("task_timeout_seconds").and_then(|v| v.as_i64()), Some(9));
+    assert_eq!(batch_json.get("provider_summary").and_then(|v| v.as_array()).map(|v| v.len()), Some(1));
 
     let queued_verify_tasks: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM tasks WHERE kind = 'verify_proxy' AND status = 'queued'"#)
         .fetch_one(&state.db)
@@ -1859,6 +1860,10 @@ async fn verify_batch_respects_max_per_provider_cap() {
     ).await;
     assert_eq!(batch_status, StatusCode::ACCEPTED);
     assert_eq!(batch_json.get("accepted").and_then(|v| v.as_i64()), Some(2));
+    let summary = batch_json.get("provider_summary").and_then(|v| v.as_array()).expect("provider summary");
+    assert_eq!(summary.len(), 2);
+    assert!(summary.iter().any(|item| item.get("provider").and_then(|v| v.as_str()) == Some("pool-a") && item.get("accepted").and_then(|v| v.as_i64()) == Some(1) && item.get("skipped_due_to_cap").and_then(|v| v.as_i64()) == Some(1)));
+    assert!(summary.iter().any(|item| item.get("provider").and_then(|v| v.as_str()) == Some("pool-b") && item.get("accepted").and_then(|v| v.as_i64()) == Some(1) && item.get("skipped_due_to_cap").and_then(|v| v.as_i64()) == Some(1)));
 
     let scheduled: Vec<(String,)> = sqlx::query_as(r#"SELECT json_extract(input_json, '$.proxy_id') FROM tasks WHERE kind = 'verify_proxy' ORDER BY id ASC"#)
         .fetch_all(&state.db)
