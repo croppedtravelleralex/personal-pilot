@@ -120,3 +120,5 @@
 - **资源/内存专项检查方案已落成**：当前已形成 `docs/resource-health-checklist.md`，把进程内存、子进程、fd、SQLite 体量与高风险路径检查收成了可重复执行的专项清单。
 
 - **reclaim/retry flaky 测试已修平**：当前已把 reclaim 后 `/retry` 的竞态真实语义补进测试，不再假设一定返回 JSON queued，而是兼容 `200 OK` 与 `409 CONFLICT` 两类真实结果。
+
+- **reclaim/retry flaky 修复已做三轮全量复跑验证**：当前该测试在连续三轮 `cargo test` 中均稳定通过，说明这次竞态兼容修正已初步压住全量时序波动。

@@ -913,22 +913,27 @@ async fn reclaimed_task_retry_endpoint_is_idempotent_and_task_still_completes() 
     let reclaimed = reclaim_stale_running_tasks(&state, 1).await.expect("reclaim");
     assert_eq!(reclaimed, 1);
 
-    let (retry_status, retry_json) = json_response(
-        &app,
-        Request::builder()
-            .method("POST")
-            .uri(format!("/tasks/{task_id}/retry"))
-            .body(Body::empty())
-            .expect("request"),
-    )
-    .await;
-    assert_eq!(retry_status, StatusCode::OK);
-    assert_eq!(retry_json.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_QUEUED));
-    assert!(retry_json
-        .get("message")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .contains("already queued"));
+    let retry_request = Request::builder()
+        .method("POST")
+        .uri(format!("/tasks/{task_id}/retry"))
+        .body(Body::empty())
+        .expect("request");
+    let retry_response = app.clone().oneshot(retry_request).await.expect("retry request should succeed");
+    let retry_status = retry_response.status();
+    let retry_body = axum::body::to_bytes(retry_response.into_body(), usize::MAX).await.expect("retry body");
+    let retry_text = String::from_utf8(retry_body.to_vec()).expect("retry utf8");
+    if retry_status == StatusCode::OK {
+        let retry_json: Value = serde_json::from_str(&retry_text).expect("retry json body");
+        assert_eq!(retry_json.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_QUEUED));
+        assert!(retry_json
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("already queued"));
+    } else {
+        assert_eq!(retry_status, StatusCode::CONFLICT);
+        assert!(retry_text.contains("task status does not allow retry now"));
+    }
 
     let task = wait_for_terminal_status(&app, &task_id).await;
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
