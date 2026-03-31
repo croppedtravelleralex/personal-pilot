@@ -76,6 +76,16 @@ pub fn provider_long_term_weight_sql() -> &'static str {
     "#
 }
 
+pub fn proxy_recent_failure_decay_sql() -> &'static str {
+    r#"
+                 CASE
+                   WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 1800 THEN 2
+                   WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 7200 THEN 1
+                   ELSE 0
+                 END ASC,
+    "#
+}
+
 pub fn proxy_selection_order_sql() -> &'static str {
     r#"
                  CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
@@ -124,6 +134,8 @@ mod tests {
         assert!(sql.contains("last_verify_status = 'failed'"));
         assert!(sql.contains("last_verify_at IS NULL"));
         let provider_weight = provider_long_term_weight_sql();
+        let recent_decay = proxy_recent_failure_decay_sql();
+        assert!(recent_decay.contains("CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 1800"));
         assert!(provider_weight.contains("HAVING SUM(failure_count) >= SUM(success_count) + 5"));
         assert!(sql.contains("failure_count >= success_count + 3"));
         assert!(sql.contains("score DESC"));

@@ -2250,3 +2250,70 @@ async fn proxy_selection_penalizes_bad_provider_history_even_with_better_score()
     .expect("select proxy");
     assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-good-provider"));
 }
+
+
+#[tokio::test]
+async fn proxy_selection_penalizes_more_recent_failure_more_than_older_failure() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-older-failure', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.70, 5, 2, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'failed', 1, 'US', 'Virginia', '9999990000', '1', '1'),
+                  ('proxy-more-recent-failure', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.95, 5, 2, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'failed', 1, 'US', 'Virginia', '9999999000', '1', '1')"#)
+        .execute(&db)
+        .await
+        .expect("insert proxies");
+
+    let selected: Option<(String,)> = sqlx::query_as(
+        r#"SELECT id FROM proxies
+           WHERE status = 'active'
+             AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+             AND (? IS NULL OR provider = ?)
+             AND (? IS NULL OR region = ?)
+             AND score >= ?
+           ORDER BY
+             CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN last_verify_status = 'failed' THEN 3
+               WHEN last_verify_at IS NULL THEN 2
+               WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
+               ELSE 0
+             END ASC,
+             CASE
+               WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 1800 THEN 2
+               WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 7200 THEN 1
+               ELSE 0
+             END ASC,
+             CASE
+               WHEN provider IS NOT NULL AND provider IN (
+                   SELECT provider FROM proxies WHERE provider IS NOT NULL GROUP BY provider HAVING SUM(failure_count) >= SUM(success_count) + 5
+               ) THEN 1
+               ELSE 0
+             END ASC,
+             CASE
+               WHEN failure_count >= success_count + 3 THEN 2
+               WHEN failure_count > success_count THEN 1
+               ELSE 0
+             END ASC,
+             score DESC,
+             COALESCE(last_used_at, '0') ASC,
+             created_at ASC
+           LIMIT 1"#,
+    )
+    .bind("9999999999")
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(0.0_f64)
+    .bind("9999999999")
+    .bind("9999999999")
+    .bind("9999999999")
+    .fetch_optional(&db)
+    .await
+    .expect("select proxy");
+    assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-older-failure"));
+}
