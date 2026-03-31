@@ -249,6 +249,7 @@ pub struct ProxyVerifyBatchRequest {
     pub task_timeout_seconds: Option<i64>,
     pub recently_used_within_seconds: Option<i64>,
     pub failed_only: Option<bool>,
+    pub max_per_provider: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

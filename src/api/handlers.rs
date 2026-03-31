@@ -1209,9 +1209,10 @@ pub async fn verify_batch_proxies(
     let task_timeout_seconds = payload.task_timeout_seconds.unwrap_or(5).max(1);
     let recently_used_within_seconds = payload.recently_used_within_seconds.unwrap_or(0).max(0);
     let failed_only = payload.failed_only.unwrap_or(false);
+    let max_per_provider = payload.max_per_provider.unwrap_or(requested).max(1);
     let now = now_ts_string();
-    let rows = sqlx::query_as::<_, (String,)>(
-        r#"SELECT id FROM proxies
+    let rows = sqlx::query_as::<_, (String, Option<String>)>(
+        r#"SELECT id, provider FROM proxies
            WHERE status = 'active'
              AND (? IS NULL OR provider = ?)
              AND (? IS NULL OR region = ?)
@@ -1250,13 +1251,22 @@ pub async fn verify_batch_proxies(
     .bind(&now)
     .bind(recently_used_within_seconds)
     .bind(if failed_only { 1_i64 } else { 0_i64 })
-    .bind(requested)
+    .bind(requested.saturating_mul(4))
     .fetch_all(&state.db)
     .await
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to select proxies for verify batch: {err}")))?;
 
     let mut accepted = 0_i64;
-    for (proxy_id,) in &rows {
+    let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
+    for (proxy_id, provider) in &rows {
+        if accepted >= requested {
+            break;
+        }
+        let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
+        let current = *per_provider_counts.get(&provider_key).unwrap_or(&0);
+        if current >= max_per_provider {
+            continue;
+        }
         let task_id = format!("task-{}", Uuid::new_v4());
         let created_at = now_ts_string();
         let input_json = serde_json::json!({
@@ -1284,6 +1294,7 @@ pub async fn verify_batch_proxies(
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to enqueue verify task: {err}")))?;
         accepted += 1;
+        per_provider_counts.insert(provider_key, current + 1);
     }
 
     Ok((

@@ -1817,3 +1817,53 @@ async fn verify_batch_can_focus_recent_failed_proxies() {
         .expect("load queued proxy id");
     assert_eq!(proxy_id, "proxy-recent-failed");
 }
+
+
+#[tokio::test]
+async fn verify_batch_respects_max_per_provider_cap() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    for (id, provider) in [
+        ("proxy-cap-a1", "pool-a"),
+        ("proxy-cap-a2", "pool-a"),
+        ("proxy-cap-b1", "pool-b"),
+        ("proxy-cap-b2", "pool-b"),
+    ] {
+        let proxy_payload = serde_json::json!({
+            "id": id,
+            "scheme": "http",
+            "host": "127.0.0.1",
+            "port": 8000,
+            "region": "shared",
+            "country": "US",
+            "provider": provider,
+            "score": 0.9
+        });
+        let (status, _) = json_response(
+            &app,
+            Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+        ).await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    let batch_payload = serde_json::json!({
+        "region": "shared",
+        "limit": 10,
+        "only_stale": true,
+        "max_per_provider": 1
+    });
+    let (batch_status, batch_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/verify-batch").header("content-type", "application/json").body(Body::from(batch_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(batch_status, StatusCode::ACCEPTED);
+    assert_eq!(batch_json.get("accepted").and_then(|v| v.as_i64()), Some(2));
+
+    let scheduled: Vec<(String,)> = sqlx::query_as(r#"SELECT json_extract(input_json, '$.proxy_id') FROM tasks WHERE kind = 'verify_proxy' ORDER BY id ASC"#)
+        .fetch_all(&state.db)
+        .await
+        .expect("load queued proxy ids");
+    assert_eq!(scheduled.len(), 2);
+    assert_ne!(scheduled[0].0, scheduled[1].0);
+}
