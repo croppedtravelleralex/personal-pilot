@@ -2536,3 +2536,121 @@ async fn proxy_trust_score_prefers_healthier_proxy_in_direct_ordering() {
 
     assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-high-trust-direct"));
 }
+
+
+#[tokio::test]
+async fn auto_selection_result_exposes_trust_score_components_and_candidate_preview() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-explain-best', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-x', 'active', 0.70, 8, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1'),
+                  ('proxy-explain-second', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-x', 'active', 0.65, 4, 2, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 0, 'US', 'Virginia', '9999999999', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxies");
+
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/explain",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-x", "region": "us-east"}
+    });
+    let (_, create_json) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request")).await;
+    let task_id = create_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let task_json = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task_json.get("proxy_id").and_then(|v| v.as_str()), Some("proxy-explain-best"));
+    assert!(task_json.get("selection_reason_summary").and_then(|v| v.as_str()).unwrap_or("").contains("trust score"));
+    assert!(task_json.get("trust_score_total").and_then(|v| v.as_i64()).is_some());
+
+    let result_json_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#)
+        .bind(&task_id)
+        .fetch_one(&state.db)
+        .await
+        .expect("load result json");
+    let result_json: Value = serde_json::from_str(result_json_text.as_deref().expect("result json")).expect("parse result json");
+    let policy = result_json.get("payload").and_then(|v| v.get("network_policy_json")).expect("policy");
+    assert!(policy.get("trust_score_components").and_then(|v| v.get("verify_ok_bonus")).and_then(|v| v.as_i64()).is_some());
+    let preview = policy.get("candidate_rank_preview").and_then(|v| v.as_array()).expect("candidate preview");
+    assert!(!preview.is_empty());
+    assert_eq!(preview[0].get("id").and_then(|v| v.as_str()), Some("proxy-explain-best"));
+    assert!(preview[0].get("summary").and_then(|v| v.as_str()).unwrap_or("").contains("trust_score_total"));
+}
+
+#[tokio::test]
+async fn verify_migration_columns_are_added_for_old_proxy_table() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db first");
+    drop(db);
+
+    let path = db_url.strip_prefix("sqlite://").expect("sqlite path");
+    let old_db = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect(&db_url).await.expect("connect old db");
+    sqlx::query("DROP TABLE proxies").execute(&old_db).await.expect("drop proxies");
+    sqlx::query(r#"CREATE TABLE proxies (
+        id TEXT PRIMARY KEY,
+        scheme TEXT NOT NULL,
+        host TEXT NOT NULL,
+        port INTEGER NOT NULL,
+        username TEXT,
+        password TEXT,
+        region TEXT,
+        country TEXT,
+        provider TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        score REAL NOT NULL DEFAULT 1.0,
+        success_count INTEGER NOT NULL DEFAULT 0,
+        failure_count INTEGER NOT NULL DEFAULT 0,
+        last_checked_at TEXT,
+        last_used_at TEXT,
+        cooldown_until TEXT,
+        last_smoke_status TEXT,
+        last_smoke_protocol_ok INTEGER,
+        last_smoke_upstream_ok INTEGER,
+        last_exit_ip TEXT,
+        last_anonymity_level TEXT,
+        last_smoke_at TEXT,
+        last_verify_status TEXT,
+        last_verify_geo_match_ok INTEGER,
+        last_exit_country TEXT,
+        last_exit_region TEXT,
+        last_verify_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )"#).execute(&old_db).await.expect("create old proxies");
+    drop(old_db);
+
+    let db2 = init_db(&format!("sqlite://{path}")).await.expect("re-init db");
+    let cols: Vec<(i64, String, String, i64, Option<String>, i64)> = sqlx::query_as("PRAGMA table_info(proxies)").fetch_all(&db2).await.expect("pragma table info");
+    let names: Vec<String> = cols.into_iter().map(|row| row.1).collect();
+    assert!(names.contains(&"last_probe_latency_ms".to_string()));
+    assert!(names.contains(&"last_probe_error".to_string()));
+    assert!(names.contains(&"last_probe_error_category".to_string()));
+    assert!(names.contains(&"last_verify_confidence".to_string()));
+    assert!(names.contains(&"last_verify_score_delta".to_string()));
+    assert!(names.contains(&"last_verify_source".to_string()));
+}
+
+#[tokio::test]
+async fn execution_feedback_updates_proxy_score() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at)
+                  VALUES ('proxy-feedback-1', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-f', 'active', 0.50, 0, 0, NULL, NULL, NULL, '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+
+    let ok_payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/ok",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "proxy_id": "proxy-feedback-1"}
+    });
+    let (_, ok_json) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(ok_payload.to_string())).expect("request")).await;
+    let ok_id = ok_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let _ = wait_for_terminal_status(&app, &ok_id).await;
+    let score_after_success: f64 = sqlx::query_scalar("SELECT score FROM proxies WHERE id = 'proxy-feedback-1'").fetch_one(&state.db).await.expect("score after success");
+    assert!(score_after_success > 0.50);
+}

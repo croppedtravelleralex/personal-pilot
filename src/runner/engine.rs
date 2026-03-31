@@ -5,7 +5,7 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_by_trust_score_sql_with_tuning, proxy_trust_score_component_weights, proxy_trust_score_sql_with_tuning, resolved_proxy_json};
+use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_by_trust_score_sql_with_tuning, proxy_trust_score_sql_with_tuning, resolved_proxy_json};
 use crate::{
     app::state::AppState,
     domain::{
@@ -101,6 +101,86 @@ fn selection_reason_summary_for_mode(mode: &str, trust_score_total: Option<i64>)
     }
 }
 
+fn computed_trust_score_components(
+    tuning: &crate::network_identity::proxy_selection::ProxySelectionTuning,
+    score: f64,
+    success_count: i64,
+    failure_count: i64,
+    last_verify_status: Option<&str>,
+    last_verify_geo_match_ok: bool,
+    last_smoke_upstream_ok: bool,
+    last_verify_at: Option<i64>,
+    provider_risk_hit: bool,
+    provider_region_cluster_hit: bool,
+    now_ts: i64,
+) -> Value {
+    let heavy_failed = matches!(last_verify_status, Some("failed"))
+        && last_verify_at.map(|ts| ts >= now_ts - tuning.recent_failure_heavy_window_seconds).unwrap_or(false);
+    let light_failed = matches!(last_verify_status, Some("failed"))
+        && !heavy_failed
+        && last_verify_at.map(|ts| ts >= now_ts - tuning.recent_failure_light_window_seconds).unwrap_or(false);
+    let base_failed = matches!(last_verify_status, Some("failed")) && !heavy_failed && !light_failed;
+    let missing_verify = last_verify_at.is_none();
+    let stale_verify = last_verify_at.map(|ts| ts <= now_ts - tuning.stale_after_seconds).unwrap_or(false) && !missing_verify;
+    let individual_penalty = if failure_count >= success_count + tuning.provider_failure_margin.saturating_sub(2).max(1) { 18 } else if failure_count > success_count { 8 } else { 0 };
+    json!({
+        "verify_ok_bonus": if matches!(last_verify_status, Some("ok")) { tuning.verify_ok_bonus } else { 0 },
+        "verify_geo_match_bonus": if last_verify_geo_match_ok { tuning.verify_geo_match_bonus } else { 0 },
+        "smoke_upstream_ok_bonus": if last_smoke_upstream_ok { tuning.smoke_upstream_ok_bonus } else { 0 },
+        "verify_failed_heavy_penalty": if heavy_failed { tuning.verify_failed_heavy_penalty } else { 0 },
+        "verify_failed_light_penalty": if light_failed { tuning.verify_failed_light_penalty } else { 0 },
+        "verify_failed_base_penalty": if base_failed { tuning.verify_failed_base_penalty } else { 0 },
+        "missing_verify_penalty": if missing_verify { tuning.missing_verify_penalty } else { 0 },
+        "stale_verify_penalty": if stale_verify { tuning.stale_verify_penalty } else { 0 },
+        "individual_history_penalty": individual_penalty,
+        "provider_risk_penalty": if provider_risk_hit { 10 } else { 0 },
+        "provider_region_cluster_penalty": if provider_region_cluster_hit { 12 } else { 0 },
+        "raw_score_component": (score * tuning.raw_score_weight_tenths as f64).floor() as i64
+    })
+}
+
+async fn compute_proxy_selection_explain(
+    state: &AppState,
+    proxy_id: &str,
+    now: &str,
+) -> Result<(Option<i64>, Value)> {
+    let provider_risk_query = format!(
+        "SELECT EXISTS(SELECT 1 FROM proxies p WHERE p.id = ? AND p.provider IS NOT NULL AND p.provider IN (SELECT provider FROM proxies WHERE provider IS NOT NULL GROUP BY provider HAVING SUM(failure_count) >= SUM(success_count) + {}))",
+        state.proxy_selection_tuning.provider_failure_margin
+    );
+    let provider_region_query = format!(
+        "SELECT EXISTS(SELECT 1 FROM proxies p WHERE p.id = ? AND p.provider IS NOT NULL AND p.region IS NOT NULL AND (p.provider, p.region) IN (SELECT provider, region FROM proxies WHERE provider IS NOT NULL AND region IS NOT NULL AND last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {} GROUP BY provider, region HAVING COUNT(*) >= {}))",
+        state.proxy_selection_tuning.provider_region_failure_cluster_window_seconds,
+        state.proxy_selection_tuning.provider_region_failure_cluster_count
+    );
+    let row = sqlx::query_as::<_, (f64, i64, i64, Option<String>, Option<i64>, Option<i64>, Option<i64>)>(
+        r#"SELECT score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, CAST(last_verify_at AS INTEGER) FROM proxies WHERE id = ?"#
+    )
+    .bind(proxy_id)
+    .fetch_optional(&state.db)
+    .await?;
+    let Some((score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at)) = row else {
+        return Ok((None, Value::Null));
+    };
+    let provider_risk_hit: i64 = sqlx::query_scalar(&provider_risk_query).bind(proxy_id).fetch_one(&state.db).await?;
+    let provider_region_cluster_hit: i64 = sqlx::query_scalar(&provider_region_query).bind(proxy_id).bind(now).fetch_one(&state.db).await?;
+    let trust_score_total = load_proxy_trust_score(state, proxy_id, now).await?;
+    let components = computed_trust_score_components(
+        &state.proxy_selection_tuning,
+        score,
+        success_count,
+        failure_count,
+        last_verify_status.as_deref(),
+        last_verify_geo_match_ok.unwrap_or(0) != 0,
+        last_smoke_upstream_ok.unwrap_or(0) != 0,
+        last_verify_at,
+        provider_risk_hit != 0,
+        provider_region_cluster_hit != 0,
+        now.parse::<i64>().unwrap_or_default(),
+    );
+    Ok((trust_score_total, components))
+}
+
 async fn preview_auto_candidates(
     state: &AppState,
     now: &str,
@@ -132,13 +212,18 @@ async fn preview_auto_candidates(
         .bind(now)
         .fetch_all(&state.db)
         .await?;
-    Ok(rows.into_iter().map(|(id, provider, region, score, trust_score_total)| json!({
-        "id": id,
-        "provider": provider,
-        "region": region,
-        "score": score,
-        "trust_score_total": trust_score_total,
-    })).collect())
+    let mut out = Vec::new();
+    for (id, provider, region, score, trust_score_total) in rows {
+        out.push(json!({
+            "id": id,
+            "provider": provider,
+            "region": region,
+            "score": score,
+            "trust_score_total": trust_score_total,
+            "summary": format!("trust_score_total={} vs raw_score={:.2}", trust_score_total, score),
+        }));
+    }
+    Ok(out)
 }
 
 async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) -> Result<()> {
@@ -228,11 +313,10 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
     }
 
     if let Some((id, scheme, host, port, username, password, region, country, provider, score)) = row {
-        let trust_score_total = load_proxy_trust_score(state, &id, &now).await?;
+        let (trust_score_total, trust_score_components) = compute_proxy_selection_explain(state, &id, &now).await?;
         let preview_provider = provider.clone();
         let preview_region = region.clone();
         let mut resolved = resolved_proxy_json(id, scheme, host, port, username, password, region, country, provider, score);
-        let trust_score_components = serde_json::to_value(proxy_trust_score_component_weights(&state.proxy_selection_tuning)).unwrap_or(Value::Null);
         if let Some(obj) = resolved.as_object_mut() {
             obj.insert("trust_score_total".to_string(), trust_score_total.map_or(Value::Null, |v| json!(v)));
             obj.insert("trust_score_components".to_string(), trust_score_components.clone());
