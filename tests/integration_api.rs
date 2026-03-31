@@ -644,10 +644,6 @@ async fn fake_runner_success_flow_is_visible_across_endpoints() {
 
     let task_id = create_task(&app, "open_page").await;
     let task = wait_for_terminal_status(&app, &task_id).await;
-    eprintln!("verify task result: {}", task);
-    let db = init_db(&db_url).await.expect("reopen db");
-    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
-    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 
     let (_, runs_json) = json_response(
@@ -797,10 +793,6 @@ async fn queued_task_runs_even_if_memory_queue_entry_is_removed() {
 
     let task_id = create_task(&app, "open_page").await;
     let task = wait_for_terminal_status(&app, &task_id).await;
-    eprintln!("verify task result: {}", task);
-    let db = init_db(&db_url).await.expect("reopen db");
-    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
-    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 }
 
@@ -856,10 +848,6 @@ async fn reclaimed_task_can_run_again_to_terminal_state() {
     assert_eq!(reclaimed, 1);
 
     let task = wait_for_terminal_status(&app, &task_id).await;
-    eprintln!("verify task result: {}", task);
-    let db = init_db(&db_url).await.expect("reopen db");
-    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
-    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 }
 
@@ -938,10 +926,6 @@ async fn reclaimed_task_retry_endpoint_is_idempotent_and_task_still_completes() 
         .contains("already queued"));
 
     let task = wait_for_terminal_status(&app, &task_id).await;
-    eprintln!("verify task result: {}", task);
-    let db = init_db(&db_url).await.expect("reopen db");
-    let input_json: String = sqlx::query_scalar("SELECT input_json FROM tasks WHERE id = ?").bind(&task_id).fetch_one(&db).await.expect("load input json");
-    eprintln!("verify task input_json: {}", input_json);
     assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
 }
 
@@ -1709,7 +1693,9 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
         "only_stale": true,
         "min_score": 0.5,
         "stale_after_seconds": 7200,
-        "task_timeout_seconds": 9
+        "task_timeout_seconds": 9,
+        "recently_used_within_seconds": 0,
+        "failed_only": false
     });
     let (batch_status, batch_json) = json_response(
         &app,
@@ -1790,4 +1776,44 @@ async fn verify_batch_skips_recently_verified_proxy_when_only_stale() {
     ).await;
     assert_eq!(batch_status, StatusCode::ACCEPTED);
     assert_eq!(batch_json.get("accepted").and_then(|v| v.as_i64()), Some(0));
+}
+
+
+#[tokio::test]
+async fn verify_batch_can_focus_recent_failed_proxies() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let state = build_app_state(db.clone(), runner, None, 1);
+    let app = build_router(state.clone());
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-recent-failed', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.9, 0, 0, NULL, '9999999999', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'failed', 0, 'US', 'Virginia', '10', '1', '1'),
+                  ('proxy-old-failed', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.8, 0, 0, NULL, '10', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'failed', 0, 'US', 'Virginia', '10', '1', '1'),
+                  ('proxy-recent-ok', 'http', '127.0.0.3', 8082, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.95, 0, 0, NULL, '9999999999', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1')"#)
+        .execute(&db)
+        .await
+        .expect("insert proxies");
+
+    let batch_payload = serde_json::json!({
+        "provider": "pool-a",
+        "region": "us-east",
+        "limit": 10,
+        "only_stale": false,
+        "recently_used_within_seconds": 3600,
+        "failed_only": true
+    });
+    let (batch_status, batch_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/verify-batch").header("content-type", "application/json").body(Body::from(batch_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(batch_status, StatusCode::ACCEPTED);
+    assert_eq!(batch_json.get("accepted").and_then(|v| v.as_i64()), Some(1));
+
+    let proxy_id: String = sqlx::query_scalar(r#"SELECT json_extract(input_json, '$.proxy_id') FROM tasks WHERE kind = 'verify_proxy' ORDER BY id DESC LIMIT 1"#)
+        .fetch_one(&db)
+        .await
+        .expect("load queued proxy id");
+    assert_eq!(proxy_id, "proxy-recent-failed");
 }

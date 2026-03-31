@@ -1207,6 +1207,8 @@ pub async fn verify_batch_proxies(
     let only_stale = payload.only_stale.unwrap_or(true);
     let stale_after_seconds = payload.stale_after_seconds.unwrap_or(3600).max(60);
     let task_timeout_seconds = payload.task_timeout_seconds.unwrap_or(5).max(1);
+    let recently_used_within_seconds = payload.recently_used_within_seconds.unwrap_or(0).max(0);
+    let failed_only = payload.failed_only.unwrap_or(false);
     let now = now_ts_string();
     let rows = sqlx::query_as::<_, (String,)>(
         r#"SELECT id FROM proxies
@@ -1220,6 +1222,14 @@ pub async fn verify_batch_proxies(
                OR last_verify_status IS NULL
                OR last_verify_status != 'ok'
                OR CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - ?
+             )
+             AND (
+               ? = 0
+               OR CAST(COALESCE(last_used_at, '0') AS INTEGER) >= CAST(? AS INTEGER) - ?
+             )
+             AND (
+               ? = 0
+               OR last_verify_status = 'failed'
              )
            ORDER BY
              CASE WHEN last_verify_status = 'ok' THEN 1 ELSE 0 END ASC,
@@ -1236,6 +1246,10 @@ pub async fn verify_batch_proxies(
     .bind(if only_stale { 1_i64 } else { 0_i64 })
     .bind(&now)
     .bind(stale_after_seconds)
+    .bind(if recently_used_within_seconds > 0 { 1_i64 } else { 0_i64 })
+    .bind(&now)
+    .bind(recently_used_within_seconds)
+    .bind(if failed_only { 1_i64 } else { 0_i64 })
     .bind(requested)
     .fetch_all(&state.db)
     .await
