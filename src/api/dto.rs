@@ -48,6 +48,14 @@ pub struct ProxyMetricsResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyMetricsResponse {
+    pub verified_ok: i64,
+    pub verified_failed: i64,
+    pub geo_match_ok: i64,
+    pub stale_or_missing_verify: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub service: String,
     pub queue_len: usize,
@@ -55,6 +63,7 @@ pub struct StatusResponse {
     pub worker: WorkerStatusResponse,
     pub fingerprint_metrics: FingerprintMetricsResponse,
     pub proxy_metrics: ProxyMetricsResponse,
+    pub verify_metrics: VerifyMetricsResponse,
     pub latest_tasks: Vec<TaskResponse>,
 }
 

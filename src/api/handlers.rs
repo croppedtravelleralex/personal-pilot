@@ -22,7 +22,7 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySmokeResponse, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySmokeResponse, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyMetricsResponse,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
@@ -376,6 +376,24 @@ async fn load_counts(state: &AppState) -> Result<TaskStatusCounts, (StatusCode, 
     Ok(TaskStatusCounts { total, queued, running, succeeded, failed, timed_out, cancelled })
 }
 
+
+async fn load_verify_metrics(state: &AppState) -> Result<VerifyMetricsResponse, (StatusCode, String)> {
+    let (verified_ok, verified_failed, geo_match_ok, stale_or_missing_verify): (i64, i64, i64, i64) =
+        sqlx::query_as(
+            r#"SELECT
+                   COALESCE(SUM(CASE WHEN last_verify_status = 'ok' THEN 1 ELSE 0 END), 0) AS verified_ok,
+                   COALESCE(SUM(CASE WHEN last_verify_status = 'failed' THEN 1 ELSE 0 END), 0) AS verified_failed,
+                   COALESCE(SUM(CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 1 ELSE 0 END), 0) AS geo_match_ok,
+                   COALESCE(SUM(CASE WHEN last_verify_at IS NULL OR last_verify_status IS NULL THEN 1 ELSE 0 END), 0) AS stale_or_missing_verify
+               FROM proxies"#,
+        )
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate verify metrics: {err}")))?;
+
+    Ok(VerifyMetricsResponse { verified_ok, verified_failed, geo_match_ok, stale_or_missing_verify })
+}
+
 pub async fn health(
     State(state): State<AppState>,
 ) -> Result<Json<HealthResponse>, (StatusCode, String)> {
@@ -436,6 +454,7 @@ pub async fn status(
 
     let fingerprint_metrics = build_fingerprint_metrics(&latest_tasks);
     let proxy_metrics = build_proxy_metrics(&latest_tasks);
+    let verify_metrics = load_verify_metrics(&state).await?;
 
     Ok(Json(StatusResponse {
         service: "AutoOpenBrowser".to_string(),
@@ -452,6 +471,7 @@ pub async fn status(
         },
         fingerprint_metrics,
         proxy_metrics,
+        verify_metrics,
         latest_tasks,
     }))
 }

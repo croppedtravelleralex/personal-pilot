@@ -1722,3 +1722,33 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
         .expect("count verify tasks");
     assert_eq!(queued_verify_tasks, 2);
 }
+
+
+#[tokio::test]
+async fn status_exposes_verify_metrics_summary() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let state = build_app_state(db.clone(), runner, None, 1);
+    let app = build_router(state.clone());
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-v-ok', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.9, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '10', '1', '1'),
+                  ('proxy-v-failed', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.8, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'failed', 0, 'US', 'Virginia', '11', '1', '1'),
+                  ('proxy-v-missing', 'http', '127.0.0.3', 8082, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.7, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '1', '1')"#)
+        .execute(&db)
+        .await
+        .expect("insert proxies");
+
+    let (_, status_json) = json_response(
+        &app,
+        Request::builder().uri("/status?limit=10&offset=0").body(Body::empty()).expect("request"),
+    ).await;
+
+    let metrics = status_json.get("verify_metrics").expect("verify metrics");
+    assert_eq!(metrics.get("verified_ok").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(metrics.get("verified_failed").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(metrics.get("geo_match_ok").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(metrics.get("stale_or_missing_verify").and_then(|v| v.as_i64()), Some(1));
+}
