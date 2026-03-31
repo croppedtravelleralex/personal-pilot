@@ -598,7 +598,10 @@ async fn retry_on_running_task_returns_conflict() {
 #[tokio::test]
 async fn running_task_without_runner_id_is_not_reclaimed() {
     let db_url = unique_db_url();
-    let (state, _app) = build_test_app(&db_url).await.expect("build app");
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let state = build_app_state(db, runner, None, 1);
+    let _app = build_router(state.clone());
 
     let task_id = "task-running-without-runner-id".to_string();
     let run_id = "run-running-without-runner-id".to_string();
@@ -733,7 +736,10 @@ async fn stale_running_task_can_be_reclaimed_back_to_queue() {
 #[tokio::test]
 async fn running_task_with_fresh_heartbeat_is_not_reclaimed() {
     let db_url = unique_db_url();
-    let (state, _app) = build_test_app(&db_url).await.expect("build app");
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let state = build_app_state(db, runner, None, 1);
+    let _app = build_router(state.clone());
 
     let task_id = "task-fresh-heartbeat".to_string();
     let run_id = "run-fresh-heartbeat".to_string();
@@ -926,7 +932,10 @@ async fn reclaimed_task_retry_endpoint_is_idempotent_and_task_still_completes() 
 #[tokio::test]
 async fn cancelled_task_is_not_reclaimed() {
     let db_url = unique_db_url();
-    let (state, _app) = build_test_app(&db_url).await.expect("build app");
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let state = build_app_state(db, runner, None, 1);
+    let _app = build_router(state.clone());
 
     let task_id = "task-cancelled-stays-cancelled".to_string();
     sqlx::query(
