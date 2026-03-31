@@ -3,6 +3,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use axum::{body::Body, http::{Request, StatusCode}};
 use AutoOpenBrowser::{
     build_test_app,
+    api::routes::build_router,
+    app::build_app_state,
+    db::init::init_db,
+    runner::fake::FakeRunner,
     domain::{
         run::{RUN_STATUS_FAILED, RUN_STATUS_RUNNING},
         task::{
@@ -674,7 +678,10 @@ async fn fake_runner_success_flow_is_visible_across_endpoints() {
 #[tokio::test]
 async fn stale_running_task_can_be_reclaimed_back_to_queue() {
     let db_url = unique_db_url();
-    let (state, _app) = build_test_app(&db_url).await.expect("build app");
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let state = build_app_state(db, runner, None, 1);
+    let _app = build_router(state.clone());
 
     let task_id = "task-stale-running".to_string();
     let run_id = "run-stale-running".to_string();
