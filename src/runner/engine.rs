@@ -170,13 +170,15 @@ pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> 
     ];
     let positive = ["verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component"];
     let Some(baseline) = baseline else {
-        let factors: Vec<Value> = keys.into_iter().map(|key| json!({
+        let mut factors: Vec<Value> = keys.into_iter().map(|key| json!({
             "factor": key,
             "winner_value": current.get(key).and_then(|v| v.as_i64()).unwrap_or(0),
             "runner_up_value": 0,
             "delta": current.get(key).and_then(|v| v.as_i64()).unwrap_or(0),
             "direction": "neutral",
         })).collect();
+        factors.sort_by_key(|v| std::cmp::Reverse(v.get("delta").and_then(|v| v.as_i64()).unwrap_or(0).abs()));
+        factors.truncate(5);
         return json!({ "factors": factors });
     };
     let c = match current.as_object() { Some(v) => v, None => return Value::Null };
@@ -202,6 +204,8 @@ pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> 
             "direction": direction,
         }));
     }
+    factors.sort_by_key(|v| std::cmp::Reverse(v.get("delta").and_then(|v| v.as_i64()).unwrap_or(0).abs()));
+    factors.truncate(5);
     json!({ "factors": factors })
 }
 
