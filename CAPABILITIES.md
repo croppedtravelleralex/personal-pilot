@@ -64,6 +64,8 @@
 
 ## 已明确的下一步巡检方向
 - `POST /proxies/verify-batch`
+- `GET /proxies/verify-batch`
+- `GET /proxies/verify-batch/:id`
 - `verify_proxy` task kind
 - 周期性 smoke / verify sweep
 - verify metrics summary

@@ -261,6 +261,8 @@ pub struct ProxyVerifyBatchProviderSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyVerifyBatchResponse {
+    pub batch_id: String,
+    pub created_at: String,
     pub requested: i64,
     pub accepted: i64,
     pub skipped: i64,
@@ -268,4 +270,30 @@ pub struct ProxyVerifyBatchResponse {
     pub task_timeout_seconds: i64,
     pub provider_summary: Vec<ProxyVerifyBatchProviderSummary>,
     pub status: String,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyBatchResponse {
+    pub id: String,
+    pub status: String,
+    pub requested_count: i64,
+    pub accepted_count: i64,
+    pub skipped_count: i64,
+    pub queued_count: i64,
+    pub running_count: i64,
+    pub succeeded_count: i64,
+    pub failed_count: i64,
+    pub stale_after_seconds: i64,
+    pub task_timeout_seconds: i64,
+    pub provider_summary_json: Option<serde_json::Value>,
+    pub filters_json: Option<serde_json::Value>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyBatchListQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }

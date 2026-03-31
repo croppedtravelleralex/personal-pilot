@@ -122,6 +122,21 @@ CREATE TABLE IF NOT EXISTS proxies (
 
 
 pub const CREATE_PROXY_SESSION_BINDINGS_TABLE_SQL: &str = r#"
+
+CREATE TABLE IF NOT EXISTS verify_batches (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    requested_count INTEGER NOT NULL,
+    accepted_count INTEGER NOT NULL,
+    skipped_count INTEGER NOT NULL,
+    stale_after_seconds INTEGER NOT NULL,
+    task_timeout_seconds INTEGER NOT NULL,
+    provider_summary_json TEXT,
+    filters_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS proxy_session_bindings (
     session_key TEXT PRIMARY KEY,
     proxy_id TEXT NOT NULL,

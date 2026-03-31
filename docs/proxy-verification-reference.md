@@ -87,3 +87,20 @@ Recommended model:
 - use `verify` before trusting region-sensitive or higher-value traffic
 - treat `geo_match_ok=true` as a strong ranking signal
 - treat `transparent` anonymity as lower trust than `anonymous` / `elite`
+
+
+## 巡检 V1（当前已落地）
+
+当前系统中的 batch verify 已具备以下能力：
+
+- 支持通过 `POST /proxies/verify-batch` 按条件批量投递 `verify_proxy` 任务
+- 支持 `stale_after_seconds`、`task_timeout_seconds`、`recently_used_within_seconds`、`failed_only`、`max_per_provider`
+- 支持返回 `batch_id`、`created_at`
+- 支持返回 `provider_summary`
+- 支持把巡检批次落库到 `verify_batches`
+- 支持通过 `GET /proxies/verify-batch`、`GET /proxies/verify-batch/:id` 回看批次
+- 支持在批次详情中查看 `queued_count / running_count / succeeded_count / failed_count`
+
+当前定位：
+- 已经具备 **巡检批次创建、批次查询、批次进度回看、基础策略调参** 能力
+- 尚未落地真正的定时调度器与多轮历史报表

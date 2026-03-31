@@ -22,7 +22,7 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySmokeResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyMetricsResponse,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySmokeResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
@@ -376,6 +376,64 @@ async fn load_counts(state: &AppState) -> Result<TaskStatusCounts, (StatusCode, 
     Ok(TaskStatusCounts { total, queued, running, succeeded, failed, timed_out, cancelled })
 }
 
+
+
+async fn map_verify_batch_row(
+    state: &AppState,
+    id: String,
+    status: String,
+    requested_count: i64,
+    accepted_count: i64,
+    skipped_count: i64,
+    stale_after_seconds: i64,
+    task_timeout_seconds: i64,
+    provider_summary_json: Option<String>,
+    filters_json: Option<String>,
+    created_at: String,
+    updated_at: String,
+) -> Result<VerifyBatchResponse, (StatusCode, String)> {
+    let (queued_count, running_count, succeeded_count, failed_count): (i64, i64, i64, i64) = sqlx::query_as(
+        r#"SELECT
+               COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN status IN ('failed', 'timed_out', 'cancelled') THEN 1 ELSE 0 END), 0)
+           FROM tasks
+           WHERE kind = 'verify_proxy' AND json_extract(input_json, '$.verify_batch_id') = ?"#,
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate verify batch task counts: {err}")))?;
+
+    let derived_status = if accepted_count == 0 {
+        status.clone()
+    } else if queued_count > 0 || running_count > 0 {
+        "running".to_string()
+    } else if succeeded_count + failed_count >= accepted_count {
+        "completed".to_string()
+    } else {
+        status.clone()
+    };
+
+    Ok(VerifyBatchResponse {
+        id,
+        status: derived_status,
+        requested_count,
+        accepted_count,
+        skipped_count,
+        queued_count,
+        running_count,
+        succeeded_count,
+        failed_count,
+        stale_after_seconds,
+        task_timeout_seconds,
+        provider_summary_json: provider_summary_json.and_then(|v| serde_json::from_str(&v).ok()),
+        filters_json: filters_json.and_then(|v| serde_json::from_str(&v).ok()),
+        created_at,
+        updated_at,
+    })
+}
 
 async fn load_verify_metrics(state: &AppState) -> Result<VerifyMetricsResponse, (StatusCode, String)> {
     let (verified_ok, verified_failed, geo_match_ok, stale_or_missing_verify): (i64, i64, i64, i64) =
@@ -1198,6 +1256,49 @@ Host: example.com:443
 
 
 
+
+pub async fn list_verify_batches(
+    State(state): State<AppState>,
+    Query(query): Query<VerifyBatchListQuery>,
+) -> Result<Json<Vec<VerifyBatchResponse>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, (String, String, i64, i64, i64, i64, i64, Option<String>, Option<String>, String, String)>(
+        r#"SELECT id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at
+           FROM verify_batches ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to list verify batches: {err}")))?;
+
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        items.push(map_verify_batch_row(&state, row.0,row.1,row.2,row.3,row.4,row.5,row.6,row.7,row.8,row.9,row.10).await?);
+    }
+    Ok(Json(items))
+}
+
+pub async fn get_verify_batch(
+    State(state): State<AppState>,
+    Path(batch_id): Path<String>,
+) -> Result<Json<VerifyBatchResponse>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, (String, String, i64, i64, i64, i64, i64, Option<String>, Option<String>, String, String)>(
+        r#"SELECT id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at
+           FROM verify_batches WHERE id = ?"#,
+    )
+    .bind(&batch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to fetch verify batch: {err}")))?;
+
+    match row {
+        Some(row) => Ok(Json(map_verify_batch_row(&state, row.0,row.1,row.2,row.3,row.4,row.5,row.6,row.7,row.8,row.9,row.10).await?)),
+        None => Err((StatusCode::NOT_FOUND, format!("verify batch not found: {batch_id}"))),
+    }
+}
+
 pub async fn verify_batch_proxies(
     State(state): State<AppState>,
     Json(payload): Json<ProxyVerifyBatchRequest>,
@@ -1211,6 +1312,7 @@ pub async fn verify_batch_proxies(
     let failed_only = payload.failed_only.unwrap_or(false);
     let max_per_provider = payload.max_per_provider.unwrap_or(requested).max(1);
     let now = now_ts_string();
+    let batch_id = format!("verify-batch-{}", Uuid::new_v4());
     let rows = sqlx::query_as::<_, (String, Option<String>)>(
         r#"SELECT id, provider FROM proxies
            WHERE status = 'active'
@@ -1278,6 +1380,7 @@ pub async fn verify_batch_proxies(
             "fingerprint_profile_id": serde_json::Value::Null,
             "fingerprint_profile_version": serde_json::Value::Null,
             "proxy_id": proxy_id,
+            "verify_batch_id": batch_id,
             "network_policy_json": serde_json::Value::Null,
         }).to_string();
         sqlx::query(
@@ -1299,7 +1402,7 @@ pub async fn verify_batch_proxies(
         per_provider_counts.insert(provider_key, current + 1);
     }
 
-    let provider_summary = per_provider_counts
+    let provider_summary: Vec<ProxyVerifyBatchProviderSummary> = per_provider_counts
         .into_iter()
         .map(|(provider, accepted)| ProxyVerifyBatchProviderSummary {
             skipped_due_to_cap: per_provider_skipped.get(&provider).copied().unwrap_or(0),
@@ -1307,10 +1410,41 @@ pub async fn verify_batch_proxies(
             accepted,
         })
         .collect();
+    let provider_summary_json = serde_json::to_string(&provider_summary)
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to encode provider summary: {err}")))?;
+    let filters_json = serde_json::json!({
+        "provider": payload.provider,
+        "region": payload.region,
+        "limit": requested,
+        "only_stale": only_stale,
+        "min_score": min_score,
+        "stale_after_seconds": stale_after_seconds,
+        "task_timeout_seconds": task_timeout_seconds,
+        "recently_used_within_seconds": recently_used_within_seconds,
+        "failed_only": failed_only,
+        "max_per_provider": max_per_provider,
+    }).to_string();
+    sqlx::query(r#"INSERT INTO verify_batches (id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at)
+                   VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?)"#)
+        .bind(&batch_id)
+        .bind(requested)
+        .bind(accepted)
+        .bind(requested - accepted)
+        .bind(stale_after_seconds)
+        .bind(task_timeout_seconds)
+        .bind(&provider_summary_json)
+        .bind(&filters_json)
+        .bind(&now)
+        .bind(&now)
+        .execute(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist verify batch: {err}")))?;
 
     Ok((
         StatusCode::ACCEPTED,
         Json(ProxyVerifyBatchResponse {
+            batch_id,
+            created_at: now,
             requested,
             accepted,
             skipped: requested - accepted,

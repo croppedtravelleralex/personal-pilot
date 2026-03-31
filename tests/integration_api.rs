@@ -1702,6 +1702,8 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
         Request::builder().method("POST").uri("/proxies/verify-batch").header("content-type", "application/json").body(Body::from(batch_payload.to_string())).expect("request"),
     ).await;
     assert_eq!(batch_status, StatusCode::ACCEPTED);
+    assert!(batch_json.get("batch_id").and_then(|v| v.as_str()).unwrap_or_default().starts_with("verify-batch-"));
+    assert!(batch_json.get("created_at").and_then(|v| v.as_str()).is_some());
     assert_eq!(batch_json.get("accepted").and_then(|v| v.as_i64()), Some(2));
     assert_eq!(batch_json.get("stale_after_seconds").and_then(|v| v.as_i64()), Some(7200));
     assert_eq!(batch_json.get("task_timeout_seconds").and_then(|v| v.as_i64()), Some(9));
@@ -1717,6 +1719,11 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
         .await
         .expect("load timeout seconds");
     assert_eq!(queued_timeout, 9);
+    let queued_batch_id: String = sqlx::query_scalar(r#"SELECT json_extract(input_json, '$.verify_batch_id') FROM tasks WHERE kind = 'verify_proxy' ORDER BY id LIMIT 1"#)
+        .fetch_one(&state.db)
+        .await
+        .expect("load verify batch id");
+    assert!(queued_batch_id.starts_with("verify-batch-"));
 }
 
 
@@ -1871,4 +1878,65 @@ async fn verify_batch_respects_max_per_provider_cap() {
         .expect("load queued proxy ids");
     assert_eq!(scheduled.len(), 2);
     assert_ne!(scheduled[0].0, scheduled[1].0);
+}
+
+
+#[tokio::test]
+async fn verify_batch_is_persisted_and_queryable() {
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+
+    for id in ["proxy-batch-persist-1", "proxy-batch-persist-2"] {
+        let proxy_payload = serde_json::json!({
+            "id": id,
+            "scheme": "http",
+            "host": "127.0.0.1",
+            "port": 8000,
+            "region": "persist",
+            "country": "US",
+            "provider": "pool-persist",
+            "score": 0.9
+        });
+        let (status, _) = json_response(
+            &app,
+            Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+        ).await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    let batch_payload = serde_json::json!({
+        "provider": "pool-persist",
+        "region": "persist",
+        "limit": 10,
+        "only_stale": true,
+        "max_per_provider": 2
+    });
+    let (status, batch_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/verify-batch").header("content-type", "application/json").body(Body::from(batch_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let batch_id = batch_json.get("batch_id").and_then(|v| v.as_str()).expect("batch id").to_string();
+
+    let (_, list_json) = json_response(
+        &app,
+        Request::builder().uri("/proxies/verify-batch?limit=10&offset=0").body(Body::empty()).expect("request"),
+    ).await;
+    let items = list_json.as_array().expect("verify batch list");
+    assert!(!items.is_empty());
+    assert!(items.iter().any(|item| item.get("id").and_then(|v| v.as_str()) == Some(batch_id.as_str())));
+
+    let (_, detail_json) = json_response(
+        &app,
+        Request::builder().uri(format!("/proxies/verify-batch/{batch_id}")).body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(detail_json.get("id").and_then(|v| v.as_str()), Some(batch_id.as_str()));
+    assert_eq!(detail_json.get("accepted_count").and_then(|v| v.as_i64()), Some(2));
+    assert_eq!(detail_json.get("queued_count").and_then(|v| v.as_i64()), Some(2));
+    assert_eq!(detail_json.get("running_count").and_then(|v| v.as_i64()), Some(0));
+    assert_eq!(detail_json.get("succeeded_count").and_then(|v| v.as_i64()), Some(0));
+    assert_eq!(detail_json.get("failed_count").and_then(|v| v.as_i64()), Some(0));
+    assert_eq!(detail_json.get("status").and_then(|v| v.as_str()), Some("running"));
+    assert!(detail_json.get("provider_summary_json").is_some());
+    assert!(detail_json.get("filters_json").is_some());
 }
