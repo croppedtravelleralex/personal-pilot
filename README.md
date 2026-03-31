@@ -173,3 +173,8 @@ Task and status observability also surface proxy resolution state via:
 - `proxy_region`
 - `proxy_resolution_status`
 - `/status.proxy_metrics`
+
+
+## API / Ops reference
+
+See `docs/api-ops.md` for the current endpoint surface, smoke response fields, persisted proxy verification fields, runner tuning variables, and current ops guidance.
