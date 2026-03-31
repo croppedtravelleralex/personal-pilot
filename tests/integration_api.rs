@@ -2674,6 +2674,29 @@ async fn execution_feedback_updates_proxy_score() {
 }
 
 
+
+#[tokio::test]
+async fn proxy_explain_endpoint_single_candidate_has_zero_gap_and_empty_runner_up_score() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES ('proxy-explain-single', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-single', 'active', 0.77, 5, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().uri("/proxies/proxy-explain-single/explain").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    let diff = json.get("winner_vs_runner_up_diff").expect("winner diff");
+    assert_eq!(diff.get("runner_up_total_score").and_then(|v| v.as_i64()), Some(0));
+    assert_eq!(diff.get("score_gap").and_then(|v| v.as_i64()), diff.get("winner_total_score").and_then(|v| v.as_i64()));
+    assert!(diff.get("factors").and_then(|v| v.as_array()).map(|v| v.len() <= 5).unwrap_or(false));
+}
+
 #[tokio::test]
 async fn proxy_explain_endpoint_returns_components_and_preview() {
     let db_url = unique_db_url();
