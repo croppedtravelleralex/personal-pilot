@@ -1730,10 +1730,8 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
 #[tokio::test]
 async fn status_exposes_verify_metrics_summary() {
     let db_url = unique_db_url();
-    let db = init_db(&db_url).await.expect("init db");
-    let runner = std::sync::Arc::new(FakeRunner);
-    let state = build_app_state(db.clone(), runner, None, 1);
-    let app = build_router(state.clone());
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+    let db = state.db.clone();
 
     sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
                   VALUES
@@ -1760,10 +1758,8 @@ async fn status_exposes_verify_metrics_summary() {
 #[tokio::test]
 async fn verify_batch_skips_recently_verified_proxy_when_only_stale() {
     let db_url = unique_db_url();
-    let db = init_db(&db_url).await.expect("init db");
-    let runner = std::sync::Arc::new(FakeRunner);
-    let state = build_app_state(db.clone(), runner, None, 1);
-    let app = build_router(state.clone());
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+    let db = state.db.clone();
 
     sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
                   VALUES ('proxy-recent-verify', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.9, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1')"#)
@@ -1939,4 +1935,202 @@ async fn verify_batch_is_persisted_and_queryable() {
     assert_eq!(detail_json.get("status").and_then(|v| v.as_str()), Some("running"));
     assert!(detail_json.get("provider_summary_json").is_some());
     assert!(detail_json.get("filters_json").is_some());
+}
+
+
+#[tokio::test]
+async fn proxy_selection_prefers_fresh_verified_proxy_over_stale_high_score_proxy() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let _state = build_app_state(db.clone(), runner, None, 1);
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-fresh-verified', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.85, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1'),
+                  ('proxy-stale-high-score', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.99, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '1', '1', '1')"#)
+        .execute(&db)
+        .await
+        .expect("insert proxies");
+
+    let selected: Option<(String,)> = sqlx::query_as(
+        r#"SELECT id FROM proxies
+           WHERE status = 'active'
+             AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+             AND (? IS NULL OR provider = ?)
+             AND (? IS NULL OR region = ?)
+             AND score >= ?
+           ORDER BY
+             CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN last_verify_status = 'failed' THEN 3
+               WHEN last_verify_at IS NULL THEN 2
+               WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
+               ELSE 0
+             END ASC,
+             score DESC,
+             COALESCE(last_used_at, '0') ASC,
+             created_at ASC
+           LIMIT 1"#,
+    )
+    .bind("9999999999")
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(0.0_f64)
+    .bind("9999999999")
+    .fetch_optional(&db)
+    .await
+    .expect("select proxy");
+    assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-fresh-verified"));
+}
+
+#[tokio::test]
+async fn proxy_selection_penalizes_recent_verify_failures_even_with_higher_score() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let _state = build_app_state(db.clone(), runner, None, 1);
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-ok-lower-score', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.70, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1'),
+                  ('proxy-failed-higher-score', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.99, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'failed', 0, 'US', 'Virginia', '9999999999', '1', '1')"#)
+        .execute(&db)
+        .await
+        .expect("insert proxies");
+
+    let selected: Option<(String,)> = sqlx::query_as(
+        r#"SELECT id FROM proxies
+           WHERE status = 'active'
+             AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+             AND (? IS NULL OR provider = ?)
+             AND (? IS NULL OR region = ?)
+             AND score >= ?
+           ORDER BY
+             CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN last_verify_status = 'failed' THEN 3
+               WHEN last_verify_at IS NULL THEN 2
+               WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
+               ELSE 0
+             END ASC,
+             score DESC,
+             COALESCE(last_used_at, '0') ASC,
+             created_at ASC
+           LIMIT 1"#,
+    )
+    .bind("9999999999")
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(0.0_f64)
+    .bind("9999999999")
+    .fetch_optional(&db)
+    .await
+    .expect("select proxy");
+    assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-ok-lower-score"));
+}
+
+
+#[tokio::test]
+async fn proxy_selection_prefers_geo_match_verified_proxy_over_smoke_only_proxy() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-geo-match', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.80, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1'),
+                  ('proxy-smoke-only', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.95, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, '1', '1')"#)
+        .execute(&db)
+        .await
+        .expect("insert proxies");
+
+    let selected: Option<(String,)> = sqlx::query_as(
+        r#"SELECT id FROM proxies
+           WHERE status = 'active'
+             AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+             AND (? IS NULL OR provider = ?)
+             AND (? IS NULL OR region = ?)
+             AND score >= ?
+           ORDER BY
+             CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN last_verify_status = 'failed' THEN 3
+               WHEN last_verify_at IS NULL THEN 2
+               WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
+               ELSE 0
+             END ASC,
+             score DESC,
+             COALESCE(last_used_at, '0') ASC,
+             created_at ASC
+           LIMIT 1"#,
+    )
+    .bind("9999999999")
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(0.0_f64)
+    .bind("9999999999")
+    .fetch_optional(&db)
+    .await
+    .expect("select proxy");
+    assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-geo-match"));
+}
+
+#[tokio::test]
+async fn proxy_selection_prefers_fresh_verified_proxy_over_missing_verify_proxy() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-fresh-verified-2', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.70, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1'),
+                  ('proxy-missing-verify', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-a', 'active', 0.99, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '1', '1')"#)
+        .execute(&db)
+        .await
+        .expect("insert proxies");
+
+    let selected: Option<(String,)> = sqlx::query_as(
+        r#"SELECT id FROM proxies
+           WHERE status = 'active'
+             AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+             AND (? IS NULL OR provider = ?)
+             AND (? IS NULL OR region = ?)
+             AND score >= ?
+           ORDER BY
+             CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN last_verify_status = 'failed' THEN 3
+               WHEN last_verify_at IS NULL THEN 2
+               WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
+               ELSE 0
+             END ASC,
+             score DESC,
+             COALESCE(last_used_at, '0') ASC,
+             created_at ASC
+           LIMIT 1"#,
+    )
+    .bind("9999999999")
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("pool-a".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(Some("us-east".to_string()))
+    .bind(0.0_f64)
+    .bind("9999999999")
+    .fetch_optional(&db)
+    .await
+    .expect("select proxy");
+    assert_eq!(selected.as_ref().map(|row| row.0.as_str()), Some("proxy-fresh-verified-2"));
 }

@@ -143,6 +143,12 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
                  CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
                  CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
                  CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
+                 CASE
+                   WHEN last_verify_status = 'failed' THEN 3
+                   WHEN last_verify_at IS NULL THEN 2
+                   WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
+                   ELSE 0
+                 END ASC,
                  score DESC,
                  COALESCE(last_used_at, '0') ASC,
                  created_at ASC
@@ -154,6 +160,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         .bind(region)
         .bind(region)
         .bind(min_score)
+        .bind(&now)
         .fetch_optional(&state.db)
         .await?,
     };

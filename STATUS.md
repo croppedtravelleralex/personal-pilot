@@ -88,3 +88,5 @@
 
 
 - **巡检 V1 已进入成型状态**：`verify_proxy` task kind、`POST /proxies/verify-batch`、按 stale/timeout/recent-use/failed-only/provider-cap 的筛选策略、provider 级批次 summary、`batch_id`、`verify_batches` 落库，以及 `GET /proxies/verify-batch` / `GET /proxies/verify-batch/:id` 批次查询都已打通；批次详情还能回看 `queued/running/succeeded/failed` 计数与派生状态。
+
+- **巡检结果已开始真正反哺代理选择**：selection 当前会明确优先 fresh verified / geo-match verified 的代理，并对 recent verify failed、missing verify、stale verify 做后排处理；对应回归已覆盖 fresh-vs-stale、ok-vs-failed、geo-match-vs-smoke-only、verified-vs-missing-verify 四类核心口径。
