@@ -1,6 +1,34 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProxySelectionTuning {
+    pub stale_after_seconds: i64,
+    pub recent_failure_heavy_window_seconds: i64,
+    pub recent_failure_light_window_seconds: i64,
+    pub provider_failure_margin: i64,
+    pub provider_region_failure_cluster_window_seconds: i64,
+    pub provider_region_failure_cluster_count: i64,
+}
+
+impl Default for ProxySelectionTuning {
+    fn default() -> Self {
+        Self {
+            stale_after_seconds: 3600,
+            recent_failure_heavy_window_seconds: 1800,
+            recent_failure_light_window_seconds: 7200,
+            provider_failure_margin: 5,
+            provider_region_failure_cluster_window_seconds: 3600,
+            provider_region_failure_cluster_count: 2,
+        }
+    }
+}
+
+pub fn default_proxy_selection_tuning() -> ProxySelectionTuning {
+    ProxySelectionTuning::default()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ProxySelectionTier {
     HardFilter,
@@ -113,14 +141,13 @@ pub fn proxy_selection_order_sql() -> &'static str {
                  CASE
                    WHEN last_verify_status = 'failed' THEN 3
                    WHEN last_verify_at IS NULL THEN 2
-                   WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
+                   WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - {stale_after_seconds} THEN 1
                    ELSE 0
                  END ASC,
-                 CASE
-                   WHEN failure_count >= success_count + 3 THEN 2
-                   WHEN failure_count > success_count THEN 1
-                   ELSE 0
-                 END ASC,
+                 {provider_region_recent_failure_decay}
+                 {recent_failure_decay}
+                 {provider_long_term_weight}
+                 {long_term_weight}
                  score DESC,
                  COALESCE(last_used_at, '0') ASC,
                  created_at ASC
@@ -135,6 +162,9 @@ mod tests {
     #[test]
     fn current_rules_expose_expected_tiers() {
         let rules = current_proxy_selection_rules();
+        let tuning = default_proxy_selection_tuning();
+        assert_eq!(tuning.stale_after_seconds, 3600);
+        assert_eq!(tuning.provider_region_failure_cluster_count, 2);
         assert_eq!(rules.len(), 4);
         assert!(rules.iter().any(|r| r.tier == ProxySelectionTier::HardFilter));
         assert!(rules.iter().any(|r| r.tier == ProxySelectionTier::StrongPositiveSignal));
@@ -158,7 +188,10 @@ mod tests {
         let recent_decay = proxy_recent_failure_decay_sql();
         assert!(recent_decay.contains("CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 1800"));
         assert!(provider_weight.contains("HAVING SUM(failure_count) >= SUM(success_count) + 5"));
-        assert!(sql.contains("failure_count >= success_count + 3"));
+        let tuned = proxy_selection_order_sql_with_tuning(&default_proxy_selection_tuning());
+        assert!(tuned.contains("COUNT(*) >= 2"));
+        assert!(sql.contains("{provider_region_recent_failure_decay}"));
+        assert!(sql.contains("{long_term_weight}"));
         assert!(sql.contains("score DESC"));
     }
 }
@@ -258,4 +291,74 @@ mod json_tests {
         assert_eq!(value.get("port").and_then(|v| v.as_i64()), Some(8080));
         assert_eq!(value.get("provider").and_then(|v| v.as_str()), Some("pool-a"));
     }
+}
+
+
+pub fn proxy_long_term_weight_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
+    format!(
+        "                 CASE
+                   WHEN failure_count >= success_count + {margin} THEN 2
+                   WHEN failure_count > success_count THEN 1
+                   ELSE 0
+                 END ASC,",
+        margin = tuning.provider_failure_margin.saturating_sub(2).max(1)
+    )
+}
+
+pub fn provider_long_term_weight_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
+    format!(
+        "                 CASE
+                   WHEN provider IS NOT NULL AND provider IN (
+                       SELECT provider
+                       FROM proxies
+                       WHERE provider IS NOT NULL
+                       GROUP BY provider
+                       HAVING SUM(failure_count) >= SUM(success_count) + {margin}
+                   ) THEN 1
+                   ELSE 0
+                 END ASC,",
+        margin = tuning.provider_failure_margin
+    )
+}
+
+pub fn proxy_recent_failure_decay_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
+    format!(
+        "                 CASE
+                   WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {heavy} THEN 2
+                   WHEN last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {light} THEN 1
+                   ELSE 0
+                 END ASC,",
+        heavy = tuning.recent_failure_heavy_window_seconds,
+        light = tuning.recent_failure_light_window_seconds
+    )
+}
+
+pub fn provider_region_recent_failure_decay_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
+    format!(
+        "                 CASE
+                   WHEN provider IS NOT NULL AND region IS NOT NULL AND (provider, region) IN (
+                       SELECT provider, region
+                       FROM proxies
+                       WHERE provider IS NOT NULL
+                         AND region IS NOT NULL
+                         AND last_verify_status = 'failed'
+                         AND last_verify_at IS NOT NULL
+                         AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - {window}
+                       GROUP BY provider, region
+                       HAVING COUNT(*) >= {count}
+                   ) THEN 1
+                   ELSE 0
+                 END ASC,",
+        window = tuning.provider_region_failure_cluster_window_seconds,
+        count = tuning.provider_region_failure_cluster_count
+    )
+}
+
+pub fn proxy_selection_order_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
+    proxy_selection_order_sql()
+        .replace("{provider_region_recent_failure_decay}", &provider_region_recent_failure_decay_sql_with_tuning(tuning))
+        .replace("{recent_failure_decay}", &proxy_recent_failure_decay_sql_with_tuning(tuning))
+        .replace("{provider_long_term_weight}", &provider_long_term_weight_sql_with_tuning(tuning))
+        .replace("{long_term_weight}", &proxy_long_term_weight_sql_with_tuning(tuning))
+        .replace("{stale_after_seconds}", &tuning.stale_after_seconds.to_string())
 }

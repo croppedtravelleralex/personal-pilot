@@ -245,3 +245,30 @@
 - 则该 `provider + region` 组合会被整体后排
 
 这意味着系统不只会看单条代理是否失败、provider 是否长期不稳，也开始识别“某个 provider 在某个 region 最近是不是正在局部翻车”。
+
+
+## 参数化起点
+
+当前策略层已经开始提供一组默认调优参数：
+
+- `stale_after_seconds`
+- `recent_failure_heavy_window_seconds`
+- `recent_failure_light_window_seconds`
+- `provider_failure_margin`
+- `provider_region_failure_cluster_window_seconds`
+- `provider_region_failure_cluster_count`
+
+当前这些参数还主要作为**默认策略口径**存在，但这一步意味着策略层已经开始从“纯硬编码规则”往“可调参数规则”迈出第一步。
+
+
+## 参数化第一版（当前状态）
+
+当前策略层已经完成参数化的第一步：
+
+- 有明确的默认调优参数结构 `ProxySelectionTuning`
+- `proxy_selection_order_sql()` 已转为模板化口径
+- 执行链已经开始通过 tuning 参数生成实际选择规则
+
+当前这一步的意义不在于已经完全开放配置，而在于：
+
+**策略阈值已经开始从“散落的硬编码常量”变成“有明确参数面的规则系统”。**
