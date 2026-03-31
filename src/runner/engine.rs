@@ -139,6 +139,151 @@ pub fn computed_trust_score_components(
     })
 }
 
+pub fn summarize_component_advantages(components: &Value) -> String {
+    let obj = match components.as_object() {
+        Some(v) => v,
+        None => return "no component detail available".to_string(),
+    };
+    let mut wins: Vec<&str> = Vec::new();
+    let mut losses: Vec<&str> = Vec::new();
+
+    let get_i = |k: &str| obj.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
+
+    if get_i("verify_ok_bonus") > 0 { wins.push("verify_ok"); }
+    if get_i("verify_geo_match_bonus") > 0 { wins.push("geo_match"); }
+    if get_i("smoke_upstream_ok_bonus") > 0 { wins.push("upstream_ok"); }
+    if get_i("raw_score_component") >= 8 { wins.push("raw_score"); }
+
+    if get_i("missing_verify_penalty") > 0 { losses.push("missing_verify"); }
+    if get_i("stale_verify_penalty") > 0 { losses.push("stale_verify"); }
+    if get_i("verify_failed_heavy_penalty") > 0 || get_i("verify_failed_light_penalty") > 0 || get_i("verify_failed_base_penalty") > 0 { losses.push("verify_failure"); }
+    if get_i("individual_history_penalty") > 0 { losses.push("history_risk"); }
+    if get_i("provider_risk_penalty") > 0 { losses.push("provider_risk"); }
+    if get_i("provider_region_cluster_penalty") > 0 { losses.push("provider_region_risk"); }
+
+    match (wins.is_empty(), losses.is_empty()) {
+        (false, false) => format!("wins on {}; penalized by {}", wins.join(", "), losses.join(", ")),
+        (false, true) => format!("wins on {}", wins.join(", ")),
+        (true, false) => format!("penalized by {}", losses.join(", ")),
+        (true, true) => "mostly driven by neutral/default signals".to_string(),
+    }
+}
+
+pub fn summarize_component_delta(current: &Value, baseline: Option<&Value>) -> String {
+    let current_summary = summarize_component_advantages(current);
+    let Some(baseline) = baseline else {
+        return current_summary;
+    };
+    let c = current.as_object();
+    let b = baseline.as_object();
+    let (Some(c), Some(b)) = (c, b) else { return current_summary; };
+
+    let mut better = Vec::new();
+    let mut worse = Vec::new();
+    for key in [
+        "verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component",
+        "missing_verify_penalty", "stale_verify_penalty", "verify_failed_heavy_penalty", "verify_failed_light_penalty",
+        "verify_failed_base_penalty", "individual_history_penalty", "provider_risk_penalty", "provider_region_cluster_penalty"
+    ] {
+        let cv = c.get(key).and_then(|v| v.as_i64()).unwrap_or(0);
+        let bv = b.get(key).and_then(|v| v.as_i64()).unwrap_or(0);
+        if ["verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component"].contains(&key) {
+            if cv > bv { better.push(key); }
+            else if cv < bv { worse.push(key); }
+        } else {
+            if cv < bv { better.push(key); }
+            else if cv > bv { worse.push(key); }
+        }
+    }
+    let mut parts = Vec::new();
+    if !better.is_empty() { parts.push(format!("better on {}", better.join(", "))); }
+    if !worse.is_empty() { parts.push(format!("worse on {}", worse.join(", "))); }
+    if parts.is_empty() { current_summary } else { format!("{}; {}", current_summary, parts.join("; ")) }
+}
+
+async fn compute_top_candidate_component_map(
+    state: &AppState,
+    now: &str,
+    provider: Option<&str>,
+    region: Option<&str>,
+    min_score: f64,
+) -> Result<std::collections::HashMap<String, Value>> {
+    let query = format!(
+        "SELECT id FROM proxies {} ORDER BY {} LIMIT 3",
+        proxy_selection_base_where_sql(),
+        proxy_selection_order_by_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
+    );
+    let ids = sqlx::query_scalar::<_, String>(&query)
+        .bind(now)
+        .bind(provider)
+        .bind(provider)
+        .bind(region)
+        .bind(region)
+        .bind(min_score)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .fetch_all(&state.db).await?;
+    let mut map = std::collections::HashMap::new();
+    for id in ids {
+        let (_, comp) = compute_proxy_selection_explain(state, &id, now).await?;
+        map.insert(id, comp);
+    }
+    Ok(map)
+}
+
+async fn compute_candidate_preview_with_reasons(
+    state: &AppState,
+    now: &str,
+    provider: Option<&str>,
+    region: Option<&str>,
+    min_score: f64,
+) -> Result<Vec<Value>> {
+    let query = format!(
+        "SELECT id, provider, region, score, CAST(({}) AS INTEGER) AS trust_score_total FROM proxies {} ORDER BY {} LIMIT 3",
+        proxy_trust_score_sql_with_tuning(&state.proxy_selection_tuning),
+        proxy_selection_base_where_sql(),
+        proxy_selection_order_by_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
+    );
+    let rows = sqlx::query_as::<_, (String, Option<String>, Option<String>, f64, i64)>(&query)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(provider)
+        .bind(provider)
+        .bind(region)
+        .bind(region)
+        .bind(min_score)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .fetch_all(&state.db).await?;
+    let component_map = compute_top_candidate_component_map(state, now, provider, region, min_score).await?;
+    let baseline = rows.get(1).and_then(|row| component_map.get(&row.0));
+    let mut out = Vec::new();
+    for (idx, (id, provider, region, score, trust_score_total)) in rows.into_iter().enumerate() {
+        let comp = component_map.get(&id);
+        let summary = if idx == 0 {
+            summarize_component_delta(comp.unwrap_or(&Value::Null), baseline)
+        } else {
+            summarize_component_advantages(comp.unwrap_or(&Value::Null))
+        };
+        out.push(json!({
+            "id": id,
+            "provider": provider,
+            "region": region,
+            "score": score,
+            "trust_score_total": trust_score_total,
+            "summary": summary,
+        }));
+    }
+    Ok(out)
+}
+
 async fn compute_proxy_selection_explain(
     state: &AppState,
     proxy_id: &str,
@@ -179,51 +324,6 @@ async fn compute_proxy_selection_explain(
         now.parse::<i64>().unwrap_or_default(),
     );
     Ok((trust_score_total, components))
-}
-
-async fn preview_auto_candidates(
-    state: &AppState,
-    now: &str,
-    provider: Option<&str>,
-    region: Option<&str>,
-    min_score: f64,
-) -> Result<Vec<Value>> {
-    let trust_sql = proxy_trust_score_sql_with_tuning(&state.proxy_selection_tuning);
-    let query = format!(
-        "SELECT id, provider, region, score, CAST(({}) AS INTEGER) AS trust_score_total FROM proxies {} ORDER BY {} LIMIT 3",
-        trust_sql,
-        proxy_selection_base_where_sql(),
-        proxy_selection_order_by_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
-    );
-    let rows = sqlx::query_as::<_, (String, Option<String>, Option<String>, f64, i64)>(&query)
-        .bind(now)
-        .bind(now)
-        .bind(now)
-        .bind(now)
-        .bind(now)
-        .bind(provider)
-        .bind(provider)
-        .bind(region)
-        .bind(region)
-        .bind(min_score)
-        .bind(now)
-        .bind(now)
-        .bind(now)
-        .bind(now)
-        .fetch_all(&state.db)
-        .await?;
-    let mut out = Vec::new();
-    for (id, provider, region, score, trust_score_total) in rows {
-        out.push(json!({
-            "id": id,
-            "provider": provider,
-            "region": region,
-            "score": score,
-            "trust_score_total": trust_score_total,
-            "summary": format!("trust_score_total={} vs raw_score={:.2}; {}", trust_score_total, score, if trust_score_total >= ((score * 10.0).floor() as i64) { "trust signals dominate" } else { "raw score dominates" }),
-        }));
-    }
-    Ok(out)
 }
 
 async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) -> Result<()> {
@@ -325,7 +425,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         policy_obj.insert("selection_reason_summary".to_string(), json!(selection_reason_summary_for_mode(selection_mode, trust_score_total)));
         policy_obj.insert("trust_score_components".to_string(), trust_score_components);
         if selection_mode == "auto" {
-            let preview = preview_auto_candidates(state, &now, preview_provider.as_deref(), preview_region.as_deref(), min_score).await?;
+            let preview = compute_candidate_preview_with_reasons(state, &now, preview_provider.as_deref(), preview_region.as_deref(), min_score).await?;
             policy_obj.insert("candidate_rank_preview".to_string(), json!(preview));
         }
         if let Some(score) = trust_score_total {
