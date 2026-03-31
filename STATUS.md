@@ -77,3 +77,5 @@
 - **能力清单文档已补齐**，当前系统已明确区分：调度控制面、fingerprint、proxy pool、sticky binding、proxy verification、状态观测，以及仍属于 V1/临时方案的部分。
 
 - **更真实的匿名性/地区校验链设计已起草**，已明确下一步应引入外部 probe endpoint、出口国家/地区回显、geo match 判定，以及独立于 smoke 的 `verify` 慢路径。
+
+- **当前阶段总结文档已收口**，`STAGE_SUMMARY_2026-03-31.md` 已整理出本阶段能力、风险、性能判断、代表性提交与下一阶段主线。

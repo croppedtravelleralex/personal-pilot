@@ -158,3 +158,5 @@
 - 能力清单文档已补齐：后续做阶段总结、对外说明、API 对齐时可直接复用 `CAPABILITIES.md` 作为主索引。
 
 - 匿名性/地区校验链下一步设计已写入 `docs/proxy-verification-next.md`，建议后续按 `smoke -> verify -> score writeback` 三段式推进。
+
+- 当前阶段总结文档已形成，后续若继续推进实现，可直接从 `STAGE_SUMMARY_2026-03-31.md` 的下一阶段主线衔接。
