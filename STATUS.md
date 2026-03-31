@@ -110,3 +110,5 @@
 - **代理选择已具备 trust score 起点**：策略层当前已能把多条正负信号收敛为统一 trust score SQL 表达，为后续把 selection 从多段规则叠加推进到更统一的 trust/risk score 模型打下基础。
 
 - **稳定性清扫已开始处理 panic 风险点**：当前已先对 memory queue 与 lightpanda runner 中的 poisoned mutex 锁处理做加固，不再在这些点直接 `expect(...)` panic，而是改为尽量恢复内部状态继续工作。
+
+- **trust score 接主链已补最小回归验证**：当前已新增直接排序层面的回归，用来验证在 trust score 规则下，更健康的代理能够压过 raw score 更高但状态更差的代理。
