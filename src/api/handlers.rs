@@ -23,7 +23,7 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
@@ -629,6 +629,50 @@ pub async fn status(
         proxy_metrics,
         verify_metrics,
         latest_tasks,
+    }))
+}
+
+pub async fn check_proxy_trust_cache(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxyTrustCacheCheckResponse>, (StatusCode, String)> {
+    let now = now_ts_string();
+    let cached_row = sqlx::query_as::<_, (Option<i64>, Option<String>)>(
+        "SELECT cached_trust_score, trust_score_cached_at FROM proxies WHERE id = ?"
+    )
+    .bind(&proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load cached trust score: {err}")))?;
+    let Some((cached_trust_score, cached_at)) = cached_row else {
+        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+    };
+
+    let recomputed_trust_score = sqlx::query_scalar::<_, i64>(&format!(
+        "SELECT CAST(({}) AS INTEGER) FROM proxies WHERE id = ?",
+        crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
+    ))
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .bind(&proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to recompute trust score: {err}")))?;
+
+    let delta = match (cached_trust_score, recomputed_trust_score) {
+        (Some(cached), Some(recomputed)) => Some(recomputed - cached),
+        _ => None,
+    };
+    let in_sync = delta.unwrap_or(0) == 0;
+
+    Ok(Json(ProxyTrustCacheCheckResponse {
+        proxy_id,
+        cached_trust_score,
+        recomputed_trust_score,
+        delta,
+        in_sync,
+        cached_at,
     }))
 }
 

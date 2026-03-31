@@ -321,3 +321,14 @@ pub struct ProxySelectionExplainResponse {
     pub candidate_rank_preview: Vec<serde_json::Value>,
     pub winner_vs_runner_up_diff: Option<serde_json::Value>,
 }
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyTrustCacheCheckResponse {
+    pub proxy_id: String,
+    pub cached_trust_score: Option<i64>,
+    pub recomputed_trust_score: Option<i64>,
+    pub delta: Option<i64>,
+    pub in_sync: bool,
+    pub cached_at: Option<String>,
+}

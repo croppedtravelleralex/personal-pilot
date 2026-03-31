@@ -4,7 +4,7 @@ use crate::app::state::AppState;
 
 use super::{auth::auth_middleware, handlers::{
     cancel_task, create_fingerprint_profile, create_proxy, create_task, get_fingerprint_profile,
-    explain_proxy_selection, get_proxy, get_task, get_task_logs, get_task_runs, health, list_fingerprint_profiles,
+    check_proxy_trust_cache, explain_proxy_selection, get_proxy, get_task, get_task_logs, get_task_runs, health, list_fingerprint_profiles,
     get_verify_batch, list_proxies, list_verify_batches, retry_task, smoke_test_proxy, verify_batch_proxies, verify_proxy, status,
 }};
 
@@ -20,6 +20,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fingerprint-profiles/:id", get(get_fingerprint_profile))
         .route("/proxies/:id", get(get_proxy))
         .route("/proxies/:id/explain", get(explain_proxy_selection))
+        .route("/proxies/:id/trust-cache-check", get(check_proxy_trust_cache))
         .route("/proxies/:id/smoke", post(smoke_test_proxy))
         .route("/proxies/:id/verify", post(verify_proxy))
         .route("/tasks/:id", get(get_task))

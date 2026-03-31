@@ -2857,3 +2857,29 @@ async fn scoped_cached_trust_score_refresh_updates_provider_group() {
     let cached_two: i64 = sqlx::query_scalar("SELECT COALESCE(cached_trust_score, 0) FROM proxies WHERE id = 'proxy-scope-2'").fetch_one(&db).await.expect("cache 2");
     assert!(cached_two > cached_one);
 }
+
+
+#[tokio::test]
+async fn trust_cache_check_endpoint_reports_sync_status() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, created_at, updated_at)
+                  VALUES ('proxy-cache-check', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-check', 'active', 0.8, 5, 0, 'ok', 1, 1, '9999999999', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db).await.expect("refresh risk snapshots");
+    AutoOpenBrowser::db::init::refresh_cached_trust_scores(&state.db).await.expect("refresh trust cache");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().uri("/proxies/proxy-cache-check/trust-cache-check").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json.get("proxy_id").and_then(|v| v.as_str()), Some("proxy-cache-check"));
+    assert!(json.get("cached_trust_score").and_then(|v| v.as_i64()).is_some());
+    assert!(json.get("recomputed_trust_score").and_then(|v| v.as_i64()).is_some());
+    assert_eq!(json.get("delta").and_then(|v| v.as_i64()), Some(0));
+    assert_eq!(json.get("in_sync").and_then(|v| v.as_bool()), Some(true));
+}
