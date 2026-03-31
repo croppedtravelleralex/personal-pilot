@@ -162,6 +162,24 @@ pub fn summarize_component_advantages(components: &Value) -> String {
     }
 }
 
+fn component_label(key: &str) -> &'static str {
+    match key {
+        "verify_ok_bonus" => "verify_ok",
+        "verify_geo_match_bonus" => "geo_match",
+        "smoke_upstream_ok_bonus" => "upstream_ok",
+        "raw_score_component" => "raw_score",
+        "missing_verify_penalty" => "missing_verify",
+        "stale_verify_penalty" => "stale_verify",
+        "verify_failed_heavy_penalty" => "verify_failed_heavy",
+        "verify_failed_light_penalty" => "verify_failed_light",
+        "verify_failed_base_penalty" => "verify_failed_base",
+        "individual_history_penalty" => "history_risk",
+        "provider_risk_penalty" => "provider_risk",
+        "provider_region_cluster_penalty" => "provider_region_risk",
+        _ => "unknown",
+    }
+}
+
 pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> Value {
     let keys = [
         "verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component",
@@ -173,6 +191,7 @@ pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> 
     let Some(baseline) = baseline else {
         let mut factors: Vec<Value> = keys.into_iter().map(|key| json!({
             "factor": key,
+            "label": component_label(key),
             "winner_value": current.get(key).and_then(|v| v.as_i64()).unwrap_or(0),
             "runner_up_value": 0,
             "delta": current.get(key).and_then(|v| v.as_i64()).unwrap_or(0),
@@ -205,6 +224,7 @@ pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> 
         };
         factors.push(json!({
             "factor": key,
+            "label": component_label(key),
             "winner_value": cv,
             "runner_up_value": bv,
             "delta": delta,

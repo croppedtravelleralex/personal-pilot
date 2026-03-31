@@ -110,6 +110,7 @@ pub enum WinnerVsRunnerUpDirection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WinnerVsRunnerUpFactor {
     pub factor: String,
+    pub label: String,
     pub winner_value: i64,
     pub runner_up_value: i64,
     pub delta: i64,
