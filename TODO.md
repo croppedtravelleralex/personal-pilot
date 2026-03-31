@@ -15,82 +15,81 @@
 - [x] 打通创建任务 -> 入队 -> 执行 -> 状态更新 -> 查询结果
 - [x] 打通创建任务 -> 查询任务 的最小闭环
 - [x] 增加数据库初始化入口
-
-## P1
-
-- [x] 增加任务取消机制
-- [x] 增加任务重试机制
-- [x] 增加任务超时模拟分支
-- [x] 增加结构化日志
-- [x] 增加执行历史与审计字段
-- [x] 设计 runner trait / adapter interface
-- [x] 为 `lightpanda-io/browser` 预留适配层
-- [x] 抽离 runner 通用执行层（第一轮）
-- [x] 让 RunnerTask 接入真实任务输入（第一版）
-- [x] 接入 `LightpandaRunner` 最小真实执行第一版（`LIGHTPANDA_BIN` + `fetch`）
-- [x] 收紧 `LightpandaRunner` 结果结构与错误语义
-- [x] 增加 `status / runs / logs` 查询控制与分页（第一版）
-- [x] 增加 `status / runs / logs` 的 `offset` 分页（第二版）
-- [x] 设计 `running cancel` 的正确演进边界
-- [x] 增加 runner cancel 抽象层（第一版）
-- [x] 为 `LightpandaRunner` 增加取消句柄注册表（第一版）
-- [x] 让 `LightpandaRunner` 尝试终止运行中外部进程（第一版）
-- [x] 让 AppState 持有当前 runner 句柄
-- [x] 打通 API 层 `running cancel` 第一版接线
-- [x] 增加 running cancel 状态竞争保护（第一版）
-- [x] 设计浏览器指纹能力边界
-- [ ] 设计高级指纹下的性能预算与性能开销控制策略
-- [x] 设计指纹 profile schema 与任务绑定字段第一版
-- [x] 设计指纹 profile 一致性校验器第一版
-- [x] 增加 fingerprint profile 最小管理接口第一版
-- [x] 为 runner 增加 fingerprint profile 注入入口第一版
-- [ ] 设计持续抓取代理的工具（优先基于开源项目改造）
-- [ ] 设计代理抓取后的清洗、去重、候选入池流程
-- [ ] 设计代理池与代理轮换策略
-- [ ] 设计代理池自生长机制
-- [ ] 设计地区感知的代理匹配策略
-- [ ] 设计“所有访问强制走代理池”的网络约束
-- [ ] 设计可用代理比例 40%-60% 的动态控制策略
-- [ ] 设计磁盘使用监控与落盘上限策略
-- [ ] 设计 artifact / log 的保留、清理与归档策略
 - [x] 增加数据库目录自动创建
 - [x] 设计下一步 queue claim / durable queue 方案（DB-first claim 第一版）
 - [x] 落地 runner_id / stale-running reclaim 最小实现
 - [x] 落地 heartbeat_at / lease-style reclaim 判定最小实现
 - [x] 修复 DB-first claim 后 queue_len / queued cancel 的内存队列漂移问题
 - [x] 将内存队列降级为兼容层，不再参与真实调度语义
-- [ ] 设计高并发下的性能优化与写放大控制策略
 - [x] 增加并发运行态可观测性第一版（status 暴露 worker / queue mode / reclaim）
-
-## P2
-
-- [ ] 增加并发控制
-- [ ] 增加资源限制
 - [x] 增加 API 鉴权
 - [x] 增加运行历史与日志查询接口
-- [x] 清理 README / STATUS / PROGRESS 中过时静态状态
 - [x] 增加基础监控指标
 - [x] 增加集成测试
 - [x] 增加集成测试骨架第一版（fake runner + retry）
 - [x] 增加最小 smoke test 脚本
 - [x] 增加 lightpanda 专项验证脚本入口
+- [x] 增加并发控制第一版骨架（多 worker + 并发度配置）
+- [x] 增加最小一致性保护第一轮（retry 防重 + cancel 保护 run）
+- [x] 加真实代理连通性/烟雾测试能力
+- [x] 收口环境变量与状态暴露文档
+- [x] 设计浏览器指纹能力边界
+- [x] 设计指纹 profile schema 与任务绑定字段第一版
+- [x] 设计指纹 profile 一致性校验器第一版
+- [x] 增加 fingerprint profile 最小管理接口第一版
+- [x] 为 runner 增加 fingerprint profile 注入入口第一版
+- [x] 增加代理池基础能力（创建 / 查询 / 筛选 / 任务绑定）
+- [x] 增加代理健康状态回写功能
+- [x] 增加 sticky session 正式绑定表与复用链路
+- [x] 增加 HTTP 代理协议层 smoke test
+- [x] 增加 verify_proxy task kind
+- [x] 增加 `POST /proxies/verify-batch`
+- [x] 增加 verify batch 查询接口
+- [x] 增加代理选择策略层第一版
+- [x] 增加 provider / region / 历史成功失败 / 近期失败衰减 / provider×region 风险等选择信号
+- [x] 增加 `ProxySelectionTuning` 默认结构与环境变量注入入口
+- [x] 增加 trust score 起点与主链接入
+- [ ] 继续推进 trust score 核心化，减少分散排序项依赖
+- [ ] 推进代理质量评分系统正式化
+- [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性）
+- [ ] 设计高并发下的性能优化与写放大控制策略
+- [ ] 设计高级指纹下的性能预算与性能开销控制策略
+- [ ] 设计磁盘使用监控与落盘上限策略
+- [ ] 设计 artifact / log 的保留、清理与归档策略
+- [ ] 同步 CURRENT_* / TODO / STATUS 口径，压平旧阶段残留
+
+## P1
+
 - [ ] 设计身份画像系统（Identity Profile）
-- [ ] 设计代理质量评分系统
+- [ ] 设计 SessionIdentity / ExecutionIdentity，把 `proxy + fingerprint + region + risk_level` 收到统一表达
 - [ ] 设计站点维度代理适配机制
 - [ ] 设计行为层模拟机制
 - [ ] 设计会话连续性机制
-- [ ] 设计策略引擎
+- [ ] 设计策略引擎正式形态
 - [ ] 设计实验记录系统
+- [ ] 增加 selection / verify / batch verify 的 metrics 与 explainability
+- [ ] 压测 proxy selection 查询、status 聚合 SQL 与 verify 批次链路
+- [ ] 继续清理 panic 风险点、锁竞争风险点与 flaky 测试
+- [ ] 继续完善 API / 运维 / 能力说明文档
+- [ ] 设计持续抓取代理的工具（优先基于开源项目改造）
+- [ ] 设计代理抓取后的清洗、去重、候选入池流程
+- [ ] 设计代理池自生长机制
+- [ ] 设计地区感知的代理匹配策略
+- [ ] 设计“所有访问强制走代理池”的网络约束
+- [ ] 设计可用代理比例 40%-60% 的动态控制策略
+
+## P2
+
+- [ ] 增加更正式的并发控制与资源限制
+- [ ] 评估 LightpandaRunner 对更真实 fingerprint 消费的落地边界
+- [ ] 设计多租户/多用户隔离是否需要前置
+- [ ] 设计 webhook / callback 通知是否纳入近期目标
+- [ ] 评估 `GOLDEN_FEATURES.md` 中哪些能力应前置到中期优先级
 
 ## 待讨论
 
 - [ ] 任务结果与 artifact 的落盘策略
 - [ ] 截图 / HTML / console log 的存储方式
-- [ ] 多租户/多用户隔离是否是近期目标
-- [ ] 是否需要 webhook / callback 通知
-- [ ] `GOLDEN_FEATURES.md` 中哪些能力应前置到中期优先级
-
-- [x] 增加并发控制第一版骨架（多 worker + 并发度配置）
-- [x] 增加最小一致性保护第一轮（retry 防重 + cancel 保护 run）
-- [x] 加真实代理连通性/烟雾测试能力
-- [x] 收口环境变量与状态暴露文档
+- [ ] 真实浏览器执行结果与 proxy quality 信号如何更紧耦合
+- [ ] trust score 与未来 risk score / policy engine 的边界
+- [ ] Identity Profile 与 fingerprint profile 的职责切分

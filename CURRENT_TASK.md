@@ -2,85 +2,79 @@
 
 ## 当前任务
 
-在真正开始大规模写代码之前，先把 `AutoOpenBrowser` 的项目任务定义补全，让后续所有执行都围绕同一个明确目标展开。
+当前任务不是回到早期“补文档骨架”，而是基于已经成型的执行系统与代理系统，继续完成 **trust score 核心深化 + verify 闭环深化 + 文档同步收口**。
 
 ---
 
 ## 任务目标
 
-围绕 `AutoOpenBrowser`，先完成以下三件事的闭环定义：
+围绕 `lightpanda-automation`，当前阶段先完成以下四件事：
 
-1. **借鉴开源项目**
-   - 查找并筛选可参考的开源项目
-   - 提炼架构、模块拆分、任务模型、执行引擎抽象、API 设计、存储设计方面的可借鉴点
-   - 特别关注浏览器指纹控制、代理池、代理轮换、反检测相关设计
+1. **继续收敛代理选择主链**
+   - 检查 selection 中仍分散存在的排序项、特判项、兜底项
+   - 判断哪些应该继续并入 trust score / risk score
+   - 降低“规则很多，但真实主排序语义分散”的维护成本
 
-2. **完善工程文档**
-   - 持续完善项目文档体系
-   - 保证文档能回答：
-     - 项目最终要做成什么
-     - 当前做到哪了
-     - 下一步要做什么
-     - 为什么这样设计
+2. **补强代理质量信号闭环**
+   - 继续完善 verify 慢路径
+   - 强化匿名性 / 地区 / 出口真实性相关信号
+   - 让 smoke、verify、batch verify、巡检结果对 selection 的影响更一致
 
-3. **再根据工程文档完善 app**
-   - 先按文档补齐工程骨架
-   - 再推进代码实现
-   - 保证代码实现不脱离文档定义的方向
+3. **补一轮性能与稳定性治理**
+   - 检查高并发下的 SQL 写放大、claim/reclaim 抖动、状态竞争
+   - 检查 status 聚合、批量巡检、代理回写对数据库的额外压力
+   - 继续压 panic 风险点与 flaky 测试点
 
----
-
-## 当前阶段定义
-
-当前阶段不是“快速堆功能”，而是：
-
-> **把项目的最终效果、最终功能、工程结构、推进顺序、执行纪律先定义清楚。**
-
-这样后续进入自动推进、写代码、检查 bug、做验证时，项目不容易失去方向。
+4. **同步文档与真实阶段**
+   - 更新 `CURRENT_DIRECTION.md`、`CURRENT_TASK.md`、`TODO.md`
+   - 确保文档反映当前真实主线，而不是历史阶段目标
+   - 保证后续自动推进围绕当前主线行动
 
 ---
 
-## 本阶段交付物
+## 当前阶段交付物
 
 本阶段应优先补齐：
 
-- [x] `VISION.md`
-- [x] `ROADMAP.md`
-- [x] `STATUS.md`
-- [x] `TODO.md`
-- [x] `EXECUTION_LOG.md`
-- [x] `RUN_STATE.json`
-- [x] `AUTONOMY_PLAN.md`
-- [x] `CURRENT_DIRECTION.md`
-- [x] `CURRENT_TASK.md`
-- [ ] 开源项目参考清单
-- [ ] Rust 工程骨架
-- [ ] 模块边界说明
-- [ ] 数据模型草案
-- [ ] SQLite schema 草案
+- [x] 代理选择策略层第一版
+- [x] `ProxySelectionTuning` 注入入口
+- [x] trust score 起点与主链接入
+- [x] `verify_proxy` task kind
+- [x] `POST /proxies/verify-batch`
+- [x] 巡检批次查询与结果回看
+- [x] `proxy_session_bindings` 正式 sticky 绑定
+- [x] 当前阶段文档初步总结（`STATUS / PROGRESS / STAGE_SUMMARY`）
+- [ ] CURRENT_* 与 TODO 文档同步到当前真实阶段
+- [ ] trust score 语义继续核心化
+- [ ] 更真实的 verify 慢路径
+- [ ] 高并发写放大与性能预算收口
+- [ ] 代理质量评分系统正式化
+- [ ] Identity Profile / SessionIdentity 设计落地第一版
 
 ---
 
 ## 下一步优先级
 
 ### P0
-1. 产出“值得借鉴的开源项目清单 + 借鉴点”
-2. 重点研究：小头浏览器高并发、高级指纹性能开销、代理池、代理验证、自生长、地区匹配
-3. 把“持续抓取代理工具”纳入正式设计范围
-4. 初始化 Rust 工程骨架
-5. 明确模块边界
-6. 定义任务模型与状态流转
+1. **继续推进 trust score 核心化**，把更多 selection 语义统一进 score 表达
+2. **推进 verify 慢路径**，补更真实的匿名性 / 地区 / 出口真实性校验链
+3. **整理 TODO / CURRENT_* 文档**，让文档与代码阶段保持一致
+4. **补一轮高并发性能治理**，重点看写放大、claim/reclaim、批量验证压力
+5. **设计代理质量评分系统**，明确 verify / smoke / 历史成功率 / provider 风险的合成口径
+6. **设计 Identity Profile / SessionIdentity**，把 proxy + fingerprint + region + risk_level 收到统一身份表达
 
 ### P1
-5. 设计 SQLite schema
-6. 定义最小 REST API
-7. 实现内存任务队列
-8. 实现 fake runner
+7. 继续补 selection / verify / batch verify 的 metrics 与 explainability
+8. 继续压测 proxy selection 查询、status 聚合 SQL 与 verify 批次链路
+9. 继续收口 panic 风险点、锁竞争风险点与 flaky 测试
+10. 继续完善 API / 运维 / 能力说明文档
 
 ### P2
-9. 跑通最小闭环
-10. 开始 bug 检查与功能验证
-11. 为 `lightpanda-io/browser` 接入预留适配层
+11. 设计策略引擎正式形态
+12. 设计行为层模拟机制
+13. 设计会话连续性机制
+14. 设计实验记录系统
+15. 评估高级指纹能力的性能预算与真实接入边界
 
 ---
 
@@ -88,9 +82,8 @@
 
 如果一个推进动作不能帮助回答下面任一问题，就应降低优先级：
 
-- 它是否让最终效果更清晰？
-- 它是否让最终功能更具体？
-- 它是否让工程结构更稳？
-- 它是否让后续代码实现更容易？
-- 它是否让 fake runner / real runner 的演进路径更清楚？
-- 它是否考虑了磁盘占用、落盘节制与性能开销？
+- 它是否让 **trust score / selection** 更统一？
+- 它是否让 **verify 质量信号** 更可信？
+- 它是否让 **并发稳定性 / 写放大 / 可观测性** 更稳？
+- 它是否让 **proxy + fingerprint + identity** 的主线更清晰？
+- 它是否让 **文档与代码** 更一致，减少自动推进跑偏风险？
