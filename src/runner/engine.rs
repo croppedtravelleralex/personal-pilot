@@ -5,6 +5,7 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::network_identity::proxy_selection::{proxy_selection_base_where_sql, proxy_selection_order_sql};
 use crate::{
     app::state::AppState,
     domain::{
@@ -131,38 +132,27 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
 
     let row = match row {
         Some(row) => Some(row),
-        None => sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(
-            r#"SELECT id, scheme, host, port, username, password, region, country, provider, score
-               FROM proxies
-               WHERE status = 'active'
-                 AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
-                 AND (? IS NULL OR provider = ?)
-                 AND (? IS NULL OR region = ?)
-                 AND score >= ?
-               ORDER BY
-                 CASE WHEN last_verify_status = 'ok' THEN 0 ELSE 1 END ASC,
-                 CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
-                 CASE WHEN COALESCE(last_smoke_upstream_ok, 0) != 0 THEN 0 ELSE 1 END ASC,
-                 CASE
-                   WHEN last_verify_status = 'failed' THEN 3
-                   WHEN last_verify_at IS NULL THEN 2
-                   WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
-                   ELSE 0
-                 END ASC,
-                 score DESC,
-                 COALESCE(last_used_at, '0') ASC,
-                 created_at ASC
-               LIMIT 1"#,
-        )
-        .bind(&now)
-        .bind(provider)
-        .bind(provider)
-        .bind(region)
-        .bind(region)
-        .bind(min_score)
-        .bind(&now)
-        .fetch_optional(&state.db)
-        .await?,
+        None => {
+            let query = format!(
+                "SELECT id, scheme, host, port, username, password, region, country, provider, score
+                 FROM proxies
+                 {}
+                 ORDER BY {}
+                 LIMIT 1",
+                proxy_selection_base_where_sql(),
+                proxy_selection_order_sql()
+            );
+            sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(&query)
+                .bind(&now)
+                .bind(provider)
+                .bind(provider)
+                .bind(region)
+                .bind(region)
+                .bind(min_score)
+                .bind(&now)
+                .fetch_optional(&state.db)
+                .await?
+        },
     };
 
     if let Some((id, scheme, host, port, username, password, region, country, provider, score)) = row {
