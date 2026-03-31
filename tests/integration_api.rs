@@ -1320,7 +1320,10 @@ async fn sticky_session_binding_table_is_written_and_reused() {
 #[tokio::test]
 async fn status_counts_are_aggregated_correctly() {
     let db_url = unique_db_url();
-    let (state, app) = build_test_app(&db_url).await.expect("build app");
+    let db = init_db(&db_url).await.expect("init db");
+    let runner = std::sync::Arc::new(FakeRunner);
+    let state = build_app_state(db, runner, None, 1);
+    let app = build_router(state.clone());
 
     let fixtures = [
         ("task-q", TASK_STATUS_QUEUED),
@@ -1465,4 +1468,57 @@ ip=198.51.100.20
     assert_eq!(smoke_status, StatusCode::OK);
     assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), Some("transparent"));
     assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("198.51.100.20"));
+}
+
+
+#[tokio::test]
+async fn verify_proxy_reports_geo_match_and_country_region() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind listener");
+    let addr = listener.local_addr().expect("local addr");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established
+
+ip=198.51.100.10
+country=US
+region=Virginia
+"),
+            ).await;
+        }
+    });
+
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+    let proxy_payload = serde_json::json!({
+        "id": "proxy-verify-us",
+        "scheme": "http",
+        "host": addr.ip().to_string(),
+        "port": addr.port(),
+        "region": "us-east",
+        "country": "US",
+        "provider": "smoke",
+        "score": 0.5
+    });
+    let (create_status, _) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(create_status, StatusCode::CREATED);
+
+    let (verify_status, verify_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/proxy-verify-us/verify").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(verify_status, StatusCode::OK);
+    assert_eq!(verify_json.get("reachable").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(verify_json.get("protocol_ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(verify_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(verify_json.get("exit_ip").and_then(|v| v.as_str()), Some("198.51.100.10"));
+    assert_eq!(verify_json.get("exit_country").and_then(|v| v.as_str()), Some("US"));
+    assert_eq!(verify_json.get("exit_region").and_then(|v| v.as_str()), Some("Virginia"));
+    assert_eq!(verify_json.get("geo_match_ok").and_then(|v| v.as_bool()), Some(true));
 }

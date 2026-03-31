@@ -205,3 +205,19 @@ pub struct ProxySmokeResponse {
     pub status: String,
     pub message: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyVerifyResponse {
+    pub id: String,
+    pub reachable: bool,
+    pub protocol_ok: bool,
+    pub upstream_ok: bool,
+    pub exit_ip: Option<String>,
+    pub exit_country: Option<String>,
+    pub exit_region: Option<String>,
+    pub geo_match_ok: Option<bool>,
+    pub anonymity_level: Option<String>,
+    pub latency_ms: Option<u128>,
+    pub status: String,
+    pub message: String,
+}
