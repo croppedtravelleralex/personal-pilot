@@ -5,7 +5,7 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_sql_with_tuning, resolved_proxy_json};
+use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_by_trust_score_sql_with_tuning, resolved_proxy_json};
 use crate::{
     app::state::AppState,
     domain::{
@@ -140,7 +140,7 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
                  ORDER BY {}
                  LIMIT 1",
                 proxy_selection_base_where_sql(),
-                proxy_selection_order_sql_with_tuning(&state.proxy_selection_tuning)
+                proxy_selection_order_by_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
             );
             sqlx::query_as::<_, (String, String, String, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, f64)>(&query)
                 .bind(&now)

@@ -194,6 +194,8 @@ mod tests {
         assert!(tuned.contains("COUNT(*) >= 2"));
         let trust = proxy_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
         assert!(trust.contains("last_verify_status = 'ok' THEN 30"));
+        let order_by = proxy_selection_order_by_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
+        assert!(order_by.contains("CAST(score * 10 AS INTEGER)"));
         assert!(sql.contains("{provider_region_recent_failure_decay}"));
         assert!(sql.contains("{long_term_weight}"));
         assert!(sql.contains("score DESC"));
@@ -429,5 +431,14 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
         provider_margin = provider_margin,
         cluster_window = cluster_window,
         cluster_count = cluster_count,
+    )
+}
+
+
+pub fn proxy_selection_order_by_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
+    let trust = proxy_trust_score_sql_with_tuning(tuning);
+    format!(
+        "(({trust}) + CAST(score * 10 AS INTEGER)) DESC, score DESC, COALESCE(last_used_at, '0') ASC, created_at ASC",
+        trust = trust
     )
 }
