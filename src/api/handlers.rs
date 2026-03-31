@@ -660,27 +660,9 @@ pub async fn explain_proxy_selection(
         .fetch_optional(&state.db)
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to compute trust score: {err}")))?;
-    let candidate_rows = sqlx::query_as::<_, (String, Option<String>, Option<String>, f64, i64)>(
-        &format!(
-            "SELECT id, provider, region, score, CAST(({}) AS INTEGER) AS trust_score_total FROM proxies WHERE status = 'active' ORDER BY {} LIMIT 3",
-            trust_sql,
-            crate::network_identity::proxy_selection::proxy_selection_order_by_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
-        )
-    )
-    .bind(&now).bind(&now).bind(&now).bind(&now)
-    .bind(&now).bind(Option::<String>::None).bind(Option::<String>::None).bind(Option::<String>::None).bind(Option::<String>::None).bind(0.0_f64)
-    .bind(&now).bind(&now).bind(&now).bind(&now)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load candidate preview: {err}")))?;
-    let candidate_rank_preview = candidate_rows.into_iter().map(|(id, provider, region, score, trust_score_total)| serde_json::json!({
-        "id": id,
-        "provider": provider,
-        "region": region,
-        "score": score,
-        "trust_score_total": trust_score_total,
-        "summary": format!("trust_score_total={} vs raw_score={:.2}", trust_score_total, score),
-    })).collect::<Vec<_>>();
+    let candidate_rank_preview = crate::runner::engine::compute_candidate_preview_with_reasons(&state, &now, None, None, 0.0_f64)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to build candidate preview with reasons: {err}")))?;
 
     let selection_reason_summary = format!(
         "proxy {} currently scores {:?}; verify_status={:?}, geo_match={}, upstream_ok={}, provider_risk={}, provider_region_cluster={}",
@@ -693,12 +675,14 @@ pub async fn explain_proxy_selection(
         provider_region_cluster_hit != 0,
     );
 
+    let winner_vs_runner_up_diff = candidate_rank_preview.get(0).and_then(|v| v.get("winner_vs_runner_up_diff")).cloned();
     Ok(Json(ProxySelectionExplainResponse {
         proxy_id: id,
         trust_score_total,
         selection_reason_summary,
         trust_score_components: components,
         candidate_rank_preview,
+        winner_vs_runner_up_diff,
     }))
 }
 

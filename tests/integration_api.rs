@@ -2677,6 +2677,7 @@ async fn proxy_explain_endpoint_returns_components_and_preview() {
     assert_eq!(json.get("proxy_id").and_then(|v| v.as_str()), Some("proxy-explain-endpoint"));
     assert!(json.get("trust_score_components").and_then(|v| v.get("verify_ok_bonus")).and_then(|v| v.as_i64()).is_some());
     assert!(json.get("candidate_rank_preview").and_then(|v| v.as_array()).map(|v| !v.is_empty()).unwrap_or(false));
+    assert!(json.get("winner_vs_runner_up_diff").is_some());
 }
 
 #[tokio::test]

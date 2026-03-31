@@ -169,6 +169,45 @@ pub fn summarize_component_advantages(components: &Value) -> String {
     }
 }
 
+pub fn structured_component_delta(current: &Value, baseline: Option<&Value>) -> Value {
+    let Some(baseline) = baseline else {
+        return json!({
+            "better": [],
+            "worse": [],
+            "same": [],
+        });
+    };
+    let c = match current.as_object() { Some(v) => v, None => return Value::Null };
+    let b = match baseline.as_object() { Some(v) => v, None => return Value::Null };
+    let positive = ["verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component"];
+    let keys = [
+        "verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component",
+        "missing_verify_penalty", "stale_verify_penalty", "verify_failed_heavy_penalty", "verify_failed_light_penalty",
+        "verify_failed_base_penalty", "individual_history_penalty", "provider_risk_penalty", "provider_region_cluster_penalty"
+    ];
+    let mut better = Vec::new();
+    let mut worse = Vec::new();
+    let mut same = Vec::new();
+    for key in keys {
+        let cv = c.get(key).and_then(|v| v.as_i64()).unwrap_or(0);
+        let bv = b.get(key).and_then(|v| v.as_i64()).unwrap_or(0);
+        if positive.contains(&key) {
+            if cv > bv { better.push(key); }
+            else if cv < bv { worse.push(key); }
+            else { same.push(key); }
+        } else {
+            if cv < bv { better.push(key); }
+            else if cv > bv { worse.push(key); }
+            else { same.push(key); }
+        }
+    }
+    json!({
+        "better": better,
+        "worse": worse,
+        "same": same,
+    })
+}
+
 pub fn summarize_component_delta(current: &Value, baseline: Option<&Value>) -> String {
     let current_summary = summarize_component_advantages(current);
     let Some(baseline) = baseline else {
@@ -233,7 +272,7 @@ async fn compute_top_candidate_component_map(
     Ok(map)
 }
 
-async fn compute_candidate_preview_with_reasons(
+pub async fn compute_candidate_preview_with_reasons(
     state: &AppState,
     now: &str,
     provider: Option<&str>,
@@ -272,6 +311,11 @@ async fn compute_candidate_preview_with_reasons(
         } else {
             summarize_component_advantages(comp.unwrap_or(&Value::Null))
         };
+        let diff = if idx == 0 {
+            structured_component_delta(comp.unwrap_or(&Value::Null), baseline)
+        } else {
+            Value::Null
+        };
         out.push(json!({
             "id": id,
             "provider": provider,
@@ -279,6 +323,7 @@ async fn compute_candidate_preview_with_reasons(
             "score": score,
             "trust_score_total": trust_score_total,
             "summary": summary,
+            "winner_vs_runner_up_diff": diff,
         }));
     }
     Ok(out)

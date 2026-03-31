@@ -319,4 +319,5 @@ pub struct ProxySelectionExplainResponse {
     pub selection_reason_summary: String,
     pub trust_score_components: serde_json::Value,
     pub candidate_rank_preview: Vec<serde_json::Value>,
+    pub winner_vs_runner_up_diff: Option<serde_json::Value>,
 }
