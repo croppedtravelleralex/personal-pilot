@@ -54,3 +54,10 @@
 1. 更真实的匿名性 / 地区校验链
 2. proxy 选择索引与策略正式化
 3. 更完整的能力总览与 API 文档对齐
+
+## 已明确但尚未落地的验证增强方向
+- 外部 probe endpoint 验证
+- 出口 country / region 回显
+- geo match 判定
+- 独立 `verify` 慢路径
+- verification score delta 回写

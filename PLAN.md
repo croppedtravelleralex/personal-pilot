@@ -156,3 +156,5 @@
   - proxy 健康模型新增 smoke 写回字段
 
 - 能力清单文档已补齐：后续做阶段总结、对外说明、API 对齐时可直接复用 `CAPABILITIES.md` 作为主索引。
+
+- 匿名性/地区校验链下一步设计已写入 `docs/proxy-verification-next.md`，建议后续按 `smoke -> verify -> score writeback` 三段式推进。
