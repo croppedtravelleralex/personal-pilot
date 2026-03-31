@@ -79,6 +79,7 @@
 - **2026年03月31日 19时54分00秒** 实现了**selection 主排序切换到 cached_trust_score 第一版**功能，让 auto selection 与候选预览开始优先按缓存 trust score 排序。
 - **2026年03月31日 20时01分00秒** 实现了**trust score 缓存增量刷新第一版**功能，支持按 provider 与 provider×region 范围批量刷新缓存。
 - **2026年03月31日 20时11分00秒** 实现了**trust score 缓存一致性校验接口第一版**功能，可直接比较 cached_trust_score 与实时重算值。
+- **2026年03月31日 20时21分00秒** 实现了**trust score 缓存修复接口第一版**功能，可对单个代理执行 cache repair 并返回修复结果。
 
 ---
 

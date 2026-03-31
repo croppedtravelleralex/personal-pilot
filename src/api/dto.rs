@@ -332,3 +332,15 @@ pub struct ProxyTrustCacheCheckResponse {
     pub in_sync: bool,
     pub cached_at: Option<String>,
 }
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyTrustCacheRepairResponse {
+    pub proxy_id: String,
+    pub cached_trust_score: Option<i64>,
+    pub recomputed_trust_score: Option<i64>,
+    pub delta: Option<i64>,
+    pub in_sync: bool,
+    pub repaired: bool,
+    pub cached_at: Option<String>,
+}

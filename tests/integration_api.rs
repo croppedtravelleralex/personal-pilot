@@ -2883,3 +2883,28 @@ async fn trust_cache_check_endpoint_reports_sync_status() {
     assert_eq!(json.get("delta").and_then(|v| v.as_i64()), Some(0));
     assert_eq!(json.get("in_sync").and_then(|v| v.as_bool()), Some(true));
 }
+
+
+#[tokio::test]
+async fn trust_cache_repair_endpoint_repairs_drifted_cache() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, cached_trust_score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, created_at, updated_at)
+                  VALUES ('proxy-cache-repair', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-repair', 'active', 0.8, 0, 5, 0, 'ok', 1, 1, '9999999999', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db).await.expect("refresh risk snapshots");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/proxy-cache-repair/trust-cache-repair").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json.get("proxy_id").and_then(|v| v.as_str()), Some("proxy-cache-repair"));
+    assert_eq!(json.get("repaired").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(json.get("in_sync").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(json.get("delta").and_then(|v| v.as_i64()), Some(0));
+    assert!(json.get("cached_trust_score").and_then(|v| v.as_i64()).unwrap_or(0) > 0);
+}
