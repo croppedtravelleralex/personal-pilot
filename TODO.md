@@ -2,6 +2,7 @@
 
 ## P0
 
+- [ ] 按 `AUTONOMY_PLAN.md` 持续执行：每轮 3–5 建议、默认执行前两项、周期性进入查 bug / 修 bug 环
 - [x] 建立项目核心文档（VISION / ROADMAP / STATUS / TODO / EXECUTION_LOG / RUN_STATE）
 - [x] 建立周期执行协议（EXECUTION_PROTOCOL）
 - [x] 建立自动执行内核基础文件（STATE_MACHINE / CHECKLIST / ROUND_RESULT template）

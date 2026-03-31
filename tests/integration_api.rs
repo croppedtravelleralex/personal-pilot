@@ -2606,6 +2606,10 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     let preview = policy.get("candidate_rank_preview").and_then(|v| v.as_array()).expect("candidate preview");
     assert!(!preview.is_empty());
     assert_eq!(preview[0].get("id").and_then(|v| v.as_str()), Some("proxy-explain-best"));
+    let preview_diff = preview[0].get("winner_vs_runner_up_diff").expect("preview diff");
+    let task_diff = task_json.get("winner_vs_runner_up_diff").expect("task diff");
+    assert_eq!(preview_diff.get("score_gap"), task_diff.get("score_gap"));
+    assert_eq!(preview_diff.get("winner_total_score"), task_diff.get("winner_total_score"));
     let summary = preview[0].get("summary").and_then(|v| v.as_str()).unwrap_or("");
     assert!(!summary.is_empty());
     assert!(summary.contains("wins on") || summary.contains("penalized by") || summary.contains("better on") || summary.contains("worse on"));
