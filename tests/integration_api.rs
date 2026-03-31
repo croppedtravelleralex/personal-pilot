@@ -2582,9 +2582,17 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).map(|v| v.len() <= 5).unwrap_or(false));
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|v| v.get("label")).and_then(|v| v.as_str()).map(|v| !v.is_empty()).unwrap_or(false));
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|v| v.get("direction")).and_then(|v| v.as_str()).map(|v| matches!(v, "winner" | "runner_up" | "neutral")).unwrap_or(false));
+    if let Some(diff) = task_json.get("winner_vs_runner_up_diff") {
+        let winner_total = diff.get("winner_total_score").and_then(|v| v.as_i64()).unwrap_or_default();
+        let runner_total = diff.get("runner_up_total_score").and_then(|v| v.as_i64()).unwrap_or_default();
+        let score_gap = diff.get("score_gap").and_then(|v| v.as_i64()).unwrap_or_default();
+        assert_eq!(winner_total - runner_total, score_gap);
+    }
     if let Some(factors) = task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()) {
         let deltas: Vec<i64> = factors.iter().filter_map(|v| v.get("delta").and_then(|v| v.as_i64()).map(|d| d.abs())).collect();
         assert!(deltas.windows(2).all(|w| w[0] >= w[1]));
+        let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk")));
     }
 
     let result_json_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#)
@@ -2733,9 +2741,17 @@ async fn proxy_explain_endpoint_returns_components_and_preview() {
     assert!(json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).map(|v| v.len() <= 5).unwrap_or(false));
     assert!(json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|v| v.get("label")).and_then(|v| v.as_str()).map(|v| !v.is_empty()).unwrap_or(false));
     assert!(json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|v| v.get("direction")).and_then(|v| v.as_str()).map(|v| matches!(v, "winner" | "runner_up" | "neutral")).unwrap_or(false));
+    if let Some(diff) = json.get("winner_vs_runner_up_diff") {
+        let winner_total = diff.get("winner_total_score").and_then(|v| v.as_i64()).unwrap_or_default();
+        let runner_total = diff.get("runner_up_total_score").and_then(|v| v.as_i64()).unwrap_or_default();
+        let score_gap = diff.get("score_gap").and_then(|v| v.as_i64()).unwrap_or_default();
+        assert_eq!(winner_total - runner_total, score_gap);
+    }
     if let Some(factors) = json.get("winner_vs_runner_up_diff").and_then(|v| v.get("factors")).and_then(|v| v.as_array()) {
         let deltas: Vec<i64> = factors.iter().filter_map(|v| v.get("delta").and_then(|v| v.as_i64()).map(|d| d.abs())).collect();
         assert!(deltas.windows(2).all(|w| w[0] >= w[1]));
+        let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk")));
     }
 }
 
