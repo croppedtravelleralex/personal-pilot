@@ -2,6 +2,7 @@
 
 ## P0
 
+- [x] 文档化执行引擎边界与 artifact 策略第一版
 - [ ] 按 `AUTONOMY_PLAN.md` 持续执行：每轮 3–5 建议、默认执行前两项、周期性进入查 bug / 修 bug 环
 - [x] 建立项目核心文档（VISION / ROADMAP / STATUS / TODO / EXECUTION_LOG / RUN_STATE）
 - [x] 建立周期执行协议（EXECUTION_PROTOCOL）

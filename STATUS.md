@@ -96,3 +96,11 @@
 - **找 bug：** 本轮最明显的问题不是代码主链缺失，而是**文档阶段错位**。`CURRENT_*` 和旧 `STATUS.md` 仍停留在早期原型视角，已经不能准确代表当前项目阶段；现已同步修正。
 - **性能评分：** 当前阶段 **8.6/10**。优点是执行链、代理验证链、策略层、批量巡检和测试覆盖都已成型；扣分点是 verify 慢路径仍偏轻、策略 explainability 仍弱、高并发写放大治理未正式落地。
 - **改进建议：** 下一步最值得做的不是继续堆新功能，而是优先完成 **trust score 再收敛 + verify 慢路径深化 + 写放大治理 + explainability 补齐**。
+
+## Autopilot Sync
+
+- 独立 autopilot 最近一次文档同步已完成。
+## 执行引擎 / Artifact 策略
+
+- 已新增 `EXECUTION_ENGINE_ARTIFACT_STRATEGY.md`，先以文档方式收敛执行引擎边界与 artifact 分层/保留策略。
+

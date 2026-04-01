@@ -34,6 +34,20 @@ pub struct RunnerTask {
 }
 
 #[derive(Debug, Clone)]
+pub struct RunnerSummaryArtifact {
+    pub category: SummaryArtifactCategory,
+    pub title: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SummaryArtifactCategory {
+    Result,
+    Debug,
+    Transient,
+    Summary,
+}
+
 pub struct RunnerExecutionResult {
     pub status: RunnerOutcomeStatus,
     pub result_json: Option<Value>,
