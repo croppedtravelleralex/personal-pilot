@@ -231,6 +231,12 @@ Host: verify.example:443
         risk_level.as_deref(),
         failure_stage.as_deref(),
     );
+    let recommended_action = recommend_verify_action(
+        verification_class.as_deref(),
+        risk_level.as_deref(),
+        failure_stage.as_deref(),
+        failure_stage_detail.as_deref(),
+    );
     let verify_source = Some("local_verify".to_string());
     let now = now_ts_string();
     sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, last_probe_latency_ms = ?, last_probe_error = ?, last_probe_error_category = ?, last_verify_confidence = ?, last_verify_score_delta = ?, last_verify_source = ?, score = MAX(0.0, score + (? / 100.0)), updated_at = ? WHERE id = ?"#)
@@ -284,6 +290,7 @@ Host: verify.example:443
         probe_error_category,
         verification_confidence,
         verification_class,
+        recommended_action,
         verification_score_delta,
         verify_source,
         status: status.to_string(),
@@ -293,6 +300,31 @@ Host: verify.example:443
 
 
 
+
+
+fn recommend_verify_action(
+    verification_class: Option<&str>,
+    risk_level: Option<&str>,
+    failure_stage: Option<&str>,
+    failure_stage_detail: Option<&str>,
+) -> Option<String> {
+    if verification_class == Some("trusted") {
+        return Some("use".to_string());
+    }
+    if verification_class == Some("conditional") {
+        return Some("use_with_caution".to_string());
+    }
+    if verification_class == Some("rejected") {
+        if matches!(failure_stage, Some("connect") | Some("protocol") | Some("identity")) {
+            return Some("retry_later".to_string());
+        }
+        if matches!(failure_stage_detail, Some("transparent_proxy") | Some("exit_ip_not_public")) || risk_level == Some("high") {
+            return Some("quarantine".to_string());
+        }
+        return Some("retry_later".to_string());
+    }
+    None
+}
 
 fn classify_verification_class(
     status: &str,

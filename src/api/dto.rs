@@ -326,6 +326,7 @@ pub struct ProxyVerifyResponse {
     pub probe_error_category: Option<String>,
     pub verification_confidence: Option<f64>,
     pub verification_class: Option<String>,
+    pub recommended_action: Option<String>,
     pub verification_score_delta: Option<i64>,
     pub verify_source: Option<String>,
     pub status: String,

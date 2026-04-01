@@ -64,6 +64,7 @@
 - **2026年04月01日 22时50分00秒** 实现了**verify 慢路径增强第三轮**功能，为代理验证结果增加可读的 `risk_level / risk_reasons` 诊断输出，让异常类型（如非公网出口、透明代理、地区不匹配、身份不完整）能直接在接口结果中读出来。
 - **2026年04月01日 23时00分00秒** 实现了**verify 慢路径增强第四轮**功能，为代理验证结果补上 `failure_stage / failure_stage_detail` 分层诊断，让失败可以区分为连接层、协议层、身份层或风险层问题。
 - **2026年04月01日 23时08分00秒** 实现了**verify 慢路径增强第五轮**功能，为代理验证结果增加 `verification_class` 分类标签，将结果归并为 `trusted / conditional / rejected`，便于策略层和人工判断快速消费。
+- **2026年04月01日 23时16分00秒** 实现了**verify 慢路径增强第六轮**功能，为代理验证结果增加 `recommended_action` 处置建议标签，可直接输出 `use / use_with_caution / retry_later / quarantine` 等动作建议。
 
 ---
 
@@ -79,4 +80,4 @@
 
 ## 当前阶段一句话总结
 
-**截至 2026年04月01日 23时08分00秒，项目已经完成“浏览器执行系统 V1 + 代理验证/巡检 V1 + trust cache 主链 + explainability 主链结构化收口 + 模块级测试锁死 + scoped trust refresh 收口 + trust cache SQL 模板抽取 + verify 慢路径增强五轮”的阶段性建设。**
+**截至 2026年04月01日 23时16分00秒，项目已经完成“浏览器执行系统 V1 + 代理验证/巡检 V1 + trust cache 主链 + explainability 主链结构化收口 + 模块级测试锁死 + scoped trust refresh 收口 + trust cache SQL 模板抽取 + verify 慢路径增强六轮”的阶段性建设。**

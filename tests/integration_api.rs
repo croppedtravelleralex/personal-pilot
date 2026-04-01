@@ -3597,3 +3597,69 @@ async fn verify_proxy_returns_verification_class_labels() {
     ).await;
     assert_eq!(bad_json.get("verification_class").and_then(|v| v.as_str()), Some("rejected"));
 }
+
+
+#[tokio::test]
+async fn verify_proxy_returns_recommended_action_labels() {
+    let listener_ok = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind ok listener");
+    let ok_addr = listener_ok.local_addr().expect("ok local addr");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener_ok.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\nip=8.8.8.8\ncountry=US\nregion=Virginia\n"),
+            ).await;
+        }
+    });
+
+    let listener_risky = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind risky listener");
+    let risky_addr = listener_risky.local_addr().expect("risky local addr");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener_risky.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established\r\nVia: 1.1 example\r\n\r\nip=8.8.8.8\ncountry=CA\nregion=Ontario\n"),
+            ).await;
+        }
+    });
+
+    let listener_bad = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind bad listener");
+    let bad_addr = listener_bad.local_addr().expect("bad local addr");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener_bad.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established\r\nX-Forwarded-For: 10.0.0.7\r\n\r\nip=10.0.0.7\ncountry=US\nregion=Virginia\n"),
+            ).await;
+        }
+    });
+
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+    for payload in [
+        serde_json::json!({"id":"proxy-action-ok","scheme":"http","host":ok_addr.ip().to_string(),"port":ok_addr.port(),"region":"Virginia","country":"US","provider":"smoke","score":0.5}),
+        serde_json::json!({"id":"proxy-action-risky","scheme":"http","host":risky_addr.ip().to_string(),"port":risky_addr.port(),"region":"Virginia","country":"US","provider":"smoke","score":0.5}),
+        serde_json::json!({"id":"proxy-action-bad","scheme":"http","host":bad_addr.ip().to_string(),"port":bad_addr.port(),"region":"Virginia","country":"US","provider":"smoke","score":0.5})
+    ] {
+        let (create_status, _) = json_response(
+            &app,
+            Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request"),
+        ).await;
+        assert_eq!(create_status, StatusCode::CREATED);
+    }
+
+    let (_, ok_json) = json_response(&app, Request::builder().method("POST").uri("/proxies/proxy-action-ok/verify").body(Body::empty()).expect("request")).await;
+    assert_eq!(ok_json.get("recommended_action").and_then(|v| v.as_str()), Some("use"));
+
+    let (_, risky_json) = json_response(&app, Request::builder().method("POST").uri("/proxies/proxy-action-risky/verify").body(Body::empty()).expect("request")).await;
+    assert_eq!(risky_json.get("recommended_action").and_then(|v| v.as_str()), Some("retry_later"));
+
+    let (_, bad_json) = json_response(&app, Request::builder().method("POST").uri("/proxies/proxy-action-bad/verify").body(Body::empty()).expect("request")).await;
+    assert_eq!(bad_json.get("recommended_action").and_then(|v| v.as_str()), Some("quarantine"));
+}
