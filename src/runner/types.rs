@@ -62,6 +62,7 @@ impl SummaryArtifactSeverity {
 
 #[derive(Debug, Clone, Copy)]
 pub enum SummaryArtifactCategory {
+    Execution,
     Result,
     Debug,
     Transient,
@@ -82,9 +83,9 @@ impl RunnerExecutionResult {
             result_json,
             error_message: None,
             summary_artifacts: vec![RunnerSummaryArtifact {
-                category: SummaryArtifactCategory::Summary,
+                category: SummaryArtifactCategory::Execution,
                 key: "runner.execution".to_string(),
-                source: "runner".to_string(),
+                source: "runner.core".to_string(),
                 severity: SummaryArtifactSeverity::Info,
                 title: "runner execution summary".to_string(),
                 summary: "runner finished successfully".to_string(),
@@ -99,9 +100,9 @@ impl RunnerExecutionResult {
             result_json: None,
             error_message: Some(msg.clone()),
             summary_artifacts: vec![RunnerSummaryArtifact {
-                category: SummaryArtifactCategory::Debug,
-                key: "runner.failure".to_string(),
-                source: "runner".to_string(),
+                category: SummaryArtifactCategory::Execution,
+                key: "runner.execution".to_string(),
+                source: "runner.core".to_string(),
                 severity: SummaryArtifactSeverity::Error,
                 title: "runner failure summary".to_string(),
                 summary: msg,

@@ -390,6 +390,29 @@ fn winner_vs_runner_up_diff(result_json: Option<&str>) -> Option<WinnerVsRunnerU
     serde_json::from_value(value).ok()
 }
 
+fn normalize_summary_category(category: &str) -> String {
+    match category {
+        "execution" | "summary" | "result" | "debug" | "transient" => category.to_string(),
+        _ => "summary".to_string(),
+    }
+}
+
+fn normalize_summary_source(source: Option<&str>) -> String {
+    match source.unwrap_or("runner.unknown") {
+        "proxy_selection" => "selection.proxy".to_string(),
+        "fake_runner" => "runner.fake".to_string(),
+        "lightpanda_runner" => "runner.lightpanda".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn normalize_summary_severity(severity: Option<&str>) -> String {
+    match severity.unwrap_or("info") {
+        "error" | "warning" | "info" => severity.unwrap_or("info").to_string(),
+        _ => "info".to_string(),
+    }
+}
+
 fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
     let diff = winner_vs_runner_up_diff(result_json)?;
     let factor_summary = diff
@@ -414,7 +437,7 @@ fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<Summ
     Some(SummaryArtifactResponse {
         category: "summary".to_string(),
         key: "proxy.selection.decision".to_string(),
-        source: "proxy_selection".to_string(),
+        source: "selection.proxy".to_string(),
         severity: "info".to_string(),
         title: "proxy selection decision".to_string(),
         summary,
@@ -436,10 +459,10 @@ fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> 
         .into_iter()
         .filter_map(|item| {
             Some(SummaryArtifactResponse {
-                category: item.get("category")?.as_str()?.to_string(),
+                category: normalize_summary_category(item.get("category")?.as_str()?),
                 key: item.get("key").and_then(|v| v.as_str()).unwrap_or_else(|| item.get("title").and_then(|v| v.as_str()).unwrap_or("summary.unknown")).to_string(),
-                source: item.get("source").and_then(|v| v.as_str()).unwrap_or("runner").to_string(),
-                severity: item.get("severity").and_then(|v| v.as_str()).unwrap_or("info").to_string(),
+                source: normalize_summary_source(item.get("source").and_then(|v| v.as_str())),
+                severity: normalize_summary_severity(item.get("severity").and_then(|v| v.as_str())),
                 title: item.get("title")?.as_str()?.to_string(),
                 summary: item.get("summary")?.as_str()?.to_string(),
                 task_id: None,

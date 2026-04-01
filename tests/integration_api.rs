@@ -2581,7 +2581,7 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     let selection_artifact = task_json.get("summary_artifacts").and_then(|v| v.as_array()).and_then(|items| items.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).expect("selection summary artifact");
     assert!(selection_artifact.get("summary").and_then(|v| v.as_str()).map(|s| s.contains("trust-score points") && s.contains("top factors")).unwrap_or(false));
     assert_eq!(selection_artifact.get("key").and_then(|v| v.as_str()), Some("proxy.selection.decision"));
-    assert_eq!(selection_artifact.get("source").and_then(|v| v.as_str()), Some("proxy_selection"));
+    assert_eq!(selection_artifact.get("source").and_then(|v| v.as_str()), Some("selection.proxy"));
     assert_eq!(selection_artifact.get("severity").and_then(|v| v.as_str()), Some("info"));
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("winner_total_score")).and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("runner_up_total_score")).and_then(|v| v.as_i64()).is_some());
@@ -2660,7 +2660,7 @@ async fn status_latest_execution_summaries_include_selection_decision_artifact()
     assert!(summary.contains("trust-score points"));
     assert!(summary.contains("top factors"));
     assert_eq!(selection.get("key").and_then(|v| v.as_str()), Some("proxy.selection.decision"));
-    assert_eq!(selection.get("source").and_then(|v| v.as_str()), Some("proxy_selection"));
+    assert_eq!(selection.get("source").and_then(|v| v.as_str()), Some("selection.proxy"));
     assert_eq!(selection.get("severity").and_then(|v| v.as_str()), Some("info"));
     assert_eq!(selection.get("task_id").and_then(|v| v.as_str()), Some(task_id.as_str()));
     assert_eq!(selection.get("task_kind").and_then(|v| v.as_str()), Some("open_page"));
@@ -3170,4 +3170,73 @@ async fn trust_cache_scan_supports_limit_and_only_drifted_filters() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json.get("total").and_then(|v| v.as_u64()), Some(1));
     assert_eq!(json.get("drifted").and_then(|v| v.as_u64()), Some(1));
+}
+
+
+#[tokio::test]
+async fn task_runs_expose_run_level_trace_metadata_and_standardized_artifacts() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-run-trace-best', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-run-trace', 'active', 0.74, 7, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1'),
+                  ('proxy-run-trace-second', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-run-trace', 'active', 0.68, 5, 2, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 0, 'US', 'Virginia', '9999999999', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxies");
+
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/run-trace",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-run-trace", "region": "us-east"}
+    });
+    let (_, create_json) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request")).await;
+    let task_id = create_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let task_json = wait_for_terminal_status(&app, &task_id).await;
+
+    let (status, runs_json) = json_response(
+        &app,
+        Request::builder().uri(format!("/tasks/{task_id}/runs")).body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    let runs = runs_json.as_array().expect("runs array");
+    assert!(!runs.is_empty());
+    let run = &runs[0];
+    let run_id = run.get("id").and_then(|v| v.as_str()).expect("run id");
+    let attempt = run.get("attempt").and_then(|v| v.as_i64()).expect("attempt");
+    let artifacts = run.get("summary_artifacts").and_then(|v| v.as_array()).expect("artifacts");
+    assert!(!artifacts.is_empty());
+    assert!(artifacts.iter().all(|item| item.get("run_id").and_then(|v| v.as_str()) == Some(run_id)));
+    assert!(artifacts.iter().all(|item| item.get("attempt").and_then(|v| v.as_i64()) == Some(attempt)));
+    assert!(artifacts.iter().all(|item| item.get("timestamp").and_then(|v| v.as_str()).map(|v| !v.is_empty()).unwrap_or(false)));
+    assert!(artifacts.iter().all(|item| item.get("source").and_then(|v| v.as_str()).map(|v| v.starts_with("runner.") || v.starts_with("selection.")).unwrap_or(false)));
+    assert!(artifacts.iter().all(|item| matches!(item.get("severity").and_then(|v| v.as_str()), Some("info") | Some("warning") | Some("error"))));
+    assert!(artifacts.iter().all(|item| matches!(item.get("category").and_then(|v| v.as_str()), Some("execution") | Some("summary") | Some("result") | Some("debug") | Some("transient"))));
+
+    let task_artifacts = task_json.get("summary_artifacts").and_then(|v| v.as_array()).expect("task artifacts");
+    let selection_artifact = task_artifacts.iter().find(|item| item.get("key").and_then(|v| v.as_str()) == Some("proxy.selection.decision")).expect("selection artifact");
+    assert_eq!(selection_artifact.get("source").and_then(|v| v.as_str()), Some("selection.proxy"));
+}
+
+#[tokio::test]
+async fn proxy_explain_endpoint_exposes_trace_metadata_fields() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, cached_trust_score, trust_score_cached_at, created_at, updated_at)
+                  VALUES ('proxy-explain-trace', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-trace', 'active', 0.77, 5, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', 57, '9999999999', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().uri("/proxies/proxy-explain-trace/explain").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json.get("explain_source").and_then(|v| v.as_str()), Some("proxy_trust_cache+candidate_preview"));
+    assert!(json.get("explain_generated_at").and_then(|v| v.as_str()).map(|v| !v.is_empty()).unwrap_or(false));
+    assert!(json.get("trust_score_cached_at").and_then(|v| v.as_str()).map(|v| !v.is_empty()).unwrap_or(false));
 }
