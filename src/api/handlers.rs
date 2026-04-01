@@ -390,9 +390,37 @@ fn winner_vs_runner_up_diff(result_json: Option<&str>) -> Option<WinnerVsRunnerU
     serde_json::from_value(value).ok()
 }
 
+fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
+    let diff = winner_vs_runner_up_diff(result_json)?;
+    let factor_summary = diff
+        .factors
+        .iter()
+        .take(2)
+        .map(|factor| format!("{}({:+})", factor.label, factor.delta))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let summary = if factor_summary.is_empty() {
+        format!(
+            "winner beat runner-up by {} trust-score points",
+            diff.score_gap
+        )
+    } else {
+        format!(
+            "winner beat runner-up by {} trust-score points; top factors: {}",
+            diff.score_gap,
+            factor_summary
+        )
+    };
+    Some(SummaryArtifactResponse {
+        category: "summary".to_string(),
+        title: "proxy selection decision".to_string(),
+        summary,
+    })
+}
+
 fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> {
     let parsed = result_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
-    parsed
+    let mut artifacts: Vec<SummaryArtifactResponse> = parsed
         .and_then(|value| value.get("summary_artifacts").cloned())
         .and_then(|value| value.as_array().cloned())
         .unwrap_or_default()
@@ -404,7 +432,16 @@ fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> 
                 summary: item.get("summary")?.as_str()?.to_string(),
             })
         })
-        .collect()
+        .collect();
+
+    let has_selection_decision = artifacts.iter().any(|item| item.title == "proxy selection decision");
+    if !has_selection_decision {
+        if let Some(artifact) = selection_decision_summary_artifact(result_json) {
+            artifacts.push(artifact);
+        }
+    }
+
+    artifacts
 }
 
 fn latest_execution_summaries(tasks: &[TaskResponse]) -> Vec<SummaryArtifactResponse> {

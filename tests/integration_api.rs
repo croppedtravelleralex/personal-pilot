@@ -2575,6 +2575,8 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     assert!(task_json.get("selection_reason_summary").and_then(|v| v.as_str()).unwrap_or("").contains("trust score"));
     assert!(task_json.get("trust_score_total").and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").is_some());
+    assert!(task_json.get("summary_artifacts").and_then(|v| v.as_array()).map(|items| items.iter().any(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).unwrap_or(false));
+    assert!(task_json.get("summary_artifacts").and_then(|v| v.as_array()).and_then(|items| items.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).and_then(|item| item.get("summary")).and_then(|v| v.as_str()).map(|s| s.contains("trust-score points") && s.contains("top factors")).unwrap_or(false));
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("winner_total_score")).and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("runner_up_total_score")).and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("score_gap")).and_then(|v| v.as_i64()).is_some());
@@ -2616,6 +2618,41 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     assert!(summary.contains("verify_ok") || summary.contains("geo_match") || summary.contains("upstream_ok") || summary.contains("raw_score") || summary.contains("provider_risk") || summary.contains("provider_region_risk") || summary.contains("history_risk") || summary.contains("stale_verify") || summary.contains("missing_verify"));
     assert!(!summary.contains("verify_ok_bonus"));
     assert!(!summary.contains("provider_region_cluster_penalty"));
+}
+
+#[tokio::test]
+async fn status_latest_execution_summaries_include_selection_decision_artifact() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES
+                  ('proxy-status-best', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-s', 'active', 0.74, 7, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', '1', '1'),
+                  ('proxy-status-second', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-s', 'active', 0.68, 5, 2, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 0, 'US', 'Virginia', '9999999999', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxies");
+
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/status-summary",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-s", "region": "us-east"}
+    });
+    let (_, create_json) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request")).await;
+    let task_id = create_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let _ = wait_for_terminal_status(&app, &task_id).await;
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().uri("/status").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    let latest = json.get("latest_execution_summaries").and_then(|v| v.as_array()).expect("latest_execution_summaries");
+    let selection = latest.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision")).expect("selection decision artifact");
+    let summary = selection.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(summary.contains("trust-score points"));
+    assert!(summary.contains("top factors"));
 }
 
 #[tokio::test]
