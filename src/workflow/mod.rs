@@ -54,6 +54,21 @@ pub struct WorkflowExecutionState {
     pub last_result_summary: String,
     pub next_action_hint: String,
     pub next_suggestions: Vec<WorkflowSuggestion>,
+    pub last_executed_actions: Vec<WorkflowActionRecord>,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkflowActionRecord {
+    pub title: String,
+    pub kind: WorkflowSuggestionKind,
+    pub status: String,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkflowDispatchResult {
+    pub executed: Vec<WorkflowActionRecord>,
 }
 
 impl WorkflowExecutionState {
@@ -71,6 +86,7 @@ impl WorkflowExecutionState {
             last_result_summary: "尚未开始自动循环".to_string(),
             next_action_hint: "先进入 plan 阶段，读取目标文档并生成建议".to_string(),
             next_suggestions: default_suggestions_for_stage(WorkflowStage::Plan),
+            last_executed_actions: Vec::new(),
         }
     }
 
@@ -193,6 +209,7 @@ impl WorkflowExecutionState {
             last_result_summary: value.get("lastVerificationResult").and_then(|v| v.as_str()).unwrap_or("从旧 RUN_STATE.json 迁移").to_string(),
             next_action_hint: value.get("lastSchedulerDecision").and_then(|v| v.as_str()).unwrap_or("下一步进入计划阶段").to_string(),
             next_suggestions,
+            last_executed_actions: Vec::new(),
         })
     }
 }
@@ -296,6 +313,23 @@ pub fn refresh_dynamic_suggestions(
     Ok(())
 }
 
+pub fn dispatch_top_suggestions(state: &mut WorkflowExecutionState, max_actions: usize) -> WorkflowDispatchResult {
+    let executed = state
+        .next_suggestions
+        .iter()
+        .take(max_actions)
+        .map(|suggestion| WorkflowActionRecord {
+            title: suggestion.title.clone(),
+            kind: suggestion.kind,
+            status: "simulated_done".to_string(),
+            note: format!("已按最小动作分发器记录执行：{}", suggestion.rationale),
+        })
+        .collect::<Vec<_>>();
+    state.last_executed_actions = executed.clone();
+    WorkflowDispatchResult { executed }
+}
+
+
 pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
     match state.stage {
         WorkflowStage::Plan => {
@@ -306,9 +340,10 @@ pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
             state.advance_after_success();
         }
         WorkflowStage::Execute => {
+            let dispatch = dispatch_top_suggestions(state, 2);
             state.current_focus = "执行建议前两项".to_string();
             state.current_objective = "完成当前最优先的两个动作并补最小必要验证".to_string();
-            state.last_result_summary = "已完成 execute 阶段，进入 verify 检查结果稳定性".to_string();
+            state.last_result_summary = format!("已完成 execute 阶段，已分发 {} 个动作，进入 verify 检查结果稳定性", dispatch.executed.len());
             state.next_action_hint = "进入 verify，优先跑定向测试和一致性检查".to_string();
             state.advance_after_success();
         }
@@ -540,9 +575,19 @@ mod tests {
         assert_eq!(state.stage, WorkflowStage::Execute);
         run_minimal_cycle_step(&mut state);
         assert_eq!(state.stage, WorkflowStage::Verify);
+        assert_eq!(state.last_executed_actions.len(), 2);
         run_minimal_cycle_step(&mut state);
         assert_eq!(state.stage, WorkflowStage::BugScan);
         assert!(state.last_result_summary.contains("verify"));
+    }
+
+    #[test]
+    fn dispatch_top_suggestions_executes_first_two_items() {
+        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let result = dispatch_top_suggestions(&mut state, 2);
+        assert_eq!(result.executed.len(), 2);
+        assert_eq!(state.last_executed_actions.len(), 2);
+        assert!(state.last_executed_actions.iter().all(|a| a.status == "simulated_done"));
     }
 
     #[test]
