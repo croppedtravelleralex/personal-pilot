@@ -172,12 +172,42 @@ pub async fn refresh_provider_region_risk_snapshot_for_pair(pool: &DbPool, provi
 }
 
 
+async fn provider_risk_hit_for_provider(pool: &DbPool, provider: Option<&str>) -> Result<Option<i64>> {
+    let Some(provider) = provider else { return Ok(None); };
+    let hit = sqlx::query_scalar::<_, i64>("SELECT risk_hit FROM provider_risk_snapshots WHERE provider = ?")
+        .bind(provider)
+        .fetch_optional(pool)
+        .await?;
+    Ok(hit)
+}
+
+async fn provider_region_risk_hit_for_pair(pool: &DbPool, provider: Option<&str>, region: Option<&str>) -> Result<Option<i64>> {
+    let (Some(provider), Some(region)) = (provider, region) else { return Ok(None); };
+    let hit = sqlx::query_scalar::<_, i64>("SELECT risk_hit FROM provider_region_risk_snapshots WHERE provider = ? AND region = ?")
+        .bind(provider)
+        .bind(region)
+        .fetch_optional(pool)
+        .await?;
+    Ok(hit)
+}
+
+
 pub async fn refresh_proxy_trust_views_for_scope(pool: &DbPool, proxy_id: &str, provider: Option<&str>, region: Option<&str>) -> Result<()> {
+    let provider_risk_before = provider_risk_hit_for_provider(pool, provider).await?;
+    let provider_region_risk_before = provider_region_risk_hit_for_pair(pool, provider, region).await?;
+
     refresh_provider_risk_snapshot_for_provider(pool, provider).await?;
     refresh_provider_region_risk_snapshot_for_pair(pool, provider, region).await?;
 
-    if provider.is_some() {
+    let provider_risk_after = provider_risk_hit_for_provider(pool, provider).await?;
+    let provider_region_risk_after = provider_region_risk_hit_for_pair(pool, provider, region).await?;
+
+    if provider.is_none() {
+        refresh_cached_trust_score_for_proxy(pool, proxy_id).await?;
+    } else if provider_risk_before != provider_risk_after {
         refresh_cached_trust_scores_for_provider(pool, provider).await?;
+    } else if provider_region_risk_before != provider_region_risk_after {
+        refresh_cached_trust_scores_for_provider_region(pool, provider, region).await?;
     } else {
         refresh_cached_trust_score_for_proxy(pool, proxy_id).await?;
     }
@@ -291,6 +321,43 @@ mod scoped_refresh_tests {
 
     fn unique_db_url() -> String {
         format!("sqlite:///tmp/auto_open_browser-db-init-test-{}.db", uuid::Uuid::new_v4())
+    }
+
+
+    #[tokio::test]
+    async fn scoped_trust_refresh_helper_limits_cache_refresh_when_risk_flags_do_not_change() {
+        let db_url = unique_db_url();
+        let db = init_db(&db_url).await.expect("init db");
+
+        sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, created_at, updated_at)
+                      VALUES
+                      ('proxy-risk-same-1', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-same', 'active', 0.2, 0, 0, NULL, 0, 0, NULL, '1', '1'),
+                      ('proxy-risk-same-2', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-west', 'US', 'pool-same', 'active', 0.9, 5, 0, 'ok', 1, 1, '9999999999', '1', '1')"#)
+            .execute(&db)
+            .await
+            .expect("insert proxies");
+
+        refresh_provider_risk_snapshots(&db).await.expect("refresh risk snapshots");
+        refresh_cached_trust_scores(&db).await.expect("refresh all trust cache");
+        let before_other: Option<String> = sqlx::query_scalar("SELECT trust_score_cached_at FROM proxies WHERE id = 'proxy-risk-same-2'")
+            .fetch_one(&db)
+            .await
+            .expect("before ts");
+
+        sqlx::query("UPDATE proxies SET score = 0.25, updated_at = '2' WHERE id = 'proxy-risk-same-1'")
+            .execute(&db)
+            .await
+            .expect("update current proxy only");
+
+        refresh_proxy_trust_views_for_scope(&db, "proxy-risk-same-1", Some("pool-same"), Some("us-east"))
+            .await
+            .expect("scoped refresh without risk flip");
+
+        let after_other: Option<String> = sqlx::query_scalar("SELECT trust_score_cached_at FROM proxies WHERE id = 'proxy-risk-same-2'")
+            .fetch_one(&db)
+            .await
+            .expect("after ts");
+        assert_eq!(after_other, before_other);
     }
 
     #[tokio::test]
