@@ -875,17 +875,32 @@ where
                     status: if result.status == "ok" { RunnerOutcomeStatus::Succeeded } else { RunnerOutcomeStatus::Failed },
                     result_json: Some(serde_json::to_value(&result).unwrap_or_else(|_| json!({"proxy_id": proxy_id, "status": result.status}))),
                     error_message: (result.status != "ok").then_some(result.message.clone()),
+                    summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
+                        category: crate::runner::types::SummaryArtifactCategory::Summary,
+                        title: "verify_proxy summary".to_string(),
+                        summary: format!("proxy {} => {}", proxy_id, result.status),
+                    }],
                 },
                 Err((_status, message)) => RunnerExecutionResult {
                     status: RunnerOutcomeStatus::Failed,
-                    result_json: Some(json!({"proxy_id": proxy_id, "status": "failed", "message": message})),
-                    error_message: Some(message),
+                    result_json: Some(json!({"proxy_id": proxy_id, "status": "failed", "message": message.clone()})),
+                    error_message: Some(message.clone()),
+                    summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
+                        category: crate::runner::types::SummaryArtifactCategory::Debug,
+                        title: "verify_proxy failure summary".to_string(),
+                        summary: message,
+                    }],
                 },
             },
             None => RunnerExecutionResult {
                 status: RunnerOutcomeStatus::Failed,
                 result_json: Some(json!({"status": "failed", "message": "verify_proxy task requires proxy_id"})),
                 error_message: Some("verify_proxy task requires proxy_id".to_string()),
+                summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
+                    category: crate::runner::types::SummaryArtifactCategory::Debug,
+                    title: "verify_proxy invalid input".to_string(),
+                    summary: "verify_proxy task requires proxy_id".to_string(),
+                }],
             },
         }
     } else {

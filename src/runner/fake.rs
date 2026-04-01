@@ -78,7 +78,12 @@ fn build_result(
     RunnerExecutionResult {
         status: outcome,
         result_json: Some(result_payload(ok, status, error_kind, task, &message)),
-        error_message: is_error.then_some(message),
+        error_message: is_error.then_some(message.clone()),
+        summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
+            category: if is_error { crate::runner::types::SummaryArtifactCategory::Debug } else { crate::runner::types::SummaryArtifactCategory::Summary },
+            title: "fake runner summary".to_string(),
+            summary: message,
+        }],
     }
 }
 

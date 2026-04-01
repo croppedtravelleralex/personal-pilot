@@ -52,6 +52,36 @@ pub struct RunnerExecutionResult {
     pub status: RunnerOutcomeStatus,
     pub result_json: Option<Value>,
     pub error_message: Option<String>,
+    pub summary_artifacts: Vec<RunnerSummaryArtifact>,
+}
+
+impl RunnerExecutionResult {
+    pub fn success(result_json: Option<Value>) -> Self {
+        Self {
+            status: RunnerOutcomeStatus::Succeeded,
+            result_json,
+            error_message: None,
+            summary_artifacts: vec![RunnerSummaryArtifact {
+                category: SummaryArtifactCategory::Summary,
+                title: "runner execution summary".to_string(),
+                summary: "runner finished successfully".to_string(),
+            }],
+        }
+    }
+
+    pub fn failure(message: impl Into<String>) -> Self {
+        let msg = message.into();
+        Self {
+            status: RunnerOutcomeStatus::Failed,
+            result_json: None,
+            error_message: Some(msg.clone()),
+            summary_artifacts: vec![RunnerSummaryArtifact {
+                category: SummaryArtifactCategory::Debug,
+                title: "runner failure summary".to_string(),
+                summary: msg,
+            }],
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
