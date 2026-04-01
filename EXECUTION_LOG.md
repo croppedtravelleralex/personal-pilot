@@ -217,3 +217,26 @@
 - 这轮没有继续碰测试侧大量 `.get()` 断言；普查结论是测试层 JSON 访问仍很多，但它们属于验证层残留，不是当前生产主链的主要风险。
 - 验证结果：针对 `verify_batch_enqueues_verify_proxy_tasks` 与 `computed_trust_score_components_returns_typed_breakdown` 的单独复测通过，随后全量 `cargo test` 也保持全绿（39 unit + 75 integration）。
 
+
+## Workflow Action Dispatch
+
+- 读取目标文档并重新排序下一阶段事项 [doc_sync]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：先对齐 VISION/CURRENT_DIRECTION/TODO，避免跑偏
+- 生成 3–5 个下一阶段建议 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：为执行前两个动作提供稳定输入
+
+## Workflow Action Dispatch
+
+- 执行建议第 1 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：默认推进当前最优先事项
+- 执行建议第 2 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：保持双任务推进节奏
+
+## Workflow Action Dispatch
+
+- 执行建议第 1 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：默认推进当前最优先事项
+- 执行建议第 2 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：保持双任务推进节奏
+
+## 2026-04-01 scoped trust refresh consolidation pass
+
+- 收口 verify / runner 执行后的 trust-view 回写路径，新增 `refresh_proxy_trust_views_for_scope(pool, proxy_id, provider, region)` 统一处理 scoped risk snapshot 与 cached trust refresh。
+- 将原本 verify / execution 后的 **5 连刷新**（provider risk + provider-region risk + provider cache + provider-region cache + proxy cache）压缩为更窄的 **3 连语义**：provider risk、provider-region risk、provider cache（provider 缺失时回退单 proxy cache）。
+- 保持 trust score 公式与选择语义不变，只减少重复写与重复范围刷新。
+- 验证结果：关键链路测试（verify task / verify score delta / verify metrics）通过，随后全量 `cargo test` 全绿（39 unit + 75 integration）。
+

@@ -9,7 +9,7 @@ use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, 
 use crate::{
     api::dto::{CandidateRankPreviewItem, TrustScoreComponents},
     app::state::AppState,
-    db::init::{refresh_cached_trust_score_for_proxy, refresh_cached_trust_scores_for_provider, refresh_cached_trust_scores_for_provider_region, refresh_provider_risk_snapshot_for_provider, refresh_provider_region_risk_snapshot_for_pair},
+    db::init::refresh_proxy_trust_views_for_scope,
     domain::{
         run::{RUN_STATUS_RUNNING, RUN_STATUS_SUCCEEDED, RUN_STATUS_FAILED, RUN_STATUS_TIMED_OUT},
         task::{
@@ -663,11 +663,7 @@ async fn update_proxy_health_after_execution(state: &AppState, proxy: Option<&Ru
         .bind(match execution_status { RunnerOutcomeStatus::Succeeded => 0.01_f64, RunnerOutcomeStatus::Failed => -0.02_f64, RunnerOutcomeStatus::TimedOut => -0.03_f64 })
         .bind(&now).bind(&proxy.id)
         .execute(&state.db).await?;
-    refresh_provider_risk_snapshot_for_provider(&state.db, proxy.provider.as_deref()).await?;
-    refresh_provider_region_risk_snapshot_for_pair(&state.db, proxy.provider.as_deref(), proxy.region.as_deref()).await?;
-    refresh_cached_trust_scores_for_provider(&state.db, proxy.provider.as_deref()).await?;
-    refresh_cached_trust_scores_for_provider_region(&state.db, proxy.provider.as_deref(), proxy.region.as_deref()).await?;
-    refresh_cached_trust_score_for_proxy(&state.db, &proxy.id).await?;
+    refresh_proxy_trust_views_for_scope(&state.db, &proxy.id, proxy.provider.as_deref(), proxy.region.as_deref()).await?;
     Ok(())
 }
 

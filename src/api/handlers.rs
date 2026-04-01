@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     network_identity::validator::validate_fingerprint_profile,
-    db::init::{refresh_cached_trust_score_for_proxy, refresh_cached_trust_scores_for_provider, refresh_cached_trust_scores_for_provider_region, refresh_provider_risk_snapshot_for_provider, refresh_provider_region_risk_snapshot_for_pair},
+    db::init::{refresh_cached_trust_score_for_proxy, refresh_proxy_trust_views_for_scope},
     app::state::AppState,
     domain::{
         run::{RUN_STATUS_CANCELLED, RUN_STATUS_RUNNING},
@@ -219,21 +219,9 @@ Host: verify.example:443
         .fetch_one(&state.db)
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy provider/region after verify: {err}")))?;
-    refresh_provider_risk_snapshot_for_provider(&state.db, provider_region.0.as_deref())
+    refresh_proxy_trust_views_for_scope(&state.db, proxy_id, provider_region.0.as_deref(), provider_region.1.as_deref())
         .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh provider risk snapshot: {err}")))?;
-    refresh_provider_region_risk_snapshot_for_pair(&state.db, provider_region.0.as_deref(), provider_region.1.as_deref())
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh provider region risk snapshot: {err}")))?;
-    refresh_cached_trust_scores_for_provider(&state.db, provider_region.0.as_deref())
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh cached trust scores for provider: {err}")))?;
-    refresh_cached_trust_scores_for_provider_region(&state.db, provider_region.0.as_deref(), provider_region.1.as_deref())
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh cached trust scores for provider region: {err}")))?;
-    refresh_cached_trust_score_for_proxy(&state.db, proxy_id)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh cached trust score: {err}")))?;
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh scoped trust views after verify: {err}")))?;
 
     Ok(ProxyVerifyResponse {
         id: proxy_id.to_string(),

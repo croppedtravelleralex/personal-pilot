@@ -172,6 +172,20 @@ pub async fn refresh_provider_region_risk_snapshot_for_pair(pool: &DbPool, provi
 }
 
 
+pub async fn refresh_proxy_trust_views_for_scope(pool: &DbPool, proxy_id: &str, provider: Option<&str>, region: Option<&str>) -> Result<()> {
+    refresh_provider_risk_snapshot_for_provider(pool, provider).await?;
+    refresh_provider_region_risk_snapshot_for_pair(pool, provider, region).await?;
+
+    if provider.is_some() {
+        refresh_cached_trust_scores_for_provider(pool, provider).await?;
+    } else {
+        refresh_cached_trust_score_for_proxy(pool, proxy_id).await?;
+    }
+
+    Ok(())
+}
+
+
 pub async fn refresh_cached_trust_scores(pool: &DbPool) -> Result<()> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
