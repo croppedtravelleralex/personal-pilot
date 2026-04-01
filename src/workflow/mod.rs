@@ -55,6 +55,8 @@ pub struct WorkflowExecutionState {
     pub next_action_hint: String,
     pub next_suggestions: Vec<WorkflowSuggestion>,
     pub last_executed_actions: Vec<WorkflowActionRecord>,
+    pub blocked_reason: String,
+    pub cooldown_seconds: u64,
 }
 
 
@@ -87,18 +89,23 @@ impl WorkflowExecutionState {
             next_action_hint: "先进入 plan 阶段，读取目标文档并生成建议".to_string(),
             next_suggestions: default_suggestions_for_stage(WorkflowStage::Plan),
             last_executed_actions: Vec::new(),
+            blocked_reason: String::new(),
+            cooldown_seconds: 30,
         }
     }
 
     pub fn should_enter_bug_cycle(&self) -> bool {
-        self.completed_since_bug_cycle >= self.bug_cycle_interval || self.consecutive_failures > 0
+        self.should_run_bug_scan_now()
     }
 
     pub fn advance_after_success(&mut self) {
         self.loop_iteration += 1;
         self.consecutive_failures = 0;
+        self.blocked_reason.clear();
         self.completed_since_bug_cycle += 1;
-        self.stage = if self.should_enter_bug_cycle() {
+        self.stage = if self.should_enter_blocked() {
+            WorkflowStage::Blocked
+        } else if self.should_enter_bug_cycle() {
             WorkflowStage::BugScan
         } else {
             match self.stage {
@@ -122,7 +129,26 @@ impl WorkflowExecutionState {
     pub fn mark_failure(&mut self, summary: impl Into<String>) {
         self.consecutive_failures += 1;
         self.last_result_summary = summary.into();
-        self.stage = WorkflowStage::BugScan;
+        if self.should_enter_blocked() {
+            self.mark_blocked("连续失败次数过高，进入 blocked 等待恢复");
+        } else {
+            self.stage = WorkflowStage::BugScan;
+            self.next_suggestions = default_suggestions_for_stage(self.stage);
+        }
+    }
+
+    pub fn should_enter_blocked(&self) -> bool {
+        self.consecutive_failures >= 3
+    }
+
+    pub fn should_run_bug_scan_now(&self) -> bool {
+        self.completed_since_bug_cycle >= self.bug_cycle_interval || self.consecutive_failures > 0
+    }
+
+    pub fn mark_blocked(&mut self, reason: impl Into<String>) {
+        self.blocked_reason = reason.into();
+        self.stage = WorkflowStage::Blocked;
+        self.next_action_hint = "先解除阻塞，再恢复到 plan".to_string();
         self.next_suggestions = default_suggestions_for_stage(self.stage);
     }
 
@@ -210,6 +236,8 @@ impl WorkflowExecutionState {
             next_action_hint: value.get("lastSchedulerDecision").and_then(|v| v.as_str()).unwrap_or("下一步进入计划阶段").to_string(),
             next_suggestions,
             last_executed_actions: Vec::new(),
+            blocked_reason: String::new(),
+            cooldown_seconds: 30,
         })
     }
 }
@@ -357,7 +385,7 @@ pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
         WorkflowStage::BugScan => {
             state.current_focus = "进入 bug 环并锁定问题".to_string();
             state.current_objective = "优先定位最值得修复的问题".to_string();
-            state.last_result_summary = "已完成 bug_scan，进入 bug_fix".to_string();
+            state.last_result_summary = "已完成 bug_scan，已定位问题，进入 bug_fix".to_string();
             state.next_action_hint = "进入 bug_fix，最小修复并补测试".to_string();
             state.advance_after_success();
         }
@@ -384,14 +412,14 @@ pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
         }
         WorkflowStage::Cooldown => {
             state.current_focus = "冷却并准备下一轮".to_string();
-            state.current_objective = "结束当前小循环，回到 plan".to_string();
-            state.last_result_summary = "已完成 cooldown，下一轮重新进入 plan".to_string();
+            state.current_objective = format!("冷却 {} 秒后结束当前小循环，回到 plan", state.cooldown_seconds);
+            state.last_result_summary = format!("已完成 cooldown（{} 秒），下一轮重新进入 plan", state.cooldown_seconds);
             state.next_action_hint = "重新读取文档并生成新建议".to_string();
             state.advance_after_success();
         }
         WorkflowStage::Blocked => {
             state.current_focus = "解除阻塞".to_string();
-            state.current_objective = "先识别阻塞，再回到 plan".to_string();
+            state.current_objective = if state.blocked_reason.is_empty() { "先识别阻塞，再回到 plan".to_string() } else { format!("先处理阻塞原因：{}", state.blocked_reason) };
             state.last_result_summary = "blocked 已切回 plan，等待恢复推进".to_string();
             state.next_action_hint = "回到 plan 重新评估".to_string();
             state.advance_after_success();
@@ -526,6 +554,16 @@ mod tests {
     }
 
     #[test]
+    fn workflow_state_enters_blocked_after_too_many_failures() {
+        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        state.mark_failure("fail-1");
+        state.mark_failure("fail-2");
+        state.mark_failure("fail-3");
+        assert_eq!(state.stage, WorkflowStage::Blocked);
+        assert!(state.blocked_reason.contains("连续失败次数过高"));
+    }
+
+    #[test]
     fn workflow_state_can_migrate_legacy_run_state() {
         let legacy = r#"{
           "project": "AutoOpenBrowser",
@@ -579,6 +617,15 @@ mod tests {
         run_minimal_cycle_step(&mut state);
         assert_eq!(state.stage, WorkflowStage::BugScan);
         assert!(state.last_result_summary.contains("verify"));
+    }
+
+    #[test]
+    fn cooldown_stage_uses_configured_delay_in_summary() {
+        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        state.stage = WorkflowStage::Cooldown;
+        state.cooldown_seconds = 45;
+        run_minimal_cycle_step(&mut state);
+        assert!(state.last_result_summary.contains("45 秒"));
     }
 
     #[test]
