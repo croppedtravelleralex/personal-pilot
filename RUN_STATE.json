@@ -1,45 +1,27 @@
 {
   "project": "AutoOpenBrowser",
   "loop_enabled": true,
-  "loop_iteration": 79,
-  "stage": "verify",
+  "loop_iteration": 81,
+  "stage": "bug_scan",
   "bug_cycle_interval": 3,
-  "completed_since_bug_cycle": 1,
+  "completed_since_bug_cycle": 3,
   "consecutive_failures": 0,
-  "current_focus": "执行建议前两项",
-  "current_objective": "完成当前最优先的两个动作并补最小必要验证",
-  "last_result_summary": "已完成 execute 阶段，进入 verify 检查结果稳定性",
-  "next_action_hint": "进入 verify，优先跑定向测试和一致性检查",
+  "current_focus": "同步文档与当前阶段状态",
+  "current_objective": "更新 TODO/STATUS/PROGRESS 与执行日志",
+  "last_result_summary": "已完成 doc_sync，进入 cooldown",
+  "next_action_hint": "进入 cooldown，短暂冷却后回到 plan",
   "next_suggestions": [
     {
-      "title": "继续推进 trust score 核心化",
+      "title": "查找 bug",
       "priority": 1,
-      "rationale": "CURRENT_DIRECTION 明确要求继续把 proxy selection 收敛到 trust score 核心表达",
-      "kind": "feature"
+      "rationale": "bug 环固定第一项为查找问题",
+      "kind": "bug_scan"
     },
     {
-      "title": "推进 verify / smoke / batch verify 质量闭环",
+      "title": "修复 bug",
       "priority": 2,
-      "rationale": "当前方向要求把 verify 信号统一成更稳定的质量闭环",
-      "kind": "feature"
-    },
-    {
-      "title": "治理高并发写放大与状态竞争",
-      "priority": 3,
-      "rationale": "TODO 与 CURRENT_DIRECTION 都把写放大控制列为当前重点",
-      "kind": "performance"
-    },
-    {
-      "title": "继续同步 CURRENT_*/TODO/STATUS 口径",
-      "priority": 4,
-      "rationale": "当前阶段强调文档、策略、代码主链要保持同一口径",
-      "kind": "doc_sync"
-    },
-    {
-      "title": "补执行引擎边界与 artifact 策略",
-      "priority": 5,
-      "rationale": "VISION 强调可替换执行引擎与长期运行下的结果管理能力",
-      "kind": "refactor"
+      "rationale": "bug 环固定第二项为修复问题",
+      "kind": "bug_fix"
     }
   ]
 }

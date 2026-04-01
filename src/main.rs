@@ -1,8 +1,8 @@
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use axum::serve;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, time::sleep};
 
 use AutoOpenBrowser::{
     network_identity::proxy_selection::proxy_selection_tuning_from_env,
@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
     if let Some(cmd) = args.get(1).map(|s| s.as_str()) {
         match cmd {
             "workflow" => {
-                return handle_workflow_cli(&args[2..]);
+                return handle_workflow_cli(&args[2..]).await;
             }
             "--help" | "-h" | "help" => {
                 print_help();
@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn handle_workflow_cli(args: &[String]) -> Result<()> {
+async fn handle_workflow_cli(args: &[String]) -> Result<()> {
     match args.first().map(|s| s.as_str()) {
         Some("tick") => {
             let state = tick_workflow_file(DEFAULT_WORKFLOW_STATE_PATH, "AutoOpenBrowser")?;
@@ -85,6 +85,9 @@ fn handle_workflow_cli(args: &[String]) -> Result<()> {
             let steps = args.get(1).and_then(|v| v.parse::<usize>().ok()).unwrap_or(1);
             let state = run_minimal_cycle_steps(DEFAULT_WORKFLOW_STATE_PATH, "AutoOpenBrowser", steps)?;
             println!("workflow run-steps ok: steps={}, stage={:?}, iteration={}", steps, state.stage, state.loop_iteration);
+        }
+        Some("daemon") => {
+            run_workflow_daemon(&args[1..]).await?;
         }
         Some("show") => {
             let state = WorkflowExecutionState::ensure_default_state_file(DEFAULT_WORKFLOW_STATE_PATH, "AutoOpenBrowser")?;
@@ -103,4 +106,50 @@ fn print_help() {
     println!("  AutoOpenBrowser workflow show   Show workflow state");
     println!("  AutoOpenBrowser workflow tick   Execute one workflow tick and persist RUN_STATE.json");
     println!("  AutoOpenBrowser workflow run-steps <n>   Execute n workflow steps and persist RUN_STATE.json");
+    println!("  AutoOpenBrowser workflow daemon [--interval-seconds N] [--ticks M]   Run periodic workflow ticks");
+}
+
+async fn run_workflow_daemon(args: &[String]) -> Result<()> {
+    let mut interval_seconds: u64 = 300;
+    let mut max_ticks: usize = 0;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--interval-seconds" => {
+                let value = args.get(i + 1).ok_or_else(|| anyhow::anyhow!("missing value for --interval-seconds"))?;
+                interval_seconds = value.parse::<u64>()?;
+                i += 2;
+            }
+            "--ticks" => {
+                let value = args.get(i + 1).ok_or_else(|| anyhow::anyhow!("missing value for --ticks"))?;
+                max_ticks = value.parse::<usize>()?;
+                i += 2;
+            }
+            other => bail!("unknown workflow daemon arg: {}", other),
+        }
+    }
+
+    if interval_seconds == 0 {
+        bail!("--interval-seconds must be > 0");
+    }
+
+    println!("workflow daemon start: interval={}s, ticks={}", interval_seconds, max_ticks);
+    let mut executed = 0usize;
+    loop {
+        let state = tick_workflow_file(DEFAULT_WORKFLOW_STATE_PATH, "AutoOpenBrowser")?;
+        executed += 1;
+        println!(
+            "workflow daemon tick {} ok: stage={:?}, iteration={}, focus={}",
+            executed,
+            state.stage,
+            state.loop_iteration,
+            state.current_focus
+        );
+        if max_ticks > 0 && executed >= max_ticks {
+            println!("workflow daemon completed requested ticks");
+            break;
+        }
+        sleep(Duration::from_secs(interval_seconds)).await;
+    }
+    Ok(())
 }
