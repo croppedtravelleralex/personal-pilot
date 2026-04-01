@@ -126,11 +126,19 @@ pub struct WinnerVsRunnerUpDiff {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SummaryArtifactResponse {
+    pub category: String,
+    pub title: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskResponse {
     pub id: String,
     pub kind: String,
     pub status: String,
     pub priority: i32,
+    pub summary_artifacts: Vec<SummaryArtifactResponse>,
     pub fingerprint_profile_id: Option<String>,
     pub fingerprint_profile_version: Option<i64>,
     pub fingerprint_resolution_status: Option<String>,
@@ -153,6 +161,7 @@ pub struct RunResponse {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub error_message: Option<String>,
+    pub summary_artifacts: Vec<SummaryArtifactResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

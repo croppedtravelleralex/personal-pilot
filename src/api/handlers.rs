@@ -23,7 +23,7 @@ use crate::{
 use super::dto::{
     CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
     FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse, WinnerVsRunnerUpDiff,
+    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse, WinnerVsRunnerUpDiff, SummaryArtifactResponse,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
 };
 
@@ -390,6 +390,23 @@ fn winner_vs_runner_up_diff(result_json: Option<&str>) -> Option<WinnerVsRunnerU
     serde_json::from_value(value).ok()
 }
 
+fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> {
+    let parsed = result_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
+    parsed
+        .and_then(|value| value.get("summary_artifacts").cloned())
+        .and_then(|value| value.as_array().cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| {
+            Some(SummaryArtifactResponse {
+                category: item.get("category")?.as_str()?.to_string(),
+                title: item.get("title")?.as_str()?.to_string(),
+                summary: item.get("summary")?.as_str()?.to_string(),
+            })
+        })
+        .collect()
+}
+
 fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {
     let mut metrics = ProxyMetricsResponse { direct: 0, resolved: 0, resolved_sticky: 0, unresolved: 0, none: 0 };
     for task in tasks {
@@ -616,6 +633,7 @@ pub async fn status(
                 kind,
                 status,
                 priority,
+                summary_artifacts: summary_artifacts(result_json.as_deref()),
                 fingerprint_profile_id,
                 fingerprint_profile_version,
             }
@@ -1008,6 +1026,7 @@ pub async fn create_task(
             kind: payload.kind,
             status: TASK_STATUS_QUEUED.to_string(),
             priority,
+            summary_artifacts: Vec::new(),
             fingerprint_profile_id: payload.fingerprint_profile_id,
             fingerprint_profile_version: profile_version,
             fingerprint_resolution_status: profile_version.map(|_| "pending".to_string()),
@@ -1067,6 +1086,7 @@ pub async fn get_task(
                 kind,
                 status,
                 priority,
+                summary_artifacts: summary_artifacts(result_json.as_deref()),
                 fingerprint_profile_id,
                 fingerprint_profile_version,
             }))
@@ -1082,8 +1102,8 @@ pub async fn get_task_runs(
 ) -> Result<Json<Vec<RunResponse>>, (StatusCode, String)> {
     let limit = sanitize_limit(query.limit, 20, 200);
     let offset = sanitize_offset(query.offset);
-    let rows = sqlx::query_as::<_, (String, String, String, i32, String, Option<String>, Option<String>, Option<String>)>(
-        r#"SELECT id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message FROM runs WHERE task_id = ? ORDER BY attempt DESC LIMIT ? OFFSET ?"#,
+    let rows = sqlx::query_as::<_, (String, String, String, i32, String, Option<String>, Option<String>, Option<String>, Option<String>)>(
+        r#"SELECT r.id, r.task_id, r.status, r.attempt, r.runner_kind, r.started_at, r.finished_at, r.error_message, t.result_json FROM runs r LEFT JOIN tasks t ON t.id = r.task_id WHERE r.task_id = ? ORDER BY r.attempt DESC LIMIT ? OFFSET ?"#,
     )
     .bind(&task_id)
     .bind(limit)
@@ -1100,7 +1120,7 @@ pub async fn get_task_runs(
     Ok(Json(
         rows.into_iter()
             .map(
-                |(id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message)| RunResponse {
+                |(id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message, result_json)| RunResponse {
                     id,
                     task_id,
                     status,
@@ -1109,6 +1129,7 @@ pub async fn get_task_runs(
                     started_at,
                     finished_at,
                     error_message,
+                    summary_artifacts: summary_artifacts(result_json.as_deref()),
                 },
             )
             .collect(),

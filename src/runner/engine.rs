@@ -946,7 +946,21 @@ where
         ),
     };
 
-    let result_json = execution.result_json.map(|value: serde_json::Value| value.to_string());
+    let result_json = execution.result_json.map(|mut value: serde_json::Value| {
+        if let serde_json::Value::Object(ref mut obj) = value {
+            let summaries = execution
+                .summary_artifacts
+                .iter()
+                .map(|item| json!({
+                    "category": format!("{:?}", item.category).to_lowercase(),
+                    "title": item.title,
+                    "summary": item.summary,
+                }))
+                .collect::<Vec<_>>();
+            obj.insert("summary_artifacts".to_string(), serde_json::Value::Array(summaries));
+        }
+        value.to_string()
+    });
     let error_message = execution.error_message;
 
     let run_update = sqlx::query(
