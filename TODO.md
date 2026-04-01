@@ -51,14 +51,21 @@
 - [x] 增加 provider / region / 历史成功失败 / 近期失败衰减 / provider×region 风险等选择信号
 - [x] 增加 `ProxySelectionTuning` 默认结构与环境变量注入入口
 - [x] 增加 trust score 起点与主链接入
+- [x] 增加 explainability traceability 元数据（`run_id / attempt / timestamp / explain_source / explain_generated_at`）
+- [x] 修复 `get_task_runs` 误复用 task 结果的问题，改为读取 run 自身结果
+- [x] 标准化 `summary_artifacts` schema（source / category / severity / trace metadata）
+- [x] 强类型化 `candidate_rank_preview`
+- [x] 抽离 explainability assembler 到独立模块
+- [x] 强类型化 `trust_score_components`
+- [ ] 给 `src/api/explainability.rs` 补独立 unit tests
+- [ ] 给 `src/runner/engine.rs` 的 explainability 辅助逻辑补独立 unit tests
+- [ ] 做一轮 explainability 主链剩余 loose JSON 普查与收口计划
 - [ ] 继续推进 trust score 核心化，减少分散排序项依赖
-- [ ] 推进代理质量评分系统正式化
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性）
 - [ ] 设计高并发下的性能优化与写放大控制策略
 - [ ] 设计高级指纹下的性能预算与性能开销控制策略
 - [ ] 设计磁盘使用监控与落盘上限策略
 - [ ] 设计 artifact / log 的保留、清理与归档策略
-- [ ] 同步 CURRENT_* / TODO / STATUS 口径，压平旧阶段残留
 
 ## P1
 
@@ -69,7 +76,7 @@
 - [ ] 设计会话连续性机制
 - [ ] 设计策略引擎正式形态
 - [ ] 设计实验记录系统
-- [ ] 增加 selection / verify / batch verify 的 metrics 与 explainability
+- [ ] 增加 selection / verify / batch verify 的 metrics 与 explainability 深化输出
 - [ ] 压测 proxy selection 查询、status 聚合 SQL 与 verify 批次链路
 - [ ] 继续清理 panic 风险点、锁竞争风险点与 flaky 测试
 - [ ] 继续完善 API / 运维 / 能力说明文档
