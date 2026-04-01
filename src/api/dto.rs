@@ -318,6 +318,8 @@ pub struct ProxyVerifyResponse {
     pub identity_fields_complete: Option<bool>,
     pub risk_level: Option<String>,
     pub risk_reasons: Vec<String>,
+    pub failure_stage: Option<String>,
+    pub failure_stage_detail: Option<String>,
     pub anonymity_level: Option<String>,
     pub latency_ms: Option<u128>,
     pub probe_error: Option<String>,

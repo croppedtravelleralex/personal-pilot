@@ -219,6 +219,13 @@ Host: verify.example:443
         anonymity_level.as_deref(),
         probe_error_category.as_deref(),
     );
+    let (failure_stage, failure_stage_detail) = classify_verify_failure_stage(
+        reachable,
+        protocol_ok,
+        upstream_ok,
+        probe_error_category.as_deref(),
+        &risk_reasons,
+    );
     let verify_source = Some("local_verify".to_string());
     let now = now_ts_string();
     sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, last_probe_latency_ms = ?, last_probe_error = ?, last_probe_error_category = ?, last_verify_confidence = ?, last_verify_score_delta = ?, last_verify_source = ?, score = MAX(0.0, score + (? / 100.0)), updated_at = ? WHERE id = ?"#)
@@ -264,6 +271,8 @@ Host: verify.example:443
         identity_fields_complete,
         risk_level,
         risk_reasons,
+        failure_stage,
+        failure_stage_detail,
         anonymity_level,
         latency_ms,
         probe_error,
@@ -276,6 +285,41 @@ Host: verify.example:443
     })
 }
 
+
+
+fn classify_verify_failure_stage(
+    reachable: bool,
+    protocol_ok: bool,
+    upstream_ok: bool,
+    probe_error_category: Option<&str>,
+    risk_reasons: &[String],
+) -> (Option<String>, Option<String>) {
+    if !reachable {
+        return (Some("connect".to_string()), Some("tcp_connect_failed".to_string()));
+    }
+    if reachable && !protocol_ok {
+        return (Some("protocol".to_string()), Some(probe_error_category.unwrap_or("protocol_invalid").to_string()));
+    }
+    if probe_error_category == Some("exit_ip_not_public") {
+        return (Some("risk".to_string()), Some("exit_ip_not_public".to_string()));
+    }
+    if !upstream_ok {
+        return (Some("identity".to_string()), Some(probe_error_category.unwrap_or("upstream_missing").to_string()));
+    }
+    if risk_reasons.iter().any(|r| matches!(r.as_str(), "transparent_proxy" | "anonymous_proxy" | "geo_mismatch" | "region_mismatch")) {
+        let detail = if risk_reasons.iter().any(|r| r == "transparent_proxy") {
+            "transparent_proxy"
+        } else if risk_reasons.iter().any(|r| r == "anonymous_proxy") {
+            "anonymous_proxy"
+        } else if risk_reasons.iter().any(|r| r == "geo_mismatch") {
+            "geo_mismatch"
+        } else {
+            "region_mismatch"
+        };
+        return (Some("risk".to_string()), Some(detail.to_string()));
+    }
+    (None, None)
+}
 
 fn compute_verify_risk_summary(
     reachable: bool,
