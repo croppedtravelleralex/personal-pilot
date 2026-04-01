@@ -266,6 +266,25 @@ pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
     }
 }
 
+
+pub fn tick_workflow_file(path: impl AsRef<Path>, project: &str) -> Result<WorkflowExecutionState> {
+    let path = path.as_ref();
+    let mut state = WorkflowExecutionState::ensure_default_state_file(path, project)?;
+    run_minimal_cycle_step(&mut state);
+    state.save(path)?;
+    Ok(state)
+}
+
+pub fn run_minimal_cycle_steps(path: impl AsRef<Path>, project: &str, steps: usize) -> Result<WorkflowExecutionState> {
+    let path = path.as_ref();
+    let mut state = WorkflowExecutionState::ensure_default_state_file(path, project)?;
+    for _ in 0..steps {
+        run_minimal_cycle_step(&mut state);
+    }
+    state.save(path)?;
+    Ok(state)
+}
+
 pub fn default_suggestions_for_stage(stage: WorkflowStage) -> Vec<WorkflowSuggestion> {
     match stage {
         WorkflowStage::Plan => vec![
@@ -424,5 +443,25 @@ mod tests {
         run_minimal_cycle_step(&mut state);
         assert_eq!(state.stage, WorkflowStage::BugScan);
         assert!(state.last_result_summary.contains("verify"));
+    }
+
+    #[test]
+    fn tick_workflow_file_updates_run_state_on_disk() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("RUN_STATE.json");
+        let state = tick_workflow_file(&path, "AutoOpenBrowser").expect("tick workflow file");
+        assert_eq!(state.stage, WorkflowStage::Execute);
+        let loaded = WorkflowExecutionState::load(&path).expect("load saved workflow state");
+        assert_eq!(loaded.stage, WorkflowStage::Execute);
+    }
+
+    #[test]
+    fn run_minimal_cycle_steps_persists_multiple_stage_advances() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("RUN_STATE.json");
+        let state = run_minimal_cycle_steps(&path, "AutoOpenBrowser", 3).expect("run workflow steps");
+        assert_eq!(state.stage, WorkflowStage::BugScan);
+        let loaded = WorkflowExecutionState::load(&path).expect("load saved workflow state");
+        assert_eq!(loaded.stage, WorkflowStage::BugScan);
     }
 }
