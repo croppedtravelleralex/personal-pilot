@@ -64,6 +64,7 @@ pub struct StatusResponse {
     pub fingerprint_metrics: FingerprintMetricsResponse,
     pub proxy_metrics: ProxyMetricsResponse,
     pub verify_metrics: VerifyMetricsResponse,
+    pub latest_execution_summaries: Vec<SummaryArtifactResponse>,
     pub latest_tasks: Vec<TaskResponse>,
 }
 

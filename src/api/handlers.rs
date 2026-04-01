@@ -407,6 +407,13 @@ fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> 
         .collect()
 }
 
+fn latest_execution_summaries(tasks: &[TaskResponse]) -> Vec<SummaryArtifactResponse> {
+    tasks.iter()
+        .flat_map(|task| task.summary_artifacts.iter().cloned())
+        .take(5)
+        .collect()
+}
+
 fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {
     let mut metrics = ProxyMetricsResponse { direct: 0, resolved: 0, resolved_sticky: 0, unresolved: 0, none: 0 };
     for task in tasks {
@@ -643,6 +650,7 @@ pub async fn status(
     let fingerprint_metrics = build_fingerprint_metrics(&latest_tasks);
     let proxy_metrics = build_proxy_metrics(&latest_tasks);
     let verify_metrics = load_verify_metrics(&state).await?;
+    let latest_execution_summaries = latest_execution_summaries(&latest_tasks);
 
     Ok(Json(StatusResponse {
         service: "AutoOpenBrowser".to_string(),
@@ -660,6 +668,7 @@ pub async fn status(
         fingerprint_metrics,
         proxy_metrics,
         verify_metrics,
+        latest_execution_summaries,
         latest_tasks,
     }))
 }
