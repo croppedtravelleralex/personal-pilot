@@ -1392,7 +1392,7 @@ async fn proxy_smoke_test_accepts_http_like_proxy_response() {
                 std::time::Duration::from_secs(3),
                 socket.write_all(b"HTTP/1.1 200 Connection Established
 
-ip=203.0.113.8
+ip=9.9.9.9
 "),
             ).await;
         }
@@ -1424,7 +1424,7 @@ ip=203.0.113.8
     assert_eq!(smoke_json.get("reachable").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(smoke_json.get("protocol_ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(smoke_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("203.0.113.8"));
+    assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("9.9.9.9"));
     assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), Some("elite"));
 
     let (failure_count, last_checked_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level): (i64, Option<String>, Option<String>, Option<String>, Option<i64>, Option<i64>, Option<String>, Option<String>) =
@@ -1438,7 +1438,7 @@ ip=203.0.113.8
     assert_eq!(last_smoke_status.as_deref(), Some("ok"));
     assert_eq!(last_smoke_protocol_ok, Some(1));
     assert_eq!(last_smoke_upstream_ok, Some(1));
-    assert_eq!(last_exit_ip.as_deref(), Some("203.0.113.8"));
+    assert_eq!(last_exit_ip.as_deref(), Some("9.9.9.9"));
     assert_eq!(last_anonymity_level.as_deref(), Some("elite"));
 }
 
@@ -1456,7 +1456,7 @@ async fn proxy_smoke_test_classifies_transparent_proxy_response() {
                 socket.write_all(b"HTTP/1.1 200 Connection Established
 X-Forwarded-For: 198.51.100.7
 
-ip=198.51.100.20
+ip=8.8.4.4
 "),
             ).await;
         }
@@ -1486,7 +1486,7 @@ ip=198.51.100.20
     ).await;
     assert_eq!(smoke_status, StatusCode::OK);
     assert_eq!(smoke_json.get("anonymity_level").and_then(|v| v.as_str()), Some("transparent"));
-    assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("198.51.100.20"));
+    assert_eq!(smoke_json.get("exit_ip").and_then(|v| v.as_str()), Some("8.8.4.4"));
 }
 
 
@@ -1502,7 +1502,7 @@ async fn verify_proxy_reports_geo_match_and_country_region() {
                 std::time::Duration::from_secs(3),
                 socket.write_all(b"HTTP/1.1 200 Connection Established
 
-ip=198.51.100.10
+ip=8.8.8.8
 country=US
 region=Virginia
 "),
@@ -1536,7 +1536,7 @@ region=Virginia
     assert_eq!(verify_json.get("reachable").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(verify_json.get("protocol_ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(verify_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(verify_json.get("exit_ip").and_then(|v| v.as_str()), Some("198.51.100.10"));
+    assert_eq!(verify_json.get("exit_ip").and_then(|v| v.as_str()), Some("8.8.8.8"));
     assert_eq!(verify_json.get("exit_country").and_then(|v| v.as_str()), Some("US"));
     assert_eq!(verify_json.get("exit_region").and_then(|v| v.as_str()), Some("Virginia"));
     assert_eq!(verify_json.get("geo_match_ok").and_then(|v| v.as_bool()), Some(true));
@@ -1547,7 +1547,7 @@ region=Virginia
     ).await;
     assert_eq!(proxy_json.get("last_verify_status").and_then(|v| v.as_str()), Some("ok"));
     assert_eq!(proxy_json.get("last_verify_geo_match_ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(proxy_json.get("last_exit_ip").and_then(|v| v.as_str()), Some("198.51.100.10"));
+    assert_eq!(proxy_json.get("last_exit_ip").and_then(|v| v.as_str()), Some("8.8.8.8"));
     assert_eq!(proxy_json.get("last_exit_country").and_then(|v| v.as_str()), Some("US"));
     assert_eq!(proxy_json.get("last_exit_region").and_then(|v| v.as_str()), Some("Virginia"));
     assert_eq!(proxy_json.get("last_anonymity_level").and_then(|v| v.as_str()), Some("elite"));
@@ -1621,7 +1621,7 @@ async fn verify_proxy_task_kind_executes_and_persists_result() {
                 std::time::Duration::from_secs(3),
                 socket.write_all(b"HTTP/1.1 200 Connection Established
 
-ip=203.0.113.9
+ip=1.1.1.1
 country=US
 region=Oregon
 "),
@@ -2871,7 +2871,7 @@ async fn verify_probe_updates_proxy_score_via_score_delta() {
             let mut buf = [0_u8; 1024];
             let _ = socket.read(&mut buf).await;
             let response = b"HTTP/1.1 200 Connection Established
-ip=203.0.113.8
+ip=9.9.9.9
 country=US
 region=Virginia
 
@@ -3308,7 +3308,7 @@ async fn verify_proxy_uses_region_match_and_complete_identity_in_confidence() {
             let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
             let _ = tokio::time::timeout(
                 std::time::Duration::from_secs(3),
-                socket.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\nip=198.51.100.10\ncountry=US\nregion=Virginia\n"),
+                socket.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\nip=8.8.8.8\ncountry=US\nregion=Virginia\n"),
             ).await;
         }
     });
@@ -3339,8 +3339,8 @@ async fn verify_proxy_uses_region_match_and_complete_identity_in_confidence() {
     assert_eq!(verify_json.get("geo_match_ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(verify_json.get("region_match_ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(verify_json.get("identity_fields_complete").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(verify_json.get("verification_confidence").and_then(|v| v.as_f64()), Some(0.97));
-    assert_eq!(verify_json.get("verification_score_delta").and_then(|v| v.as_i64()), Some(17));
+    assert_eq!(verify_json.get("verification_confidence").and_then(|v| v.as_f64()), Some(0.98));
+    assert_eq!(verify_json.get("verification_score_delta").and_then(|v| v.as_i64()), Some(18));
 }
 
 
@@ -3385,5 +3385,50 @@ async fn verify_proxy_rejects_invalid_exit_ip_shape_from_identity_probe() {
     assert_eq!(verify_json.get("exit_ip").and_then(|v| v.as_str()), None);
     assert_eq!(verify_json.get("identity_fields_complete").and_then(|v| v.as_bool()), Some(false));
     assert_eq!(verify_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(verify_json.get("status").and_then(|v| v.as_str()), Some("failed"));
+}
+
+
+#[tokio::test]
+async fn verify_proxy_penalizes_non_public_exit_ip_and_transparent_headers() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind listener");
+    let addr = listener.local_addr().expect("local addr");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established\r\nX-Forwarded-For: 10.0.0.7\r\nVia: 1.1 example\r\n\r\nip=10.0.0.7\ncountry=US\nregion=Virginia\n"),
+            ).await;
+        }
+    });
+
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+    let proxy_payload = serde_json::json!({
+        "id": "proxy-verify-private-transparent",
+        "scheme": "http",
+        "host": addr.ip().to_string(),
+        "port": addr.port(),
+        "region": "Virginia",
+        "country": "US",
+        "provider": "smoke",
+        "score": 0.5
+    });
+    let (create_status, _) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(create_status, StatusCode::CREATED);
+
+    let (verify_status, verify_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/proxy-verify-private-transparent/verify").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(verify_status, StatusCode::OK);
+    assert_eq!(verify_json.get("upstream_ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(verify_json.get("anonymity_level").and_then(|v| v.as_str()), Some("transparent"));
+    assert_eq!(verify_json.get("probe_error_category").and_then(|v| v.as_str()), Some("exit_ip_not_public"));
     assert_eq!(verify_json.get("status").and_then(|v| v.as_str()), Some("failed"));
 }

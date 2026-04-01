@@ -123,6 +123,7 @@ pub async fn run_proxy_verify_probe(
     let mut geo_match_ok: Option<bool> = None;
     let mut region_match_ok: Option<bool> = None;
     let mut identity_fields_complete: Option<bool> = None;
+    let mut exit_ip_public: Option<bool> = None;
     let mut anonymity_level: Option<String> = None;
     let mut probe_error: Option<String> = if reachable { None } else { Some("proxy verify tcp connect failed".to_string()) };
     let mut probe_error_category: Option<String> = if reachable { None } else { Some("connect_failed".to_string()) };
@@ -151,11 +152,12 @@ Host: verify.example:443
                         exit_ip = parse_probe_field(&text, "ip").filter(|v| looks_like_ip(v));
                         exit_country = parse_probe_field(&text, "country");
                         exit_region = parse_probe_field(&text, "region");
+                        exit_ip_public = exit_ip.as_deref().map(ip_is_public);
                         identity_fields_complete = Some(exit_ip.is_some() && exit_country.is_some() && exit_region.is_some());
-                        upstream_ok = identity_fields_complete.unwrap_or(false);
+                        upstream_ok = identity_fields_complete.unwrap_or(false) && exit_ip_public != Some(false);
                         geo_match_ok = expected_country.as_ref().map(|expected| exit_country.as_ref().map(|actual| actual.eq_ignore_ascii_case(expected)).unwrap_or(false));
                         region_match_ok = expected_region.as_ref().map(|expected| exit_region.as_ref().map(|actual| actual.eq_ignore_ascii_case(expected)).unwrap_or(false));
-                        verify_message = format!("proxy verify completed ip={:?} country={:?} region={:?} region_match={:?}", exit_ip, exit_country, exit_region, region_match_ok);
+                        verify_message = format!("proxy verify completed ip={:?} public_ip={:?} country={:?} region={:?} region_match={:?}", exit_ip, exit_ip_public, exit_country, exit_region, region_match_ok);
                         probe_error = None;
                         probe_error_category = None;
                     } else {
@@ -168,19 +170,24 @@ Host: verify.example:443
         }
     }
 
-    if reachable && protocol_ok && !upstream_ok {
+    if reachable && protocol_ok && exit_ip_public == Some(false) {
+        probe_error = Some("verify probe reported non-public exit ip".to_string());
+        probe_error_category = Some("exit_ip_not_public".to_string());
+    } else if reachable && protocol_ok && !upstream_ok {
         probe_error = Some("verify probe did not receive upstream identity fields".to_string());
         probe_error_category = Some("upstream_missing".to_string());
     }
     let latency_ms = Some(started.elapsed().as_millis());
     let latency_ms_i64 = latency_ms.and_then(|v| i64::try_from(v).ok());
     let status = if reachable && protocol_ok && upstream_ok { "ok" } else { "failed" };
-    let verification_confidence = Some(if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) && region_match_ok != Some(false) {
-        0.97
+    let verification_confidence = Some(if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) && region_match_ok != Some(false) && anonymity_level.as_deref() == Some("elite") {
+        0.98
+    } else if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) && region_match_ok != Some(false) {
+        0.95
     } else if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) {
-        0.88
+        0.86
     } else if reachable && protocol_ok && upstream_ok {
-        0.72
+        0.68
     } else if reachable && protocol_ok {
         0.45
     } else if reachable {
@@ -193,9 +200,11 @@ Host: verify.example:443
         + (if geo_match_ok == Some(true) { 4 } else if geo_match_ok == Some(false) { -4 } else { 0 })
         + (if region_match_ok == Some(true) { 2 } else if region_match_ok == Some(false) { -2 } else { 0 })
         + (if identity_fields_complete == Some(true) { 1 } else { -1 })
+        + (if exit_ip_public == Some(true) { 1 } else if exit_ip_public == Some(false) { -3 } else { 0 })
         + match anonymity_level.as_deref() {
             Some("elite") => 2,
-            Some("transparent") => -2,
+            Some("anonymous") => -1,
+            Some("transparent") => -3,
             _ => 0,
         }
     );
@@ -256,6 +265,18 @@ Host: verify.example:443
 
 fn looks_like_ip(value: &str) -> bool {
     value.parse::<std::net::IpAddr>().is_ok()
+}
+
+fn ip_is_public(value: &str) -> bool {
+    match value.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => {
+            !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_broadcast() || ip.is_documentation() || ip.is_unspecified())
+        }
+        Ok(std::net::IpAddr::V6(ip)) => {
+            !(ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local() || ip.is_unicast_link_local())
+        }
+        Err(_) => false,
+    }
 }
 
 fn parse_probe_field(text: &str, key: &str) -> Option<String> {

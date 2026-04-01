@@ -60,6 +60,7 @@
 - **2026年04月01日 20时58分00秒** 实现了**scoped trust refresh 收口**功能，将 verify 与 runner 执行后的重复 trust/risk 刷新路径压缩到统一 helper。
 - **2026年04月01日 21时02分00秒** 实现了**trust cache SQL 公共模板抽取**功能，将多处重复的 cached trust score 更新公式收口为统一模板，并补上 scoped refresh helper 单测。
 - **2026年04月01日 21时55分00秒** 实现了**verify 慢路径增强第一轮**功能，为代理验证补上出口 IP 形状校验、region 匹配判断、identity fields 完整度判断，并将这些信号纳入 verify 置信度与分值计算。
+- **2026年04月01日 22时40分00秒** 实现了**verify 慢路径增强第二轮**功能，为代理验证补上非公网出口 IP 识别与透明/匿名代理惩罚，使 verify 置信度与分值更贴近真实代理质量。
 
 ---
 
@@ -75,4 +76,4 @@
 
 ## 当前阶段一句话总结
 
-**截至 2026年04月01日 21时55分00秒，项目已经完成“浏览器执行系统 V1 + 代理验证/巡检 V1 + trust cache 主链 + explainability 主链结构化收口 + 模块级测试锁死 + scoped trust refresh 收口 + trust cache SQL 模板抽取 + verify 慢路径增强第一轮”的阶段性建设。**
+**截至 2026年04月01日 22时40分00秒，项目已经完成“浏览器执行系统 V1 + 代理验证/巡检 V1 + trust cache 主链 + explainability 主链结构化收口 + 模块级测试锁死 + scoped trust refresh 收口 + trust cache SQL 模板抽取 + verify 慢路径增强两轮”的阶段性建设。**
