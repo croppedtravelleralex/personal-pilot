@@ -413,6 +413,9 @@ fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<Summ
     };
     Some(SummaryArtifactResponse {
         category: "summary".to_string(),
+        key: "proxy.selection.decision".to_string(),
+        source: "proxy_selection".to_string(),
+        severity: "info".to_string(),
         title: "proxy selection decision".to_string(),
         summary,
         task_id: None,
@@ -431,6 +434,9 @@ fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> 
         .filter_map(|item| {
             Some(SummaryArtifactResponse {
                 category: item.get("category")?.as_str()?.to_string(),
+                key: item.get("key").and_then(|v| v.as_str()).unwrap_or_else(|| item.get("title").and_then(|v| v.as_str()).unwrap_or("summary.unknown")).to_string(),
+                source: item.get("source").and_then(|v| v.as_str()).unwrap_or("runner").to_string(),
+                severity: item.get("severity").and_then(|v| v.as_str()).unwrap_or("info").to_string(),
                 title: item.get("title")?.as_str()?.to_string(),
                 summary: item.get("summary")?.as_str()?.to_string(),
                 task_id: None,
@@ -451,17 +457,25 @@ fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> 
 }
 
 fn latest_execution_summaries(tasks: &[TaskResponse]) -> Vec<SummaryArtifactResponse> {
-    tasks.iter()
-        .flat_map(|task| {
-            task.summary_artifacts.iter().cloned().map(move |mut artifact| {
-                artifact.task_id = Some(task.id.clone());
-                artifact.task_kind = Some(task.kind.clone());
-                artifact.task_status = Some(task.status.clone());
-                artifact
-            })
-        })
-        .take(5)
-        .collect()
+    let mut items = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for task in tasks {
+        for mut artifact in task.summary_artifacts.iter().cloned() {
+            artifact.task_id = Some(task.id.clone());
+            artifact.task_kind = Some(task.kind.clone());
+            artifact.task_status = Some(task.status.clone());
+            let dedupe_key = format!("{}::{}::{}", artifact.task_id.clone().unwrap_or_default(), artifact.key, artifact.title);
+            if seen.insert(dedupe_key) {
+                items.push(artifact);
+                if items.len() >= 5 {
+                    return items;
+                }
+            }
+        }
+    }
+
+    items
 }
 
 fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {

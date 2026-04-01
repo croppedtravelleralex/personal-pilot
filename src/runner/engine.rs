@@ -877,6 +877,9 @@ where
                     error_message: (result.status != "ok").then_some(result.message.clone()),
                     summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
                         category: crate::runner::types::SummaryArtifactCategory::Summary,
+                        key: "verify_proxy.execution".to_string(),
+                        source: "verify_pipeline".to_string(),
+                        severity: crate::runner::types::SummaryArtifactSeverity::Info,
                         title: "verify_proxy execution summary".to_string(),
                         summary: format!("kind=verify_proxy proxy_id={} status={} message={}", proxy_id, result.status, result.message),
                     }],
@@ -887,6 +890,9 @@ where
                     error_message: Some(message.clone()),
                     summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
                         category: crate::runner::types::SummaryArtifactCategory::Debug,
+                        key: "verify_proxy.execution".to_string(),
+                        source: "verify_pipeline".to_string(),
+                        severity: crate::runner::types::SummaryArtifactSeverity::Error,
                         title: "verify_proxy execution summary".to_string(),
                         summary: format!("kind=verify_proxy proxy_id={} status=failed message={}", proxy_id, message),
                     }],
@@ -898,6 +904,9 @@ where
                 error_message: Some("verify_proxy task requires proxy_id".to_string()),
                 summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
                     category: crate::runner::types::SummaryArtifactCategory::Debug,
+                    key: "verify_proxy.execution".to_string(),
+                    source: "verify_pipeline".to_string(),
+                    severity: crate::runner::types::SummaryArtifactSeverity::Error,
                     title: "verify_proxy execution summary".to_string(),
                     summary: "kind=verify_proxy status=failed message=verify_proxy task requires proxy_id".to_string(),
                 }],

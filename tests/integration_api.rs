@@ -2576,7 +2576,11 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     assert!(task_json.get("trust_score_total").and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").is_some());
     assert!(task_json.get("summary_artifacts").and_then(|v| v.as_array()).map(|items| items.iter().any(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).unwrap_or(false));
-    assert!(task_json.get("summary_artifacts").and_then(|v| v.as_array()).and_then(|items| items.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).and_then(|item| item.get("summary")).and_then(|v| v.as_str()).map(|s| s.contains("trust-score points") && s.contains("top factors")).unwrap_or(false));
+    let selection_artifact = task_json.get("summary_artifacts").and_then(|v| v.as_array()).and_then(|items| items.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).expect("selection summary artifact");
+    assert!(selection_artifact.get("summary").and_then(|v| v.as_str()).map(|s| s.contains("trust-score points") && s.contains("top factors")).unwrap_or(false));
+    assert_eq!(selection_artifact.get("key").and_then(|v| v.as_str()), Some("proxy.selection.decision"));
+    assert_eq!(selection_artifact.get("source").and_then(|v| v.as_str()), Some("proxy_selection"));
+    assert_eq!(selection_artifact.get("severity").and_then(|v| v.as_str()), Some("info"));
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("winner_total_score")).and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("runner_up_total_score")).and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("score_gap")).and_then(|v| v.as_i64()).is_some());
@@ -2653,6 +2657,9 @@ async fn status_latest_execution_summaries_include_selection_decision_artifact()
     let summary = selection.get("summary").and_then(|v| v.as_str()).unwrap_or("");
     assert!(summary.contains("trust-score points"));
     assert!(summary.contains("top factors"));
+    assert_eq!(selection.get("key").and_then(|v| v.as_str()), Some("proxy.selection.decision"));
+    assert_eq!(selection.get("source").and_then(|v| v.as_str()), Some("proxy_selection"));
+    assert_eq!(selection.get("severity").and_then(|v| v.as_str()), Some("info"));
     assert_eq!(selection.get("task_id").and_then(|v| v.as_str()), Some(task_id.as_str()));
     assert_eq!(selection.get("task_kind").and_then(|v| v.as_str()), Some("open_page"));
     assert_eq!(selection.get("task_status").and_then(|v| v.as_str()), Some("succeeded"));

@@ -129,6 +129,9 @@ pub struct WinnerVsRunnerUpDiff {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummaryArtifactResponse {
     pub category: String,
+    pub key: String,
+    pub source: String,
+    pub severity: String,
     pub title: String,
     pub summary: String,
     pub task_id: Option<String>,
