@@ -5,6 +5,7 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::network_identity::proxy_growth::{assess_proxy_pool_health, default_proxy_pool_growth_policy, evaluate_region_match, ProxyPoolInventorySnapshot};
 use crate::network_identity::proxy_selection::{apply_proxy_resolution_metadata, proxy_selection_base_where_sql, proxy_selection_order_by_cached_trust_score_sql, proxy_selection_order_by_trust_score_sql_with_tuning, resolved_proxy_json};
 use crate::{
     api::dto::{
@@ -852,6 +853,72 @@ async fn upsert_proxy_session_binding(
     Ok(())
 }
 
+async fn build_proxy_growth_explain_json(
+    state: &AppState,
+    task_payload: &Value,
+    selected_proxy: Option<&RunnerProxySelection>,
+) -> Result<Value> {
+    let target_region = task_payload
+        .get("target_region")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            task_payload
+                .get("region")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(ToOwned::to_owned)
+        });
+
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM proxies")
+        .fetch_one(&state.db)
+        .await?;
+    let available: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+    )
+    .fetch_one(&state.db)
+    .await?;
+
+    let available_in_region: i64 = match target_region.as_deref() {
+        Some(region) => sqlx::query_scalar(
+            "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND region = ? AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+        )
+        .bind(region)
+        .fetch_one(&state.db)
+        .await?,
+        None => 0,
+    };
+
+    let inflight_tasks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status IN ('queued', 'running')")
+        .fetch_one(&state.db)
+        .await?;
+
+    let snapshot = ProxyPoolInventorySnapshot {
+        total,
+        available,
+        region: target_region.clone(),
+        available_in_region,
+        inflight_tasks,
+    };
+    let policy = default_proxy_pool_growth_policy();
+    let health = assess_proxy_pool_health(&snapshot, &policy);
+    let region_match = evaluate_region_match(
+        target_region.as_deref(),
+        selected_proxy.and_then(|proxy| proxy.region.as_deref()),
+    );
+
+    Ok(json!({
+        "target_region": target_region,
+        "selected_proxy_region": selected_proxy.and_then(|proxy| proxy.region.clone()),
+        "inventory_snapshot": snapshot,
+        "health_assessment": health,
+        "region_match": region_match,
+    }))
+}
+
 async fn update_proxy_health_after_execution(state: &AppState, proxy: Option<&RunnerProxySelection>, execution_status: RunnerOutcomeStatus) -> Result<()> {
     let Some(proxy) = proxy else { return Ok(()); };
     let now = now_ts_string();
@@ -1213,7 +1280,7 @@ where
             .execute(RunnerTask {
                 task_id: task_id.clone(),
                 attempt,
-                kind: task_kind,
+                kind: task_kind.clone(),
                 payload,
                 timeout_seconds,
                 fingerprint_profile,
@@ -1251,9 +1318,10 @@ where
         ),
     };
 
+    let proxy_growth_explain = build_proxy_growth_explain_json(state, &payload_for_binding, proxy_for_health.as_ref()).await.ok();
     let result_json = execution.result_json.map(|mut value: serde_json::Value| {
         if let serde_json::Value::Object(ref mut obj) = value {
-            let summaries = execution
+            let mut summaries = execution
                 .summary_artifacts
                 .iter()
                 .map(|item| json!({
@@ -1268,6 +1336,27 @@ where
                     "timestamp": finished_at,
                 }))
                 .collect::<Vec<_>>();
+            if let Some(proxy_growth_explain) = proxy_growth_explain.clone() {
+                summaries.push(json!({
+                    "category": "selection",
+                    "key": format!("{}.proxy_growth", task_kind),
+                    "source": "selection.proxy_growth",
+                    "severity": if proxy_growth_explain.get("health_assessment").and_then(|v| v.get("require_replenish")).and_then(|v| v.as_bool()) == Some(true) { "warn" } else { "info" },
+                    "title": "proxy growth assessment",
+                    "summary": format!(
+                        "target_region={} selected_proxy_region={} available_ratio_percent={} require_replenish={} region_match_reason={}",
+                        proxy_growth_explain.get("target_region").and_then(|v| v.as_str()).unwrap_or("none"),
+                        proxy_growth_explain.get("selected_proxy_region").and_then(|v| v.as_str()).unwrap_or("none"),
+                        proxy_growth_explain.get("health_assessment").and_then(|v| v.get("available_ratio_percent")).and_then(|v| v.as_i64()).unwrap_or(0),
+                        proxy_growth_explain.get("health_assessment").and_then(|v| v.get("require_replenish")).and_then(|v| v.as_bool()).unwrap_or(false),
+                        proxy_growth_explain.get("region_match").and_then(|v| v.get("reason")).and_then(|v| v.as_str()).unwrap_or("none"),
+                    ),
+                    "run_id": run_id,
+                    "attempt": attempt,
+                    "timestamp": finished_at,
+                }));
+                obj.insert("proxy_growth_explain".to_string(), proxy_growth_explain);
+            }
             obj.insert("summary_artifacts".to_string(), json!(summaries));
         }
         value.to_string()
