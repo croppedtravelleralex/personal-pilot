@@ -102,7 +102,7 @@
 ### P0
 1. **继续推进 selection → trust score 核心化**，把剩余分散在 selection 中的控制流语义继续收进统一 score / explain 边界。
 2. **继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例是否稳定。**
-3. **推进 provider 级 refresh 范围收窄最小实现**，当前已落下 `provider_risk_snapshots.version`、`proxies.provider_risk_version_seen` 与 `provider_scope_flip -> 当前 proxy 懒更新` 的第一版，并通过补样确认 providerScope 已切到 lazy_current_proxy；providerRegion 继续延后。
+3. **推进 provider 级 refresh 范围收窄稳定化**，当前已通过补样确认 providerScope 已切到 lazy_current_proxy；下一阶段继续巩固 providerScope 收益判断，providerRegion 继续延后。
 4. **继续清 explainability 主链里剩余 typed/JSON 边界与 summary 文案质量。**
 5. **推进更真实的 verify 慢路径**，继续补匿名性 / 地区 / 出口真实性以外的可稳定质量信号。
 

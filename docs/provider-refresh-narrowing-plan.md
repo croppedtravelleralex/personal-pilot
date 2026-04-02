@@ -66,3 +66,8 @@ profiling 样本已经显示：
 ## 当前结论
 
 > **如果后续样本继续显示 `provider_scope_flip` 主导，下一步最值得推进的是“provider risk version / dirty 标记 + 懒刷新”方向，而不是简单地把 provider refresh 改成一个拍脑袋的小范围批量刷新。**
+
+## 阶段性决定（2026-04-02）
+
+- **providerScope：继续验证并巩固收益判断**
+- **providerRegion：继续延后，不进入下一阶段实现**
