@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS provider_risk_snapshots (
     success_count INTEGER NOT NULL,
     failure_count INTEGER NOT NULL,
     risk_hit INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL
 );
 "#;
@@ -157,6 +158,7 @@ CREATE TABLE IF NOT EXISTS proxies (
     last_verify_source TEXT,
     cached_trust_score INTEGER,
     trust_score_cached_at TEXT,
+    provider_risk_version_seen INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

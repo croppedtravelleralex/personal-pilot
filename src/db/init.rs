@@ -83,6 +83,8 @@ pub async fn init_db(database_url: &str) -> Result<DbPool> {
     ensure_column_exists(&pool, "proxies", "last_verify_source", "ALTER TABLE proxies ADD COLUMN last_verify_source TEXT").await?;
     ensure_column_exists(&pool, "proxies", "cached_trust_score", "ALTER TABLE proxies ADD COLUMN cached_trust_score INTEGER").await?;
     ensure_column_exists(&pool, "proxies", "trust_score_cached_at", "ALTER TABLE proxies ADD COLUMN trust_score_cached_at TEXT").await?;
+    ensure_column_exists(&pool, "proxies", "provider_risk_version_seen", "ALTER TABLE proxies ADD COLUMN provider_risk_version_seen INTEGER").await?;
+    ensure_column_exists(&pool, "provider_risk_snapshots", "version", "ALTER TABLE provider_risk_snapshots ADD COLUMN version INTEGER NOT NULL DEFAULT 1").await?;
     refresh_provider_risk_snapshots(&pool).await?;
     refresh_cached_trust_scores(&pool).await?;
 
@@ -100,13 +102,14 @@ pub async fn refresh_provider_risk_snapshots(pool: &DbPool) -> Result<()> {
 
     sqlx::query("DELETE FROM provider_risk_snapshots").execute(pool).await?;
     sqlx::query(
-        r#"INSERT INTO provider_risk_snapshots (provider, success_count, failure_count, risk_hit, updated_at)
+        r#"INSERT INTO provider_risk_snapshots (provider, success_count, failure_count, risk_hit, version, updated_at)
            SELECT provider, SUM(success_count), SUM(failure_count),
                   CASE
                     WHEN SUM(failure_count) >= SUM(success_count) + 5 THEN 1
                     WHEN SUM(CASE WHEN last_probe_error_category = 'exit_ip_not_public' THEN 1 ELSE 0 END) >= 2 THEN 1
                     ELSE 0
                   END,
+                  1,
                   ?
            FROM proxies
            WHERE provider IS NOT NULL
@@ -156,30 +159,51 @@ pub async fn refresh_provider_risk_snapshot_for_provider(pool: &DbPool, provider
         .unwrap_or(0)
         .to_string();
 
-    sqlx::query("DELETE FROM provider_risk_snapshots WHERE provider = ?")
+    let previous = sqlx::query_as::<_, (i64, i64)>("SELECT risk_hit, version FROM provider_risk_snapshots WHERE provider = ?")
         .bind(provider)
-        .execute(pool)
+        .fetch_optional(pool)
         .await?;
-    sqlx::query(
-        r#"INSERT INTO provider_risk_snapshots (provider, success_count, failure_count, risk_hit, updated_at)
-           SELECT provider, SUM(success_count), SUM(failure_count),
+    let aggregate = sqlx::query_as::<_, (i64, i64, i64)>(
+        r#"SELECT COALESCE(SUM(success_count), 0), COALESCE(SUM(failure_count), 0),
                   CASE
-                    WHEN SUM(failure_count) >= SUM(success_count) + 5 THEN 1
-                    WHEN SUM(CASE WHEN last_probe_error_category = 'exit_ip_not_public' THEN 1 ELSE 0 END) >= 2 THEN 1
+                    WHEN COALESCE(SUM(failure_count), 0) >= COALESCE(SUM(success_count), 0) + 5 THEN 1
+                    WHEN COALESCE(SUM(CASE WHEN last_probe_error_category = 'exit_ip_not_public' THEN 1 ELSE 0 END), 0) >= 2 THEN 1
                     ELSE 0
-                  END,
-                  ?
+                  END
            FROM proxies
-           WHERE provider = ?
-           GROUP BY provider"#,
+           WHERE provider = ?"#,
     )
-    .bind(&now)
     .bind(provider)
+    .fetch_one(pool)
+    .await?;
+    let (success_count, failure_count, risk_hit) = aggregate;
+    let version = match previous {
+        Some((old_hit, old_version)) if old_hit != risk_hit => old_version + 1,
+        Some((_, old_version)) => old_version,
+        None => 1,
+    };
+
+    sqlx::query(
+        r#"INSERT INTO provider_risk_snapshots (provider, success_count, failure_count, risk_hit, version, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(provider) DO UPDATE SET
+             success_count = excluded.success_count,
+             failure_count = excluded.failure_count,
+             risk_hit = excluded.risk_hit,
+             version = excluded.version,
+             updated_at = excluded.updated_at"#,
+    )
+    .bind(provider)
+    .bind(success_count)
+    .bind(failure_count)
+    .bind(risk_hit)
+    .bind(version)
+    .bind(&now)
     .execute(pool)
     .await?;
     perf_probe_log(
         "refresh_provider_risk_snapshot",
-        &[("scope", "provider".to_string()), ("provider", provider.to_string()), ("elapsed_ms", started.elapsed().as_millis().to_string())],
+        &[("scope", "provider".to_string()), ("provider", provider.to_string()), ("risk_hit", risk_hit.to_string()), ("version", version.to_string()), ("elapsed_ms", started.elapsed().as_millis().to_string())],
     );
     Ok(())
 }
@@ -262,8 +286,8 @@ pub async fn refresh_proxy_trust_views_for_scope(pool: &DbPool, proxy_id: &str, 
         perf_probe_log("refresh_proxy_trust_views_for_scope", &[("branch", "proxy_only_providerless".to_string()), ("proxy_id", proxy_id.to_string())]);
         refresh_cached_trust_score_for_proxy(pool, proxy_id).await?;
     } else if provider_risk_before != provider_risk_after {
-        perf_probe_log("refresh_proxy_trust_views_for_scope", &[("branch", "provider_scope_flip".to_string()), ("proxy_id", proxy_id.to_string()), ("provider", provider.unwrap_or_default().to_string())]);
-        refresh_cached_trust_scores_for_provider(pool, provider).await?;
+        perf_probe_log("refresh_proxy_trust_views_for_scope", &[("branch", "provider_scope_flip".to_string()), ("mode", "lazy_current_proxy".to_string()), ("proxy_id", proxy_id.to_string()), ("provider", provider.unwrap_or_default().to_string())]);
+        refresh_cached_trust_score_for_proxy(pool, proxy_id).await?;
     } else if provider_region_risk_before != provider_region_risk_after {
         perf_probe_log("refresh_proxy_trust_views_for_scope", &[("branch", "provider_region_scope_flip".to_string()), ("proxy_id", proxy_id.to_string()), ("provider", provider.unwrap_or_default().to_string()), ("region", region.unwrap_or_default().to_string())]);
         refresh_cached_trust_scores_for_provider_region(pool, provider, region).await?;
@@ -295,7 +319,11 @@ fn cached_trust_score_update_sql(where_clause: Option<&str>) -> String {
                 (CASE WHEN provider IS NOT NULL AND EXISTS (SELECT 1 FROM provider_risk_snapshots prs WHERE prs.provider = proxies.provider AND prs.risk_hit != 0) THEN 10 ELSE 0 END) -
                 (CASE WHEN provider IS NOT NULL AND region IS NOT NULL AND EXISTS (SELECT 1 FROM provider_region_risk_snapshots prrs WHERE prrs.provider = proxies.provider AND prrs.region = proxies.region AND prrs.risk_hit != 0) THEN 12 ELSE 0 END) +
                 CAST(score * 10 AS INTEGER),
-               trust_score_cached_at = ?"#.to_string();
+               trust_score_cached_at = ?,
+               provider_risk_version_seen = CASE
+                   WHEN provider IS NOT NULL THEN (SELECT prs.version FROM provider_risk_snapshots prs WHERE prs.provider = proxies.provider)
+                   ELSE NULL
+               END"#.to_string();
     if let Some(where_clause) = where_clause {
         sql.push_str(" WHERE ");
         sql.push_str(where_clause);
@@ -429,7 +457,7 @@ mod scoped_refresh_tests {
     }
 
     #[tokio::test]
-    async fn scoped_trust_refresh_helper_updates_provider_group_and_falls_back_for_providerless_proxy() {
+    async fn scoped_trust_refresh_helper_refreshes_current_proxy_on_provider_flip_and_falls_back_for_providerless_proxy() {
         let db_url = unique_db_url();
         let db = init_db(&db_url).await.expect("init db");
 
@@ -443,14 +471,65 @@ mod scoped_refresh_tests {
             .expect("insert proxies");
 
         refresh_provider_risk_snapshots(&db).await.expect("refresh risk snapshots");
+        refresh_cached_trust_scores(&db).await.expect("refresh initial caches");
+        let helper_two_before: Option<String> = sqlx::query_scalar("SELECT trust_score_cached_at FROM proxies WHERE id = 'proxy-scope-helper-2'").fetch_one(&db).await.expect("helper2 before ts");
+        let helper_two_seen_before: Option<i64> = sqlx::query_scalar("SELECT provider_risk_version_seen FROM proxies WHERE id = 'proxy-scope-helper-2'").fetch_one(&db).await.expect("helper2 before seen");
+
+        sqlx::query("UPDATE proxies SET failure_count = 6, updated_at = '2' WHERE id = 'proxy-scope-helper-1'")
+            .execute(&db)
+            .await
+            .expect("make provider risk flip");
+
         refresh_proxy_trust_views_for_scope(&db, "proxy-scope-helper-1", Some("pool-helper"), Some("us-east")).await.expect("refresh helper provider scope");
-        let helper_one: i64 = sqlx::query_scalar("SELECT COALESCE(cached_trust_score, 0) FROM proxies WHERE id = 'proxy-scope-helper-1'").fetch_one(&db).await.expect("cache 1");
-        let helper_two: i64 = sqlx::query_scalar("SELECT COALESCE(cached_trust_score, 0) FROM proxies WHERE id = 'proxy-scope-helper-2'").fetch_one(&db).await.expect("cache 2");
-        assert!(helper_two > helper_one);
+        let helper_one_after: Option<String> = sqlx::query_scalar("SELECT trust_score_cached_at FROM proxies WHERE id = 'proxy-scope-helper-1'").fetch_one(&db).await.expect("helper1 after ts");
+        let helper_one_seen: Option<i64> = sqlx::query_scalar("SELECT provider_risk_version_seen FROM proxies WHERE id = 'proxy-scope-helper-1'").fetch_one(&db).await.expect("helper1 seen");
+        let provider_version: i64 = sqlx::query_scalar("SELECT version FROM provider_risk_snapshots WHERE provider = 'pool-helper'").fetch_one(&db).await.expect("provider version");
+        let helper_two_after: Option<String> = sqlx::query_scalar("SELECT trust_score_cached_at FROM proxies WHERE id = 'proxy-scope-helper-2'").fetch_one(&db).await.expect("helper2 after ts");
+        let helper_two_seen_after: Option<i64> = sqlx::query_scalar("SELECT provider_risk_version_seen FROM proxies WHERE id = 'proxy-scope-helper-2'").fetch_one(&db).await.expect("helper2 after seen");
+        assert!(helper_one_after.is_some());
+        assert_eq!(helper_one_seen, Some(provider_version));
+        assert_eq!(helper_two_after, helper_two_before);
+        assert_eq!(helper_two_seen_after, helper_two_seen_before);
 
         refresh_proxy_trust_views_for_scope(&db, "proxy-no-provider", None, Some("us-east")).await.expect("refresh helper providerless fallback");
         let providerless: i64 = sqlx::query_scalar("SELECT COALESCE(cached_trust_score, 0) FROM proxies WHERE id = 'proxy-no-provider'").fetch_one(&db).await.expect("providerless cache");
         assert!(providerless > 0);
+    }
+
+
+    #[tokio::test]
+    async fn provider_risk_snapshot_version_increments_when_risk_hit_flips() {
+        let db_url = unique_db_url();
+        let db = init_db(&db_url).await.expect("init db");
+        sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, provider, region, country, status, score, success_count, failure_count, created_at, updated_at)
+                      VALUES
+                      ('proxy-version-1', 'http', '127.0.0.1', 8080, 'pool-version', 'us-east', 'US', 'active', 0.6, 3, 0, '1', '1'),
+                      ('proxy-version-2', 'http', '127.0.0.2', 8081, 'pool-version', 'us-west', 'US', 'active', 0.6, 3, 0, '1', '1')"#)
+            .execute(&db)
+            .await
+            .expect("insert proxies");
+        refresh_provider_risk_snapshots(&db).await.expect("refresh snapshots");
+        let before: i64 = sqlx::query_scalar("SELECT version FROM provider_risk_snapshots WHERE provider = 'pool-version'")
+            .fetch_one(&db)
+            .await
+            .expect("version before");
+
+        sqlx::query("UPDATE proxies SET failure_count = 12, updated_at = '2' WHERE id = 'proxy-version-1'")
+            .execute(&db)
+            .await
+            .expect("flip risk");
+        refresh_provider_risk_snapshot_for_provider(&db, Some("pool-version")).await.expect("refresh provider scoped");
+
+        let after: i64 = sqlx::query_scalar("SELECT version FROM provider_risk_snapshots WHERE provider = 'pool-version'")
+            .fetch_one(&db)
+            .await
+            .expect("version after");
+        let hit: i64 = sqlx::query_scalar("SELECT risk_hit FROM provider_risk_snapshots WHERE provider = 'pool-version'")
+            .fetch_one(&db)
+            .await
+            .expect("risk hit after");
+        assert_eq!(after, before + 1);
+        assert_eq!(hit, 1);
     }
 
 

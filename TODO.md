@@ -71,7 +71,9 @@
 - [x] 跑一轮 selection / trust cache / verify 回写 profiling 样本记录
 - [x] 给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测
 - [ ] 继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 命中比例是否稳定
-- [ ] 推进 provider 级 refresh 范围收窄方案设计（优先研究 `provider risk version / dirty 标记 + 懒刷新`，且第一阶段只落 provider risk，不与 provider_region 一起上）
+- [x] 推进 provider 级 refresh 范围收窄方案设计（优先研究 `provider risk version / dirty 标记 + 懒刷新`，且第一阶段只落 provider risk，不与 provider_region 一起上）
+- [ ] 继续验证 provider risk version / seen 第一版在真实链路中的收益
+- [ ] 评估何时将 provider_region 纳入 version / dirty 语义
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略
