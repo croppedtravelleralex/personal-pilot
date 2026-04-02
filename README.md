@@ -1,3 +1,11 @@
+## Current Stage Snapshot
+
+- **Stage status:** stable / closed enough to freeze
+- **Completed in current stage:** providerScope lazy refresh validated; provider risk version / seen v1 landed; selection intentionally unchanged; explain-side version visibility landed and validated; providerRegion deferred for this stage
+- **Frozen in current stage:** providerRegion implementation; selection ranking redesign around version semantics; broad trust-score semantics rewrite; broad explainability rewrite
+- **Reopen rule:** deferred lines reopen only when their documented reopen conditions are explicitly met
+- **Fast answer to "where are we now?":** refresh-scope work is closed for this stage; current state is stable; deferred lines remain frozen unless reopen conditions are met
+
 # AutoOpenBrowser
 
 高性能浏览器自动化系统，运行在 Ubuntu 上。
