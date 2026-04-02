@@ -65,10 +65,12 @@
 - [x] 固化 eligibility gate vs ranking score 的正式边界
 - [x] 将 `soft_min_score` 作为 soft ranking penalty 并入 trust score
 - [x] 将 verify 慢路径底层风险信号并入 trust score（anonymity / latency / exit-ip / probe-error / geo-mismatch / region-mismatch）
-- [ ] 评估 provider/provider×region 风险汇总是否吸收 verify 慢路径新信号
+- [x] 评估 provider/provider×region 风险汇总是否吸收 verify 慢路径新信号
 - [ ] 继续收窄 trust cache / risk snapshot refresh 范围
 - [x] 为 selection / trust refresh / snapshot flip 增加最小 perf probe 埋点
-- [ ] 跑一轮 selection / trust cache / verify 回写 / status 聚合 profiling 样本记录
+- [x] 跑一轮 selection / trust cache / verify 回写 profiling 样本记录
+- [ ] 给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测
+- [ ] 继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 命中比例是否稳定
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略

@@ -88,3 +88,6 @@
 - **2026年04月02日 16时46分00秒** 实现了**verify probe error 分类并入 trust score**功能，将 `protocol_invalid / upstream_missing / connect_failed` 等 probe error category 映射为排序 penalty。
 - **2026年04月02日 17时00分00秒** 实现了**geo / region mismatch 严重度并入 trust score**功能，将国家级错配与地区级错配拆成不同 penalty，并同步修复 explainability 组件标签映射，使新的风险组件能稳定出现在候选差分与 explain 接口中。
 - **2026年04月02日 17时26分00秒** 实现了**trust refresh 性能观测埋点第一版**功能，为 provider/provider×region snapshot refresh、cached trust refresh 与 scoped refresh 分支命中增加 `AOB_PERF_PROBE=1` 低侵入 perf probe，开始为真实 profiling 样本收集做准备。
+- **2026年04月02日 17时38分00秒** 实现了**batch verify 真执行回写链集成测试**功能，新增 `verify_batch_executes_verify_tasks_and_persists_proxy_results`，正式覆盖 batch verify → verify_proxy 执行 → proxy 回写 → trust refresh 的真实闭环。
+- **2026年04月02日 17时40分00秒** 实现了**perf probe 分支统计脚本与首批命中分布总结**功能，新增 `scripts/summarize_perf_probe.py`，并确认当前样本中范围刷新分支命中占比约 `57.1%`，其中 `provider_scope_flip` 是当前主导项。
+- **2026年04月02日 17时44分00秒** 实现了**真实任务流 perf probe 样本补充**功能，确认 `provider_scope_flip` 已在 verify_proxy / open_page 自动代理选择路径中真实发生，`provider_region_scope_flip` 已在 batch verify 真执行回写链中真实发生。

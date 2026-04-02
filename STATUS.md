@@ -82,14 +82,14 @@
 1. **selection 语义仍未完全统一。**
    当前 auto 主链已经走 trust score，但 explicit / sticky / cooldown / no-match fallback 仍保留一定控制流语义，后续若继续叠规则，维护成本仍可能升高。
 
-2. **verify 风险原因已开始进入单代理 score，但 provider/provider×region 聚合还没正式吸收这些新信号。**
-   这会导致单代理排序进步快于聚合风险层，后续可能需要再收一轮跨代理风险汇总策略。
+2. **provider/provider×region 聚合虽已开始吸收 verify 新信号，但聚合范围与 refresh 代价还需继续收敛。**
+   当前 provider risk snapshot 已吸收 `exit_ip_not_public` 群体命中，provider×region risk snapshot 已吸收 `region_mismatch` 群体命中，但后续仍需继续验证聚合收益与范围刷新成本的平衡。
 
 3. **高并发下的 SQL / 写放大治理还没有正式做。**
-   trust cache、verify 回写、status 聚合、selection explain 已经全部进入主链，后续要正式看查询成本、索引策略与写频率。
+   trust cache、verify 回写、status 聚合、selection explain 已经全部进入主链，且 profiling 样本显示范围刷新分支占比不低，后续要正式看查询成本、索引策略与写频率。
 
-4. **profiling 现在已有最小观测埋点，但还缺真实样本。**
-   当前已为 snapshot refresh / cached trust refresh / scoped refresh branch 增加 `AOB_PERF_PROBE=1` 观测埋点，但还没跑足够真实流量样本来判断热点分布。
+4. **profiling 已有第一批真实样本，但读取侧仍是盲区。**
+   当前已为 snapshot refresh / cached trust refresh / scoped refresh branch 增加 `AOB_PERF_PROBE=1` 观测埋点，并拿到第一批样本：范围刷新分支命中占比约 `57.1%`，其中 `provider_scope_flip` 是当前主导项；但 `/status` 与 `/proxies/:id/explain` 的读取侧观测仍未补齐。
 
 5. **文档刚追回代码主线，仍需持续同步。**
    如果 `STATUS / TODO / PROGRESS / CURRENT_*` 不持续跟进，自动推进仍可能围绕旧阶段动作打转。
@@ -101,8 +101,8 @@
 
 ### P0
 1. **继续推进 selection → trust score 核心化**，把剩余分散在 selection 中的控制流语义继续收进统一 score / explain 边界。
-2. **开始评估 provider/provider×region 风险汇总是否吸收 verify 慢路径新信号**，避免单代理 score 与聚合风险层脱节。
-3. **跑一轮真实场景下的 `AOB_PERF_PROBE=1` 样本观察**，量化 snapshot flip、范围刷新分布与耗时。
+2. **给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测**，补齐当前 profiling 盲区。
+3. **继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例是否稳定。**
 4. **继续清 explainability 主链里剩余 typed/JSON 边界与 summary 文案质量。**
 5. **推进更真实的 verify 慢路径**，继续补匿名性 / 地区 / 出口真实性以外的可稳定质量信号。
 
@@ -114,9 +114,9 @@
 
 ## 本轮体检（2026-04-02）
 
-- **找 bug：** 本轮真实暴露并修掉的核心 bug 不是业务逻辑错误，而是 explainability 组件标签映射未同步更新，导致新 score component 在 diff 中掉成 `unknown`；现已修复。
-- **性能评分：** 当前阶段 **9.2/10**。优点是 trust score / explainability 主链已经开始真正消费 verify 慢路径信号，且 profiling 最小观测埋点已经落地；扣分点仍然是真实样本数据还未量化。
-- **改进建议：** 下一步最值得做的是 **评估 provider/provider×region 风险汇总如何吸收 verify 慢路径新增信号**，避免单体排序与聚合风险策略分裂。
+- **找 bug：** 本轮没有新增业务逻辑 bug；profiling 样本反而确认了两个真实热点事实：`provider_scope_flip` 已在 verify/open_page/batch verify 真执行链中真实命中，且范围刷新分支在当前样本中占比约 `57.1%`。
+- **性能评分：** 当前阶段 **9.4/10**。优点是 trust score / explainability 主链已经开始真正消费 verify 慢路径信号，profiling 最小观测埋点已经落地且已有第一批真实样本；扣分点主要转移到读取侧观测尚未补齐。
+- **改进建议：** 下一步最值得做的是 **给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测**，并继续验证范围刷新命中比例是否稳定。
 
 ## Autopilot Sync
 
