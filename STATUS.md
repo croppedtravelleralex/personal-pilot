@@ -88,10 +88,13 @@
 3. **高并发下的 SQL / 写放大治理还没有正式做。**
    trust cache、verify 回写、status 聚合、selection explain 已经全部进入主链，后续要正式看查询成本、索引策略与写频率。
 
-4. **文档刚追回代码主线，仍需持续同步。**
+4. **profiling 现在已有最小观测埋点，但还缺真实样本。**
+   当前已为 snapshot refresh / cached trust refresh / scoped refresh branch 增加 `AOB_PERF_PROBE=1` 观测埋点，但还没跑足够真实流量样本来判断热点分布。
+
+5. **文档刚追回代码主线，仍需持续同步。**
    如果 `STATUS / TODO / PROGRESS / CURRENT_*` 不持续跟进，自动推进仍可能围绕旧阶段动作打转。
 
-5. **Lightpanda 真实浏览器侧的更深 fingerprint 消费还没正式进入系统验证阶段。**
+6. **Lightpanda 真实浏览器侧的更深 fingerprint 消费还没正式进入系统验证阶段。**
    当前 profile 注入主链是通的，但真实浏览器侧更深能力与性能影响仍待系统评估。
 
 ## 当前下一步
@@ -99,7 +102,7 @@
 ### P0
 1. **继续推进 selection → trust score 核心化**，把剩余分散在 selection 中的控制流语义继续收进统一 score / explain 边界。
 2. **开始评估 provider/provider×region 风险汇总是否吸收 verify 慢路径新信号**，避免单代理 score 与聚合风险层脱节。
-3. **做一轮 selection / trust cache / verify 回写 / status 聚合 profiling**，量化热点和写放大。
+3. **跑一轮真实场景下的 `AOB_PERF_PROBE=1` 样本观察**，量化 snapshot flip、范围刷新分布与耗时。
 4. **继续清 explainability 主链里剩余 typed/JSON 边界与 summary 文案质量。**
 5. **推进更真实的 verify 慢路径**，继续补匿名性 / 地区 / 出口真实性以外的可稳定质量信号。
 
@@ -112,7 +115,7 @@
 ## 本轮体检（2026-04-02）
 
 - **找 bug：** 本轮真实暴露并修掉的核心 bug 不是业务逻辑错误，而是 explainability 组件标签映射未同步更新，导致新 score component 在 diff 中掉成 `unknown`；现已修复。
-- **性能评分：** 当前阶段 **9.1/10**。优点是 trust score / explainability 主链已经开始真正消费 verify 慢路径信号；扣分点仍然是聚合风险层尚未吸收这些新信号、profiling 数据还未量化。
+- **性能评分：** 当前阶段 **9.2/10**。优点是 trust score / explainability 主链已经开始真正消费 verify 慢路径信号，且 profiling 最小观测埋点已经落地；扣分点仍然是真实样本数据还未量化。
 - **改进建议：** 下一步最值得做的是 **评估 provider/provider×region 风险汇总如何吸收 verify 慢路径新增信号**，避免单体排序与聚合风险策略分裂。
 
 ## Autopilot Sync

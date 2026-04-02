@@ -87,3 +87,4 @@
 - **2026年04月02日 16时42分00秒** 实现了**verify 慢路径信号并入 trust score 第二轮**功能，将 `exit_ip_not_public` 风险正式作为 penalty 并入 trust score 主链。
 - **2026年04月02日 16时46分00秒** 实现了**verify probe error 分类并入 trust score**功能，将 `protocol_invalid / upstream_missing / connect_failed` 等 probe error category 映射为排序 penalty。
 - **2026年04月02日 17时00分00秒** 实现了**geo / region mismatch 严重度并入 trust score**功能，将国家级错配与地区级错配拆成不同 penalty，并同步修复 explainability 组件标签映射，使新的风险组件能稳定出现在候选差分与 explain 接口中。
+- **2026年04月02日 17时26分00秒** 实现了**trust refresh 性能观测埋点第一版**功能，为 provider/provider×region snapshot refresh、cached trust refresh 与 scoped refresh 分支命中增加 `AOB_PERF_PROBE=1` 低侵入 perf probe，开始为真实 profiling 样本收集做准备。
