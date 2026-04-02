@@ -114,7 +114,9 @@
 - [x] 继续以 bounded expansion 方式定义最小新动作
 - [x] 在清晰 action contract 基础上选择一个最小新动作落地候选
 - [x] 验证 `get_html` 是否能安全复用当前 fetch-style 路径
-- [ ] 继续补 `get_html` 结果边界与摘要质量
+- [x] 继续补 `get_html` 结果边界与摘要质量
+- [x] 开始高级代理体系第一轮最小闭环
+- [ ] 将 `proxy_growth` 规则接入选择链路或 explain 输出
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略
