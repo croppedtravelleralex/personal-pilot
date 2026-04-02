@@ -2918,6 +2918,46 @@ async fn proxy_explain_endpoint_single_candidate_has_zero_gap_and_empty_runner_u
     }
 }
 
+
+#[tokio::test]
+async fn proxy_explain_endpoint_with_higher_candidate_count_still_returns_preview() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let mut values = Vec::new();
+    for i in 0..12 {
+        let id = format!("proxy-explain-bulk-{}", i);
+        let score = 0.90 - (i as f64 * 0.02);
+        let success = 10 - (i.min(5) as i64);
+        let verify_geo = if i % 3 == 0 { 0 } else { 1 };
+        values.push(format!(
+            "('{}', 'http', '127.0.0.1', {}, NULL, NULL, 'us-east', 'US', 'pool-bulk', 'active', {:.2}, {}, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', {}, 'US', 'Virginia', '9999999999', '1', '1')",
+            id,
+            8100 + i,
+            score,
+            success,
+            verify_geo
+        ));
+    }
+    let sql = format!(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, created_at, updated_at)
+                  VALUES {}"#, values.join(",\n"));
+    sqlx::query(&sql)
+        .execute(&state.db)
+        .await
+        .expect("insert proxies");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().uri("/proxies/proxy-explain-bulk-0/explain").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    let preview = json.get("candidate_rank_preview").and_then(|v| v.as_array()).expect("candidate_rank_preview");
+    assert!(!preview.is_empty());
+    assert!(preview.len() <= 5);
+    assert_eq!(preview[0].get("id").and_then(|v| v.as_str()), Some("proxy-explain-bulk-0"));
+}
+
+
 #[tokio::test]
 async fn proxy_explain_endpoint_returns_components_and_preview() {
     let db_url = unique_db_url();

@@ -88,8 +88,8 @@
 3. **高并发下的 SQL / 写放大治理还没有正式做。**
    trust cache、verify 回写、status 聚合、selection explain 已经全部进入主链，且 profiling 样本显示范围刷新分支占比不低，后续要正式看查询成本、索引策略与写频率。
 
-4. **profiling 已有第一批真实样本，但读取侧仍是盲区。**
-   当前已为 snapshot refresh / cached trust refresh / scoped refresh branch 增加 `AOB_PERF_PROBE=1` 观测埋点，并拿到第一批样本：范围刷新分支命中占比约 `57.1%`，其中 `provider_scope_flip` 是当前主导项；但 `/status` 与 `/proxies/:id/explain` 的读取侧观测仍未补齐。
+4. **profiling 已有第一批真实样本，当前热点仍偏写侧范围刷新。**
+   当前已为 snapshot refresh / cached trust refresh / scoped refresh branch、`/status` 与 `/proxies/:id/explain` 增加 `AOB_PERF_PROBE=1` 观测埋点，并拿到第一批样本：范围刷新分支命中占比约 `57.1%`，其中 `provider_scope_flip` 是当前主导项；读侧 `/status` 约 `1ms`、`/proxies/:id/explain` 在 `candidate_count=1~3` 时约 `3~6ms`，当前仍明显轻于写侧范围刷新。
 
 5. **文档刚追回代码主线，仍需持续同步。**
    如果 `STATUS / TODO / PROGRESS / CURRENT_*` 不持续跟进，自动推进仍可能围绕旧阶段动作打转。
@@ -101,8 +101,8 @@
 
 ### P0
 1. **继续推进 selection → trust score 核心化**，把剩余分散在 selection 中的控制流语义继续收进统一 score / explain 边界。
-2. **给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测**，补齐当前 profiling 盲区。
-3. **继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例是否稳定。**
+2. **继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例是否稳定。**
+3. **评估是否继续收窄 provider 级 refresh 范围**，前提是后续样本仍显示 `provider_scope_flip` 主导。
 4. **继续清 explainability 主链里剩余 typed/JSON 边界与 summary 文案质量。**
 5. **推进更真实的 verify 慢路径**，继续补匿名性 / 地区 / 出口真实性以外的可稳定质量信号。
 

@@ -69,7 +69,7 @@
 - [ ] 继续收窄 trust cache / risk snapshot refresh 范围
 - [x] 为 selection / trust refresh / snapshot flip 增加最小 perf probe 埋点
 - [x] 跑一轮 selection / trust cache / verify 回写 profiling 样本记录
-- [ ] 给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测
+- [x] 给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测
 - [ ] 继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 命中比例是否稳定
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）

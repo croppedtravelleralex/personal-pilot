@@ -102,3 +102,17 @@
 1. 继续扩大真实任务流样本，验证 `57.1%` 的分布是否稳定
 2. 观察更高候选规模下 `/proxies/:id/explain` 的增长曲线
 3. 若 provider 级范围刷新持续主导，再考虑是否继续收窄 provider 级 refresh 范围
+
+
+## 读侧补充样本：更高候选规模 explain
+
+新增采样路径：
+- `proxy_explain_endpoint_with_higher_candidate_count_still_returns_preview`
+
+样本：
+- `api_proxy_explain proxy_id=proxy-explain-bulk-0 elapsed_ms=6 candidate_count=3`
+
+### 补充判断
+- 当前候选规模从 1 提升到 3 时，`/proxies/:id/explain` 仍处于低毫秒级
+- 在当前测试规模下，读侧 explain 仍明显轻于写侧范围刷新
+- 现阶段还没有足够证据支持“优先优化 explain 读侧”
