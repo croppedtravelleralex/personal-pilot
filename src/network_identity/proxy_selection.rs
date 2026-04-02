@@ -13,6 +13,8 @@ pub struct ProxySelectionTuning {
     pub raw_score_weight_tenths: i64,
     pub verify_ok_bonus: i64,
     pub verify_geo_match_bonus: i64,
+    pub geo_mismatch_penalty: i64,
+    pub region_mismatch_penalty: i64,
     pub smoke_upstream_ok_bonus: i64,
     pub verify_failed_heavy_penalty: i64,
     pub verify_failed_light_penalty: i64,
@@ -45,6 +47,8 @@ impl Default for ProxySelectionTuning {
             raw_score_weight_tenths: 10,
             verify_ok_bonus: 30,
             verify_geo_match_bonus: 20,
+            geo_mismatch_penalty: 8,
+            region_mismatch_penalty: 4,
             smoke_upstream_ok_bonus: 10,
             verify_failed_heavy_penalty: 30,
             verify_failed_light_penalty: 15,
@@ -209,6 +213,8 @@ mod tests {
         assert_eq!(tuning.provider_region_failure_cluster_count, 2);
         assert_eq!(tuning.raw_score_weight_tenths, 10);
         assert_eq!(tuning.verify_ok_bonus, 30);
+        assert_eq!(tuning.geo_mismatch_penalty, 8);
+        assert_eq!(tuning.region_mismatch_penalty, 4);
         assert_eq!(tuning.missing_verify_penalty, 12);
         assert_eq!(tuning.soft_min_score_penalty, 6);
         assert_eq!(tuning.anonymity_elite_bonus, 4);
@@ -467,6 +473,12 @@ pub fn proxy_selection_tuning_from_env() -> ProxySelectionTuning {
     if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_GEO_MATCH_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() { tuning.verify_geo_match_bonus = parsed; }
     }
+    if let Ok(value) = std::env::var("AOB_PROXY_GEO_MISMATCH_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.geo_mismatch_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_REGION_MISMATCH_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.region_mismatch_penalty = parsed; }
+    }
     if let Ok(value) = std::env::var("AOB_PROXY_SMOKE_UPSTREAM_OK_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() { tuning.smoke_upstream_ok_bonus = parsed; }
     }
@@ -597,6 +609,8 @@ pub fn proxy_selection_order_by_cached_trust_score_sql() -> String {
 pub struct ProxyTrustScoreComponentWeights {
     pub verify_ok_bonus: i64,
     pub verify_geo_match_bonus: i64,
+    pub geo_mismatch_penalty: i64,
+    pub region_mismatch_penalty: i64,
     pub smoke_upstream_ok_bonus: i64,
     pub verify_failed_heavy_penalty: i64,
     pub verify_failed_light_penalty: i64,
@@ -612,6 +626,8 @@ pub fn proxy_trust_score_component_weights(tuning: &ProxySelectionTuning) -> Pro
     ProxyTrustScoreComponentWeights {
         verify_ok_bonus: tuning.verify_ok_bonus,
         verify_geo_match_bonus: tuning.verify_geo_match_bonus,
+        geo_mismatch_penalty: tuning.geo_mismatch_penalty,
+        region_mismatch_penalty: tuning.region_mismatch_penalty,
         smoke_upstream_ok_bonus: tuning.smoke_upstream_ok_bonus,
         verify_failed_heavy_penalty: tuning.verify_failed_heavy_penalty,
         verify_failed_light_penalty: tuning.verify_failed_light_penalty,

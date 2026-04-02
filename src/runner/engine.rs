@@ -133,6 +133,7 @@ pub fn computed_trust_score_components(
     failure_count: i64,
     last_verify_status: Option<&str>,
     last_verify_geo_match_ok: bool,
+    last_region_match_ok: Option<bool>,
     last_smoke_upstream_ok: bool,
     last_verify_at: Option<i64>,
     last_anonymity_level: Option<&str>,
@@ -145,6 +146,8 @@ pub fn computed_trust_score_components(
 ) -> TrustScoreComponents {
     let verify_ok_bonus = if last_verify_status == Some("ok") { tuning.verify_ok_bonus } else { 0 };
     let verify_geo_match_bonus = if last_verify_geo_match_ok { tuning.verify_geo_match_bonus } else { 0 };
+    let geo_mismatch_penalty = if !last_verify_geo_match_ok { tuning.geo_mismatch_penalty } else { 0 };
+    let region_mismatch_penalty = if last_region_match_ok == Some(false) { tuning.region_mismatch_penalty } else { 0 };
     let smoke_upstream_ok_bonus = if last_smoke_upstream_ok { tuning.smoke_upstream_ok_bonus } else { 0 };
     let raw_score_component = (score * tuning.raw_score_weight_tenths as f64).round() as i64;
     let missing_verify_penalty = if last_verify_at.is_none() { tuning.missing_verify_penalty } else { 0 };
@@ -188,6 +191,8 @@ pub fn computed_trust_score_components(
     TrustScoreComponents {
         verify_ok_bonus,
         verify_geo_match_bonus,
+        geo_mismatch_penalty,
+        region_mismatch_penalty,
         smoke_upstream_ok_bonus,
         raw_score_component,
         missing_verify_penalty,
@@ -210,6 +215,8 @@ fn component_value(components: &TrustScoreComponents, key: &str) -> i64 {
     match key {
         "verify_ok_bonus" => components.verify_ok_bonus,
         "verify_geo_match_bonus" => components.verify_geo_match_bonus,
+        "geo_mismatch_penalty" => components.geo_mismatch_penalty,
+        "region_mismatch_penalty" => components.region_mismatch_penalty,
         "smoke_upstream_ok_bonus" => components.smoke_upstream_ok_bonus,
         "raw_score_component" => components.raw_score_component,
         "missing_verify_penalty" => components.missing_verify_penalty,
@@ -229,10 +236,12 @@ fn component_value(components: &TrustScoreComponents, key: &str) -> i64 {
     }
 }
 
-fn component_keys() -> [&'static str; 16] {
+fn component_keys() -> [&'static str; 18] {
     [
         "verify_ok_bonus",
         "verify_geo_match_bonus",
+        "geo_mismatch_penalty",
+        "region_mismatch_penalty",
         "smoke_upstream_ok_bonus",
         "raw_score_component",
         "missing_verify_penalty",
@@ -264,6 +273,8 @@ fn empty_components() -> TrustScoreComponents {
     TrustScoreComponents {
         verify_ok_bonus: 0,
         verify_geo_match_bonus: 0,
+        geo_mismatch_penalty: 0,
+        region_mismatch_penalty: 0,
         smoke_upstream_ok_bonus: 0,
         raw_score_component: 0,
         missing_verify_penalty: 0,
@@ -286,6 +297,8 @@ fn component_label(key: &str) -> &'static str {
     match key {
         "verify_ok_bonus" => "verify_ok",
         "verify_geo_match_bonus" => "geo_match",
+        "geo_mismatch_penalty" => "geo_mismatch",
+        "region_mismatch_penalty" => "region_mismatch",
         "smoke_upstream_ok_bonus" => "upstream_ok",
         "raw_score_component" => "raw_score",
         "missing_verify_penalty" => "missing_verify",
@@ -296,6 +309,11 @@ fn component_label(key: &str) -> &'static str {
         "individual_history_penalty" => "history_risk",
         "provider_risk_penalty" => "provider_risk",
         "provider_region_cluster_penalty" => "provider_region_risk",
+        "anonymity_bonus" => "anonymity",
+        "latency_penalty" => "probe_latency",
+        "exit_ip_not_public_penalty" => "exit_ip_not_public",
+        "probe_error_penalty" => "probe_error_category",
+        "soft_min_score_penalty" => "soft_min_score",
         _ => "unknown",
     }
 }
@@ -533,25 +551,34 @@ async fn compute_proxy_selection_explain(
 ) -> Result<(Option<i64>, TrustScoreComponents)> {
     let provider_risk_query = "SELECT EXISTS(SELECT 1 FROM provider_risk_snapshots s JOIN proxies p ON p.provider = s.provider WHERE p.id = ? AND s.risk_hit != 0)";
     let provider_region_query = "SELECT EXISTS(SELECT 1 FROM provider_region_risk_snapshots s JOIN proxies p ON p.provider = s.provider AND p.region = s.region WHERE p.id = ? AND s.risk_hit != 0)";
-    let row = sqlx::query_as::<_, (f64, i64, i64, Option<String>, Option<i64>, Option<i64>, Option<i64>, Option<String>, Option<i64>, Option<String>)>(
-        r#"SELECT score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, CAST(last_verify_at AS INTEGER), last_anonymity_level, last_probe_latency_ms, last_probe_error_category FROM proxies WHERE id = ?"#
+    let row = sqlx::query_as::<_, (f64, i64, i64, Option<String>, Option<i64>, Option<i64>, Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(
+        r#"SELECT score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, CAST(last_verify_at AS INTEGER), last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_country, last_exit_region, country, region FROM proxies WHERE id = ?"#
     )
     .bind(proxy_id)
     .fetch_optional(&state.db)
     .await?;
-    let Some((score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, last_anonymity_level, last_probe_latency_ms, last_probe_error_category)) = row else {
+    let Some((score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_country, last_exit_region, proxy_country, proxy_region)) = row else {
         return Ok((None, empty_components()));
     };
     let provider_risk_hit: i64 = sqlx::query_scalar(provider_risk_query).bind(proxy_id).fetch_one(&state.db).await?;
     let provider_region_cluster_hit: i64 = sqlx::query_scalar(provider_region_query).bind(proxy_id).fetch_one(&state.db).await?;
     let trust_score_total = load_proxy_trust_score(state, proxy_id, now).await?;
+    let region_match_ok = match (last_exit_region.as_deref(), proxy_region.as_deref()) {
+        (Some(actual), Some(expected)) => Some(actual.eq_ignore_ascii_case(expected)),
+        _ => None,
+    };
+    let geo_match_ok = match (last_exit_country.as_deref(), proxy_country.as_deref()) {
+        (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
+        _ => last_verify_geo_match_ok.unwrap_or(0) != 0,
+    };
     let components = computed_trust_score_components(
         &state.proxy_selection_tuning,
         score,
         success_count,
         failure_count,
         last_verify_status.as_deref(),
-        last_verify_geo_match_ok.unwrap_or(0) != 0,
+        geo_match_ok,
+        region_match_ok,
         last_smoke_upstream_ok.unwrap_or(0) != 0,
         last_verify_at,
         last_anonymity_level.as_deref(),
@@ -1348,6 +1375,8 @@ mod tests {
         TrustScoreComponents {
             verify_ok_bonus: 30,
             verify_geo_match_bonus: 20,
+            geo_mismatch_penalty: 0,
+            region_mismatch_penalty: 0,
             smoke_upstream_ok_bonus: 10,
             raw_score_component: 8,
             missing_verify_penalty: 0,
@@ -1370,6 +1399,8 @@ mod tests {
         TrustScoreComponents {
             verify_ok_bonus: 0,
             verify_geo_match_bonus: 0,
+            geo_mismatch_penalty: 8,
+            region_mismatch_penalty: 4,
             smoke_upstream_ok_bonus: 0,
             raw_score_component: 0,
             missing_verify_penalty: 12,
@@ -1398,6 +1429,7 @@ mod tests {
             1,
             Some("ok"),
             true,
+            Some(false),
             true,
             Some(9999999999),
             Some("elite"),
@@ -1410,6 +1442,8 @@ mod tests {
         );
         assert_eq!(components.verify_ok_bonus, 30);
         assert_eq!(components.verify_geo_match_bonus, 20);
+        assert_eq!(components.geo_mismatch_penalty, 0);
+        assert_eq!(components.region_mismatch_penalty, 4);
         assert_eq!(components.smoke_upstream_ok_bonus, 10);
         assert_eq!(components.raw_score_component, 8);
         assert_eq!(components.provider_risk_penalty, 5);
@@ -1440,8 +1474,8 @@ mod tests {
         let baseline = penalty_components_json();
         let delta = structured_component_delta(&current, Some(&baseline));
         assert_eq!(delta.winner_total_score, 68);
-        assert_eq!(delta.runner_up_total_score, 84);
-        assert_eq!(delta.score_gap, -16);
+        assert_eq!(delta.runner_up_total_score, 96);
+        assert_eq!(delta.score_gap, -28);
         let factors = &delta.factors;
         assert!(!factors.is_empty());
         assert!(factors.len() <= 5);

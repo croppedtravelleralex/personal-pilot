@@ -2600,7 +2600,7 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
         let deltas: Vec<i64> = factors.iter().filter_map(|v| v.get("delta").and_then(|v| v.as_i64()).map(|d| d.abs())).collect();
         assert!(deltas.windows(2).all(|w| w[0] >= w[1]));
         let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
-        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk")));
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
     }
 
     let result_json_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#)
@@ -2812,7 +2812,7 @@ async fn proxy_explain_endpoint_single_candidate_has_zero_gap_and_empty_runner_u
     assert!(diff.get("factors").and_then(|v| v.as_array()).map(|v| v.len() <= 5).unwrap_or(false));
     if let Some(factors) = diff.get("factors").and_then(|v| v.as_array()) {
         let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
-        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk")));
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
         let directions: Vec<&str> = factors.iter().filter_map(|v| v.get("direction").and_then(|v| v.as_str())).collect();
         assert!(directions.iter().all(|d| *d == "neutral"));
     }
@@ -2855,7 +2855,7 @@ async fn proxy_explain_endpoint_returns_components_and_preview() {
         let deltas: Vec<i64> = factors.iter().filter_map(|v| v.get("delta").and_then(|v| v.as_i64()).map(|d| d.abs())).collect();
         assert!(deltas.windows(2).all(|w| w[0] >= w[1]));
         let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
-        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk")));
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
     }
 }
 
