@@ -42,6 +42,16 @@
 
 ---
 
+## 2.1 当前阶段快照（Current Stage Snapshot）
+
+- **Stage status:** stable / closed enough to freeze
+- **Completed in current stage:** providerScope lazy refresh validated; provider risk version / seen v1 landed; selection intentionally unchanged; explain-side version visibility landed and validated; providerRegion deferred for this stage
+- **Frozen in current stage:** providerRegion implementation; selection ranking redesign around version semantics; broad trust-score semantics rewrite; broad explainability rewrite
+- **Reopen rule:** deferred lines reopen only when their documented reopen conditions are explicitly met
+- **Fast answer:** refresh-scope work is closed for this stage; current state is stable; deferred lines remain frozen unless reopen conditions are met
+- **Entry maintenance:** `python3 scripts/check_stage_entry_consistency.py`
+- **Entry maintenance flow:** `bash scripts/stage_entry_maintenance_flow.sh`
+
 ## 3. 项目根目录关键文件
 
 ### 标准入口文档

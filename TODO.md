@@ -97,7 +97,8 @@
 - [x] 若后续阶段切换，再按 example + checklist 联动更新入口摘要
 - [x] 后续若入口摘要更新，先运行 `python3 scripts/check_stage_entry_consistency.py`
 - [x] 后续若入口摘要更新，按 usage 文档的 flow 执行
-- [ ] 后续若阶段切换，优先使用 `bash scripts/stage_entry_maintenance_flow.sh` 做维护前检查
+- [x] 后续若阶段切换，优先使用 `bash scripts/stage_entry_maintenance_flow.sh` 做维护前检查
+- [ ] 后续若入口状态变更，同步维护 README 与 AI.md 两处 Current Stage Snapshot
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略
