@@ -110,7 +110,8 @@
 - [x] 优先推进 execution-path hardening
 - [x] 继续推进 runner 可观测性 / artifact 质量
 - [x] 推进指纹真实消费边界
-- [ ] 在稳定基础上评估真实能力扩展 beyond minimal fetch
+- [x] 在稳定基础上评估真实能力扩展 beyond minimal fetch
+- [ ] 继续以 bounded expansion 方式定义最小新动作
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略

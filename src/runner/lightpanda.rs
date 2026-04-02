@@ -105,6 +105,7 @@ fn result_payload(
     error_kind: Option<&str>,
     failure_scope: Option<&str>,
     browser_failure_signal: Option<&str>,
+    action: &str,
     task: &RunnerTask,
     url: Option<&str>,
     timeout_seconds: Option<u64>,
@@ -159,7 +160,7 @@ fn result_payload(
 
     json!({
         "runner": "lightpanda",
-        "action": "open_page",
+        "action": action,
         "ok": ok,
         "status": status,
         "error_kind": error_kind,
@@ -187,6 +188,7 @@ fn build_result(
     ok: bool,
     status: &str,
     error_kind: Option<&str>,
+    action: &str,
     task: &RunnerTask,
     url: Option<&str>,
     timeout_seconds: Option<u64>,
@@ -214,6 +216,7 @@ fn build_result(
             error_kind,
             failure_scope,
             browser_failure_signal,
+            action,
             task,
             url,
             timeout_seconds,
@@ -230,10 +233,10 @@ fn build_result(
             key: format!("{}.execution", task.kind),
             source: "runner.lightpanda".to_string(),
             severity: if is_error { crate::runner::types::SummaryArtifactSeverity::Error } else { crate::runner::types::SummaryArtifactSeverity::Info },
-            title: execution_summary_title(status, error_kind),
+            title: execution_summary_title(action, status, error_kind),
             summary: format!(
                 "{} failure_scope={} browser_failure_signal={}",
-                execution_summary_text(task, status, error_kind, exit_code, timeout_seconds, &message),
+                execution_summary_text(action, task, status, error_kind, exit_code, timeout_seconds, &message),
                 failure_scope.unwrap_or("none"),
                 browser_failure_signal.unwrap_or("none"),
             ),
@@ -241,12 +244,13 @@ fn build_result(
     }
 }
 
-fn invalid_input(task: &RunnerTask, message: &str, url: Option<&str>) -> RunnerExecutionResult {
+fn invalid_input(task: &RunnerTask, action: &str, message: &str, url: Option<&str>) -> RunnerExecutionResult {
     build_result(
         RunnerOutcomeStatus::Failed,
         false,
         "failed",
         Some("invalid_input"),
+        action,
         task,
         url,
         None,
@@ -257,6 +261,23 @@ fn invalid_input(task: &RunnerTask, message: &str, url: Option<&str>) -> RunnerE
         None,
         message,
     )
+}
+
+fn extract_action(payload: &Value) -> String {
+    payload
+        .get("action")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("open_page")
+        .to_string()
+}
+
+fn normalize_action(action: &str) -> Option<&'static str> {
+    match action {
+        "open_page" | "fetch" => Some("open_page"),
+        _ => None,
+    }
 }
 
 fn extract_url(payload: &Value) -> Option<String> {
@@ -312,20 +333,21 @@ fn classify_exit_code(exit_code: Option<i32>) -> &'static str {
     }
 }
 
-fn execution_summary_title(status: &str, error_kind: Option<&str>) -> String {
+fn execution_summary_title(action: &str, status: &str, error_kind: Option<&str>) -> String {
     match (status, error_kind) {
-        ("succeeded", _) => "open_page execution succeeded".to_string(),
-        ("timed_out", Some("timeout")) => "open_page execution timed out".to_string(),
-        ("failed", Some(kind)) => format!("open_page execution failed ({kind})"),
-        ("failed", None) => "open_page execution failed".to_string(),
-        _ => format!("open_page execution {status}"),
+        ("succeeded", _) => format!("{action} execution succeeded"),
+        ("timed_out", Some("timeout")) => format!("{action} execution timed out"),
+        ("failed", Some(kind)) => format!("{action} execution failed ({kind})"),
+        ("failed", None) => format!("{action} execution failed"),
+        _ => format!("{action} execution {status}"),
     }
 }
 
-fn execution_summary_text(task: &RunnerTask, status: &str, error_kind: Option<&str>, exit_code: Option<i32>, timeout_seconds: Option<u64>, message: &str) -> String {
+fn execution_summary_text(action: &str, task: &RunnerTask, status: &str, error_kind: Option<&str>, exit_code: Option<i32>, timeout_seconds: Option<u64>, message: &str) -> String {
     format!(
-        "kind={} status={} error_kind={} exit_code={:?} timeout_seconds={:?} message={}",
+        "kind={} action={} status={} error_kind={} exit_code={:?} timeout_seconds={:?} message={}",
         task.kind,
+        action,
         status,
         error_kind.unwrap_or("none"),
         exit_code,
@@ -469,11 +491,25 @@ impl TaskRunner for LightpandaRunner {
     }
 
     async fn execute(&self, task: RunnerTask) -> RunnerExecutionResult {
+        let requested_action = extract_action(&task.payload);
+        let action = match normalize_action(&requested_action) {
+            Some(action) => action,
+            None => {
+                return invalid_input(
+                    &task,
+                    requested_action.as_str(),
+                    "lightpanda runner currently supports only action=open_page (fetch is accepted as an alias)",
+                    extract_url(&task.payload).as_deref(),
+                )
+            }
+        };
+
         let url = match extract_url(&task.payload) {
             Some(url) => url,
             None => {
                 return invalid_input(
                     &task,
+                    action,
                     "lightpanda runner requires a non-empty url in task payload",
                     None,
                 )
@@ -483,6 +519,7 @@ impl TaskRunner for LightpandaRunner {
         if !looks_like_url(&url) {
             return invalid_input(
                 &task,
+                action,
                 "lightpanda runner currently only accepts http:// or https:// urls",
                 Some(&url),
             );
@@ -529,6 +566,7 @@ impl TaskRunner for LightpandaRunner {
                     false,
                     "failed",
                     Some(classify_spawn_error(&err)),
+                    action,
                     &task,
                     Some(&url),
                     Some(timeout_seconds),
@@ -639,6 +677,7 @@ impl TaskRunner for LightpandaRunner {
             matches!(outcome, RunnerOutcomeStatus::Succeeded),
             status_text,
             error_kind,
+            action,
             &task,
             Some(&url),
             Some(timeout_seconds),
@@ -844,9 +883,42 @@ exit 0",
     }
 
     #[test]
+    fn extract_action_defaults_to_open_page_and_accepts_explicit_action() {
+        assert_eq!(extract_action(&json!({"url": "https://example.com"})), "open_page");
+        assert_eq!(extract_action(&json!({"url": "https://example.com", "action": "fetch"})), "fetch");
+        assert_eq!(normalize_action("open_page"), Some("open_page"));
+        assert_eq!(normalize_action("fetch"), Some("open_page"));
+        assert_eq!(normalize_action("screenshot"), None);
+    }
+
+    #[test]
     fn extract_url_trims_and_rejects_empty() {
         assert_eq!(extract_url(&json!({"url": "  https://example.com  "})), Some("https://example.com".to_string()));
         assert_eq!(extract_url(&json!({"url": "   "})), None);
+    }
+
+    #[tokio::test]
+    async fn execute_accepts_fetch_action_alias() {
+        let script = write_script(
+            "fetch-alias",
+            "echo ok
+exit 0",
+        );
+        let result = execute_with_bin(script.to_str().unwrap(), json!({"url": "https://example.com", "action": "fetch"}), Some(5)).await;
+        let _ = fs::remove_file(script);
+
+        assert!(matches!(result.status, RunnerOutcomeStatus::Succeeded));
+        let json = result.result_json.expect("result json");
+        assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("open_page"));
+    }
+
+    #[tokio::test]
+    async fn execute_rejects_unsupported_action() {
+        let result = execute_with_bin("/bin/sh", json!({"url": "https://example.com", "action": "screenshot"}), Some(5)).await;
+        assert!(matches!(result.status, RunnerOutcomeStatus::Failed));
+        let json = result.result_json.expect("result json");
+        assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("invalid_input"));
+        assert!(json.get("message").and_then(|v| v.as_str()).unwrap_or("").contains("supports only action=open_page"));
     }
 
     #[tokio::test]
