@@ -84,7 +84,7 @@
 - [x] 定义 provider_region 进入实现阶段的条件
 - [x] 规划第二阶段主线边界（哪些继续延后，哪些可以进入实现）
 - [x] 围绕 providerRegion 进入条件补最小验证样本
-- [ ] 继续累积 providerRegion 进入条件验证样本
+- [ ] 再补极少量 providerRegion 进入条件验证样本后收口当前判断
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略
