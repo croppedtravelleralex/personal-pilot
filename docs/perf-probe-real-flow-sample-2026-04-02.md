@@ -86,3 +86,38 @@
 1. 继续采样会真正触发 verify 批量执行回写的 batch verify 路径
 2. 给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测
 3. 统计 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例
+
+---
+
+## 补充样本：batch verify 真执行回写链
+
+新增采样路径：
+- `verify_batch_executes_verify_tasks_and_persists_proxy_results`
+
+观测到：
+- `refresh_provider_risk_snapshot scope=provider provider=pool-batch-run elapsed_ms=6`
+- `refresh_provider_region_risk_snapshot scope=provider_region provider=pool-batch-run region=us-east elapsed_ms=5`
+- `refresh_proxy_trust_views_for_scope branch=provider_scope_flip proxy_id=proxy-batch-run-1 provider=pool-batch-run`
+- `refresh_cached_trust_scores scope=provider provider=pool-batch-run elapsed_ms=6`
+- `refresh_provider_risk_snapshot scope=provider provider=pool-batch-run elapsed_ms=11`
+- `refresh_provider_region_risk_snapshot scope=provider_region provider=pool-batch-run region=us-east elapsed_ms=14`
+- `refresh_proxy_trust_views_for_scope branch=provider_region_scope_flip proxy_id=proxy-batch-run-2 provider=pool-batch-run region=us-east`
+- `refresh_cached_trust_scores scope=provider_region provider=pool-batch-run region=us-east elapsed_ms=8`
+
+### 补充结论
+
+1. **batch verify 真执行链比单次 verify 更容易触发范围刷新级联。**
+   在同一批次内，已经同时观察到：
+   - `provider_scope_flip`
+   - `provider_region_scope_flip`
+
+2. **provider_region_scope_flip 现在已经不是理论分支。**
+   它已在 batch verify 真执行回写链中真实命中。
+
+3. **下一步 profiling 的最关键指标已经更明确：**
+   不只是看 provider scope flip，
+   还要看：
+   - `provider_scope_flip`
+   - `provider_region_scope_flip`
+   - `proxy_only_no_flip`
+   三者在真实任务流里的命中比例。

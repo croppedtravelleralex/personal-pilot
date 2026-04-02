@@ -1748,6 +1748,106 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
 }
 
 
+
+#[tokio::test]
+async fn verify_batch_executes_verify_tasks_and_persists_proxy_results() {
+    let listener_one = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind listener one");
+    let addr_one = listener_one.local_addr().expect("local addr one");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener_one.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\nip=1.1.1.1\ncountry=US\nregion=Virginia\n"),
+            ).await;
+        }
+    });
+
+    let listener_two = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind listener two");
+    let addr_two = listener_two.local_addr().expect("local addr two");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener_two.accept().await {
+            let mut buf = [0_u8; 256];
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut buf)).await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\nip=1.1.1.2\ncountry=US\nregion=Virginia\n"),
+            ).await;
+        }
+    });
+
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    for (id, host, port) in [
+        ("proxy-batch-run-1", addr_one.ip().to_string(), addr_one.port()),
+        ("proxy-batch-run-2", addr_two.ip().to_string(), addr_two.port()),
+    ] {
+        let proxy_payload = serde_json::json!({
+            "id": id,
+            "scheme": "http",
+            "host": host,
+            "port": port,
+            "region": "us-east",
+            "country": "US",
+            "provider": "pool-batch-run",
+            "score": 0.9
+        });
+        let (status, _) = json_response(
+            &app,
+            Request::builder().method("POST").uri("/proxies").header("content-type", "application/json").body(Body::from(proxy_payload.to_string())).expect("request"),
+        ).await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    let batch_payload = serde_json::json!({
+        "provider": "pool-batch-run",
+        "region": "us-east",
+        "limit": 10,
+        "only_stale": true,
+        "task_timeout_seconds": 5,
+        "recently_used_within_seconds": 0,
+        "failed_only": false
+    });
+    let (batch_status, batch_json) = json_response(
+        &app,
+        Request::builder().method("POST").uri("/proxies/verify-batch").header("content-type", "application/json").body(Body::from(batch_payload.to_string())).expect("request"),
+    ).await;
+    assert_eq!(batch_status, StatusCode::ACCEPTED);
+    assert_eq!(batch_json.get("accepted").and_then(|v| v.as_i64()), Some(2));
+    let batch_id = batch_json.get("batch_id").and_then(|v| v.as_str()).expect("batch id");
+
+    let mut task_ids: Vec<String> = Vec::new();
+    for _ in 0..12 {
+        task_ids = sqlx::query_scalar(r#"SELECT id FROM tasks WHERE kind = 'verify_proxy' AND json_extract(input_json, '$.verify_batch_id') = ? ORDER BY id ASC"#)
+            .bind(batch_id)
+            .fetch_all(&state.db)
+            .await
+            .expect("load verify task ids");
+        if task_ids.len() == 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(task_ids.len(), 2);
+
+    for task_id in &task_ids {
+        let task = wait_for_terminal_status(&app, task_id).await;
+        assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
+    }
+
+    for proxy_id in ["proxy-batch-run-1", "proxy-batch-run-2"] {
+        let (_, proxy_json) = json_response(
+            &app,
+            Request::builder().uri(format!("/proxies/{proxy_id}")).body(Body::empty()).expect("request"),
+        ).await;
+        assert_eq!(proxy_json.get("last_verify_status").and_then(|v| v.as_str()), Some("ok"));
+        assert_eq!(proxy_json.get("last_exit_region").and_then(|v| v.as_str()), Some("Virginia"));
+    }
+}
+
+
 #[tokio::test]
 async fn status_exposes_verify_metrics_summary() {
     let db_url = unique_db_url();
