@@ -202,8 +202,8 @@ fn build_result(
             key: format!("{}.execution", task.kind),
             source: "runner.lightpanda".to_string(),
             severity: if is_error { crate::runner::types::SummaryArtifactSeverity::Error } else { crate::runner::types::SummaryArtifactSeverity::Info },
-            title: format!("{} execution summary", task.kind),
-            summary: format!("kind={} status={} message={}", task.kind, status, message),
+            title: execution_summary_title(status, error_kind),
+            summary: execution_summary_text(task, status, error_kind, exit_code, timeout_seconds, &message),
         }],
     }
 }
@@ -267,6 +267,38 @@ fn classify_spawn_error(err: &io::Error) -> &'static str {
         io::ErrorKind::PermissionDenied => "spawn_permission_denied",
         _ => "spawn_failed",
     }
+}
+
+fn classify_exit_code(exit_code: Option<i32>) -> &'static str {
+    match exit_code {
+        Some(126) => "runner_invocation_not_executable",
+        Some(127) => "runner_command_not_found",
+        Some(code) if code >= 128 => "runner_terminated_by_signal",
+        Some(_) => "runner_non_zero_exit",
+        None => "runner_non_zero_exit",
+    }
+}
+
+fn execution_summary_title(status: &str, error_kind: Option<&str>) -> String {
+    match (status, error_kind) {
+        ("succeeded", _) => "open_page execution succeeded".to_string(),
+        ("timed_out", Some("timeout")) => "open_page execution timed out".to_string(),
+        ("failed", Some(kind)) => format!("open_page execution failed ({kind})"),
+        ("failed", None) => "open_page execution failed".to_string(),
+        _ => format!("open_page execution {status}"),
+    }
+}
+
+fn execution_summary_text(task: &RunnerTask, status: &str, error_kind: Option<&str>, exit_code: Option<i32>, timeout_seconds: Option<u64>, message: &str) -> String {
+    format!(
+        "kind={} status={} error_kind={} exit_code={:?} timeout_seconds={:?} message={}",
+        task.kind,
+        status,
+        error_kind.unwrap_or("none"),
+        exit_code,
+        timeout_seconds,
+        message,
+    )
 }
 
 async fn terminate_pid(pid: u32) -> Result<(), String> {
@@ -459,13 +491,16 @@ impl TaskRunner for LightpandaRunner {
                     "lightpanda fetch completed successfully".to_string(),
                     status.code(),
                 ),
-                Ok(status) => (
-                    RunnerOutcomeStatus::Failed,
-                    "failed",
-                    Some("non_zero_exit"),
-                    "lightpanda fetch exited with non-zero status".to_string(),
-                    status.code(),
-                ),
+                Ok(status) => {
+                    let exit_code = status.code();
+                    (
+                        RunnerOutcomeStatus::Failed,
+                        "failed",
+                        Some(classify_exit_code(exit_code)),
+                        format!("lightpanda fetch exited with non-zero status (exit_code={exit_code:?})"),
+                        exit_code,
+                    )
+                },
                 Err(err) => (
                     RunnerOutcomeStatus::Failed,
                     "failed",
@@ -727,7 +762,7 @@ exit 7",
 
         assert!(matches!(result.status, RunnerOutcomeStatus::Failed));
         let json = result.result_json.expect("result json");
-        assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("non_zero_exit"));
+        assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("runner_non_zero_exit"));
         assert_eq!(json.get("task_id").and_then(|v| v.as_str()), Some("task-test"));
         assert_eq!(json.get("attempt").and_then(|v| v.as_i64()), Some(1));
         assert_eq!(json.get("kind").and_then(|v| v.as_str()), Some("open_page"));
@@ -735,6 +770,36 @@ exit 7",
         assert_eq!(json.get("exit_code").and_then(|v| v.as_i64()), Some(7));
         assert_eq!(json.get("stdout_preview").and_then(|v| v.as_str()), Some("bad-output"));
         assert_eq!(json.get("stderr_preview").and_then(|v| v.as_str()), Some("bad-error"));
+    }
+
+    #[tokio::test]
+    async fn execute_classifies_command_not_found_exit_code_127() {
+        let script = write_script(
+            "exit-127",
+            "exit 127",
+        );
+        let result = execute_with_bin(script.to_str().unwrap(), json!({"url": "https://example.com"}), Some(5)).await;
+        let _ = fs::remove_file(script);
+
+        assert!(matches!(result.status, RunnerOutcomeStatus::Failed));
+        let json = result.result_json.expect("result json");
+        assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("runner_command_not_found"));
+        assert_eq!(json.get("exit_code").and_then(|v| v.as_i64()), Some(127));
+    }
+
+    #[tokio::test]
+    async fn execute_classifies_not_executable_exit_code_126() {
+        let script = write_script(
+            "exit-126",
+            "exit 126",
+        );
+        let result = execute_with_bin(script.to_str().unwrap(), json!({"url": "https://example.com"}), Some(5)).await;
+        let _ = fs::remove_file(script);
+
+        assert!(matches!(result.status, RunnerOutcomeStatus::Failed));
+        let json = result.result_json.expect("result json");
+        assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("runner_invocation_not_executable"));
+        assert_eq!(json.get("exit_code").and_then(|v| v.as_i64()), Some(126));
     }
 
     #[tokio::test]

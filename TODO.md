@@ -106,8 +106,9 @@
 - [x] 重置进度口径，分开子主线进度与最终目标总进度
 - [x] 将最终目标模块化进度口径接入后续默认汇报
 - [x] 回到更大的未完成主线：真实 Lightpanda / 指纹真实消费 / 高级代理体系
-- [ ] 按模块拆分 real Lightpanda execution deepening 主线
-- [ ] 优先推进 execution-path hardening
+- [x] 按模块拆分 real Lightpanda execution deepening 主线
+- [x] 优先推进 execution-path hardening
+- [ ] 继续推进 runner 可观测性 / artifact 质量
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略
