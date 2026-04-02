@@ -173,6 +173,12 @@ pub fn computed_trust_score_components(
     } else {
         0
     };
+    let probe_error_penalty = match last_probe_error_category {
+        Some("protocol_invalid") => tuning.probe_error_protocol_penalty,
+        Some("upstream_missing") => tuning.probe_error_upstream_missing_penalty,
+        Some("connect_failed") => tuning.probe_error_connect_failed_penalty,
+        _ => 0,
+    };
     let soft_min_score_penalty = if let Some(threshold) = soft_min_score {
         if score < threshold { tuning.soft_min_score_penalty } else { 0 }
     } else {
@@ -195,6 +201,7 @@ pub fn computed_trust_score_components(
         anonymity_bonus,
         latency_penalty,
         exit_ip_not_public_penalty,
+        probe_error_penalty,
         soft_min_score_penalty,
     }
 }
@@ -216,12 +223,13 @@ fn component_value(components: &TrustScoreComponents, key: &str) -> i64 {
         "anonymity_bonus" => components.anonymity_bonus,
         "latency_penalty" => components.latency_penalty,
         "exit_ip_not_public_penalty" => components.exit_ip_not_public_penalty,
+        "probe_error_penalty" => components.probe_error_penalty,
         "soft_min_score_penalty" => components.soft_min_score_penalty,
         _ => 0,
     }
 }
 
-fn component_keys() -> [&'static str; 15] {
+fn component_keys() -> [&'static str; 16] {
     [
         "verify_ok_bonus",
         "verify_geo_match_bonus",
@@ -238,6 +246,7 @@ fn component_keys() -> [&'static str; 15] {
         "anonymity_bonus",
         "latency_penalty",
         "exit_ip_not_public_penalty",
+        "probe_error_penalty",
     ]
 }
 
@@ -268,6 +277,7 @@ fn empty_components() -> TrustScoreComponents {
         anonymity_bonus: 0,
         latency_penalty: 0,
         exit_ip_not_public_penalty: 0,
+        probe_error_penalty: 0,
         soft_min_score_penalty: 0,
     }
 }
@@ -1351,6 +1361,7 @@ mod tests {
             anonymity_bonus: 0,
             latency_penalty: 0,
             exit_ip_not_public_penalty: 0,
+            probe_error_penalty: 0,
             soft_min_score_penalty: 0,
         }
     }
@@ -1372,6 +1383,7 @@ mod tests {
             anonymity_bonus: 0,
             latency_penalty: 0,
             exit_ip_not_public_penalty: 0,
+            probe_error_penalty: 0,
             soft_min_score_penalty: 0,
         }
     }
@@ -1390,7 +1402,7 @@ mod tests {
             Some(9999999999),
             Some("elite"),
             Some(650),
-            Some("exit_ip_not_public"),
+            Some("protocol_invalid"),
             true,
             true,
             1000,
@@ -1404,7 +1416,8 @@ mod tests {
         assert_eq!(components.provider_region_cluster_penalty, 2);
         assert_eq!(components.anonymity_bonus, 4);
         assert_eq!(components.latency_penalty, -2);
-        assert_eq!(components.exit_ip_not_public_penalty, 8);
+        assert_eq!(components.exit_ip_not_public_penalty, 0);
+        assert_eq!(components.probe_error_penalty, 6);
         assert_eq!(components.missing_verify_penalty, 0);
     }
 

@@ -27,6 +27,9 @@ pub struct ProxySelectionTuning {
     pub high_latency_penalty: i64,
     pub very_high_latency_penalty: i64,
     pub exit_ip_not_public_penalty: i64,
+    pub probe_error_protocol_penalty: i64,
+    pub probe_error_upstream_missing_penalty: i64,
+    pub probe_error_connect_failed_penalty: i64,
     pub soft_min_score_penalty: i64,
 }
 
@@ -56,6 +59,9 @@ impl Default for ProxySelectionTuning {
             high_latency_penalty: 2,
             very_high_latency_penalty: 5,
             exit_ip_not_public_penalty: 8,
+            probe_error_protocol_penalty: 6,
+            probe_error_upstream_missing_penalty: 5,
+            probe_error_connect_failed_penalty: 8,
             soft_min_score_penalty: 6,
         }
     }
@@ -208,6 +214,9 @@ mod tests {
         assert_eq!(tuning.anonymity_elite_bonus, 4);
         assert_eq!(tuning.very_high_latency_penalty, 5);
         assert_eq!(tuning.exit_ip_not_public_penalty, 8);
+        assert_eq!(tuning.probe_error_protocol_penalty, 6);
+        assert_eq!(tuning.probe_error_upstream_missing_penalty, 5);
+        assert_eq!(tuning.probe_error_connect_failed_penalty, 8);
         let env_tuning = proxy_selection_tuning_from_env();
         assert!(env_tuning.stale_after_seconds > 0);
         assert_eq!(rules.len(), 4);
@@ -499,6 +508,15 @@ pub fn proxy_selection_tuning_from_env() -> ProxySelectionTuning {
     }
     if let Ok(value) = std::env::var("AOB_PROXY_EXIT_IP_NOT_PUBLIC_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() { tuning.exit_ip_not_public_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_PROTOCOL_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.probe_error_protocol_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_UPSTREAM_MISSING_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.probe_error_upstream_missing_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_CONNECT_FAILED_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.probe_error_connect_failed_penalty = parsed; }
     }
     tuning
 }
