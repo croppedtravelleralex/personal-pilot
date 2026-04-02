@@ -122,3 +122,4 @@
 - **2026年04月02日 23时53分00秒** 完成了**Current Stage Snapshot 接入 AI.md**，把当前阶段快照从 README 扩展到更核心的 AI 接手入口，方便后续人或 AI 更快校准当前阶段完成项、冻结项与重开规则。
 - **2026年04月02日 23时55分00秒** 完成了**双入口快照一致性检查扩展**，将 `scripts/check_stage_entry_consistency.py` 从 README 单入口扩展到 README + AI.md 双入口核对，降低后续双入口口径漂移风险。
 - **2026年04月02日 23时57分00秒** 完成了**dual-entry snapshot maintenance example**，补齐 README + AI.md 双入口快照联动更新示例，进一步降低未来阶段切换时双入口先后顺序错乱的风险。
+- **2026年04月03日 00时00分00秒** 完成了**dual-entry snapshot cheat sheet**，把双入口快照维护流程进一步压缩成最小步骤清单，方便未来阶段切换时快速执行。
