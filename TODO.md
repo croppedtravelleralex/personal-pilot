@@ -113,7 +113,8 @@
 - [x] 在稳定基础上评估真实能力扩展 beyond minimal fetch
 - [x] 继续以 bounded expansion 方式定义最小新动作
 - [x] 在清晰 action contract 基础上选择一个最小新动作落地候选
-- [ ] 验证 `get_html` 是否能安全复用当前 fetch-style 路径
+- [x] 验证 `get_html` 是否能安全复用当前 fetch-style 路径
+- [ ] 继续补 `get_html` 结果边界与摘要质量
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略

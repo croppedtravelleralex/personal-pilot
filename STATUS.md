@@ -102,7 +102,7 @@
 ### P0
 1. **继续推进 selection → trust score 核心化**，把剩余分散在 selection 中的控制流语义继续收进统一 score / explain 边界。
 2. **继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例是否稳定。**
-3. **推进真实 Lightpanda 执行路径深化**，当前已完成 execution-path hardening v1、runner 可观测性 / artifact 质量 v1、指纹真实消费边界 v1、真实能力扩展边界 v1、action contract visibility v1，并确认下一最小新动作候选应优先选择 `get_html`，而不是更重的 screenshot / script。
+3. **推进真实 Lightpanda 执行路径深化**，当前已完成 execution-path hardening v1、runner 可观测性 / artifact 质量 v1、指纹真实消费边界 v1、真实能力扩展边界 v1、action contract visibility v1，并已落下最小新动作 `get_html` bounded v1：复用当前 fetch-style 路径输出 `html_preview`。
 4. **继续清 explainability 主链里剩余 typed/JSON 边界与 summary 文案质量。**
 5. **推进更真实的 verify 慢路径**，继续补匿名性 / 地区 / 出口真实性以外的可稳定质量信号。
 
@@ -116,7 +116,7 @@
 
 - **找 bug：** 本轮没有新增业务逻辑 bug；profiling 样本反而确认了两个真实热点事实：`provider_scope_flip` 已在 verify/open_page/batch verify 真执行链中真实命中，且范围刷新分支在当前样本中占比约 `57.1%`。
 - **性能评分：** 当前阶段 **9.4/10**。优点是 trust score / explainability 主链已经开始真正消费 verify 慢路径信号，profiling 最小观测埋点已经落地且已有第一批真实样本；扣分点主要转移到读取侧观测尚未补齐。
-- **改进建议：** 下一步最值得做的是 **围绕 `get_html` 候选验证最小实现路径，先确认是否能安全复用当前 fetch-style 路径，再决定是否真正落代码**。
+- **改进建议：** 下一步最值得做的是 **围绕 `get_html` bounded v1 继续补结果边界与摘要质量，但不要立刻跳去 screenshot / script 这类更重动作**。
 
 ## Autopilot Sync
 

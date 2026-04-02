@@ -132,3 +132,4 @@
 - **2026年04月03日 00时24分00秒** 实现了**Lightpanda 真实能力扩展边界 v1**，新增 `payload.action` 解析与规范化，支持 `fetch` 作为 `open_page` 别名，同时显式拒绝未支持动作，补齐对应回归测试，避免真实能力扩展阶段无边界膨胀。
 - **2026年04月03日 00时31分00秒** 实现了**Lightpanda action contract visibility v1**，在结果 JSON 中新增 `requested_action`、`supported_actions`、`capability_stage`，并强化对规范化动作与未支持动作的可见性，便于后续以 bounded expansion 方式扩新动作。
 - **2026年04月03日 00时40分00秒** 完成了**Lightpanda 最小新动作候选选择**，明确下一 bounded expansion 候选优先为 `get_html`，因为它最贴近现有 fetch-style 路径，扩面明显小于 screenshot / script 执行。
+- **2026年04月03日 00时43分00秒** 实现了**Lightpanda `get_html` bounded v1**，将 `get_html` 纳入支持动作列表，复用当前 fetch-style 执行路径，并在结果中增加 `html_preview` 与 `content_kind=text/html`，补齐对应回归测试。

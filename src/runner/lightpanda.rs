@@ -134,6 +134,12 @@ fn result_payload(
         "resolution_status": proxy.resolution_status,
     }));
 
+    let html_preview = if action == "get_html" {
+        stdout_preview.clone()
+    } else {
+        None
+    };
+
     let fingerprint_runtime_json = fingerprint_runtime.map(|runtime| {
         let supported_field_count = runtime.applied_fields.iter().filter(|f| *f != "profile_id" && *f != "profile_version").count();
         let unsupported_field_count = runtime.ignored_fields.len();
@@ -183,6 +189,8 @@ fn result_payload(
         "exit_code": exit_code,
         "stdout_preview": stdout_preview,
         "stderr_preview": stderr_preview,
+        "html_preview": html_preview,
+        "content_kind": (action == "get_html").then_some("text/html"),
         "message": message,
     })
 }
@@ -283,12 +291,13 @@ fn extract_action(payload: &Value) -> String {
 fn normalize_action(action: &str) -> Option<&'static str> {
     match action {
         "open_page" | "fetch" => Some("open_page"),
+        "get_html" => Some("get_html"),
         _ => None,
     }
 }
 
 fn supported_actions() -> &'static [&'static str] {
-    &["open_page", "fetch"]
+    &["open_page", "fetch", "get_html"]
 }
 
 fn extract_url(payload: &Value) -> Option<String> {
@@ -510,7 +519,7 @@ impl TaskRunner for LightpandaRunner {
                     &task,
                     requested_action.as_str(),
                     requested_action.as_str(),
-                    "lightpanda runner currently supports only action=open_page (fetch is accepted as an alias)",
+                    "lightpanda runner currently supports only action=open_page, action=get_html (fetch is accepted as an alias for open_page)",
                     extract_url(&task.payload).as_deref(),
                 )
             }
@@ -904,6 +913,7 @@ exit 0",
         assert_eq!(extract_action(&json!({"url": "https://example.com", "action": "fetch"})), "fetch");
         assert_eq!(normalize_action("open_page"), Some("open_page"));
         assert_eq!(normalize_action("fetch"), Some("open_page"));
+        assert_eq!(normalize_action("get_html"), Some("get_html"));
         assert_eq!(normalize_action("screenshot"), None);
     }
 
@@ -928,7 +938,25 @@ exit 0",
         assert_eq!(json.get("requested_action").and_then(|v| v.as_str()), Some("fetch"));
         assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("open_page"));
         assert_eq!(json.get("capability_stage").and_then(|v| v.as_str()), Some("minimal_real_execution_v1"));
-        assert_eq!(json.get("supported_actions").and_then(|v| v.as_array()).map(|v| v.len()), Some(2));
+        assert_eq!(json.get("supported_actions").and_then(|v| v.as_array()).map(|v| v.len()), Some(3));
+    }
+
+    #[tokio::test]
+    async fn execute_supports_get_html_v1() {
+        let script = write_script(
+            "get-html",
+            "echo '<html><body>ok</body></html>'
+exit 0",
+        );
+        let result = execute_with_bin(script.to_str().unwrap(), json!({"url": "https://example.com", "action": "get_html"}), Some(5)).await;
+        let _ = fs::remove_file(script);
+
+        assert!(matches!(result.status, RunnerOutcomeStatus::Succeeded));
+        let json = result.result_json.expect("result json");
+        assert_eq!(json.get("requested_action").and_then(|v| v.as_str()), Some("get_html"));
+        assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("get_html"));
+        assert_eq!(json.get("content_kind").and_then(|v| v.as_str()), Some("text/html"));
+        assert_eq!(json.get("html_preview").and_then(|v| v.as_str()), Some("<html><body>ok</body></html>"));
     }
 
     #[tokio::test]
