@@ -158,13 +158,38 @@ fn normalize_summary_severity(severity: Option<&str>) -> String {
     }
 }
 
+fn humanize_selection_factor_label(label: &str) -> &'static str {
+    match label {
+        "verify_ok" => "verify ok",
+        "geo_match" => "geo matched",
+        "geo_mismatch" => "country mismatch risk",
+        "region_mismatch" => "region mismatch risk",
+        "upstream_ok" => "upstream reachable",
+        "raw_score" => "base score",
+        "missing_verify" => "missing verify",
+        "stale_verify" => "stale verify",
+        "verify_failed_heavy" => "recent verify heavy failure",
+        "verify_failed_light" => "recent verify light failure",
+        "verify_failed_base" => "historical verify failure",
+        "history_risk" => "history risk",
+        "provider_risk" => "provider risk",
+        "provider_region_risk" => "provider-region risk",
+        "anonymity" => "anonymity quality",
+        "probe_latency" => "probe latency",
+        "exit_ip_not_public" => "non-public exit ip risk",
+        "probe_error_category" => "probe error risk",
+        "soft_min_score" => "soft min-score penalty",
+        _ => "selection factor",
+    }
+}
+
 fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
     let diff = winner_vs_runner_up_diff(result_json)?;
     let factor_summary = diff
         .factors
         .iter()
         .take(2)
-        .map(|factor| format!("{}({:+})", factor.label, factor.delta))
+        .map(|factor| format!("{}({:+})", humanize_selection_factor_label(&factor.label), factor.delta))
         .collect::<Vec<_>>()
         .join(", ");
     let summary = if factor_summary.is_empty() {

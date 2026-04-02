@@ -119,6 +119,14 @@
 - provider/provider×region 维度的 `probe_error_category` 聚类
 - provider 级 geo mismatch ratio
 
+### 当前保守决定
+- **`geo_mismatch` 暂不直接进入 provider 级 snapshot。**
+- 原因：provider 级粒度过粗，容易把局部国家错配放大成整个 provider 风险。
+- 当前先保留：
+  - 单代理层 penalty
+  - provider×region 层的 `region_mismatch` 群体命中
+- 只有在后续 profiling / 真实数据证明 provider 级 `geo_mismatch` 呈现稳定群体模式时，才考虑上升到 provider 聚合层。
+
 ---
 
 ## 当前结论
