@@ -271,6 +271,30 @@ async fn provider_region_risk_hit_for_pair(pool: &DbPool, provider: Option<&str>
     Ok(hit)
 }
 
+pub async fn provider_risk_version_state_for_proxy(pool: &DbPool, proxy_id: &str) -> Result<(Option<i64>, Option<i64>, String)> {
+    let row = sqlx::query_as::<_, (Option<String>, Option<i64>)>("SELECT provider, provider_risk_version_seen FROM proxies WHERE id = ?")
+        .bind(proxy_id)
+        .fetch_optional(pool)
+        .await?;
+    let Some((provider, seen_version)) = row else {
+        return Ok((None, None, "not_applicable".to_string()));
+    };
+    let Some(provider) = provider else {
+        return Ok((None, seen_version, "not_applicable".to_string()));
+    };
+    let current_version = sqlx::query_scalar::<_, i64>("SELECT version FROM provider_risk_snapshots WHERE provider = ?")
+        .bind(provider)
+        .fetch_optional(pool)
+        .await?;
+    let status = match (current_version, seen_version) {
+        (Some(current), Some(seen)) if current == seen => "aligned",
+        (Some(_), Some(_)) => "stale",
+        (Some(_), None) => "stale",
+        _ => "not_applicable",
+    }.to_string();
+    Ok((current_version, seen_version, status))
+}
+
 
 pub async fn refresh_proxy_trust_views_for_scope(pool: &DbPool, proxy_id: &str, provider: Option<&str>, region: Option<&str>) -> Result<()> {
     let provider_risk_before = provider_risk_hit_for_provider(pool, provider).await?;
@@ -531,6 +555,38 @@ mod scoped_refresh_tests {
         assert_eq!(after, before + 1);
         assert_eq!(hit, 1);
     }
+
+
+
+    #[tokio::test]
+    async fn provider_risk_version_state_reports_aligned_stale_and_not_applicable() {
+        let db_url = unique_db_url();
+        let db = init_db(&db_url).await.expect("init db");
+        sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, provider, region, country, status, score, success_count, failure_count, created_at, updated_at)
+                      VALUES
+                      ('proxy-version-state-a', 'http', '127.0.0.1', 8080, 'pool-state', 'us-east', 'US', 'active', 0.6, 3, 0, '1', '1'),
+                      ('proxy-version-state-b', 'http', '127.0.0.2', 8081, 'pool-state', 'us-west', 'US', 'active', 0.6, 3, 0, '1', '1'),
+                      ('proxy-version-state-none', 'http', '127.0.0.3', 8082, NULL, 'us-west', 'US', 'active', 0.6, 3, 0, '1', '1')"#)
+            .execute(&db)
+            .await
+            .expect("insert proxies");
+        refresh_provider_risk_snapshots(&db).await.expect("refresh snapshots");
+        refresh_cached_trust_scores(&db).await.expect("refresh caches");
+
+        let aligned = provider_risk_version_state_for_proxy(&db, "proxy-version-state-a").await.expect("aligned state");
+        assert_eq!(aligned.2, "aligned");
+
+        sqlx::query("UPDATE provider_risk_snapshots SET version = version + 1 WHERE provider = 'pool-state'")
+            .execute(&db)
+            .await
+            .expect("bump version");
+        let stale = provider_risk_version_state_for_proxy(&db, "proxy-version-state-a").await.expect("stale state");
+        assert_eq!(stale.2, "stale");
+
+        let na = provider_risk_version_state_for_proxy(&db, "proxy-version-state-none").await.expect("na state");
+        assert_eq!(na.2, "not_applicable");
+    }
+
 
 
     #[tokio::test]

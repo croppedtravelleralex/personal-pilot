@@ -2919,6 +2919,43 @@ async fn proxy_explain_endpoint_single_candidate_has_zero_gap_and_empty_runner_u
 }
 
 
+
+#[tokio::test]
+async fn proxy_explain_endpoint_exposes_provider_risk_version_visibility_fields() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, created_at, updated_at)
+                  VALUES
+                  ('proxy-explain-version', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-version-fields', 'active', 0.9, 5, 0, '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+
+    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db).await.expect("refresh snapshots");
+    AutoOpenBrowser::db::init::refresh_cached_trust_scores(&state.db).await.expect("refresh caches");
+    sqlx::query("UPDATE provider_risk_snapshots SET version = version + 1 WHERE provider = 'pool-version-fields'")
+        .execute(&state.db)
+        .await
+        .expect("bump version");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder()
+            .method("GET")
+            .uri("/proxies/proxy-explain-version/explain")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json.get("provider_risk_version_status").and_then(|v| v.as_str()), Some("stale"));
+    assert!(json.get("provider_risk_version_current").and_then(|v| v.as_i64()).is_some());
+    assert!(json.get("provider_risk_version_seen").and_then(|v| v.as_i64()).is_some());
+}
+
+
+
 #[tokio::test]
 async fn proxy_explain_endpoint_with_higher_candidate_count_still_returns_preview() {
     let db_url = unique_db_url();

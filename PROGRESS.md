@@ -100,3 +100,4 @@
 - **2026年04月02日 22时36分00秒** 完成了**providerScope 验证后下一阶段主线切换设计**，明确在继续延后 providerRegion 的前提下，将后续主线转向 selection / explain 对 provider-risk version 语义的消费评估。
 - **2026年04月02日 22时39分00秒** 完成了**selection / explain 对 provider-risk version 语义的第一轮消费评估**，明确当前阶段先不改 selection 排序语义；若后续需要新增消费者，优先从 explain 可见性切入，providerRegion 继续延后。
 - **2026年04月02日 22时40分00秒** 完成了**explain 可见性字段方案设计**，明确若后续需要新增 version 语义消费者，优先从 `/proxies/:id/explain` 暴露 `provider_risk_version_current / seen / status` 这类字段切入，而不先改 selection 排序语义。
+- **2026年04月02日 22时43分00秒** 实现了**explain 可见性字段第一版接线**，为 `/proxies/:id/explain` 增加 `provider_risk_version_current / provider_risk_version_seen / provider_risk_version_status` 字段，并补齐对应回归测试。

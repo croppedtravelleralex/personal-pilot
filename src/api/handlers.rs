@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     network_identity::validator::validate_fingerprint_profile,
-    db::init::{refresh_cached_trust_score_for_proxy, refresh_proxy_trust_views_for_scope},
+    db::init::{provider_risk_version_state_for_proxy, refresh_cached_trust_score_for_proxy, refresh_proxy_trust_views_for_scope},
     app::state::AppState,
     domain::{
         run::{RUN_STATUS_CANCELLED, RUN_STATUS_RUNNING},
@@ -1066,12 +1066,19 @@ pub async fn explain_proxy_selection(
     );
 
     let winner_vs_runner_up_diff = candidate_rank_preview.first().and_then(|item| item.winner_vs_runner_up_diff.clone());
+    let (provider_risk_version_current, provider_risk_version_seen, provider_risk_version_status) =
+        provider_risk_version_state_for_proxy(&state.db, &id)
+            .await
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load provider risk version state: {err}")))?;
     let response = ProxySelectionExplainResponse {
         proxy_id: id,
         trust_score_total,
         trust_score_cached_at: cached_at,
         explain_generated_at: now_ts.to_string(),
         explain_source: "proxy_trust_cache+candidate_preview".to_string(),
+        provider_risk_version_current,
+        provider_risk_version_seen,
+        provider_risk_version_status,
         selection_reason_summary,
         trust_score_components: components,
         candidate_rank_preview,
