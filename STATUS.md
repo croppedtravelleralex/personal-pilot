@@ -102,7 +102,7 @@
 ### P0
 1. **继续推进 selection → trust score 核心化**，把剩余分散在 selection 中的控制流语义继续收进统一 score / explain 边界。
 2. **继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例是否稳定。**
-3. **推进控制面与可见性质量收口主线**，当前已完成入口级 current-stage snapshot 接入，并验证 README / STATUS / TODO / PROGRESS 的阶段口径基本一致；refresh-scope 不再继续扩实现，providerRegion / selection redesign / 广义 trust 语义扩张继续冻结。
+3. **推进控制面与可见性质量收口主线**，当前已完成入口级 current-stage snapshot 接入、阶段口径一致性检查与摘要维护规则补齐；refresh-scope 不再继续扩实现，providerRegion / selection redesign / 广义 trust 语义扩张继续冻结。
 4. **继续清 explainability 主链里剩余 typed/JSON 边界与 summary 文案质量。**
 5. **推进更真实的 verify 慢路径**，继续补匿名性 / 地区 / 出口真实性以外的可稳定质量信号。
 
