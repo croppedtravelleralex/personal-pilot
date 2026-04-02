@@ -102,7 +102,7 @@
 ### P0
 1. **继续推进 selection → trust score 核心化**，把剩余分散在 selection 中的控制流语义继续收进统一 score / explain 边界。
 2. **继续扩大真实任务流样本，验证 `provider_scope_flip / provider_region_scope_flip / proxy_only_no_flip` 的命中比例是否稳定。**
-3. **推进 provider 级 refresh 范围收窄稳定化**，当前已通过补样确认 providerScope 已切到 lazy_current_proxy；下一阶段继续巩固 providerScope 收益判断，providerRegion 继续延后。
+3. **推进 provider 级 refresh 范围收窄稳定化**，当前 providerScope 收益判断已接近阶段性收口；下一阶段主线转向 selection / explain 是否继续消费 provider-risk version 语义，providerRegion 继续延后。
 4. **继续清 explainability 主链里剩余 typed/JSON 边界与 summary 文案质量。**
 5. **推进更真实的 verify 慢路径**，继续补匿名性 / 地区 / 出口真实性以外的可稳定质量信号。
 
@@ -116,7 +116,7 @@
 
 - **找 bug：** 本轮没有新增业务逻辑 bug；profiling 样本反而确认了两个真实热点事实：`provider_scope_flip` 已在 verify/open_page/batch verify 真执行链中真实命中，且范围刷新分支在当前样本中占比约 `57.1%`。
 - **性能评分：** 当前阶段 **9.4/10**。优点是 trust score / explainability 主链已经开始真正消费 verify 慢路径信号，profiling 最小观测埋点已经落地且已有第一批真实样本；扣分点主要转移到读取侧观测尚未补齐。
-- **改进建议：** 下一步最值得做的是 **继续巩固 providerScope 这一层的收益判断，并暂缓 providerRegion 扩面，避免过早把第二阶段拉进来**。
+- **改进建议：** 下一步最值得做的是 **把主线从 providerScope 收益验证切到 selection / explain 的 version 语义消费评估，同时继续延后 providerRegion 扩面**。
 
 ## Autopilot Sync
 

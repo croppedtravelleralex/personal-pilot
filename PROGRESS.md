@@ -97,3 +97,4 @@
 - **2026年04月02日 21时35分00秒** 实现了**provider risk version / seen 第一版最小闭环**，为 `provider_risk_snapshots` 增加 `version`、为 `proxies` 增加 `provider_risk_version_seen`，并将 `provider_scope_flip` 从“整 provider 立即刷新”收敛为“更新 snapshot version + 当前 proxy 懒更新”，同时补上回归测试验证非当前 proxy 不会被立刻刷新。
 - **2026年04月02日 22时28分00秒** 完成了**provider risk version / seen v1 收益验证补样**，确认 `provider_scope_flip` 在新增样本中已稳定表现为 `lazy_current_proxy`，且未再观察到 provider 级 cached trust refresh 命中；当前判断继续延后 providerRegion 扩面。
 - **2026年04月02日 22时34分00秒** 完成了**provider risk v1 阶段性决策收口**，新增决策文档并明确当前阶段继续巩固 providerScope 收益判断、继续延后 providerRegion 扩面。
+- **2026年04月02日 22时36分00秒** 完成了**providerScope 验证后下一阶段主线切换设计**，明确在继续延后 providerRegion 的前提下，将后续主线转向 selection / explain 对 provider-risk version 语义的消费评估。
