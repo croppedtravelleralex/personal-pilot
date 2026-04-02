@@ -101,7 +101,8 @@
 - [x] 后续若入口状态变更，同步维护 README 与 AI.md 两处 Current Stage Snapshot
 - [x] 后续若双入口快照更新，先运行覆盖 README + AI.md 的一致性检查
 - [x] 后续若阶段切换，按 dual-entry example + consistency script 联动更新双入口快照
-- [ ] 后续若要快速维护双入口快照，优先按 cheat sheet 执行
+- [x] 后续若要快速维护双入口快照，优先按 cheat sheet 执行
+- [ ] 后续若只需要命令入口，优先看 entry maintenance command index
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
 - [x] 设计高并发下的性能优化与写放大控制策略

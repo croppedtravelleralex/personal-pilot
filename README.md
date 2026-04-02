@@ -4,6 +4,7 @@ Usage flow: see `docs/stage-entry-consistency-script-usage.md`.
 Maintenance helper: `bash scripts/stage_entry_maintenance_flow.sh`.
 Dual-entry example: see `docs/dual-entry-snapshot-maintenance-example.md`.
 Cheat sheet: see `docs/dual-entry-snapshot-cheat-sheet.md`.
+Command index: see `docs/entry-maintenance-command-index.md`.
 
 
 - **Stage status:** stable / closed enough to freeze
