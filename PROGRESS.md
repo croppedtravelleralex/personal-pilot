@@ -120,3 +120,4 @@
 - **2026年04月02日 23时50分00秒** 完成了**stage entry consistency 脚本使用说明**，补齐脚本运行时机、预期结果与标准 flow，进一步把入口摘要维护从经验动作收成固定流程。
 - **2026年04月02日 23时52分00秒** 完成了**stage entry maintenance flow helper**，新增未来阶段维护示例文档与 `scripts/stage_entry_maintenance_flow.sh`，把入口摘要维护前检查与更新顺序进一步固化为可执行 flow。
 - **2026年04月02日 23时53分00秒** 完成了**Current Stage Snapshot 接入 AI.md**，把当前阶段快照从 README 扩展到更核心的 AI 接手入口，方便后续人或 AI 更快校准当前阶段完成项、冻结项与重开规则。
+- **2026年04月02日 23时55分00秒** 完成了**双入口快照一致性检查扩展**，将 `scripts/check_stage_entry_consistency.py` 从 README 单入口扩展到 README + AI.md 双入口核对，降低后续双入口口径漂移风险。
