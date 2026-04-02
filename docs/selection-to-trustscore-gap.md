@@ -105,11 +105,25 @@
 问题：
 - `min_score` 不是 score 主链，而是前置门槛
 - 这会让“略低于门槛但高 trust score”的候选完全消失
+- 如果直接把现有 `min_score` 改成软惩罚，会破坏当前 API 语义、测试假设和 no-match 解释口径
 
-建议：
-- 短期继续保留为硬过滤（更安全）
-- 后续可评估：
-  - 是否拆成 `hard_min_score` 与 `soft_score_penalty_threshold`
+正式方案（当前推荐）：
+- **保留现有 `min_score` = hard gate**
+  - `score < min_score`：直接不进入候选集
+- **后续新增 `soft_min_score` = optional soft ranking threshold**
+  - `min_score <= score < soft_min_score`：允许进入候选集，但追加 `soft_min_score_penalty`
+  - `score >= soft_min_score`：不吃该 penalty
+
+设计原则：
+1. **兼容优先**：不破坏现有 `min_score` 语义
+2. **分层明确**：hard gate 与 ranking score 不混用
+3. **explainability 友好**：后续可在 `trust_score_components` 中加入 `soft_min_score_penalty`
+4. **渐进落地**：先文档定口径，再上 API / SQL / score 计算 / 测试
+
+建议落地顺序：
+- 第一步：文档中明确 `min_score = hard gate`
+- 第二步：设计 `soft_min_score` 请求字段与 `soft_min_score_penalty` 组件
+- 第三步：实现 explainability 与测试覆盖
 
 ---
 
@@ -178,7 +192,7 @@
 1. **先文档化 gate vs score 边界**
 2. **给 explicit / sticky 增加结构化 explain 字段**
 3. **给 no-match/fallback 增加结构化 reason code**
-4. **再决定 min_score 是否要拆成 hard/soft 两层**
+4. **按 `min_score = hard gate / soft_min_score = soft ranking` 方案推进实现**
 
 ---
 
@@ -196,3 +210,7 @@
 因此，下一阶段最核心的动作不是再加更多零散规则，而是：
 
 > **把 selection 里的剩余控制流语义，尽可能收进结构化 explain 与统一设计边界。**
+
+其中 `min_score` 的正式口径已经明确为：
+
+> **`min_score` 保持 hard gate；后续通过 `soft_min_score` + `soft_min_score_penalty` 扩展 soft ranking。**
