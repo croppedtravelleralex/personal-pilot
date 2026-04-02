@@ -37,3 +37,18 @@ For `/proxies/:id/explain`, consider adding:
 ## Recommendation
 
 > The next concrete implementation candidate should be **adding explain-side version visibility fields**, not changing selection semantics.
+
+
+## Minimal wording boundary
+
+Recommended API-facing wording:
+
+- `aligned` -> provider risk version is up to date
+- `stale` -> provider risk version changed after this proxy cache was last refreshed
+- `not_applicable` -> no provider-linked version state applies
+
+Recommended UI/summary boundary:
+
+- expose these fields as structured machine-readable fields first
+- do **not** force them into the main human summary sentence in this stage
+- only surface them in human wording when there is evidence they improve operator decisions
