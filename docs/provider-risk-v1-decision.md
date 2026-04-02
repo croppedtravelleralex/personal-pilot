@@ -23,3 +23,14 @@ The current v1 implementation is already strong enough to support a conservative
 1. Add a few more real-path samples to strengthen the providerScope收益 conclusion
 2. Keep providerRegion in evaluation, not implementation
 3. Revisit providerRegion only after providerScope收益判断 is stable enough
+
+## Reinforcement sample (round 3)
+
+- providerScope lazy hits: **3**
+- providerRegion scope hits: **1**
+- proxy refresh samples: **[4, 8, 4] ms**
+- providerRegion refresh samples: **[22] ms**
+- status samples: **[7] ms**
+
+### Reinforced judgment
+The round-3 sample still supports the same conservative decision: keep validating providerScope收益 and continue deferring providerRegion implementation.
