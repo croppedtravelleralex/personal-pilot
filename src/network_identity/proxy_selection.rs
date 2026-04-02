@@ -26,6 +26,7 @@ pub struct ProxySelectionTuning {
     pub medium_latency_bonus: i64,
     pub high_latency_penalty: i64,
     pub very_high_latency_penalty: i64,
+    pub exit_ip_not_public_penalty: i64,
     pub soft_min_score_penalty: i64,
 }
 
@@ -54,6 +55,7 @@ impl Default for ProxySelectionTuning {
             medium_latency_bonus: 1,
             high_latency_penalty: 2,
             very_high_latency_penalty: 5,
+            exit_ip_not_public_penalty: 8,
             soft_min_score_penalty: 6,
         }
     }
@@ -205,6 +207,7 @@ mod tests {
         assert_eq!(tuning.soft_min_score_penalty, 6);
         assert_eq!(tuning.anonymity_elite_bonus, 4);
         assert_eq!(tuning.very_high_latency_penalty, 5);
+        assert_eq!(tuning.exit_ip_not_public_penalty, 8);
         let env_tuning = proxy_selection_tuning_from_env();
         assert!(env_tuning.stale_after_seconds > 0);
         assert_eq!(rules.len(), 4);
@@ -493,6 +496,9 @@ pub fn proxy_selection_tuning_from_env() -> ProxySelectionTuning {
     }
     if let Ok(value) = std::env::var("AOB_PROXY_VERY_HIGH_LATENCY_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() { tuning.very_high_latency_penalty = parsed; }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_EXIT_IP_NOT_PUBLIC_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() { tuning.exit_ip_not_public_penalty = parsed; }
     }
     tuning
 }
