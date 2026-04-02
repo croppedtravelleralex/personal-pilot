@@ -105,6 +105,7 @@ fn result_payload(
     error_kind: Option<&str>,
     failure_scope: Option<&str>,
     browser_failure_signal: Option<&str>,
+    requested_action: &str,
     action: &str,
     task: &RunnerTask,
     url: Option<&str>,
@@ -160,7 +161,10 @@ fn result_payload(
 
     json!({
         "runner": "lightpanda",
+        "requested_action": requested_action,
         "action": action,
+        "supported_actions": supported_actions(),
+        "capability_stage": "minimal_real_execution_v1",
         "ok": ok,
         "status": status,
         "error_kind": error_kind,
@@ -188,6 +192,7 @@ fn build_result(
     ok: bool,
     status: &str,
     error_kind: Option<&str>,
+    requested_action: &str,
     action: &str,
     task: &RunnerTask,
     url: Option<&str>,
@@ -216,6 +221,7 @@ fn build_result(
             error_kind,
             failure_scope,
             browser_failure_signal,
+            requested_action,
             action,
             task,
             url,
@@ -244,12 +250,13 @@ fn build_result(
     }
 }
 
-fn invalid_input(task: &RunnerTask, action: &str, message: &str, url: Option<&str>) -> RunnerExecutionResult {
+fn invalid_input(task: &RunnerTask, requested_action: &str, action: &str, message: &str, url: Option<&str>) -> RunnerExecutionResult {
     build_result(
         RunnerOutcomeStatus::Failed,
         false,
         "failed",
         Some("invalid_input"),
+        requested_action,
         action,
         task,
         url,
@@ -278,6 +285,10 @@ fn normalize_action(action: &str) -> Option<&'static str> {
         "open_page" | "fetch" => Some("open_page"),
         _ => None,
     }
+}
+
+fn supported_actions() -> &'static [&'static str] {
+    &["open_page", "fetch"]
 }
 
 fn extract_url(payload: &Value) -> Option<String> {
@@ -498,6 +509,7 @@ impl TaskRunner for LightpandaRunner {
                 return invalid_input(
                     &task,
                     requested_action.as_str(),
+                    requested_action.as_str(),
                     "lightpanda runner currently supports only action=open_page (fetch is accepted as an alias)",
                     extract_url(&task.payload).as_deref(),
                 )
@@ -509,6 +521,7 @@ impl TaskRunner for LightpandaRunner {
             None => {
                 return invalid_input(
                     &task,
+                    requested_action.as_str(),
                     action,
                     "lightpanda runner requires a non-empty url in task payload",
                     None,
@@ -519,6 +532,7 @@ impl TaskRunner for LightpandaRunner {
         if !looks_like_url(&url) {
             return invalid_input(
                 &task,
+                requested_action.as_str(),
                 action,
                 "lightpanda runner currently only accepts http:// or https:// urls",
                 Some(&url),
@@ -566,6 +580,7 @@ impl TaskRunner for LightpandaRunner {
                     false,
                     "failed",
                     Some(classify_spawn_error(&err)),
+                    requested_action.as_str(),
                     action,
                     &task,
                     Some(&url),
@@ -677,6 +692,7 @@ impl TaskRunner for LightpandaRunner {
             matches!(outcome, RunnerOutcomeStatus::Succeeded),
             status_text,
             error_kind,
+            requested_action.as_str(),
             action,
             &task,
             Some(&url),
@@ -909,7 +925,10 @@ exit 0",
 
         assert!(matches!(result.status, RunnerOutcomeStatus::Succeeded));
         let json = result.result_json.expect("result json");
+        assert_eq!(json.get("requested_action").and_then(|v| v.as_str()), Some("fetch"));
         assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("open_page"));
+        assert_eq!(json.get("capability_stage").and_then(|v| v.as_str()), Some("minimal_real_execution_v1"));
+        assert_eq!(json.get("supported_actions").and_then(|v| v.as_array()).map(|v| v.len()), Some(2));
     }
 
     #[tokio::test]
@@ -918,6 +937,8 @@ exit 0",
         assert!(matches!(result.status, RunnerOutcomeStatus::Failed));
         let json = result.result_json.expect("result json");
         assert_eq!(json.get("error_kind").and_then(|v| v.as_str()), Some("invalid_input"));
+        assert_eq!(json.get("requested_action").and_then(|v| v.as_str()), Some("screenshot"));
+        assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("screenshot"));
         assert!(json.get("message").and_then(|v| v.as_str()).unwrap_or("").contains("supports only action=open_page"));
     }
 

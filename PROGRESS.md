@@ -130,3 +130,4 @@
 - **2026年04月03日 00时15分00秒** 实现了**Lightpanda runner 可观测性 / artifact 质量 v1**，在结果 JSON 与 summary artifact 中新增 `failure_scope` 与 `browser_failure_signal`，并补齐基于 stderr 的浏览器失败信号识别回归测试。
 - **2026年04月03日 00时18分00秒** 实现了**Lightpanda 指纹真实消费边界 v1**，为 `fingerprint_runtime` 增加 `consumption_status`、supported/unsupported field 计数，并补齐部分消费/完全消费相关测试，提升了 real runner 对指纹真实消费程度的可见性。
 - **2026年04月03日 00时24分00秒** 实现了**Lightpanda 真实能力扩展边界 v1**，新增 `payload.action` 解析与规范化，支持 `fetch` 作为 `open_page` 别名，同时显式拒绝未支持动作，补齐对应回归测试，避免真实能力扩展阶段无边界膨胀。
+- **2026年04月03日 00时31分00秒** 实现了**Lightpanda action contract visibility v1**，在结果 JSON 中新增 `requested_action`、`supported_actions`、`capability_stage`，并强化对规范化动作与未支持动作的可见性，便于后续以 bounded expansion 方式扩新动作。
