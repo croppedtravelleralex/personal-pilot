@@ -99,3 +99,4 @@
 - **2026年04月02日 22时34分00秒** 完成了**provider risk v1 阶段性决策收口**，新增决策文档并明确当前阶段继续巩固 providerScope 收益判断、继续延后 providerRegion 扩面。
 - **2026年04月02日 22时36分00秒** 完成了**providerScope 验证后下一阶段主线切换设计**，明确在继续延后 providerRegion 的前提下，将后续主线转向 selection / explain 对 provider-risk version 语义的消费评估。
 - **2026年04月02日 22时39分00秒** 完成了**selection / explain 对 provider-risk version 语义的第一轮消费评估**，明确当前阶段先不改 selection 排序语义；若后续需要新增消费者，优先从 explain 可见性切入，providerRegion 继续延后。
+- **2026年04月02日 22时40分00秒** 完成了**explain 可见性字段方案设计**，明确若后续需要新增 version 语义消费者，优先从 `/proxies/:id/explain` 暴露 `provider_risk_version_current / seen / status` 这类字段切入，而不先改 selection 排序语义。

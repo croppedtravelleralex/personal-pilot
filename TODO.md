@@ -77,7 +77,8 @@
 - [x] 当前阶段决定继续延后 provider_region 扩面
 - [x] 评估 selection 是否需要继续消费 provider-risk version 语义
 - [x] 评估 explain 是否需要继续消费 provider-risk version 语义
-- [ ] 若需要新增 version 语义消费者，优先设计 explain 可见性字段
+- [x] 若需要新增 version 语义消费者，优先设计 explain 可见性字段
+- [ ] 决定 explain 可见性字段是否进入下一轮最小实现
 - [ ] 定义 provider_region 进入实现阶段的条件
 - [ ] 继续清 explainability summary / artifact 文案质量
 - [ ] 推进更真实的 verify 慢路径（匿名性 / 地区 / 出口真实性之外的稳定质量信号）
