@@ -194,7 +194,6 @@ pub fn proxy_selection_order_sql() -> &'static str {
                  {recent_failure_decay}
                  {provider_long_term_weight}
                  {long_term_weight}
-                 score DESC,
                  COALESCE(last_used_at, '0') ASC,
                  created_at ASC
     "#
@@ -257,9 +256,10 @@ mod tests {
         assert!(trust.contains("CAST(score * 10 AS INTEGER)"));
         let order_by = proxy_selection_order_by_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
         assert!(!order_by.contains("score DESC, score DESC"));
+        assert!(!order_by.contains("score DESC"));
         assert!(sql.contains("{provider_region_recent_failure_decay}"));
         assert!(sql.contains("{long_term_weight}"));
-        assert!(sql.contains("score DESC"));
+        assert!(!sql.contains("score DESC"));
     }
 
     #[test]
@@ -595,14 +595,14 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
 pub fn proxy_selection_order_by_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
     let trust = proxy_trust_score_sql_with_tuning(tuning);
     format!(
-        "({trust}) DESC, score DESC, COALESCE(last_used_at, '0') ASC, created_at ASC",
+        "({trust}) DESC, COALESCE(last_used_at, '0') ASC, created_at ASC",
         trust = trust
     )
 }
 
 
 pub fn proxy_selection_order_by_cached_trust_score_sql() -> String {
-    "COALESCE(cached_trust_score, -999999) DESC, score DESC, COALESCE(last_used_at, '0') ASC, created_at ASC".to_string()
+    "COALESCE(cached_trust_score, -999999) DESC, COALESCE(last_used_at, '0') ASC, created_at ASC".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
