@@ -1599,7 +1599,7 @@ where
                     "title": "proxy growth assessment",
                     "summary": if require_replenish {
                         format!(
-                            "proxy pool needs replenishment; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                            "proxy pool is below target for this request; target region {} ; selected region {} ; availability {}% ; region signal {}",
                             target_region,
                             selected_proxy_region,
                             available_ratio_percent,
@@ -1607,7 +1607,7 @@ where
                         )
                     } else {
                         format!(
-                            "proxy pool remains healthy; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                            "proxy pool looks healthy for this request; target region {} ; selected region {} ; availability {}% ; region signal {}",
                             target_region,
                             selected_proxy_region,
                             available_ratio_percent,
@@ -1630,7 +1630,7 @@ where
                     "severity": if consistency == "mismatch" { "warning" } else { "info" },
                     "title": "fingerprint runtime assessment",
                     "summary": format!(
-                        "fingerprint runtime resolved with budget={} and consistency={}",
+                        "fingerprint runtime used {} budget with {} consistency",
                         budget,
                         consistency,
                     ),

@@ -243,10 +243,10 @@ fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<Summ
         .collect::<Vec<_>>()
         .join(", ");
     let summary = if factor_summary.is_empty() {
-        format!("selected winner over runner-up by {} trust-score points", diff.score_gap)
+        format!("selected this proxy by a {}-point trust-score margin", diff.score_gap)
     } else {
         format!(
-            "selected winner over runner-up by {} trust-score points; strongest factors: {}",
+            "selected this proxy by a {}-point trust-score margin; biggest reasons: {}",
             diff.score_gap, factor_summary
         )
     };
@@ -317,21 +317,26 @@ fn identity_network_summary_artifact(result_json: Option<&str>) -> Option<Summar
     })
 }
 
+fn health_band_phrase(band: &str) -> &'static str {
+    match band {
+        "below_min" => "below target band",
+        "above_max" => "above target band",
+        "within_band" => "within target band",
+        _ => "unknown band",
+    }
+}
+
 fn proxy_growth_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
     let explain = selection_explain(result_json)?;
     let growth = explain.proxy_growth?;
     let target_region = growth.target_region.as_deref().unwrap_or("none");
     let selected_proxy_region = growth.selected_proxy_region.as_deref().unwrap_or("none");
-    let available_ratio_percent = growth
-        .health_assessment
-        .as_ref()
-        .map(|v| v.available_ratio_percent)
-        .unwrap_or(0);
-    let require_replenish = growth
-        .health_assessment
-        .as_ref()
-        .map(|v| v.require_replenish)
-        .unwrap_or(false);
+    let health = growth.health_assessment.as_ref();
+    let available_ratio_percent = health.map(|v| v.available_ratio_percent).unwrap_or(0);
+    let require_replenish = health.map(|v| v.require_replenish).unwrap_or(false);
+    let health_band = health
+        .map(|v| health_band_phrase(&v.healthy_ratio_band))
+        .unwrap_or("unknown band");
     let region_match_reason = growth
         .region_match
         .as_ref()
@@ -345,18 +350,20 @@ fn proxy_growth_summary_artifact(result_json: Option<&str>) -> Option<SummaryArt
         title: "proxy growth assessment".to_string(),
         summary: if require_replenish {
             format!(
-                "proxy pool needs replenishment; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                "proxy pool is below target for this request; target region {} ; selected region {} ; availability {}% ({}) ; region signal {}",
                 target_region,
                 selected_proxy_region,
                 available_ratio_percent,
+                health_band,
                 region_match_reason,
             )
         } else {
             format!(
-                "proxy pool remains healthy; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                "proxy pool looks healthy for this request; target region {} ; selected region {} ; availability {}% ({}) ; region signal {}",
                 target_region,
                 selected_proxy_region,
                 available_ratio_percent,
+                health_band,
                 region_match_reason,
             )
         },
@@ -673,8 +680,8 @@ mod tests {
         assert_eq!(selection.key, "proxy.selection.decision");
         assert_eq!(selection.source, "selection.proxy");
         assert_eq!(selection.severity, "info");
-        assert!(selection.summary.contains("selected winner over runner-up"));
-        assert!(selection.summary.contains("strongest factors"));
+        assert!(selection.summary.contains("selected this proxy by a"));
+        assert!(selection.summary.contains("biggest reasons"));
 
         let identity = artifacts.iter().find(|a| a.title == "identity and network summary").expect("identity artifact");
         assert_eq!(identity.key, "identity.network.summary");
@@ -688,9 +695,9 @@ mod tests {
         assert_eq!(growth.key, "proxy.selection.proxy_growth");
         assert_eq!(growth.source, "selection.proxy_growth");
         assert_eq!(growth.severity, "info");
-        assert!(growth.summary.contains("proxy pool remains healthy"));
-        assert!(growth.summary.contains("target_region=us-east"));
-        assert!(growth.summary.contains("region_match_reason=exact region match"));
+        assert!(growth.summary.contains("proxy pool looks healthy for this request"));
+        assert!(growth.summary.contains("target region us-east"));
+        assert!(growth.summary.contains("region signal exact region match"));
     }
 
     #[test]
