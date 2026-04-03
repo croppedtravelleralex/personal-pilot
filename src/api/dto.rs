@@ -134,6 +134,7 @@ pub struct TrustScoreComponents {
     pub verify_geo_match_bonus: i64,
     pub geo_mismatch_penalty: i64,
     pub region_mismatch_penalty: i64,
+    pub geo_risk_penalty: i64,
     pub smoke_upstream_ok_bonus: i64,
     pub raw_score_component: i64,
     pub missing_verify_penalty: i64,

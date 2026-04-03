@@ -271,6 +271,7 @@ pub fn computed_trust_score_components(
     let verify_geo_match_bonus = if last_verify_geo_match_ok { tuning.verify_geo_match_bonus } else { 0 };
     let geo_mismatch_penalty = if !last_verify_geo_match_ok { tuning.geo_mismatch_penalty } else { 0 };
     let region_mismatch_penalty = if last_region_match_ok == Some(false) { tuning.region_mismatch_penalty } else { 0 };
+    let geo_risk_penalty = geo_mismatch_penalty + region_mismatch_penalty;
     let smoke_upstream_ok_bonus = if last_smoke_upstream_ok { tuning.smoke_upstream_ok_bonus } else { 0 };
     let raw_score_component = (score * tuning.raw_score_weight_tenths as f64).round() as i64;
     let missing_verify_penalty = if last_verify_at.is_none() { tuning.missing_verify_penalty } else { 0 };
@@ -334,6 +335,7 @@ pub fn computed_trust_score_components(
         verify_geo_match_bonus,
         geo_mismatch_penalty,
         region_mismatch_penalty,
+        geo_risk_penalty,
         smoke_upstream_ok_bonus,
         raw_score_component,
         missing_verify_penalty,
@@ -362,6 +364,7 @@ fn component_value(components: &TrustScoreComponents, key: &str) -> i64 {
         "verify_geo_match_bonus" => components.verify_geo_match_bonus,
         "geo_mismatch_penalty" => components.geo_mismatch_penalty,
         "region_mismatch_penalty" => components.region_mismatch_penalty,
+        "geo_risk_penalty" => components.geo_risk_penalty,
         "smoke_upstream_ok_bonus" => components.smoke_upstream_ok_bonus,
         "raw_score_component" => components.raw_score_component,
         "missing_verify_penalty" => components.missing_verify_penalty,
@@ -385,12 +388,13 @@ fn component_value(components: &TrustScoreComponents, key: &str) -> i64 {
     }
 }
 
-fn component_keys() -> [&'static str; 22] {
+fn component_keys() -> [&'static str; 24] {
     [
         "verify_ok_bonus",
         "verify_geo_match_bonus",
         "geo_mismatch_penalty",
         "region_mismatch_penalty",
+        "geo_risk_penalty",
         "smoke_upstream_ok_bonus",
         "raw_score_component",
         "missing_verify_penalty",
@@ -409,10 +413,11 @@ fn component_keys() -> [&'static str; 22] {
         "exit_ip_not_public_penalty",
         "probe_error_penalty",
         "verify_risk_penalty",
+        "soft_min_score_penalty",
     ]
 }
 
-fn positive_component_keys() -> [&'static str; 9] {
+fn positive_component_keys() -> [&'static str; 8] {
     [
         "verify_ok_bonus",
         "verify_geo_match_bonus",
@@ -422,7 +427,6 @@ fn positive_component_keys() -> [&'static str; 9] {
         "verify_score_delta_bonus",
         "verify_source_bonus",
         "anonymity_bonus",
-        "verify_risk_penalty",
     ]
 }
 
@@ -432,6 +436,7 @@ fn empty_components() -> TrustScoreComponents {
         verify_geo_match_bonus: 0,
         geo_mismatch_penalty: 0,
         region_mismatch_penalty: 0,
+        geo_risk_penalty: 0,
         smoke_upstream_ok_bonus: 0,
         raw_score_component: 0,
         missing_verify_penalty: 0,
@@ -460,6 +465,7 @@ fn component_label(key: &str) -> &'static str {
         "verify_geo_match_bonus" => "geo_match",
         "geo_mismatch_penalty" => "geo_mismatch",
         "region_mismatch_penalty" => "region_mismatch",
+        "geo_risk_penalty" => "geo_risk",
         "smoke_upstream_ok_bonus" => "upstream_ok",
         "raw_score_component" => "raw_score",
         "missing_verify_penalty" => "missing_verify",
@@ -477,6 +483,7 @@ fn component_label(key: &str) -> &'static str {
         "latency_penalty" => "probe_latency",
         "exit_ip_not_public_penalty" => "exit_ip_not_public",
         "probe_error_penalty" => "probe_error_category",
+        "verify_risk_penalty" => "verify_risk",
         "soft_min_score_penalty" => "soft_min_score",
         _ => "unknown",
     }
@@ -492,6 +499,9 @@ pub fn summarize_component_advantages(current: &TrustScoreComponents) -> String 
         }
     }
     for key in [
+        "geo_mismatch_penalty",
+        "region_mismatch_penalty",
+        "geo_risk_penalty",
         "missing_verify_penalty",
         "stale_verify_penalty",
         "verify_failed_heavy_penalty",
@@ -500,6 +510,10 @@ pub fn summarize_component_advantages(current: &TrustScoreComponents) -> String 
         "individual_history_penalty",
         "provider_risk_penalty",
         "provider_region_cluster_penalty",
+        "exit_ip_not_public_penalty",
+        "probe_error_penalty",
+        "verify_risk_penalty",
+        "soft_min_score_penalty",
     ] {
         let value = component_value(current, key);
         if value > 0 {
@@ -1755,6 +1769,7 @@ mod tests {
             verify_geo_match_bonus: 20,
             geo_mismatch_penalty: 0,
             region_mismatch_penalty: 0,
+            geo_risk_penalty: 0,
             smoke_upstream_ok_bonus: 10,
             raw_score_component: 8,
             missing_verify_penalty: 0,
@@ -1783,6 +1798,7 @@ mod tests {
             verify_geo_match_bonus: 0,
             geo_mismatch_penalty: 8,
             region_mismatch_penalty: 4,
+            geo_risk_penalty: 12,
             smoke_upstream_ok_bonus: 0,
             raw_score_component: 0,
             missing_verify_penalty: 12,
@@ -1881,6 +1897,7 @@ mod tests {
         assert_eq!(components.verify_geo_match_bonus, 20);
         assert_eq!(components.geo_mismatch_penalty, 0);
         assert_eq!(components.region_mismatch_penalty, 4);
+        assert_eq!(components.geo_risk_penalty, 4);
         assert_eq!(components.smoke_upstream_ok_bonus, 10);
         assert_eq!(components.raw_score_component, 8);
         assert_eq!(components.provider_risk_penalty, 5);
@@ -1901,7 +1918,7 @@ mod tests {
         let summary = summarize_component_advantages(&components_json());
         assert!(summary.contains("wins on verify_ok, geo_match, upstream_ok, raw_score"));
         let penalty_summary = summarize_component_advantages(&penalty_components_json());
-        assert!(penalty_summary.contains("penalized by missing_verify, stale_verify, verify_failed_heavy, verify_failed_light, verify_failed_base, history_risk, provider_risk, provider_region_risk"));
+        assert!(penalty_summary.contains("penalized by geo_mismatch, region_mismatch, geo_risk, missing_verify, stale_verify, verify_failed_heavy, verify_failed_light, verify_failed_base, history_risk, provider_risk, provider_region_risk"));
 
         let delta = summarize_component_delta(&components_json(), Some(&penalty_components_json()));
         assert!(delta.contains("better on"));
@@ -1922,7 +1939,7 @@ mod tests {
         assert!(factors.len() <= 5);
         let labels: Vec<&str> = factors.iter().map(|item| item.label.as_str()).collect();
         assert!(labels.iter().any(|label| *label == "verify_ok"));
-        assert!(labels.iter().any(|label| matches!(*label, "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk")));
+        assert!(labels.iter().any(|label| matches!(*label, "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "geo_risk")));
         let deltas: Vec<i64> = factors.iter().map(|item| item.delta.abs()).collect();
         assert!(deltas.windows(2).all(|w| w[0] >= w[1]));
     }
