@@ -255,6 +255,52 @@ fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<Summ
     Some(artifact)
 }
 
+fn identity_network_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
+    let proxy_resolution_status = proxy_resolution_status(result_json);
+    let (proxy_id, proxy_provider, proxy_region) = proxy_identity(result_json);
+    let selection_reason_summary = selection_reason_summary(result_json);
+    let fingerprint_runtime_explain = fingerprint_runtime_explain(result_json);
+    let mut parts = Vec::new();
+    if let Some(provider) = proxy_provider.as_deref() {
+        if let Some(region) = proxy_region.as_deref() {
+            parts.push(format!("proxy {}@{}", provider, region));
+        } else {
+            parts.push(format!("proxy {}", provider));
+        }
+    } else if let Some(proxy_id) = proxy_id.as_deref() {
+        parts.push(format!("proxy {}", proxy_id));
+    }
+    if let Some(status) = proxy_resolution_status.as_deref() {
+        parts.push(format!("resolution {}", status));
+    }
+    if let Some(tag) = fingerprint_runtime_explain
+        .as_ref()
+        .and_then(|v| v.fingerprint_budget_tag.as_deref())
+    {
+        parts.push(format!("fingerprint budget {}", tag));
+    }
+    if let Some(summary) = selection_reason_summary.as_deref() {
+        parts.push(summary.to_string());
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    Some(SummaryArtifactResponse {
+        category: "summary".to_string(),
+        key: "identity.network.summary".to_string(),
+        source: "selection.identity_network".to_string(),
+        severity: "info".to_string(),
+        title: "identity and network summary".to_string(),
+        summary: parts.join("; "),
+        task_id: None,
+        task_kind: None,
+        task_status: None,
+        run_id: None,
+        attempt: None,
+        timestamp: None,
+    })
+}
+
 pub fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> {
     let parsed = result_json.and_then(|raw| serde_json::from_str::<Value>(raw).ok());
     let mut artifacts: Vec<SummaryArtifactResponse> = parsed
@@ -290,6 +336,13 @@ pub fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactRespon
     let has_selection_decision = artifacts.iter().any(|item| item.title == "proxy selection decision");
     if !has_selection_decision {
         if let Some(artifact) = selection_decision_summary_artifact(result_json) {
+            artifacts.push(artifact);
+        }
+    }
+
+    let has_identity_network_summary = artifacts.iter().any(|item| item.title == "identity and network summary");
+    if !has_identity_network_summary {
+        if let Some(artifact) = identity_network_summary_artifact(result_json) {
             artifacts.push(artifact);
         }
     }
@@ -499,7 +552,7 @@ mod tests {
     fn summary_artifacts_normalize_fields_and_inject_selection_decision() {
         let raw = sample_result_json_without_selection_artifact();
         let artifacts = summary_artifacts(Some(&raw));
-        assert_eq!(artifacts.len(), 2);
+        assert_eq!(artifacts.len(), 3);
 
         let runner = artifacts.iter().find(|a| a.title == "fake runner summary").expect("runner artifact");
         assert_eq!(runner.category, "summary");
@@ -515,6 +568,14 @@ mod tests {
         assert_eq!(selection.severity, "info");
         assert!(selection.summary.contains("selected winner over runner-up"));
         assert!(selection.summary.contains("strongest factors"));
+
+        let identity = artifacts.iter().find(|a| a.title == "identity and network summary").expect("identity artifact");
+        assert_eq!(identity.key, "identity.network.summary");
+        assert_eq!(identity.source, "selection.identity_network");
+        assert_eq!(identity.severity, "info");
+        assert!(identity.summary.contains("proxy pool-a@us-east"));
+        assert!(identity.summary.contains("resolution resolved"));
+        assert!(identity.summary.contains("fingerprint budget medium"));
     }
 
     #[test]
@@ -695,7 +756,7 @@ mod tests {
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.proxy_provider.as_deref()), Some("pool-a"));
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.fingerprint_runtime_explain.as_ref()).and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
         assert!(explain.winner_vs_runner_up_diff.is_some());
-        assert_eq!(explain.summary_artifacts.len(), 2);
+        assert_eq!(explain.summary_artifacts.len(), 3);
         assert!(explain.summary_artifacts.iter().all(|a| a.task_id.as_deref() == Some("task-1")));
         assert!(explain.summary_artifacts.iter().all(|a| a.task_kind.as_deref() == Some("open_page")));
         assert!(explain.summary_artifacts.iter().all(|a| a.task_status.as_deref() == Some("succeeded")));
