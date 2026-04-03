@@ -151,6 +151,7 @@ pub struct TrustScoreComponents {
     pub latency_penalty: i64,
     pub exit_ip_not_public_penalty: i64,
     pub probe_error_penalty: i64,
+    pub verify_risk_penalty: i64,
     pub soft_min_score_penalty: i64,
 }
 

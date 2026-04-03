@@ -79,7 +79,7 @@ verify 慢路径当前已经产出：
 
 ### 推荐优先级
 
-#### P0：适合直接进入单代理 trust score
+#### P0：适合直接进入单代理 trust score（先做最小闭环）
 1. **`transparent_proxy`**
    - 已部分通过 anonymity 进入 score
    - 但应明确成为 explain / score 统一语义的一部分
@@ -113,6 +113,7 @@ verify 慢路径当前已经产出：
 先补这两个最值原始信号：
 1. **`exit_ip_not_public` penalty**
 2. **`probe_error_category` penalty 映射**
+3. **`verify_risk_penalty` 聚合项**
 
 原因：
 - 它们是 verify 慢路径里非常底层、非常稳定的真实质量信号
