@@ -110,8 +110,14 @@ V2 想回答的问题是：
 - `anonymity_level`
 - `probe_latency_ms` bucket
 - `probe_error_category`
+- `exit_ip_not_public`
 - repeated verify pass/fail streak
 - `verification_score_delta`
+
+说明：
+- `probe_error_category` 已经在主链里有 penalty 映射
+- `exit_ip_not_public` 适合继续作为高优先级风险原因并入 trust score
+- `verification_score_delta` 更适合作为解释与回写辅助，而不是单独主导排序
 
 ## verify_batch 的 V2 方向
 
