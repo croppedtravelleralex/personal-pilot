@@ -3416,6 +3416,16 @@ async fn task_runs_expose_run_level_trace_metadata_and_standardized_artifacts() 
     assert!(artifacts.iter().all(|item| item.get("source").and_then(|v| v.as_str()).map(|v| v.starts_with("runner.") || v.starts_with("selection.")).unwrap_or(false)));
     assert!(artifacts.iter().all(|item| matches!(item.get("severity").and_then(|v| v.as_str()), Some("info") | Some("warning") | Some("error"))));
     assert!(artifacts.iter().all(|item| matches!(item.get("category").and_then(|v| v.as_str()), Some("execution") | Some("summary") | Some("result") | Some("debug") | Some("transient"))));
+    assert_eq!(run.get("proxy_id").and_then(|v| v.as_str()), task_json.get("proxy_id").and_then(|v| v.as_str()));
+    assert_eq!(run.get("proxy_provider").and_then(|v| v.as_str()), task_json.get("proxy_provider").and_then(|v| v.as_str()));
+    assert_eq!(run.get("proxy_region").and_then(|v| v.as_str()), task_json.get("proxy_region").and_then(|v| v.as_str()));
+    assert_eq!(run.get("proxy_resolution_status").and_then(|v| v.as_str()), task_json.get("proxy_resolution_status").and_then(|v| v.as_str()));
+    assert_eq!(run.get("trust_score_total").and_then(|v| v.as_i64()), task_json.get("trust_score_total").and_then(|v| v.as_i64()));
+    assert_eq!(run.get("selection_reason_summary").and_then(|v| v.as_str()), task_json.get("selection_reason_summary").and_then(|v| v.as_str()));
+    assert_eq!(run.get("selection_explain"), task_json.get("selection_explain"));
+    assert_eq!(run.get("fingerprint_runtime_explain"), task_json.get("fingerprint_runtime_explain"));
+    assert_eq!(run.get("identity_network_explain"), task_json.get("identity_network_explain"));
+    assert_eq!(run.get("winner_vs_runner_up_diff"), task_json.get("winner_vs_runner_up_diff"));
 
     let task_artifacts = task_json.get("summary_artifacts").and_then(|v| v.as_array()).expect("task artifacts");
     let selection_artifact = task_artifacts.iter().find(|item| item.get("key").and_then(|v| v.as_str()) == Some("proxy.selection.decision")).expect("selection artifact");

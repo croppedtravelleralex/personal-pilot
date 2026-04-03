@@ -28,7 +28,7 @@ use super::{
     PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
     RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
     },
-    explainability::{build_task_explainability, enrich_summary_artifacts, latest_execution_summaries, summary_artifacts},
+    explainability::{build_task_explainability, enrich_summary_artifacts, latest_execution_summaries},
 };
 
 fn perf_probe_enabled() -> bool {
@@ -1295,6 +1295,15 @@ pub async fn get_task_runs(
             .map(
                 |(id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message, result_json, task_kind, task_status)| {
                     let summary_timestamp = finished_at.as_deref().or(started_at.as_deref()).map(|v| v.to_string());
+                    let explainability = build_task_explainability(
+                        None,
+                        None,
+                        result_json.as_deref(),
+                        Some(&task_id),
+                        task_kind.as_deref(),
+                        task_status.as_deref(),
+                        summary_timestamp.as_deref(),
+                    );
                     RunResponse {
                         id: id.clone(),
                         task_id: task_id.clone(),
@@ -1305,7 +1314,7 @@ pub async fn get_task_runs(
                         finished_at,
                         error_message,
                         summary_artifacts: enrich_summary_artifacts(
-                            summary_artifacts(result_json.as_deref()),
+                            explainability.summary_artifacts,
                             Some(&task_id),
                             task_kind.as_deref(),
                             task_status.as_deref(),
@@ -1313,6 +1322,16 @@ pub async fn get_task_runs(
                             Some(attempt),
                             summary_timestamp.as_deref(),
                         ),
+                        proxy_id: explainability.proxy_id,
+                        proxy_provider: explainability.proxy_provider,
+                        proxy_region: explainability.proxy_region,
+                        proxy_resolution_status: explainability.proxy_resolution_status,
+                        trust_score_total: explainability.trust_score_total,
+                        selection_reason_summary: explainability.selection_reason_summary,
+                        selection_explain: explainability.selection_explain,
+                        fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
+                        identity_network_explain: explainability.identity_network_explain,
+                        winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
                     }
                 },
             )

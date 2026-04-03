@@ -284,6 +284,16 @@ pub struct RunResponse {
     pub finished_at: Option<String>,
     pub error_message: Option<String>,
     pub summary_artifacts: Vec<SummaryArtifactResponse>,
+    pub proxy_id: Option<String>,
+    pub proxy_provider: Option<String>,
+    pub proxy_region: Option<String>,
+    pub proxy_resolution_status: Option<String>,
+    pub trust_score_total: Option<i64>,
+    pub selection_reason_summary: Option<String>,
+    pub selection_explain: Option<ProxySelectionExplain>,
+    pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
+    pub identity_network_explain: Option<IdentityNetworkExplain>,
+    pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
