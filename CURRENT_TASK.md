@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-当前任务已进入 **绝对指纹优先第一批真实实现**。当前已完成指纹字段优先级分层、指纹-代理-地区一致性检查、性能/并发预算第一轮接线、explain/status 可观测性补齐、并发预算行为回归测试补强，以及 fingerprint runtime explain 闭环第一版；下一步优先把这套结果继续抬进更上层 explainability/API 聚合。
+当前任务已进入 **绝对指纹优先第一批真实实现**。当前已完成指纹字段优先级分层、指纹-代理-地区一致性检查、性能/并发预算第一轮接线、explain/status 可观测性补齐、并发预算行为回归测试补强、fingerprint runtime explain 闭环，以及 explainability/API 聚合接线；下一步优先把它与高级代理 explain 聚合。
 
 ---
 

@@ -3884,6 +3884,8 @@ async fn create_task_resolves_proxy_with_soft_min_score_penalty() {
     assert_eq!(explain.get("soft_min_score_penalty_applied").and_then(|v| v.as_bool()), Some(true));
     assert!(explain.get("fingerprint_budget_medium_limit").and_then(|v| v.as_u64()).is_some());
     assert!(explain.get("fingerprint_budget_heavy_limit").and_then(|v| v.as_u64()).is_some());
+    let runtime = task.get("fingerprint_runtime_explain").expect("fingerprint runtime explain");
+    assert!(runtime.get("fingerprint_budget_tag").is_some() || runtime.is_null());
     assert!(task.get("trust_score_total").and_then(|v| v.as_i64()).is_some());
 }
 

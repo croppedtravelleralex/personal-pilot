@@ -738,6 +738,7 @@ pub async fn status(
                 trust_score_total: explainability.trust_score_total,
                 selection_reason_summary: explainability.selection_reason_summary,
                 selection_explain: explainability.selection_explain,
+                fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
                 winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
                 summary_artifacts: explainability.summary_artifacts,
                 id,
@@ -1181,6 +1182,7 @@ pub async fn create_task(
             trust_score_total: None,
             selection_reason_summary: None,
             selection_explain: None,
+            fingerprint_runtime_explain: None,
             winner_vs_runner_up_diff: None,
         }),
     ))
@@ -1227,6 +1229,7 @@ pub async fn get_task(
                 trust_score_total: explainability.trust_score_total,
                 selection_reason_summary: explainability.selection_reason_summary,
                 selection_explain: explainability.selection_explain,
+                fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
                 winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
                 summary_artifacts: explainability.summary_artifacts,
                 id,

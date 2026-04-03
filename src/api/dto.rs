@@ -181,6 +181,12 @@ pub struct ProxySelectionExplain {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FingerprintRuntimeExplain {
+    pub fingerprint_budget_tag: Option<String>,
+    pub fingerprint_consistency: Option<crate::network_identity::fingerprint_consistency::FingerprintConsistencyAssessment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummaryArtifactResponse {
     pub category: String,
     pub key: String,
@@ -215,6 +221,7 @@ pub struct TaskResponse {
     pub trust_score_total: Option<i64>,
     pub selection_reason_summary: Option<String>,
     pub selection_explain: Option<ProxySelectionExplain>,
+    pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
     pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
 }
 

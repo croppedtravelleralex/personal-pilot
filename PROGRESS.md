@@ -142,3 +142,4 @@
 - **2026年04月03日 08时19分00秒** 完成了**fingerprint budget 可观测性补齐**，在 status 中暴露 medium/heavy 并发上限，并在 selection explain 中增加 fingerprint budget 相关字段，同时补上对应 API 回归测试。
 - **2026年04月03日 08时28分00秒** 完成了**并发预算行为回归测试补强**，将 claim 候选挑选逻辑抽成纯函数并补上单元测试，明确锁住“heavy 满额时跳过 heavy、继续放行 light/medium”的行为，避免系统退化成伪串行。
 - **2026年04月03日 08时43分00秒** 完成了**fingerprint runtime explain v1**，将 fingerprint budget 与 consistency 决策写入任务结果 JSON 的 `fingerprint_runtime_explain`，并新增 fingerprint runtime assessment summary artifact，形成更完整 explain 闭环。
+- **2026年04月03日 08时47分00秒** 完成了**fingerprint runtime explain API 聚合接线**，新增 `FingerprintRuntimeExplain` DTO，并将 `fingerprint_runtime_explain` 正式并入 `TaskExplainability -> TaskResponse`，让 `/tasks` 与 `/status` 返回的聚合结果可直接暴露该字段。

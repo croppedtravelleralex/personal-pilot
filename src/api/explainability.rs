@@ -23,7 +23,7 @@ fn perf_probe_log(event: &str, fields: &[(&str, String)]) {
     }
 }
 
-use super::dto::{CandidateRankPreviewItem, ProxySelectionExplain, SummaryArtifactResponse, TaskResponse, WinnerVsRunnerUpDiff};
+use super::dto::{CandidateRankPreviewItem, FingerprintRuntimeExplain, ProxySelectionExplain, SummaryArtifactResponse, TaskResponse, WinnerVsRunnerUpDiff};
 
 #[derive(Debug, Clone)]
 pub struct TaskExplainability {
@@ -35,6 +35,7 @@ pub struct TaskExplainability {
     pub trust_score_total: Option<i64>,
     pub selection_reason_summary: Option<String>,
     pub selection_explain: Option<ProxySelectionExplain>,
+    pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
     pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
     pub summary_artifacts: Vec<SummaryArtifactResponse>,
 }
@@ -130,6 +131,14 @@ pub fn selection_explain(result_json: Option<&str>) -> Option<ProxySelectionExpl
         .and_then(|value| value.get("network_policy_json"))
         .and_then(|value| value.get("selection_explain").cloned())
         .and_then(|value| serde_json::from_value::<ProxySelectionExplain>(value).ok())
+}
+
+pub fn fingerprint_runtime_explain(result_json: Option<&str>) -> Option<FingerprintRuntimeExplain> {
+    let parsed = result_json.and_then(|raw| serde_json::from_str::<Value>(raw).ok())?;
+    parsed
+        .get("fingerprint_runtime_explain")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<FingerprintRuntimeExplain>(value).ok())
 }
 
 pub fn trust_score_total(result_json: Option<&str>) -> Option<i64> {
@@ -367,6 +376,7 @@ pub fn build_task_explainability(
     let trust_score_total = trust_score_total(result_json);
     let selection_reason_summary = selection_reason_summary(result_json);
     let selection_explain = selection_explain(result_json);
+    let fingerprint_runtime_explain = fingerprint_runtime_explain(result_json);
     let winner_vs_runner_up_diff = winner_vs_runner_up_diff(result_json);
     let summary_artifacts = enrich_summary_artifacts(
         summary_artifacts(result_json),
@@ -391,6 +401,7 @@ pub fn build_task_explainability(
         trust_score_total,
         selection_reason_summary,
         selection_explain,
+        fingerprint_runtime_explain,
         winner_vs_runner_up_diff,
         summary_artifacts,
     }
@@ -451,6 +462,13 @@ mod tests {
                         "summary": "wins on verify_ok; penalized by provider_risk",
                         "winner_vs_runner_up_diff": sample_diff()
                     }]
+                }
+            },
+            "fingerprint_runtime_explain": {
+                "fingerprint_budget_tag": "medium",
+                "fingerprint_consistency": {
+                    "overall_status": "soft_match",
+                    "checks": [{"name": "timezone_vs_region", "status": "soft_match", "reason": "timezone_matches_region_family"}]
                 }
             },
             "summary_artifacts": [{
@@ -575,6 +593,7 @@ mod tests {
                 trust_score_total: None,
                 selection_reason_summary: None,
                 selection_explain: None,
+                fingerprint_runtime_explain: None,
                 winner_vs_runner_up_diff: None,
             },
             TaskResponse {
@@ -624,6 +643,7 @@ mod tests {
                 trust_score_total: None,
                 selection_reason_summary: None,
                 selection_explain: None,
+                fingerprint_runtime_explain: None,
                 winner_vs_runner_up_diff: None,
             },
         ];
@@ -655,6 +675,8 @@ mod tests {
         assert_eq!(explain.proxy_resolution_status.as_deref(), Some("resolved"));
         assert_eq!(explain.trust_score_total, Some(90));
         assert_eq!(explain.selection_reason_summary.as_deref(), Some("winner has better trust score"));
+        assert_eq!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
+        assert!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.fingerprint_consistency.as_ref()).is_some());
         assert!(explain.winner_vs_runner_up_diff.is_some());
         assert_eq!(explain.summary_artifacts.len(), 2);
         assert!(explain.summary_artifacts.iter().all(|a| a.task_id.as_deref() == Some("task-1")));
