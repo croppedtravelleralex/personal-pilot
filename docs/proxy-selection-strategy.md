@@ -302,4 +302,4 @@
 
 - `proxy_trust_score_sql_with_tuning()`
 
-当前它已经接入 selection 主排序，实际排序口径已经进入 **trust score 优先、raw score 次级兜底** 的阶段。也就是说，selection 已不再是“先按 rule 分层、最后才看 score”，而是开始由统一 trust score 承担主排序责任；后续仍应继续把剩余分散语义进一步并入 trust/risk score，减少对次级兜底项的依赖。
+当前它已经接入 selection 主排序，实际排序口径已经进入 **trust score 优先、尾部资源均衡** 的阶段。也就是说，selection 已不再是“先按 rule 分层、最后才看 score”，而是开始由统一 trust score 承担主排序责任；后续仍应继续把剩余分散语义进一步并入 trust/risk score，减少对尾部排序项的依赖。
