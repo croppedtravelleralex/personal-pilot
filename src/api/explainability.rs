@@ -186,8 +186,24 @@ fn normalize_summary_source(source: Option<&str>) -> String {
 
 fn normalize_summary_severity(severity: Option<&str>) -> String {
     match severity.unwrap_or("info") {
-        "error" | "warning" | "info" => severity.unwrap_or("info").to_string(),
+        "error" => "error".to_string(),
+        "warning" | "warn" => "warning".to_string(),
+        "info" => "info".to_string(),
         _ => "info".to_string(),
+    }
+}
+
+fn humanize_proxy_growth_reason(reason: &str) -> &'static str {
+    match reason {
+        "exact_region_match" => "exact region match",
+        "region_mismatch" => "region mismatch",
+        "proxy_region_missing" => "proxy region missing",
+        "target_region_not_requested" => "target region not requested",
+        "no_region_constraint" => "no region constraint",
+        other => {
+            let _ = other;
+            "proxy growth signal"
+        }
     }
 }
 
@@ -301,6 +317,58 @@ fn identity_network_summary_artifact(result_json: Option<&str>) -> Option<Summar
     })
 }
 
+fn proxy_growth_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
+    let explain = selection_explain(result_json)?;
+    let growth = explain.proxy_growth?;
+    let target_region = growth.target_region.as_deref().unwrap_or("none");
+    let selected_proxy_region = growth.selected_proxy_region.as_deref().unwrap_or("none");
+    let available_ratio_percent = growth
+        .health_assessment
+        .as_ref()
+        .map(|v| v.available_ratio_percent)
+        .unwrap_or(0);
+    let require_replenish = growth
+        .health_assessment
+        .as_ref()
+        .map(|v| v.require_replenish)
+        .unwrap_or(false);
+    let region_match_reason = growth
+        .region_match
+        .as_ref()
+        .map(|v| humanize_proxy_growth_reason(&v.reason))
+        .unwrap_or("proxy growth signal");
+    Some(SummaryArtifactResponse {
+        category: "summary".to_string(),
+        key: "proxy.selection.proxy_growth".to_string(),
+        source: "selection.proxy_growth".to_string(),
+        severity: if require_replenish { "warning".to_string() } else { "info".to_string() },
+        title: "proxy growth assessment".to_string(),
+        summary: if require_replenish {
+            format!(
+                "proxy pool needs replenishment; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                target_region,
+                selected_proxy_region,
+                available_ratio_percent,
+                region_match_reason,
+            )
+        } else {
+            format!(
+                "proxy pool remains healthy; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                target_region,
+                selected_proxy_region,
+                available_ratio_percent,
+                region_match_reason,
+            )
+        },
+        task_id: None,
+        task_kind: None,
+        task_status: None,
+        run_id: None,
+        attempt: None,
+        timestamp: None,
+    })
+}
+
 pub fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> {
     let parsed = result_json.and_then(|raw| serde_json::from_str::<Value>(raw).ok());
     let mut artifacts: Vec<SummaryArtifactResponse> = parsed
@@ -343,6 +411,13 @@ pub fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactRespon
     let has_identity_network_summary = artifacts.iter().any(|item| item.title == "identity and network summary");
     if !has_identity_network_summary {
         if let Some(artifact) = identity_network_summary_artifact(result_json) {
+            artifacts.push(artifact);
+        }
+    }
+
+    let has_proxy_growth_summary = artifacts.iter().any(|item| item.title == "proxy growth assessment");
+    if !has_proxy_growth_summary {
+        if let Some(artifact) = proxy_growth_summary_artifact(result_json) {
             artifacts.push(artifact);
         }
     }
@@ -518,6 +593,38 @@ mod tests {
                 "network_policy_json": {
                     "selection_reason_summary": "winner has better trust score",
                     "trust_score_total": 90,
+                    "selection_explain": {
+                        "selection_mode": "auto",
+                        "proxy_growth": {
+                            "target_region": "us-east",
+                            "selected_proxy_region": "us-east",
+                            "inventory_snapshot": {
+                                "total": 100,
+                                "available": 45,
+                                "region": "us-east",
+                                "available_in_region": 5,
+                                "inflight_tasks": 10
+                            },
+                            "health_assessment": {
+                                "available_ratio_percent": 45,
+                                "healthy_ratio_band": "within_band",
+                                "below_min_ratio": false,
+                                "above_max_ratio": false,
+                                "below_min_total": false,
+                                "below_min_region": false,
+                                "require_replenish": false,
+                                "reasons": []
+                            },
+                            "region_match": {
+                                "target_region": "us-east",
+                                "proxy_region": "us-east",
+                                "match_mode": "region_preferred",
+                                "matches": true,
+                                "score": 100,
+                                "reason": "exact_region_match"
+                            }
+                        }
+                    },
                     "candidate_rank_preview": [{
                         "id": "proxy-1",
                         "provider": "pool-a",
@@ -552,7 +659,7 @@ mod tests {
     fn summary_artifacts_normalize_fields_and_inject_selection_decision() {
         let raw = sample_result_json_without_selection_artifact();
         let artifacts = summary_artifacts(Some(&raw));
-        assert_eq!(artifacts.len(), 3);
+        assert_eq!(artifacts.len(), 4);
 
         let runner = artifacts.iter().find(|a| a.title == "fake runner summary").expect("runner artifact");
         assert_eq!(runner.category, "summary");
@@ -576,6 +683,14 @@ mod tests {
         assert!(identity.summary.contains("proxy pool-a@us-east"));
         assert!(identity.summary.contains("resolution resolved"));
         assert!(identity.summary.contains("fingerprint budget medium"));
+
+        let growth = artifacts.iter().find(|a| a.title == "proxy growth assessment").expect("growth artifact");
+        assert_eq!(growth.key, "proxy.selection.proxy_growth");
+        assert_eq!(growth.source, "selection.proxy_growth");
+        assert_eq!(growth.severity, "info");
+        assert!(growth.summary.contains("proxy pool remains healthy"));
+        assert!(growth.summary.contains("target_region=us-east"));
+        assert!(growth.summary.contains("region_match_reason=exact region match"));
     }
 
     #[test]
@@ -756,7 +871,7 @@ mod tests {
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.proxy_provider.as_deref()), Some("pool-a"));
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.fingerprint_runtime_explain.as_ref()).and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
         assert!(explain.winner_vs_runner_up_diff.is_some());
-        assert_eq!(explain.summary_artifacts.len(), 3);
+        assert_eq!(explain.summary_artifacts.len(), 4);
         assert!(explain.summary_artifacts.iter().all(|a| a.task_id.as_deref() == Some("task-1")));
         assert!(explain.summary_artifacts.iter().all(|a| a.task_kind.as_deref() == Some("open_page")));
         assert!(explain.summary_artifacts.iter().all(|a| a.task_status.as_deref() == Some("succeeded")));

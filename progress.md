@@ -58,3 +58,4 @@
 ---
 *Update after completing each phase or encountering errors*
 - 继续推进 explainability 主链：新增 **identity and network summary** artifact，把 proxy provider/region、resolution status、fingerprint budget 与 selection summary 抬成用户可读 summary artifact；首轮因 `source` 命名越界触发 integration test，随后收口到 `selection.identity_network` 命名并重新验证。
+- 把 **proxy_growth** 从“只在 runner 路径里半可见”推进到 explainability 主链自动补全：新增 `proxy growth assessment` summary artifact，可直接从 `selection_explain.proxy_growth` 生成；同时修正 severity 归一化，兼容历史 `warn -> warning`。
