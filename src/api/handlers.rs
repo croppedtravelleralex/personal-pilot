@@ -5,6 +5,7 @@ use axum::{
 };
 use std::{net::SocketAddr, time::{Instant, SystemTime, UNIX_EPOCH}};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
@@ -1004,18 +1005,33 @@ pub async fn explain_proxy_selection(
 ) -> Result<Json<ProxySelectionExplainResponse>, (StatusCode, String)> {
     let started = Instant::now();
     let now = now_ts_string();
-    let row = sqlx::query_as::<_, (String, Option<String>, Option<String>, f64, i64, i64, Option<String>, Option<i64>, Option<i64>, Option<String>, Option<f64>, Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>)>(
-        &format!(
-            "SELECT id, provider, region, score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, last_verify_confidence, last_verify_score_delta, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_region FROM proxies WHERE id = ?"
-        )
+    let row = sqlx::query(
+        "SELECT id, provider, region, score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, last_verify_confidence, last_verify_score_delta, last_verify_source, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_region FROM proxies WHERE id = ?"
     )
     .bind(&proxy_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy explain row: {err}")))?;
-    let Some((id, _provider, _region, score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, last_verify_confidence, last_verify_score_delta, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_region)) = row else {
+    let Some(row) = row else {
         return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
     };
+    let id: String = row.try_get("id").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode id: {err}")))?;
+    let _provider: Option<String> = row.try_get("provider").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode provider: {err}")))?;
+    let region: Option<String> = row.try_get("region").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode region: {err}")))?;
+    let score: f64 = row.try_get("score").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode score: {err}")))?;
+    let success_count: i64 = row.try_get("success_count").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode success_count: {err}")))?;
+    let failure_count: i64 = row.try_get("failure_count").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode failure_count: {err}")))?;
+    let last_verify_status: Option<String> = row.try_get("last_verify_status").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_status: {err}")))?;
+    let last_verify_geo_match_ok: Option<i64> = row.try_get("last_verify_geo_match_ok").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_geo_match_ok: {err}")))?;
+    let last_smoke_upstream_ok: Option<i64> = row.try_get("last_smoke_upstream_ok").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_smoke_upstream_ok: {err}")))?;
+    let last_verify_at: Option<String> = row.try_get("last_verify_at").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_at: {err}")))?;
+    let last_verify_confidence: Option<f64> = row.try_get("last_verify_confidence").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_confidence: {err}")))?;
+    let last_verify_score_delta: Option<i64> = row.try_get("last_verify_score_delta").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_score_delta: {err}")))?;
+    let last_verify_source: Option<String> = row.try_get("last_verify_source").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_source: {err}")))?;
+    let last_anonymity_level: Option<String> = row.try_get("last_anonymity_level").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_anonymity_level: {err}")))?;
+    let last_probe_latency_ms: Option<i64> = row.try_get("last_probe_latency_ms").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_probe_latency_ms: {err}")))?;
+    let last_probe_error_category: Option<String> = row.try_get("last_probe_error_category").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_probe_error_category: {err}")))?;
+    let last_exit_region: Option<String> = row.try_get("last_exit_region").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_exit_region: {err}")))?;
 
     let provider_risk_hit: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM provider_risk_snapshots s JOIN proxies p ON p.provider = s.provider WHERE p.id = ? AND s.risk_hit != 0)")
         .bind(&proxy_id)
@@ -1027,7 +1043,7 @@ pub async fn explain_proxy_selection(
         .fetch_one(&state.db)
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to compute provider region risk: {err}")))?;
-    let region_match_ok = match (last_exit_region.as_deref(), _region.as_deref()) {
+    let region_match_ok = match (last_exit_region.as_deref(), region.as_deref()) {
         (Some(actual), Some(expected)) => Some(actual.eq_ignore_ascii_case(expected)),
         _ => None,
     };
@@ -1044,6 +1060,7 @@ pub async fn explain_proxy_selection(
         last_verify_at.as_ref().and_then(|v: &String| v.parse::<i64>().ok()),
         last_verify_confidence,
         last_verify_score_delta,
+        last_verify_source.as_deref(),
         last_anonymity_level.as_deref(),
         last_probe_latency_ms,
         last_probe_error_category.as_deref(),

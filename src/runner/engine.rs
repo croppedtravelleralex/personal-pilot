@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
+use sqlx::Row;
 use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -257,6 +258,7 @@ pub fn computed_trust_score_components(
     last_verify_at: Option<i64>,
     last_verify_confidence: Option<f64>,
     last_verify_score_delta: Option<i64>,
+    last_verify_source: Option<&str>,
     last_anonymity_level: Option<&str>,
     last_probe_latency_ms: Option<i64>,
     last_probe_error_category: Option<&str>,
@@ -290,6 +292,10 @@ pub fn computed_trust_score_components(
         Some(v) if v >= 6 => 1,
         Some(v) if v <= -12 => -2,
         Some(v) if v <= -6 => -1,
+        _ => 0,
+    };
+    let verify_source_bonus = match last_verify_source {
+        Some("local_verify") => 1,
         _ => 0,
     };
     let anonymity_bonus = match last_anonymity_level {
@@ -339,6 +345,7 @@ pub fn computed_trust_score_components(
         provider_region_cluster_penalty,
         verify_confidence_bonus,
         verify_score_delta_bonus,
+        verify_source_bonus,
         anonymity_bonus,
         latency_penalty,
         exit_ip_not_public_penalty,
@@ -365,6 +372,7 @@ fn component_value(components: &TrustScoreComponents, key: &str) -> i64 {
         "provider_region_cluster_penalty" => components.provider_region_cluster_penalty,
         "verify_confidence_bonus" => components.verify_confidence_bonus,
         "verify_score_delta_bonus" => components.verify_score_delta_bonus,
+        "verify_source_bonus" => components.verify_source_bonus,
         "anonymity_bonus" => components.anonymity_bonus,
         "latency_penalty" => components.latency_penalty,
         "exit_ip_not_public_penalty" => components.exit_ip_not_public_penalty,
@@ -374,7 +382,7 @@ fn component_value(components: &TrustScoreComponents, key: &str) -> i64 {
     }
 }
 
-fn component_keys() -> [&'static str; 20] {
+fn component_keys() -> [&'static str; 21] {
     [
         "verify_ok_bonus",
         "verify_geo_match_bonus",
@@ -392,6 +400,7 @@ fn component_keys() -> [&'static str; 20] {
         "provider_region_cluster_penalty",
         "verify_confidence_bonus",
         "verify_score_delta_bonus",
+        "verify_source_bonus",
         "anonymity_bonus",
         "latency_penalty",
         "exit_ip_not_public_penalty",
@@ -399,7 +408,7 @@ fn component_keys() -> [&'static str; 20] {
     ]
 }
 
-fn positive_component_keys() -> [&'static str; 7] {
+fn positive_component_keys() -> [&'static str; 8] {
     [
         "verify_ok_bonus",
         "verify_geo_match_bonus",
@@ -407,6 +416,7 @@ fn positive_component_keys() -> [&'static str; 7] {
         "raw_score_component",
         "verify_confidence_bonus",
         "verify_score_delta_bonus",
+        "verify_source_bonus",
         "anonymity_bonus",
     ]
 }
@@ -429,6 +439,7 @@ fn empty_components() -> TrustScoreComponents {
         provider_region_cluster_penalty: 0,
         verify_confidence_bonus: 0,
         verify_score_delta_bonus: 0,
+        verify_source_bonus: 0,
         anonymity_bonus: 0,
         latency_penalty: 0,
         exit_ip_not_public_penalty: 0,
@@ -455,6 +466,7 @@ fn component_label(key: &str) -> &'static str {
         "provider_region_cluster_penalty" => "provider_region_risk",
         "verify_confidence_bonus" => "verify_confidence",
         "verify_score_delta_bonus" => "verify_score_delta",
+        "verify_source_bonus" => "verify_source",
         "anonymity_bonus" => "anonymity",
         "latency_penalty" => "probe_latency",
         "exit_ip_not_public_penalty" => "exit_ip_not_public",
@@ -697,15 +709,32 @@ async fn compute_proxy_selection_explain(
 ) -> Result<(Option<i64>, TrustScoreComponents)> {
     let provider_risk_query = "SELECT EXISTS(SELECT 1 FROM provider_risk_snapshots s JOIN proxies p ON p.provider = s.provider WHERE p.id = ? AND s.risk_hit != 0)";
     let provider_region_query = "SELECT EXISTS(SELECT 1 FROM provider_region_risk_snapshots s JOIN proxies p ON p.provider = s.provider AND p.region = s.region WHERE p.id = ? AND s.risk_hit != 0)";
-    let row = sqlx::query_as::<_, (f64, i64, i64, Option<String>, Option<i64>, Option<i64>, Option<i64>, Option<f64>, Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(
-        r#"SELECT score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, CAST(last_verify_at AS INTEGER), last_verify_confidence, last_verify_score_delta, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_country, last_exit_region, country, region FROM proxies WHERE id = ?"#
+    let row = sqlx::query(
+        r#"SELECT score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, CAST(last_verify_at AS INTEGER) AS last_verify_at, last_verify_confidence, last_verify_score_delta, last_verify_source, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_country, last_exit_region, country, region FROM proxies WHERE id = ?"#
     )
     .bind(proxy_id)
     .fetch_optional(&state.db)
     .await?;
-    let Some((score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, last_verify_confidence, last_verify_score_delta, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_country, last_exit_region, proxy_country, proxy_region)) = row else {
+    let Some(row) = row else {
         return Ok((None, empty_components()));
     };
+    let score: f64 = row.try_get("score")?;
+    let success_count: i64 = row.try_get("success_count")?;
+    let failure_count: i64 = row.try_get("failure_count")?;
+    let last_verify_status: Option<String> = row.try_get("last_verify_status")?;
+    let last_verify_geo_match_ok: Option<i64> = row.try_get("last_verify_geo_match_ok")?;
+    let last_smoke_upstream_ok: Option<i64> = row.try_get("last_smoke_upstream_ok")?;
+    let last_verify_at: Option<i64> = row.try_get("last_verify_at")?;
+    let last_verify_confidence: Option<f64> = row.try_get("last_verify_confidence")?;
+    let last_verify_score_delta: Option<i64> = row.try_get("last_verify_score_delta")?;
+    let last_verify_source: Option<String> = row.try_get("last_verify_source")?;
+    let last_anonymity_level: Option<String> = row.try_get("last_anonymity_level")?;
+    let last_probe_latency_ms: Option<i64> = row.try_get("last_probe_latency_ms")?;
+    let last_probe_error_category: Option<String> = row.try_get("last_probe_error_category")?;
+    let last_exit_country: Option<String> = row.try_get("last_exit_country")?;
+    let last_exit_region: Option<String> = row.try_get("last_exit_region")?;
+    let proxy_country: Option<String> = row.try_get("country")?;
+    let proxy_region: Option<String> = row.try_get("region")?;
     let provider_risk_hit: i64 = sqlx::query_scalar(provider_risk_query).bind(proxy_id).fetch_one(&state.db).await?;
     let provider_region_cluster_hit: i64 = sqlx::query_scalar(provider_region_query).bind(proxy_id).fetch_one(&state.db).await?;
     let trust_score_total = load_proxy_trust_score(state, proxy_id, now).await?;
@@ -729,6 +758,7 @@ async fn compute_proxy_selection_explain(
         last_verify_at,
         last_verify_confidence,
         last_verify_score_delta,
+        last_verify_source.as_deref(),
         last_anonymity_level.as_deref(),
         last_probe_latency_ms,
         last_probe_error_category.as_deref(),
@@ -1731,6 +1761,7 @@ mod tests {
             provider_region_cluster_penalty: 0,
             verify_confidence_bonus: 0,
             verify_score_delta_bonus: 0,
+            verify_source_bonus: 0,
             anonymity_bonus: 0,
             latency_penalty: 0,
             exit_ip_not_public_penalty: 0,
@@ -1757,6 +1788,7 @@ mod tests {
             provider_region_cluster_penalty: 2,
             verify_confidence_bonus: 0,
             verify_score_delta_bonus: 0,
+            verify_source_bonus: 0,
             anonymity_bonus: 0,
             latency_penalty: 0,
             exit_ip_not_public_penalty: 0,
@@ -1828,6 +1860,7 @@ mod tests {
             Some(9999999999),
             Some(0.98),
             Some(18),
+            Some("local_verify"),
             Some("elite"),
             Some(650),
             Some("protocol_invalid"),
@@ -1846,6 +1879,7 @@ mod tests {
         assert_eq!(components.provider_region_cluster_penalty, 2);
         assert_eq!(components.verify_confidence_bonus, 3);
         assert_eq!(components.verify_score_delta_bonus, 2);
+        assert_eq!(components.verify_source_bonus, 1);
         assert_eq!(components.anonymity_bonus, 4);
         assert_eq!(components.latency_penalty, -2);
         assert_eq!(components.exit_ip_not_public_penalty, 0);

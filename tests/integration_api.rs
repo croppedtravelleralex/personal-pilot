@@ -2703,7 +2703,7 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
         let deltas: Vec<i64> = factors.iter().filter_map(|v| v.get("delta").and_then(|v| v.as_i64()).map(|d| d.abs())).collect();
         assert!(deltas.windows(2).all(|w| w[0] >= w[1]));
         let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
-        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "verify_confidence" | "verify_score_delta" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "verify_confidence" | "verify_score_delta" | "verify_source" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
     }
 
     let result_json_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#)
@@ -2915,7 +2915,7 @@ async fn proxy_explain_endpoint_single_candidate_has_zero_gap_and_empty_runner_u
     assert!(diff.get("factors").and_then(|v| v.as_array()).map(|v| v.len() <= 5).unwrap_or(false));
     if let Some(factors) = diff.get("factors").and_then(|v| v.as_array()) {
         let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
-        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "verify_confidence" | "verify_score_delta" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "verify_confidence" | "verify_score_delta" | "verify_source" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
         let directions: Vec<&str> = factors.iter().filter_map(|v| v.get("direction").and_then(|v| v.as_str())).collect();
         assert!(directions.iter().all(|d| *d == "neutral"));
     }
@@ -3035,7 +3035,7 @@ async fn proxy_explain_endpoint_returns_components_and_preview() {
         let deltas: Vec<i64> = factors.iter().filter_map(|v| v.get("delta").and_then(|v| v.as_i64()).map(|d| d.abs())).collect();
         assert!(deltas.windows(2).all(|w| w[0] >= w[1]));
         let labels: Vec<&str> = factors.iter().filter_map(|v| v.get("label").and_then(|v| v.as_str())).collect();
-        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "verify_confidence" | "verify_score_delta" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
+        assert!(labels.iter().all(|label| matches!(*label, "verify_ok" | "geo_match" | "geo_mismatch" | "region_mismatch" | "upstream_ok" | "raw_score" | "missing_verify" | "stale_verify" | "verify_failed_heavy" | "verify_failed_light" | "verify_failed_base" | "history_risk" | "provider_risk" | "provider_region_risk" | "verify_confidence" | "verify_score_delta" | "verify_source" | "anonymity" | "probe_latency" | "exit_ip_not_public" | "probe_error_category" | "soft_min_score")));
     }
 }
 
@@ -3469,7 +3469,7 @@ async fn proxy_explain_trust_score_components_roundtrip_as_typed_shape() {
     assert_eq!(status, StatusCode::OK);
     let comp = json.get("trust_score_components").expect("components");
     for key in [
-        "verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component", "verify_confidence_bonus", "verify_score_delta_bonus",
+        "verify_ok_bonus", "verify_geo_match_bonus", "smoke_upstream_ok_bonus", "raw_score_component", "verify_confidence_bonus", "verify_score_delta_bonus", "verify_source_bonus",
         "missing_verify_penalty", "stale_verify_penalty", "verify_failed_heavy_penalty", "verify_failed_light_penalty",
         "verify_failed_base_penalty", "individual_history_penalty", "provider_risk_penalty", "provider_region_cluster_penalty"
     ] {
