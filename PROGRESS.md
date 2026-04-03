@@ -143,3 +143,4 @@
 - **2026年04月03日 08时28分00秒** 完成了**并发预算行为回归测试补强**，将 claim 候选挑选逻辑抽成纯函数并补上单元测试，明确锁住“heavy 满额时跳过 heavy、继续放行 light/medium”的行为，避免系统退化成伪串行。
 - **2026年04月03日 08时43分00秒** 完成了**fingerprint runtime explain v1**，将 fingerprint budget 与 consistency 决策写入任务结果 JSON 的 `fingerprint_runtime_explain`，并新增 fingerprint runtime assessment summary artifact，形成更完整 explain 闭环。
 - **2026年04月03日 08时47分00秒** 完成了**fingerprint runtime explain API 聚合接线**，新增 `FingerprintRuntimeExplain` DTO，并将 `fingerprint_runtime_explain` 正式并入 `TaskExplainability -> TaskResponse`，让 `/tasks` 与 `/status` 返回的聚合结果可直接暴露该字段。
+- **2026年04月03日 10时34分00秒** 实现了**proxy_growth API explainability 强类型接线**，在 `src/api/dto.rs` 为 `selection_explain.proxy_growth` 新增强类型 DTO，使代理池健康评估、地区匹配与补池判断不再只停留在原始 JSON 子字段中，并完成 `68 + 87` 全量测试验证。

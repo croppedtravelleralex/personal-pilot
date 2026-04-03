@@ -163,6 +163,37 @@ pub struct CandidateRankPreviewItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyPoolHealthAssessmentExplain {
+    pub available_ratio_percent: i64,
+    pub healthy_ratio_band: String,
+    pub below_min_ratio: bool,
+    pub above_max_ratio: bool,
+    pub below_min_total: bool,
+    pub below_min_region: bool,
+    pub require_replenish: bool,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegionMatchExplain {
+    pub target_region: Option<String>,
+    pub proxy_region: Option<String>,
+    pub match_mode: String,
+    pub matches: bool,
+    pub score: i64,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyGrowthExplain {
+    pub target_region: Option<String>,
+    pub selected_proxy_region: Option<String>,
+    pub inventory_snapshot: Option<crate::network_identity::proxy_growth::ProxyPoolInventorySnapshot>,
+    pub health_assessment: Option<ProxyPoolHealthAssessmentExplain>,
+    pub region_match: Option<RegionMatchExplain>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxySelectionExplain {
     pub selection_mode: Option<String>,
     pub explicit_override: Option<bool>,
@@ -175,6 +206,7 @@ pub struct ProxySelectionExplain {
     pub soft_min_score_penalty_applied: Option<bool>,
     pub fallback_reason: Option<String>,
     pub no_match_reason_code: Option<String>,
+    pub proxy_growth: Option<ProxyGrowthExplain>,
     pub fingerprint_budget_tag: Option<String>,
     pub fingerprint_budget_medium_limit: Option<usize>,
     pub fingerprint_budget_heavy_limit: Option<usize>,
