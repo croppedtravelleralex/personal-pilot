@@ -2095,7 +2095,6 @@ async fn proxy_selection_prefers_fresh_verified_proxy_over_stale_high_score_prox
                WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2145,7 +2144,6 @@ async fn proxy_selection_penalizes_recent_verify_failures_even_with_higher_score
                WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2194,7 +2192,6 @@ async fn proxy_selection_prefers_geo_match_verified_proxy_over_smoke_only_proxy(
                WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2242,7 +2239,6 @@ async fn proxy_selection_prefers_fresh_verified_proxy_over_missing_verify_proxy(
                WHEN CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - 3600 THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2296,7 +2292,6 @@ async fn proxy_selection_penalizes_bad_long_term_history_even_with_fresh_verify(
                WHEN failure_count > success_count THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2357,7 +2352,6 @@ async fn proxy_selection_penalizes_bad_provider_history_even_with_better_score()
                WHEN failure_count > success_count THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2422,7 +2416,6 @@ async fn proxy_selection_penalizes_more_recent_failure_more_than_older_failure()
                WHEN failure_count > success_count THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2499,7 +2492,6 @@ async fn proxy_selection_penalizes_recent_provider_region_failure_cluster() {
                WHEN failure_count > success_count THEN 1
                ELSE 0
              END ASC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2564,7 +2556,6 @@ async fn proxy_trust_score_penalizes_missing_verify_even_against_much_higher_raw
                          GROUP BY provider, region HAVING COUNT(*) >= 2
                     ) THEN 12 ELSE 0 END) +
               CAST(score * 10 AS INTEGER)) DESC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,
@@ -2629,7 +2620,6 @@ async fn proxy_trust_score_prefers_healthier_proxy_in_direct_ordering() {
                          WHERE provider IS NOT NULL AND region IS NOT NULL AND last_verify_status = 'failed' AND last_verify_at IS NOT NULL AND CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 3600
                          GROUP BY provider, region HAVING COUNT(*) >= 2
                     ) THEN 12 ELSE 0 END)) DESC,
-             score DESC,
              COALESCE(last_used_at, '0') ASC,
              created_at ASC
            LIMIT 1"#,

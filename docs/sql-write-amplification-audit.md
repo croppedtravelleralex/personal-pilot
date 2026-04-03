@@ -29,7 +29,7 @@
 ### 风险
 - 候选代理量大后，单次 selection 查询成本会上升
 - provider / provider×region 子查询会反复参与排序
-- 当前索引 `idx_proxies_selection(status, provider, region, score DESC, last_used_at, created_at)` 只能覆盖一部分过滤与尾部排序，**无法真正覆盖 trust score 中的聚合和时间衰减逻辑**
+- 当前索引 `idx_proxies_selection(status, provider, region, score DESC, last_used_at, created_at)`（历史/兼容）仅保留兼容含义；当前 trust score 主排序已不再依赖 `score DESC` 二次兜底，因此它只能覆盖一部分过滤与尾部排序，**无法真正覆盖 trust score 中的聚合和时间衰减逻辑**
 
 ### 建议
 - 评估把 provider / provider×region 风险做成预聚合表或周期性物化结果
@@ -85,7 +85,7 @@
 ## 当前 schema 观察
 
 当前 schema 已有：
-- `idx_proxies_selection(status, provider, region, score DESC, last_used_at, created_at)`
+- `idx_proxies_selection(status, provider, region, score DESC, last_used_at, created_at)`（历史/兼容）
 - `idx_proxy_session_bindings_lookup(proxy_id, provider, region, expires_at, last_used_at)`
 
 ### 明显缺口

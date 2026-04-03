@@ -18,7 +18,7 @@ created_at ASC
 
 这说明：
 - **trust score 已接主链**
-- 原始 `score` 已不再作为单独的二次兜底
+- 原始分数已不再作为单独的二次兜底
 - 资源均衡仍在尾部用 `last_used_at / created_at` 承接
 
 ## 当前已纳入 trust score 的信号
@@ -41,7 +41,7 @@ created_at ASC
 ## 仍未完全收口的地方
 
 ### 1. raw score 已不再作为排序兜底
-当前 `raw score` 已经进入 trust score 主表达，且主排序中的 `score DESC` 二次兜底已经移除。
+当前 `raw score` 已经进入 trust score 主表达，且主排序中的原始分数二次兜底已经移除。
 
 这意味着：
 - trust score 接管语义更彻底了
@@ -63,7 +63,7 @@ created_at ASC
 ## 推荐收口顺序
 
 ### P0：先把排序主语义彻底收紧
-1. 明确 `score DESC` 是不是还需要保留
+1. 明确原始分数二次兜底是不是还需要保留
 2. 若保留，文档明确其职责仅是 **trust score 相同情况下的次级平局裁决**
 3. 若不保留，改为把 raw score 完全内化到 trust score 中，只保留 `last_used_at / created_at` 作为资源均衡尾部
 
@@ -121,7 +121,7 @@ created_at ASC
 
 1. 保留现有 trust score SQL 主体
 2. 新增 `anonymity_level` 与 `probe latency` 两类信号设计
-3. 明确 `score DESC` 的职责是“平局兜底”还是“待移除残留”
+3. 明确原始分数二次兜底的职责是“平局兜底”还是“待移除残留”
 4. 补一份 explainability 输出结构，避免 trust score 继续黑盒化
 
 ## 一句话结论

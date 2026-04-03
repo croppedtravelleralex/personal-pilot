@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-当前任务已进入 **绝对指纹优先第一批真实实现**。当前已完成指纹字段优先级分层、指纹-代理-地区一致性检查、性能/并发预算第一轮接线、explain/status 可观测性补齐、并发预算行为回归测试补强、fingerprint runtime explain 闭环，以及 explainability/API 聚合接线；当前主线继续向 **trust score 核心化** 收口，近期已去掉 trust/cached trust 主链中的 `score DESC` 二次兜底。
+当前任务已进入 **绝对指纹优先第一批真实实现**。当前已完成指纹字段优先级分层、指纹-代理-地区一致性检查、性能/并发预算第一轮接线、explain/status 可观测性补齐、并发预算行为回归测试补强、fingerprint runtime explain 闭环，以及 explainability/API 聚合接线；当前主线继续向 **trust score 核心化** 收口，近期已去掉 trust/cached trust 主链中的原始分数二次兜底。
 
 ---
 
@@ -13,7 +13,7 @@
 1. **继续收敛代理选择主链**
    - 检查 selection 中仍分散存在的排序项、特判项、兜底项
    - 判断哪些应该继续并入 trust score / risk score
-   - 近期已完成 trust/cached trust 主链移除 `score DESC` 二次兜底，继续降低“规则很多，但真实主排序语义分散”的维护成本
+   - 近期已完成 trust/cached trust 主链移除原始分数二次兜底，继续降低“规则很多，但真实主排序语义分散”的维护成本
 
 2. **补强代理质量信号闭环**
    - 继续完善 verify 慢路径

@@ -60,7 +60,7 @@
 - [x] 给 `src/api/explainability.rs` 补独立 unit tests
 - [x] 给 `src/runner/engine.rs` 的 explainability 辅助逻辑补独立 unit tests
 - [x] 做一轮 explainability 主链剩余 loose JSON 普查与收口计划
-- [ ] 继续推进 trust score 核心化，减少分散排序项依赖（已去掉 trust/cached trust 主链中的 `score DESC` 二次兜底，继续收口剩余语义）
+- [ ] 继续推进 trust score 核心化，减少分散排序项依赖（已去掉 trust/cached trust 主链中的原始分数二次兜底，继续收口剩余语义）
 - [x] 为 explicit / sticky / no-match 增加结构化 explain 字段
 - [x] 固化 eligibility gate vs ranking score 的正式边界
 - [x] 将 `soft_min_score` 作为 soft ranking penalty 并入 trust score

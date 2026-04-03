@@ -4,7 +4,7 @@
 
 当前优先级最高的目标，不再是继续补“最小骨架”，也不是继续把控制面收口误报成总完成度，而是先按 **fingerprint-first** 规则约束后续实现：真实指纹消费、一致性、性能预算优先。
 
-1. 让 **proxy selection** 从“多段规则叠加”继续收敛到 **trust score 核心表达**；近期已把 trust/cached trust 主链里的 `score DESC` 二次兜底移除，减少 raw score 重复参与排序。
+1. 让 **proxy selection** 从“多段规则叠加”继续收敛到 **trust score 核心表达**；近期已把 trust/cached trust 主链里的原始分数二次兜底移除，减少 raw score 重复参与排序。
 2. 让 **verify / smoke / batch verify / 巡检** 形成更稳定的质量闭环
 3. 让 **文档、策略、代码主链** 保持同一口径，避免自动推进被旧文档误导
 4. 在继续加能力之前，先补齐 **性能预算、写放大控制、可观测性与风险边界**
