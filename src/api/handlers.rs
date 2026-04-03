@@ -769,6 +769,8 @@ pub async fn status(
             claim_retry_limit: crate::runner::runner_claim_retry_limit_from_env(),
             idle_backoff_min_ms: crate::runner::runner_idle_backoff_min_ms_from_env(),
             idle_backoff_max_ms: crate::runner::runner_idle_backoff_max_ms_from_env(),
+            fingerprint_medium_max_concurrency: state.worker_count.max(2),
+            fingerprint_heavy_max_concurrency: state.worker_count.clamp(1, 2),
         },
         fingerprint_metrics,
         proxy_metrics,

@@ -157,6 +157,9 @@ fn selection_explain_json(
     soft_min_score: Option<f64>,
     soft_min_score_penalty_applied: Option<bool>,
     proxy_growth: Option<Value>,
+    fingerprint_budget_tag: Option<&str>,
+    fingerprint_budget_medium_limit: Option<usize>,
+    fingerprint_budget_heavy_limit: Option<usize>,
 ) -> Value {
     let eligibility_gate = "active+cooldown+provider/region+min_score";
     json!({
@@ -172,6 +175,9 @@ fn selection_explain_json(
         "fallback_reason": fallback_reason,
         "no_match_reason_code": no_match_reason_code,
         "proxy_growth": proxy_growth,
+        "fingerprint_budget_tag": fingerprint_budget_tag,
+        "fingerprint_budget_medium_limit": fingerprint_budget_medium_limit,
+        "fingerprint_budget_heavy_limit": fingerprint_budget_heavy_limit,
     })
 }
 
@@ -815,8 +821,9 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
             .and_then(|items| items.first())
             .map(|item| item.summary.as_str());
         let proxy_growth_for_selection = build_proxy_growth_explain_json(state, &payload_snapshot, selected_proxy_snapshot.as_ref()).await.ok();
+        let requested_fp_budget = payload_snapshot.get("fingerprint_profile_json").and_then(|v| v.as_str()).map(|v| match fingerprint_perf_budget_tag_from_profile_json(Some(v)) { FingerprintPerfBudgetTag::Light => "light", FingerprintPerfBudgetTag::Medium => "medium", FingerprintPerfBudgetTag::Heavy => "heavy" });
         policy_obj.insert("selection_reason_summary".to_string(), json!(selection_reason_summary_for_mode(selection_mode, trust_score_total, candidate_summary)));
-        policy_obj.insert("selection_explain".to_string(), selection_explain_json(selection_mode, fallback_reason, None, sticky_binding_age_seconds, sticky_reuse_reason, would_rank_position_if_auto, soft_min_score, soft_min_score_penalty_applied, proxy_growth_for_selection));
+        policy_obj.insert("selection_explain".to_string(), selection_explain_json(selection_mode, fallback_reason, None, sticky_binding_age_seconds, sticky_reuse_reason, would_rank_position_if_auto, soft_min_score, soft_min_score_penalty_applied, proxy_growth_for_selection, requested_fp_budget, Some(medium_budget_limit(state.worker_count)), Some(heavy_budget_limit(state.worker_count))));
         policy_obj.insert("trust_score_components".to_string(), json!(trust_score_components));
         if let Some(preview) = preview {
             policy_obj.insert("candidate_rank_preview".to_string(), json!(preview));
@@ -845,7 +852,8 @@ async fn resolve_network_policy_for_task(state: &AppState, payload: &mut Value) 
         };
         policy_obj.insert("selection_reason_summary".to_string(), json!("no eligible active proxy matched the current policy filters"));
         let proxy_growth_for_selection = build_proxy_growth_explain_json(state, &payload_snapshot, None).await.ok();
-        policy_obj.insert("selection_explain".to_string(), selection_explain_json(selection_mode, fallback_reason, no_match_reason_code, None, None, None, soft_min_score, None, proxy_growth_for_selection));
+        let requested_fp_budget = payload_snapshot.get("fingerprint_profile_json").and_then(|v| v.as_str()).map(|v| match fingerprint_perf_budget_tag_from_profile_json(Some(v)) { FingerprintPerfBudgetTag::Light => "light", FingerprintPerfBudgetTag::Medium => "medium", FingerprintPerfBudgetTag::Heavy => "heavy" });
+        policy_obj.insert("selection_explain".to_string(), selection_explain_json(selection_mode, fallback_reason, no_match_reason_code, None, None, None, soft_min_score, None, proxy_growth_for_selection, requested_fp_budget, Some(medium_budget_limit(state.worker_count)), Some(heavy_budget_limit(state.worker_count))));
     }
     Ok(())
 }

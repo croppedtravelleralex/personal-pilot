@@ -488,6 +488,9 @@ async fn status_exposes_fingerprint_metrics_summary() {
     assert_eq!(metrics.get("resolved").and_then(|v| v.as_i64()), Some(1));
     assert_eq!(metrics.get("downgraded").and_then(|v| v.as_i64()), Some(1));
     assert_eq!(metrics.get("none").and_then(|v| v.as_i64()), Some(1));
+    let worker = json.get("worker").expect("worker");
+    assert!(worker.get("fingerprint_medium_max_concurrency").and_then(|v| v.as_u64()).unwrap_or(0) >= 2);
+    assert!(worker.get("fingerprint_heavy_max_concurrency").and_then(|v| v.as_u64()).unwrap_or(0) >= 1);
 }
 
 #[tokio::test]
@@ -3879,6 +3882,8 @@ async fn create_task_resolves_proxy_with_soft_min_score_penalty() {
     let explain = task.get("selection_explain").expect("selection explain");
     assert_eq!(explain.get("soft_min_score").and_then(|v| v.as_f64()), Some(0.8));
     assert_eq!(explain.get("soft_min_score_penalty_applied").and_then(|v| v.as_bool()), Some(true));
+    assert!(explain.get("fingerprint_budget_medium_limit").and_then(|v| v.as_u64()).is_some());
+    assert!(explain.get("fingerprint_budget_heavy_limit").and_then(|v| v.as_u64()).is_some());
     assert!(task.get("trust_score_total").and_then(|v| v.as_i64()).is_some());
 }
 

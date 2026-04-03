@@ -28,6 +28,8 @@ pub struct WorkerStatusResponse {
     pub claim_retry_limit: u32,
     pub idle_backoff_min_ms: u64,
     pub idle_backoff_max_ms: u64,
+    pub fingerprint_medium_max_concurrency: usize,
+    pub fingerprint_heavy_max_concurrency: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +175,9 @@ pub struct ProxySelectionExplain {
     pub soft_min_score_penalty_applied: Option<bool>,
     pub fallback_reason: Option<String>,
     pub no_match_reason_code: Option<String>,
+    pub fingerprint_budget_tag: Option<String>,
+    pub fingerprint_budget_medium_limit: Option<usize>,
+    pub fingerprint_budget_heavy_limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
