@@ -138,3 +138,4 @@
 - **2026年04月03日 02时06分00秒** 更新了**fingerprint-first development rules**，将 headless Ubuntu 运行约束、磁盘扩容后的功能取舍、结构化结果优先、以及“性能优化不能退化成伪串行”的并发规则一并写入项目规则文档。
 - **2026年04月03日 02时24分00秒** 实现了**fingerprint policy 第一版**，新增 `src/network_identity/fingerprint_policy.rs`，将指纹字段优先级分层（L1/L2/L3）与默认性能预算标签（light/medium/heavy）收成可复用规则模块，并补齐对应单元测试。
 - **2026年04月03日 02时28分00秒** 实现了**fingerprint consistency 第一版**，新增 `src/network_identity/fingerprint_consistency.rs`，对 target/proxy/exit region 与 timezone/locale/accept_language 的一致性做结构化评估，并补齐 exact/soft/mismatch/suspicious 相关测试。
+- **2026年04月03日 08时17分00秒** 实现了**fingerprint perf budget 第一轮接线**，runner claim 路径开始按指纹预算（light/medium/heavy）扫描候选队列并限量放行 medium/heavy 任务，避免高成本指纹任务把队列压成伪串行。

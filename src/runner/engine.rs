@@ -13,6 +13,7 @@ use crate::{
         WinnerVsRunnerUpDirection, WinnerVsRunnerUpFactor,
     },
     app::state::AppState,
+    network_identity::fingerprint_policy::FingerprintPerfBudgetTag,
     db::init::refresh_proxy_trust_views_for_scope,
     domain::{
         run::{RUN_STATUS_RUNNING, RUN_STATUS_SUCCEEDED, RUN_STATUS_FAILED, RUN_STATUS_TIMED_OUT},
@@ -34,6 +35,51 @@ fn now_ts_string() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     secs.to_string()
+}
+
+fn fingerprint_perf_budget_tag_from_profile_json(profile_json: Option<&str>) -> FingerprintPerfBudgetTag {
+    let Some(profile_json) = profile_json else {
+        return FingerprintPerfBudgetTag::Light;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(profile_json) else {
+        return FingerprintPerfBudgetTag::Light;
+    };
+    let Some(obj) = value.as_object() else {
+        return FingerprintPerfBudgetTag::Light;
+    };
+
+    let has = |key: &str| obj.contains_key(key);
+    if has("canvas") || has("webgl") || has("audio") || has("fonts") || has("anti_detection_flags") {
+        FingerprintPerfBudgetTag::Heavy
+    } else if has("client_hints") || has("hardware_concurrency") || has("device_memory") || has("color_scheme") {
+        FingerprintPerfBudgetTag::Medium
+    } else {
+        FingerprintPerfBudgetTag::Light
+    }
+}
+
+fn medium_budget_limit(worker_count: usize) -> usize {
+    std::env::var("AUTO_OPEN_BROWSER_FP_MEDIUM_MAX_CONCURRENCY")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or_else(|| worker_count.max(2))
+}
+
+fn heavy_budget_limit(worker_count: usize) -> usize {
+    std::env::var("AUTO_OPEN_BROWSER_FP_HEAVY_MAX_CONCURRENCY")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or_else(|| worker_count.clamp(1, 2))
+}
+
+fn claim_candidate_scan_limit() -> i64 {
+    std::env::var("AUTO_OPEN_BROWSER_RUNNER_CLAIM_SCAN_LIMIT")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(16)
 }
 
 async fn insert_log(
@@ -963,18 +1009,80 @@ where
         let run_id = format!("run-{}", Uuid::new_v4());
 
         let mut tx = state.db.begin().await?;
+        let candidates = sqlx::query_as::<_, (String, String, String, Option<String>, Option<i64>, Option<String>)>(
+            r#"
+            SELECT id, kind, input_json, fingerprint_profile_id, fingerprint_profile_version,
+                (
+                    SELECT fp.profile_json
+                    FROM fingerprint_profiles fp
+                    WHERE fp.id = tasks.fingerprint_profile_id
+                      AND fp.status = 'active'
+                      AND fp.version = tasks.fingerprint_profile_version
+                ) as profile_json
+            FROM tasks
+            WHERE status = ?
+            ORDER BY priority DESC, COALESCE(queued_at, created_at) ASC, created_at ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(TASK_STATUS_QUEUED)
+        .bind(claim_candidate_scan_limit())
+        .fetch_all(&mut *tx)
+        .await?;
+
+        if candidates.is_empty() {
+            tx.rollback().await?;
+            return Ok(None);
+        }
+
+        let running_profiles = sqlx::query_scalar::<_, Option<String>>(
+            r#"
+            SELECT (
+                SELECT fp.profile_json
+                FROM fingerprint_profiles fp
+                WHERE fp.id = tasks.fingerprint_profile_id
+                  AND fp.status = 'active'
+                  AND fp.version = tasks.fingerprint_profile_version
+            ) as profile_json
+            FROM tasks
+            WHERE status = ?
+            "#,
+        )
+        .bind(TASK_STATUS_RUNNING)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let running_medium = running_profiles
+            .iter()
+            .filter(|profile_json| fingerprint_perf_budget_tag_from_profile_json(profile_json.as_deref()) == FingerprintPerfBudgetTag::Medium)
+            .count();
+        let running_heavy = running_profiles
+            .iter()
+            .filter(|profile_json| fingerprint_perf_budget_tag_from_profile_json(profile_json.as_deref()) == FingerprintPerfBudgetTag::Heavy)
+            .count();
+
+        let medium_limit = medium_budget_limit(state.worker_count);
+        let heavy_limit = heavy_budget_limit(state.worker_count);
+
+        let selected = candidates.into_iter().find(|candidate| {
+            let budget = fingerprint_perf_budget_tag_from_profile_json(candidate.5.as_deref());
+            match budget {
+                FingerprintPerfBudgetTag::Light => true,
+                FingerprintPerfBudgetTag::Medium => running_medium < medium_limit,
+                FingerprintPerfBudgetTag::Heavy => running_heavy < heavy_limit,
+            }
+        });
+
+        let Some((selected_id, _selected_kind, _selected_input_json, _selected_fp_id, _selected_fp_version, _selected_profile_json)) = selected else {
+            tx.rollback().await?;
+            return Ok(None);
+        };
+
         let claimed = sqlx::query_as::<_, (String, String, String, Option<String>, Option<i64>, Option<String>)>(
             r#"
-            WITH next_task AS (
-                SELECT id
-                FROM tasks
-                WHERE status = ?
-                ORDER BY priority DESC, COALESCE(queued_at, created_at) ASC, created_at ASC
-                LIMIT 1
-            )
             UPDATE tasks
             SET status = ?, started_at = ?, runner_id = ?, heartbeat_at = ?
-            WHERE id = (SELECT id FROM next_task)
+            WHERE id = ?
               AND status = ?
             RETURNING id, kind, input_json, fingerprint_profile_id, fingerprint_profile_version,
                 (
@@ -986,18 +1094,18 @@ where
                 ) as profile_json
             "#,
         )
-        .bind(TASK_STATUS_QUEUED)
         .bind(TASK_STATUS_RUNNING)
         .bind(&started_at)
         .bind(worker_label)
         .bind(&started_at)
+        .bind(&selected_id)
         .bind(TASK_STATUS_QUEUED)
         .fetch_optional(&mut *tx)
         .await?;
 
         let Some((task_id, task_kind, input_json, fingerprint_profile_id, fingerprint_profile_version, fingerprint_profile_json)) = claimed else {
             tx.rollback().await?;
-            return Ok(None);
+            continue;
         };
 
         let requested_fingerprint_profile_id = fingerprint_profile_id.clone();
