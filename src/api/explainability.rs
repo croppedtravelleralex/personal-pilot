@@ -23,7 +23,7 @@ fn perf_probe_log(event: &str, fields: &[(&str, String)]) {
     }
 }
 
-use super::dto::{CandidateRankPreviewItem, FingerprintRuntimeExplain, ProxySelectionExplain, SummaryArtifactResponse, TaskResponse, WinnerVsRunnerUpDiff};
+use super::dto::{CandidateRankPreviewItem, FingerprintRuntimeExplain, IdentityNetworkExplain, ProxySelectionExplain, SummaryArtifactResponse, TaskResponse, WinnerVsRunnerUpDiff};
 
 #[derive(Debug, Clone)]
 pub struct TaskExplainability {
@@ -36,6 +36,7 @@ pub struct TaskExplainability {
     pub selection_reason_summary: Option<String>,
     pub selection_explain: Option<ProxySelectionExplain>,
     pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
+    pub identity_network_explain: Option<IdentityNetworkExplain>,
     pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
     pub summary_artifacts: Vec<SummaryArtifactResponse>,
 }
@@ -377,6 +378,16 @@ pub fn build_task_explainability(
     let selection_reason_summary = selection_reason_summary(result_json);
     let selection_explain = selection_explain(result_json);
     let fingerprint_runtime_explain = fingerprint_runtime_explain(result_json);
+    let identity_network_explain = Some(IdentityNetworkExplain {
+        selection_explain: selection_explain.clone(),
+        fingerprint_runtime_explain: fingerprint_runtime_explain.clone(),
+        proxy_id: proxy_id.clone(),
+        proxy_provider: proxy_provider.clone(),
+        proxy_region: proxy_region.clone(),
+        proxy_resolution_status: proxy_resolution_status.clone(),
+        selection_reason_summary: selection_reason_summary.clone(),
+        trust_score_total,
+    });
     let winner_vs_runner_up_diff = winner_vs_runner_up_diff(result_json);
     let summary_artifacts = enrich_summary_artifacts(
         summary_artifacts(result_json),
@@ -402,6 +413,7 @@ pub fn build_task_explainability(
         selection_reason_summary,
         selection_explain,
         fingerprint_runtime_explain,
+        identity_network_explain,
         winner_vs_runner_up_diff,
         summary_artifacts,
     }
@@ -594,6 +606,7 @@ mod tests {
                 selection_reason_summary: None,
                 selection_explain: None,
                 fingerprint_runtime_explain: None,
+                identity_network_explain: None,
                 winner_vs_runner_up_diff: None,
             },
             TaskResponse {
@@ -644,6 +657,7 @@ mod tests {
                 selection_reason_summary: None,
                 selection_explain: None,
                 fingerprint_runtime_explain: None,
+                identity_network_explain: None,
                 winner_vs_runner_up_diff: None,
             },
         ];
@@ -677,6 +691,9 @@ mod tests {
         assert_eq!(explain.selection_reason_summary.as_deref(), Some("winner has better trust score"));
         assert_eq!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
         assert!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.fingerprint_consistency.as_ref()).is_some());
+        assert!(explain.identity_network_explain.is_some());
+        assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.proxy_provider.as_deref()), Some("pool-a"));
+        assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.fingerprint_runtime_explain.as_ref()).and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
         assert!(explain.winner_vs_runner_up_diff.is_some());
         assert_eq!(explain.summary_artifacts.len(), 2);
         assert!(explain.summary_artifacts.iter().all(|a| a.task_id.as_deref() == Some("task-1")));

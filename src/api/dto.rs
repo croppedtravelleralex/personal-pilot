@@ -235,6 +235,18 @@ pub struct SummaryArtifactResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityNetworkExplain {
+    pub selection_explain: Option<ProxySelectionExplain>,
+    pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
+    pub proxy_id: Option<String>,
+    pub proxy_provider: Option<String>,
+    pub proxy_region: Option<String>,
+    pub proxy_resolution_status: Option<String>,
+    pub selection_reason_summary: Option<String>,
+    pub trust_score_total: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskResponse {
     pub id: String,
     pub kind: String,
@@ -254,6 +266,7 @@ pub struct TaskResponse {
     pub selection_reason_summary: Option<String>,
     pub selection_explain: Option<ProxySelectionExplain>,
     pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
+    pub identity_network_explain: Option<IdentityNetworkExplain>,
     pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
 }
 

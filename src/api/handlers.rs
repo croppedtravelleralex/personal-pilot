@@ -739,6 +739,7 @@ pub async fn status(
                 selection_reason_summary: explainability.selection_reason_summary,
                 selection_explain: explainability.selection_explain,
                 fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
+                identity_network_explain: explainability.identity_network_explain,
                 winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
                 summary_artifacts: explainability.summary_artifacts,
                 id,
@@ -1183,6 +1184,7 @@ pub async fn create_task(
             selection_reason_summary: None,
             selection_explain: None,
             fingerprint_runtime_explain: None,
+            identity_network_explain: None,
             winner_vs_runner_up_diff: None,
         }),
     ))
@@ -1230,6 +1232,7 @@ pub async fn get_task(
                 selection_reason_summary: explainability.selection_reason_summary,
                 selection_explain: explainability.selection_explain,
                 fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
+                identity_network_explain: explainability.identity_network_explain,
                 winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
                 summary_artifacts: explainability.summary_artifacts,
                 id,
