@@ -227,10 +227,10 @@ fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<Summ
         .collect::<Vec<_>>()
         .join(", ");
     let summary = if factor_summary.is_empty() {
-        format!("winner beat runner-up by {} trust-score points", diff.score_gap)
+        format!("selected winner over runner-up by {} trust-score points", diff.score_gap)
     } else {
         format!(
-            "winner beat runner-up by {} trust-score points; top factors: {}",
+            "selected winner over runner-up by {} trust-score points; strongest factors: {}",
             diff.score_gap, factor_summary
         )
     };
@@ -513,8 +513,8 @@ mod tests {
         assert_eq!(selection.key, "proxy.selection.decision");
         assert_eq!(selection.source, "selection.proxy");
         assert_eq!(selection.severity, "info");
-        assert!(selection.summary.contains("trust-score points"));
-        assert!(selection.summary.contains("top factors"));
+        assert!(selection.summary.contains("selected winner over runner-up"));
+        assert!(selection.summary.contains("strongest factors"));
     }
 
     #[test]

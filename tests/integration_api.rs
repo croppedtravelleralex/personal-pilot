@@ -2682,7 +2682,7 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     assert!(task_json.get("winner_vs_runner_up_diff").is_some());
     assert!(task_json.get("summary_artifacts").and_then(|v| v.as_array()).map(|items| items.iter().any(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).unwrap_or(false));
     let selection_artifact = task_json.get("summary_artifacts").and_then(|v| v.as_array()).and_then(|items| items.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision"))).expect("selection summary artifact");
-    assert!(selection_artifact.get("summary").and_then(|v| v.as_str()).map(|s| s.contains("trust-score points") && s.contains("top factors")).unwrap_or(false));
+    assert!(selection_artifact.get("summary").and_then(|v| v.as_str()).map(|s| s.contains("selected winner over runner-up") && s.contains("strongest factors")).unwrap_or(false));
     assert_eq!(selection_artifact.get("key").and_then(|v| v.as_str()), Some("proxy.selection.decision"));
     assert_eq!(selection_artifact.get("source").and_then(|v| v.as_str()), Some("selection.proxy"));
     assert_eq!(selection_artifact.get("severity").and_then(|v| v.as_str()), Some("info"));
@@ -2760,8 +2760,8 @@ async fn status_latest_execution_summaries_include_selection_decision_artifact()
     let latest = json.get("latest_execution_summaries").and_then(|v| v.as_array()).expect("latest_execution_summaries");
     let selection = latest.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy selection decision")).expect("selection decision artifact");
     let summary = selection.get("summary").and_then(|v| v.as_str()).unwrap_or("");
-    assert!(summary.contains("trust-score points"));
-    assert!(summary.contains("top factors"));
+    assert!(summary.contains("selected winner over runner-up"));
+    assert!(summary.contains("strongest factors"));
     assert_eq!(selection.get("key").and_then(|v| v.as_str()), Some("proxy.selection.decision"));
     assert_eq!(selection.get("source").and_then(|v| v.as_str()), Some("selection.proxy"));
     assert_eq!(selection.get("severity").and_then(|v| v.as_str()), Some("info"));

@@ -145,3 +145,4 @@
 - **2026年04月03日 08时47分00秒** 完成了**fingerprint runtime explain API 聚合接线**，新增 `FingerprintRuntimeExplain` DTO，并将 `fingerprint_runtime_explain` 正式并入 `TaskExplainability -> TaskResponse`，让 `/tasks` 与 `/status` 返回的聚合结果可直接暴露该字段。
 - **2026年04月03日 10时34分00秒** 实现了**proxy_growth API explainability 强类型接线**，在 `src/api/dto.rs` 为 `selection_explain.proxy_growth` 新增强类型 DTO，使代理池健康评估、地区匹配与补池判断不再只停留在原始 JSON 子字段中，并完成 `68 + 87` 全量测试验证。
 - **2026年04月03日 10时42分00秒** 实现了**identity/network explain 第一版聚合面**，在 `TaskExplainability -> TaskResponse` 新增 `identity_network_explain`，把 `selection_explain`、`fingerprint_runtime_explain`、代理身份与 trust score 摘要收进统一结构，并完成 `68 + 87` 全量测试验证。
+- **2026年04月03日 10时59分00秒** 清理了**explainability summary / artifact 文案质量第一轮**，把 selection decision、proxy growth、fingerprint runtime 的摘要改成更面向人读的描述，并同步修正 API/集成测试断言，完成 `68 + 87` 全量测试验证。

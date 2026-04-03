@@ -1527,20 +1527,34 @@ where
                 }))
                 .collect::<Vec<_>>();
             if let Some(proxy_growth_explain) = proxy_growth_explain.clone() {
+                let target_region = proxy_growth_explain.get("target_region").and_then(|v| v.as_str()).unwrap_or("none");
+                let selected_proxy_region = proxy_growth_explain.get("selected_proxy_region").and_then(|v| v.as_str()).unwrap_or("none");
+                let available_ratio_percent = proxy_growth_explain.get("health_assessment").and_then(|v| v.get("available_ratio_percent")).and_then(|v| v.as_i64()).unwrap_or(0);
+                let require_replenish = proxy_growth_explain.get("health_assessment").and_then(|v| v.get("require_replenish")).and_then(|v| v.as_bool()).unwrap_or(false);
+                let region_match_reason = proxy_growth_explain.get("region_match").and_then(|v| v.get("reason")).and_then(|v| v.as_str()).unwrap_or("none");
                 summaries.push(json!({
                     "category": "selection",
                     "key": format!("{}.proxy_growth", task_kind),
                     "source": "selection.proxy_growth",
-                    "severity": if proxy_growth_explain.get("health_assessment").and_then(|v| v.get("require_replenish")).and_then(|v| v.as_bool()) == Some(true) { "warn" } else { "info" },
+                    "severity": if require_replenish { "warn" } else { "info" },
                     "title": "proxy growth assessment",
-                    "summary": format!(
-                        "target_region={} selected_proxy_region={} available_ratio_percent={} require_replenish={} region_match_reason={}",
-                        proxy_growth_explain.get("target_region").and_then(|v| v.as_str()).unwrap_or("none"),
-                        proxy_growth_explain.get("selected_proxy_region").and_then(|v| v.as_str()).unwrap_or("none"),
-                        proxy_growth_explain.get("health_assessment").and_then(|v| v.get("available_ratio_percent")).and_then(|v| v.as_i64()).unwrap_or(0),
-                        proxy_growth_explain.get("health_assessment").and_then(|v| v.get("require_replenish")).and_then(|v| v.as_bool()).unwrap_or(false),
-                        proxy_growth_explain.get("region_match").and_then(|v| v.get("reason")).and_then(|v| v.as_str()).unwrap_or("none"),
-                    ),
+                    "summary": if require_replenish {
+                        format!(
+                            "proxy pool needs replenishment; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                            target_region,
+                            selected_proxy_region,
+                            available_ratio_percent,
+                            region_match_reason,
+                        )
+                    } else {
+                        format!(
+                            "proxy pool remains healthy; target_region={} selected_proxy_region={} available_ratio_percent={} region_match_reason={}",
+                            target_region,
+                            selected_proxy_region,
+                            available_ratio_percent,
+                            region_match_reason,
+                        )
+                    },
                     "run_id": run_id,
                     "attempt": attempt,
                     "timestamp": finished_at,
@@ -1548,16 +1562,18 @@ where
                 obj.insert("proxy_growth_explain".to_string(), proxy_growth_explain);
             }
             if fingerprint_runtime_explain.get("fingerprint_budget_tag").and_then(|v| v.as_str()).is_some() {
+                let budget = fingerprint_runtime_explain.get("fingerprint_budget_tag").and_then(|v| v.as_str()).unwrap_or("none");
+                let consistency = fingerprint_runtime_explain.get("fingerprint_consistency").and_then(|v| v.get("overall_status")).and_then(|v| v.as_str()).unwrap_or("none");
                 summaries.push(json!({
                     "category": "summary",
                     "key": format!("{}.fingerprint_runtime", task_kind),
                     "source": "runner.fingerprint",
-                    "severity": if fingerprint_runtime_explain.get("fingerprint_consistency").and_then(|v| v.get("overall_status")).and_then(|v| v.as_str()) == Some("mismatch") { "warning" } else { "info" },
+                    "severity": if consistency == "mismatch" { "warning" } else { "info" },
                     "title": "fingerprint runtime assessment",
                     "summary": format!(
-                        "budget={} consistency={}",
-                        fingerprint_runtime_explain.get("fingerprint_budget_tag").and_then(|v| v.as_str()).unwrap_or("none"),
-                        fingerprint_runtime_explain.get("fingerprint_consistency").and_then(|v| v.get("overall_status")).and_then(|v| v.as_str()).unwrap_or("none"),
+                        "fingerprint runtime resolved with budget={} and consistency={}",
+                        budget,
+                        consistency,
                     ),
                     "run_id": run_id,
                     "attempt": attempt,
