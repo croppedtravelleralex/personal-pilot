@@ -120,6 +120,7 @@ verify 慢路径当前已经产出：
 - 进入 score 后不容易和现有信号循环依赖
 - 价值比继续堆 summary 字段更高
 - 这一步优先做成“能解释、能回归、能调参”的最小闭环
+- **`verify_risk_penalty` 作为统一解释入口**，避免底层风险分散成多个平行摘要
 
 ### 第二步
 再评估是否需要把：
@@ -137,4 +138,4 @@ verify 慢路径当前已经产出：
 
 ## 当前结论
 
-> **下一步最值得继续进入 trust score 的，不是 `verification_class` 或 `recommended_action`，而是 `exit_ip_not_public` 与 `probe_error_category` 这类底层 verify 风险原因。**
+> **下一步最值得继续进入 trust score 的，不是 `verification_class` 或 `recommended_action`，而是以 `verify_risk_penalty` 为统一入口，把 `exit_ip_not_public` 与 `probe_error_category` 这类底层 verify 风险原因收口进去。**

@@ -118,6 +118,7 @@ V2 想回答的问题是：
 - `probe_error_category` 已经在主链里有 penalty 映射
 - `exit_ip_not_public` 适合继续作为高优先级风险原因并入 trust score
 - `verification_score_delta` 更适合作为解释与回写辅助，而不是单独主导排序
+- **最小闭环建议以 `verify_risk_penalty` 为统一入口**，先让解释链收束再继续拆分细项
 
 ## verify_batch 的 V2 方向
 
