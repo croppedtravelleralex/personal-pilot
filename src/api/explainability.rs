@@ -268,9 +268,12 @@ fn humanize_selection_factor_label(label: &str) -> &'static str {
     }
 }
 
-fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
+fn selection_decision_summary_artifact_from_parsed(parsed: Option<&Value>) -> Option<SummaryArtifactResponse> {
     let started = Instant::now();
-    let diff = winner_vs_runner_up_diff(result_json)?;
+    let diff = candidate_rank_preview_from_parsed(parsed)
+        .into_iter()
+        .next()
+        .and_then(|item| item.winner_vs_runner_up_diff)?;
     let factor_summary = diff
         .factors
         .iter()
@@ -307,11 +310,11 @@ fn selection_decision_summary_artifact(result_json: Option<&str>) -> Option<Summ
     Some(artifact)
 }
 
-fn identity_network_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
-    let proxy_resolution_status = proxy_resolution_status(result_json);
-    let (proxy_id, proxy_provider, proxy_region) = proxy_identity(result_json);
-    let selection_reason_summary = selection_reason_summary(result_json);
-    let fingerprint_runtime_explain = fingerprint_runtime_explain(result_json);
+fn identity_network_summary_artifact_from_parsed(parsed: Option<&Value>) -> Option<SummaryArtifactResponse> {
+    let proxy_resolution_status = proxy_resolution_status_from_parsed(parsed);
+    let (proxy_id, proxy_provider, proxy_region) = proxy_identity_from_parsed(parsed);
+    let selection_reason_summary = selection_reason_summary_from_parsed(parsed);
+    let fingerprint_runtime_explain = fingerprint_runtime_explain_from_parsed(parsed);
     let mut parts = Vec::new();
     if let Some(provider) = proxy_provider.as_deref() {
         if let Some(region) = proxy_region.as_deref() {
@@ -362,9 +365,8 @@ fn health_band_phrase(band: &str) -> &'static str {
     }
 }
 
-fn proxy_growth_summary_artifact(result_json: Option<&str>) -> Option<SummaryArtifactResponse> {
-    let explain = selection_explain(result_json)?;
-    let growth = explain.proxy_growth?;
+fn proxy_growth_summary_artifact_from_parsed(parsed: Option<&Value>) -> Option<SummaryArtifactResponse> {
+    let growth = selection_explain_from_parsed(parsed)?.proxy_growth?;
     let target_region = growth.target_region.as_deref().unwrap_or("none");
     let selected_proxy_region = growth.selected_proxy_region.as_deref().unwrap_or("none");
     let health = growth.health_assessment.as_ref();
@@ -412,8 +414,7 @@ fn proxy_growth_summary_artifact(result_json: Option<&str>) -> Option<SummaryArt
     })
 }
 
-pub fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> {
-    let parsed = result_json.and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+fn summary_artifacts_from_parsed(parsed: Option<&Value>) -> Vec<SummaryArtifactResponse> {
     let mut artifacts: Vec<SummaryArtifactResponse> = parsed
         .and_then(|value| value.get("summary_artifacts").cloned())
         .and_then(|value| value.as_array().cloned())
@@ -446,26 +447,31 @@ pub fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactRespon
 
     let has_selection_decision = artifacts.iter().any(|item| item.title == "proxy selection decision");
     if !has_selection_decision {
-        if let Some(artifact) = selection_decision_summary_artifact(result_json) {
+        if let Some(artifact) = selection_decision_summary_artifact_from_parsed(parsed) {
             artifacts.push(artifact);
         }
     }
 
     let has_identity_network_summary = artifacts.iter().any(|item| item.title == "identity and network summary");
     if !has_identity_network_summary {
-        if let Some(artifact) = identity_network_summary_artifact(result_json) {
+        if let Some(artifact) = identity_network_summary_artifact_from_parsed(parsed) {
             artifacts.push(artifact);
         }
     }
 
     let has_proxy_growth_summary = artifacts.iter().any(|item| item.title == "proxy growth assessment");
     if !has_proxy_growth_summary {
-        if let Some(artifact) = proxy_growth_summary_artifact(result_json) {
+        if let Some(artifact) = proxy_growth_summary_artifact_from_parsed(parsed) {
             artifacts.push(artifact);
         }
     }
 
     artifacts
+}
+
+pub fn summary_artifacts(result_json: Option<&str>) -> Vec<SummaryArtifactResponse> {
+    let parsed = parse_result_json(result_json);
+    summary_artifacts_from_parsed(parsed.as_ref())
 }
 
 pub fn enrich_summary_artifacts(
@@ -566,7 +572,7 @@ pub fn build_task_explainability(
         .next()
         .and_then(|item| item.winner_vs_runner_up_diff);
     let summary_artifacts = enrich_summary_artifacts(
-        summary_artifacts(result_json),
+        summary_artifacts_from_parsed(parsed_ref),
         task_id,
         task_kind,
         task_status,
