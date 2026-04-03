@@ -63,3 +63,4 @@
 - 开始收 typed / JSON 边界：在 `src/api/explainability.rs` 引入统一 `parse_result_json` 与按已解析 `Value` 取字段的内部 helper，减少 `build_task_explainability` 一次构建内的重复 JSON 解析与松散取值路径。
 - 继续收 explain 解析边界：`summary_artifacts` 与三类自动补全 artifact（selection / identity-network / proxy-growth）也改成复用已解析 `result_json`，不再在同一条构建链里重复 parse。
 - 继续收 explain 摘要职责：把“为什么选中”“当前身份/网络情况”“代理池状态”三块摘要分开，各自只讲自己的事；同步统一 selection / proxy_growth 文案与相关断言。
+- 补真实任务验收：新增 integration 级检查，确认真实跑出来的 `summary_artifacts` 里 selection / identity-network / proxy-growth 三块都在，且断言收敛到“职责和结构正确”，不把可选字段或具体地区值写死。

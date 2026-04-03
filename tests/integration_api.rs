@@ -2686,6 +2686,18 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
     assert_eq!(selection_artifact.get("key").and_then(|v| v.as_str()), Some("proxy.selection.decision"));
     assert_eq!(selection_artifact.get("source").and_then(|v| v.as_str()), Some("selection.proxy"));
     assert_eq!(selection_artifact.get("severity").and_then(|v| v.as_str()), Some("info"));
+    let identity_artifact = task_json.get("summary_artifacts").and_then(|v| v.as_array()).and_then(|items| items.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("identity and network summary"))).expect("identity summary artifact");
+    let identity_summary = identity_artifact.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(identity_summary.contains("proxy pool-x@us-east") || identity_summary.contains("proxy proxy-explain-best"));
+    assert!(identity_summary.contains("proxy resolution resolved"));
+    assert!(identity_summary.contains("selection summary"));
+    assert!(!identity_summary.contains("pool is healthy for this request"));
+    let growth_artifact = task_json.get("summary_artifacts").and_then(|v| v.as_array()).and_then(|items| items.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy growth assessment"))).expect("growth summary artifact");
+    let growth_summary = growth_artifact.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(growth_summary.contains("pool is healthy for this request") || growth_summary.contains("pool needs replenishment for this request"));
+    assert!(growth_summary.contains("target region "));
+    assert!(growth_summary.contains("region fit"));
+    assert!(!growth_summary.contains("biggest score drivers"));
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("winner_total_score")).and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("runner_up_total_score")).and_then(|v| v.as_i64()).is_some());
     assert!(task_json.get("winner_vs_runner_up_diff").and_then(|v| v.get("score_gap")).and_then(|v| v.as_i64()).is_some());
@@ -2768,6 +2780,16 @@ async fn status_latest_execution_summaries_include_selection_decision_artifact()
     assert_eq!(selection.get("task_id").and_then(|v| v.as_str()), Some(task_id.as_str()));
     assert_eq!(selection.get("task_kind").and_then(|v| v.as_str()), Some("open_page"));
     assert_eq!(selection.get("task_status").and_then(|v| v.as_str()), Some("succeeded"));
+    let identity = latest.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("identity and network summary")).expect("identity summary artifact");
+    let identity_summary = identity.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(identity_summary.contains("proxy "));
+    assert!(identity_summary.contains("proxy resolution resolved"));
+    assert!(identity_summary.contains("selection summary"));
+    let growth = latest.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("proxy growth assessment")).expect("growth summary artifact");
+    let growth_summary = growth.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(growth_summary.contains("pool is healthy for this request") || growth_summary.contains("pool needs replenishment for this request"));
+    assert!(growth_summary.contains("target region "));
+    assert!(growth_summary.contains("region fit"));
 }
 
 #[tokio::test]
