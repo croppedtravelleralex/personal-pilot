@@ -82,6 +82,36 @@ fn claim_candidate_scan_limit() -> i64 {
         .unwrap_or(16)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ClaimBudgetSnapshot {
+    running_medium: usize,
+    running_heavy: usize,
+    medium_limit: usize,
+    heavy_limit: usize,
+}
+
+fn budget_tag_str(tag: FingerprintPerfBudgetTag) -> &'static str {
+    match tag {
+        FingerprintPerfBudgetTag::Light => "light",
+        FingerprintPerfBudgetTag::Medium => "medium",
+        FingerprintPerfBudgetTag::Heavy => "heavy",
+    }
+}
+
+fn pick_claim_candidate_index(
+    candidate_profile_jsons: &[Option<String>],
+    budget: ClaimBudgetSnapshot,
+) -> Option<usize> {
+    candidate_profile_jsons.iter().position(|profile_json| {
+        let tag = fingerprint_perf_budget_tag_from_profile_json(profile_json.as_deref());
+        match tag {
+            FingerprintPerfBudgetTag::Light => true,
+            FingerprintPerfBudgetTag::Medium => budget.running_medium < budget.medium_limit,
+            FingerprintPerfBudgetTag::Heavy => budget.running_heavy < budget.heavy_limit,
+        }
+    })
+}
+
 async fn insert_log(
     state: &AppState,
     log_id: &str,
@@ -1072,19 +1102,21 @@ where
         let medium_limit = medium_budget_limit(state.worker_count);
         let heavy_limit = heavy_budget_limit(state.worker_count);
 
-        let selected = candidates.into_iter().find(|candidate| {
-            let budget = fingerprint_perf_budget_tag_from_profile_json(candidate.5.as_deref());
-            match budget {
-                FingerprintPerfBudgetTag::Light => true,
-                FingerprintPerfBudgetTag::Medium => running_medium < medium_limit,
-                FingerprintPerfBudgetTag::Heavy => running_heavy < heavy_limit,
-            }
-        });
-
-        let Some((selected_id, _selected_kind, _selected_input_json, _selected_fp_id, _selected_fp_version, _selected_profile_json)) = selected else {
+        let candidate_profile_jsons = candidates.iter().map(|candidate| candidate.5.clone()).collect::<Vec<_>>();
+        let Some(selected_idx) = pick_claim_candidate_index(
+            &candidate_profile_jsons,
+            ClaimBudgetSnapshot {
+                running_medium,
+                running_heavy,
+                medium_limit,
+                heavy_limit,
+            },
+        ) else {
             tx.rollback().await?;
             return Ok(None);
         };
+
+        let (selected_id, _selected_kind, _selected_input_json, _selected_fp_id, _selected_fp_version, _selected_profile_json) = candidates.into_iter().nth(selected_idx).expect("selected candidate by index");
 
         let claimed = sqlx::query_as::<_, (String, String, String, Option<String>, Option<i64>, Option<String>)>(
             r#"
@@ -1630,7 +1662,55 @@ mod tests {
         }
     }
 
+        #[test]
+    fn pick_claim_candidate_skips_heavy_when_heavy_budget_is_full() {
+        let heavy = Some(serde_json::json!({"canvas": {"mode": "noise"}}).to_string());
+        let light = Some(serde_json::json!({"timezone": "Asia/Shanghai"}).to_string());
+        let idx = pick_claim_candidate_index(
+            &[heavy, light],
+            ClaimBudgetSnapshot {
+                running_medium: 0,
+                running_heavy: 1,
+                medium_limit: 2,
+                heavy_limit: 1,
+            },
+        );
+        assert_eq!(idx, Some(1));
+    }
+
     #[test]
+    fn pick_claim_candidate_accepts_heavy_when_capacity_exists() {
+        let heavy = Some(serde_json::json!({"canvas": {"mode": "noise"}}).to_string());
+        let light = Some(serde_json::json!({"timezone": "Asia/Shanghai"}).to_string());
+        let idx = pick_claim_candidate_index(
+            &[heavy, light],
+            ClaimBudgetSnapshot {
+                running_medium: 0,
+                running_heavy: 0,
+                medium_limit: 2,
+                heavy_limit: 1,
+            },
+        );
+        assert_eq!(idx, Some(0));
+    }
+
+    #[test]
+    fn pick_claim_candidate_skips_medium_when_medium_budget_is_full_but_keeps_light_moving() {
+        let medium = Some(serde_json::json!({"hardware_concurrency": 8}).to_string());
+        let light = Some(serde_json::json!({"timezone": "Asia/Shanghai"}).to_string());
+        let idx = pick_claim_candidate_index(
+            &[medium, light],
+            ClaimBudgetSnapshot {
+                running_medium: 2,
+                running_heavy: 0,
+                medium_limit: 2,
+                heavy_limit: 1,
+            },
+        );
+        assert_eq!(idx, Some(1));
+    }
+
+#[test]
     fn computed_trust_score_components_returns_typed_breakdown() {
         let tuning = default_proxy_selection_tuning();
         let components = computed_trust_score_components(
