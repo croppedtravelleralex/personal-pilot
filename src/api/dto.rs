@@ -268,9 +268,24 @@ pub struct ProxySelectionExplain {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsumptionExplain {
+    pub declared_fields: Vec<String>,
+    pub resolved_fields: Vec<String>,
+    pub applied_fields: Vec<String>,
+    pub ignored_fields: Vec<String>,
+    pub declared_count: usize,
+    pub resolved_count: usize,
+    pub applied_count: usize,
+    pub ignored_count: usize,
+    pub consumption_status: String,
+    pub partial_support_warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FingerprintRuntimeExplain {
     pub fingerprint_budget_tag: Option<String>,
     pub fingerprint_consistency: Option<crate::network_identity::fingerprint_consistency::FingerprintConsistencyAssessment>,
+    pub consumption_explain: Option<ConsumptionExplain>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

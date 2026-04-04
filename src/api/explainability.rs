@@ -698,6 +698,18 @@ mod tests {
                 "fingerprint_consistency": {
                     "overall_status": "soft_match",
                     "checks": [{"name": "timezone_vs_region", "status": "soft_match", "reason": "timezone_matches_region_family"}]
+                },
+                "consumption_explain": {
+                    "declared_fields": ["user_agent", "timezone", "platform"],
+                    "resolved_fields": ["user_agent", "timezone"],
+                    "applied_fields": ["user_agent", "timezone"],
+                    "ignored_fields": ["platform"],
+                    "declared_count": 3,
+                    "resolved_count": 2,
+                    "applied_count": 2,
+                    "ignored_count": 1,
+                    "consumption_status": "partially_consumed",
+                    "partial_support_warning": "some declared fingerprint fields were not consumed by the current lightpanda runner"
                 }
             },
             "summary_artifacts": [{
@@ -925,6 +937,8 @@ mod tests {
         assert_eq!(explain.selection_reason_summary.as_deref(), Some("winner has better trust score"));
         assert_eq!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
         assert!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.fingerprint_consistency.as_ref()).is_some());
+        assert_eq!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.consumption_explain.as_ref()).map(|v| v.consumption_status.as_str()), Some("partially_consumed"));
+        assert_eq!(explain.fingerprint_runtime_explain.as_ref().and_then(|v| v.consumption_explain.as_ref()).map(|v| v.ignored_count), Some(1));
         assert!(explain.identity_network_explain.is_some());
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.proxy_provider.as_deref()), Some("pool-a"));
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.fingerprint_runtime_explain.as_ref()).and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
