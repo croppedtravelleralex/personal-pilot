@@ -3541,6 +3541,7 @@ async fn proxy_explain_trust_score_components_roundtrip_as_typed_shape() {
     ] {
         assert!(comp.get(key).and_then(|v| v.as_i64()).is_some(), "missing key {key}");
     }
+    assert_eq!(comp.get("verify_source_bonus").and_then(|v| v.as_i64()), Some(0));
 }
 
 

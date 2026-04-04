@@ -296,8 +296,11 @@ pub fn computed_trust_score_components(
         _ => 0,
     };
     let verify_source_bonus = match last_verify_source {
-        Some("local_verify") => 1,
-        _ => 0,
+        Some("local_verify") => 2,
+        Some("runner_verify") => 1,
+        Some("imported_verify") | Some("manual_verify") | Some("backfill_verify") => -1,
+        Some(_) => 0,
+        None => 0,
     };
     let anonymity_bonus = match last_anonymity_level {
         Some("elite") => tuning.anonymity_elite_bonus,
@@ -1929,7 +1932,51 @@ mod tests {
         assert_eq!(components.provider_region_cluster_penalty, 2);
         assert_eq!(components.verify_confidence_bonus, 3);
         assert_eq!(components.verify_score_delta_bonus, 2);
-        assert_eq!(components.verify_source_bonus, 1);
+        assert_eq!(components.verify_source_bonus, 2);
+        let runner_components = computed_trust_score_components(
+            &tuning,
+            0.77,
+            5,
+            1,
+            Some("ok"),
+            true,
+            Some(false),
+            true,
+            Some(9999999999),
+            Some(0.98),
+            Some(18),
+            Some("runner_verify"),
+            Some("elite"),
+            Some(650),
+            Some("protocol_invalid"),
+            true,
+            true,
+            1000,
+            None,
+        );
+        assert_eq!(runner_components.verify_source_bonus, 1);
+        let imported_components = computed_trust_score_components(
+            &tuning,
+            0.77,
+            5,
+            1,
+            Some("ok"),
+            true,
+            Some(false),
+            true,
+            Some(9999999999),
+            Some(0.98),
+            Some(18),
+            Some("imported_verify"),
+            Some("elite"),
+            Some(650),
+            Some("protocol_invalid"),
+            true,
+            true,
+            1000,
+            None,
+        );
+        assert_eq!(imported_components.verify_source_bonus, -1);
         assert_eq!(components.anonymity_bonus, 4);
         assert_eq!(components.latency_penalty, -2);
         assert_eq!(components.exit_ip_not_public_penalty, 0);
