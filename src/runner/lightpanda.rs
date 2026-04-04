@@ -295,12 +295,14 @@ fn normalize_action(action: &str) -> Option<&'static str> {
     match action {
         "open_page" | "fetch" => Some("open_page"),
         "get_html" => Some("get_html"),
+        "get_title" => Some("get_title"),
+        "get_final_url" => Some("get_final_url"),
         _ => None,
     }
 }
 
 fn supported_actions() -> &'static [&'static str] {
-    &["open_page", "fetch", "get_html"]
+    &["open_page", "fetch", "get_html", "get_title", "get_final_url"]
 }
 
 fn extract_url(payload: &Value) -> Option<String> {
@@ -536,7 +538,7 @@ impl TaskRunner for LightpandaRunner {
                     &task,
                     requested_action.as_str(),
                     requested_action.as_str(),
-                    "lightpanda runner currently supports only action=open_page, action=get_html (fetch is accepted as an alias for open_page)",
+                    "lightpanda runner currently supports only action=open_page, action=get_html, action=get_title, action=get_final_url (fetch is accepted as an alias for open_page)",
                     extract_url(&task.payload).as_deref(),
                 )
             }
@@ -944,6 +946,8 @@ exit 0",
         assert_eq!(normalize_action("open_page"), Some("open_page"));
         assert_eq!(normalize_action("fetch"), Some("open_page"));
         assert_eq!(normalize_action("get_html"), Some("get_html"));
+        assert_eq!(normalize_action("get_title"), Some("get_title"));
+        assert_eq!(normalize_action("get_final_url"), Some("get_final_url"));
         assert_eq!(normalize_action("screenshot"), None);
     }
 
@@ -968,7 +972,7 @@ exit 0",
         assert_eq!(json.get("requested_action").and_then(|v| v.as_str()), Some("fetch"));
         assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("open_page"));
         assert_eq!(json.get("capability_stage").and_then(|v| v.as_str()), Some("minimal_real_execution_v1"));
-        assert_eq!(json.get("supported_actions").and_then(|v| v.as_array()).map(|v| v.len()), Some(3));
+        assert_eq!(json.get("supported_actions").and_then(|v| v.as_array()).map(|v| v.len()), Some(5));
     }
 
     #[tokio::test]
