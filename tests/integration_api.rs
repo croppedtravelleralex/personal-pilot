@@ -3054,6 +3054,53 @@ async fn proxy_explain_endpoint_with_higher_candidate_count_still_returns_previe
 
 
 #[tokio::test]
+async fn auto_selection_prefers_stronger_verify_source_signal() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_verify_source, created_at, updated_at)
+                  VALUES
+                  ('proxy-source-local', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'pool-source', 'active', 0.70, 8, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', 'local_verify', '1', '1'),
+                  ('proxy-source-runner', 'http', '127.0.0.2', 8081, NULL, NULL, 'us-east', 'US', 'pool-source', 'active', 0.70, 8, 1, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, 'ok', 1, 'US', 'Virginia', '9999999999', 'runner_verify', '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxies");
+
+    let payload = serde_json::json!({
+        "kind": "open_page",
+        "url": "https://example.com/source-rank",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "provider": "pool-source", "region": "us-east"}
+    });
+    let (_, create_json) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request")).await;
+    let task_id = create_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let task_json = wait_for_terminal_status(&app, &task_id).await;
+
+    assert_eq!(task_json.get("proxy_id").and_then(|v| v.as_str()), Some("proxy-source-local"));
+    let diff = task_json.get("winner_vs_runner_up_diff").expect("winner diff");
+    let score_gap = diff.get("score_gap").and_then(|v| v.as_i64()).unwrap_or_default();
+    assert_eq!(score_gap, 1);
+    let factors = diff.get("factors").and_then(|v| v.as_array()).expect("factors");
+    assert!(factors.iter().any(|f| f.get("label").and_then(|v| v.as_str()) == Some("verify_source") && f.get("delta").and_then(|v| v.as_i64()) == Some(1)));
+
+    let result_json_text: Option<String> = sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#)
+        .bind(&task_id)
+        .fetch_one(&state.db)
+        .await
+        .expect("load result json");
+    let result_json: Value = serde_json::from_str(result_json_text.as_deref().expect("result json")).expect("parse result json");
+    let preview = result_json
+        .get("payload")
+        .and_then(|v| v.get("network_policy_json"))
+        .and_then(|v| v.get("candidate_rank_preview"))
+        .and_then(|v| v.as_array())
+        .expect("candidate preview");
+    assert_eq!(preview[0].get("id").and_then(|v| v.as_str()), Some("proxy-source-local"));
+    let summary = preview[0].get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(summary.contains("verify_source") || summary.contains("wins on verify_source") || summary.contains("better on verify_source"));
+}
+
+#[tokio::test]
 async fn proxy_explain_endpoint_returns_components_and_preview() {
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
