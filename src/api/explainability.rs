@@ -336,6 +336,18 @@ fn identity_network_summary_artifact_from_parsed(parsed: Option<&Value>) -> Opti
     {
         parts.push(format!("fingerprint budget {}", tag));
     }
+    if let Some(consumption) = fingerprint_runtime_explain
+        .as_ref()
+        .and_then(|v| v.consumption_explain.as_ref())
+    {
+        parts.push(format!(
+            "fingerprint consumption {} (declared {}, applied {}, ignored {})",
+            consumption.consumption_status,
+            consumption.declared_count,
+            consumption.applied_count,
+            consumption.ignored_count,
+        ));
+    }
     if let Some(summary) = selection_reason_summary.as_deref() {
         let short = summary
             .split(';')
@@ -752,6 +764,7 @@ mod tests {
         assert!(identity.summary.contains("proxy pool-a@us-east"));
         assert!(identity.summary.contains("proxy resolution resolved"));
         assert!(identity.summary.contains("fingerprint budget medium"));
+        assert!(identity.summary.contains("fingerprint consumption partially_consumed (declared 3, applied 2, ignored 1)"));
         assert!(identity.summary.contains("selection summary"));
 
         let growth = artifacts.iter().find(|a| a.title == "proxy growth assessment").expect("growth artifact");

@@ -3717,10 +3717,14 @@ async fn task_runs_expose_run_level_trace_metadata_and_standardized_artifacts() 
     assert_eq!(run.get("fingerprint_runtime_explain"), task_json.get("fingerprint_runtime_explain"));
     assert_eq!(run.get("identity_network_explain"), task_json.get("identity_network_explain"));
     assert_eq!(run.get("winner_vs_runner_up_diff"), task_json.get("winner_vs_runner_up_diff"));
+    assert_eq!(run.get("fingerprint_runtime_explain").and_then(|v| v.get("consumption_explain")).and_then(|v| v.get("consumption_status")).and_then(|v| v.as_str()), Some("partially_consumed"));
+    assert_eq!(task_json.get("fingerprint_runtime_explain").and_then(|v| v.get("consumption_explain")).and_then(|v| v.get("ignored_count")).and_then(|v| v.as_i64()), Some(1));
 
     let task_artifacts = task_json.get("summary_artifacts").and_then(|v| v.as_array()).expect("task artifacts");
     let selection_artifact = task_artifacts.iter().find(|item| item.get("key").and_then(|v| v.as_str()) == Some("proxy.selection.decision")).expect("selection artifact");
     assert_eq!(selection_artifact.get("source").and_then(|v| v.as_str()), Some("selection.proxy"));
+    let identity_artifact = task_artifacts.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("identity and network summary")).expect("identity summary artifact");
+    assert!(identity_artifact.get("summary").and_then(|v| v.as_str()).map(|s| s.contains("fingerprint consumption partially_consumed")).unwrap_or(false));
 }
 
 #[tokio::test]
