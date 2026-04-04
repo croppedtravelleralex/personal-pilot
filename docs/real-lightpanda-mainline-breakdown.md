@@ -87,3 +87,39 @@ So the intended convergence is:
 - lightpanda runner = real fingerprint-browser execution core
 
 This should guide future endpoint design and naming.
+
+## Why Lightpanda should currently be treated as an execution core, not the whole product
+
+This is the correct current framing because:
+
+- the browser-facing API surface is what has already become concrete in this repo
+- the result contract and content contract are being shaped above the runner layer
+- real `LIGHTPANDA_BIN` wiring is still missing on this machine
+- script-runner / framework validation has been done, but real-engine validation is still blocked
+
+So the stable architecture boundary is:
+- product layer = browser-facing API
+- control layer = task / scheduling / status / logs
+- execution layer = Lightpanda
+
+That framing is more honest and more durable than presenting Lightpanda itself as the full external product.
+
+## API layer vs execution core responsibilities
+
+### Browser-facing API layer should own
+- endpoint naming
+- request / response contracts
+- product-facing result semantics
+- stable external operation entry
+
+### Task / control plane should own
+- scheduling
+- retries
+- status transitions
+- logs / runs / visibility
+
+### Lightpanda execution core should own
+- page visit / navigation execution
+- bounded content extraction execution
+- runner-level success / failure signals
+- real browser-engine behavior underneath the API
