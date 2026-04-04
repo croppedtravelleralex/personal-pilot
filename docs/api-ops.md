@@ -26,6 +26,7 @@ Current browser-facing API v1 contract:
 Current result-shape notes:
 - `get_html` currently returns `content_kind=text/html` plus `html_preview`, `html_length`, `html_truncated`
 - `extract_text` currently returns `content_kind=text/plain` plus `text_preview`, `text_length`, `text_truncated`
+- both content-oriented actions now also expose unified fields: `content_preview`, `content_length`, `content_truncated`
 - result depth is still evolving; current previews are useful for lightweight inspection, not yet the final rich content contract
 
 ### Tasks

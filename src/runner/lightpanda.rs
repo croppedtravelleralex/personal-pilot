@@ -146,6 +146,11 @@ fn result_payload(
         "extract_text" => text_truncated,
         _ => None,
     };
+    let content_preview = match action {
+        "get_html" => html_preview.clone(),
+        "extract_text" => text_preview.clone(),
+        _ => None,
+    };
 
     let fingerprint_runtime_json = fingerprint_runtime.map(|runtime| {
         let supported_field_count = runtime.applied_fields.iter().filter(|f| *f != "profile_id" && *f != "profile_version").count();
@@ -202,6 +207,7 @@ fn result_payload(
         "text_preview": text_preview,
         "text_length": text_length,
         "text_truncated": text_truncated,
+        "content_preview": content_preview,
         "content_length": content_length,
         "content_truncated": content_truncated,
         "content_kind": match action {
@@ -1057,6 +1063,7 @@ exit 0",
         assert_eq!(json.get("text_preview").and_then(|v| v.as_str()), Some("hello world from lightpanda"));
         assert_eq!(json.get("text_length").and_then(|v| v.as_u64()), Some(27));
         assert_eq!(json.get("text_truncated").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(json.get("content_preview").and_then(|v| v.as_str()), Some("hello world from lightpanda"));
         assert_eq!(json.get("content_length").and_then(|v| v.as_u64()), Some(27));
         assert_eq!(json.get("content_truncated").and_then(|v| v.as_bool()), Some(false));
     }
