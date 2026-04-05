@@ -697,6 +697,23 @@ pub fn latest_browser_ready_tasks(tasks: &[TaskResponse], limit: usize) -> Vec<T
         .filter(|task| browser_summary_from_task(task).is_some())
         .cloned()
         .collect::<Vec<_>>();
+
+    items.sort_by(|a, b| {
+        let a_ready = a.content_ready.unwrap_or(false);
+        let b_ready = b.content_ready.unwrap_or(false);
+        let a_readability = i32::from(a.title.as_ref().map(|v| !v.is_empty()).unwrap_or(false))
+            + i32::from(a.content_preview.as_ref().map(|v| !v.is_empty()).unwrap_or(false));
+        let b_readability = i32::from(b.title.as_ref().map(|v| !v.is_empty()).unwrap_or(false))
+            + i32::from(b.content_preview.as_ref().map(|v| !v.is_empty()).unwrap_or(false));
+        let a_freshness = a.finished_at.as_deref().or(a.started_at.as_deref()).unwrap_or("");
+        let b_freshness = b.finished_at.as_deref().or(b.started_at.as_deref()).unwrap_or("");
+
+        b_ready
+            .cmp(&a_ready)
+            .then_with(|| b_readability.cmp(&a_readability))
+            .then_with(|| b_freshness.cmp(a_freshness))
+    });
+
     items.truncate(limit);
     items
 }
@@ -1113,7 +1130,7 @@ mod tests {
                 status: "succeeded".to_string(),
                 priority: 1,
                 started_at: None,
-                finished_at: None,
+                finished_at: Some("3".to_string()),
                 summary_artifacts: vec![],
                 fingerprint_profile_id: None,
                 fingerprint_profile_version: None,
@@ -1167,14 +1184,44 @@ mod tests {
                 content_source_action: None,
                 content_ready: None,
             },
+            TaskResponse {
+                id: "task-browser-2".to_string(),
+                kind: "extract_text".to_string(),
+                status: "succeeded".to_string(),
+                priority: 1,
+                started_at: None,
+                finished_at: Some("4".to_string()),
+                summary_artifacts: vec![],
+                fingerprint_profile_id: None,
+                fingerprint_profile_version: None,
+                fingerprint_resolution_status: None,
+                proxy_id: None,
+                proxy_provider: None,
+                proxy_region: None,
+                proxy_resolution_status: None,
+                trust_score_total: None,
+                selection_reason_summary: None,
+                selection_explain: None,
+                fingerprint_runtime_explain: None,
+                identity_network_explain: None,
+                winner_vs_runner_up_diff: None,
+                title: None,
+                final_url: Some("https://example.com/2".to_string()),
+                content_preview: Some("preview".to_string()),
+                content_length: Some(7),
+                content_truncated: None,
+                content_kind: Some("text/plain".to_string()),
+                content_source_action: Some("extract_text".to_string()),
+                content_ready: Some(true),
+            },
         ];
 
         let latest = latest_browser_ready_tasks(&tasks, 3);
-        assert_eq!(latest.len(), 1);
-        assert_eq!(latest[0].id, "task-browser-1");
+        assert_eq!(latest.len(), 2);
+        assert_eq!(latest[0].id, "task-browser-2");
+        assert_eq!(latest[1].id, "task-browser-1");
         let browser = browser_summary_from_task(&latest[0]).expect("browser summary");
-        assert_eq!(browser.title.as_deref(), Some("Browser 1"));
-        assert_eq!(browser.final_url.as_deref(), Some("https://example.com/1"));
+        assert_eq!(browser.content_kind.as_deref(), Some("text/plain"));
     }
 
     #[test]

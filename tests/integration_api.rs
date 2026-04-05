@@ -3230,6 +3230,37 @@ async fn status_tracks_browser_ready_tasks_separately_from_latest_tasks() {
 }
 
 #[tokio::test]
+async fn status_browser_ready_tasks_prioritize_content_ready_and_readability() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(
+        r#"INSERT INTO tasks (id, kind, status, input_json, network_policy_json, fingerprint_profile_json, priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at, result_json, error_message)
+           VALUES
+           ('task-browser-order-title', 'get_title', 'succeeded', '{}', NULL, NULL, 0, '3', '3', '3', '3', NULL, NULL, '{"title":"Readable title","final_url":"https://example.com/title"}', NULL),
+           ('task-browser-order-ready', 'extract_text', 'succeeded', '{}', NULL, NULL, 0, '4', '4', '4', '4', NULL, NULL, '{"final_url":"https://example.com/text","content_preview":"hello world","content_kind":"text/plain","content_length":11,"content_ready":true}', NULL),
+           ('task-browser-order-weak', 'get_final_url', 'succeeded', '{}', NULL, NULL, 0, '5', '5', '5', '5', NULL, NULL, '{"final_url":"https://example.com/weak"}', NULL)"#,
+    )
+    .execute(&state.db)
+    .await
+    .expect("insert ordered tasks");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder()
+            .uri("/status?limit=10&offset=0")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let latest_browser_tasks = json.get("latest_browser_tasks").and_then(|v| v.as_array()).expect("latest browser tasks");
+    assert_eq!(latest_browser_tasks.first().and_then(|v| v.get("id")).and_then(|v| v.as_str()), Some("task-browser-order-ready"));
+    assert_eq!(latest_browser_tasks.get(1).and_then(|v| v.get("id")).and_then(|v| v.as_str()), Some("task-browser-order-title"));
+}
+
+#[tokio::test]
 async fn verify_migration_columns_are_added_for_old_proxy_table() {
     let db_url = unique_db_url();
     let db = init_db(&db_url).await.expect("init db first");
