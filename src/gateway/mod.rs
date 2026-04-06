@@ -68,6 +68,7 @@ pub fn build_gateway_router(state: GatewayState) -> Router {
     Router::new()
         .route("/health", get(gateway_health))
         .route("/admin/usage", get(admin_usage))
+        .route("/admin/stats", get(admin_stats))
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
         .with_state(state)
@@ -79,7 +80,9 @@ pub fn gateway_state_from_env() -> GatewayState {
     let concurrency_per_token = std::env::var("GATEWAY_CONCURRENCY_PER_TOKEN").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(3);
     let upstream_base_url = std::env::var("UPSTREAM_BASE_URL").ok().filter(|v| !v.trim().is_empty());
     let upstream_bearer_token = std::env::var("UPSTREAM_BEARER_TOKEN").ok().filter(|v| !v.trim().is_empty());
-    let tokens_json = std::env::var("GATEWAY_DOWNSTREAM_TOKENS_JSON").unwrap_or_else(|_| "[]".to_string());
+    let tokens_json = std::env::var("GATEWAY_DOWNSTREAM_TOKENS_JSON")
+        .or_else(|_| std::env::var("GATEWAY_DOWNSTREAM_TOKENS_B64").map(|v| String::from_utf8(base64::decode(v).unwrap_or_default()).unwrap_or_else(|_| "[]".to_string())))
+        .unwrap_or_else(|_| "[]".to_string());
     let parsed: Vec<DownstreamToken> = serde_json::from_str(&tokens_json).unwrap_or_default();
     let mut map = HashMap::new();
     for token in parsed {
@@ -106,15 +109,33 @@ async fn gateway_health(State(state): State<GatewayState>) -> impl IntoResponse 
 }
 
 async fn admin_usage(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
-    let Some(expected) = state.admin_token.as_deref() else {
-        return error_response(StatusCode::FORBIDDEN, "admin_disabled", "admin endpoint disabled");
-    };
-    let provided = extract_bearer_or_api_key(&headers);
-    if provided != Some(expected) {
-        return error_response(StatusCode::UNAUTHORIZED, "auth_failed", "invalid admin token");
+    if let Err(resp) = authorize_admin(&state, &headers) {
+        return resp;
     }
     let events = state.usage_log.lock().expect("usage log mutex poisoned").clone();
     Json(json!({"events": events})).into_response()
+}
+
+async fn admin_stats(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
+    if let Err(resp) = authorize_admin(&state, &headers) {
+        return resp;
+    }
+    let events = state.usage_log.lock().expect("usage log mutex poisoned").clone();
+    let mut by_token = std::collections::BTreeMap::new();
+    let mut by_status = std::collections::BTreeMap::new();
+    let mut by_model = std::collections::BTreeMap::new();
+    for event in &events {
+        *by_token.entry(event.token_label.clone()).or_insert(0usize) += 1;
+        *by_status.entry(event.status_code.to_string()).or_insert(0usize) += 1;
+        *by_model.entry(event.model.clone().unwrap_or_else(|| "unknown".to_string())).or_insert(0usize) += 1;
+    }
+    Json(json!({
+        "total_events": events.len(),
+        "by_token": by_token,
+        "by_status": by_status,
+        "by_model": by_model,
+        "recent": events.iter().rev().take(20).cloned().collect::<Vec<_>>()
+    })).into_response()
 }
 
 async fn list_models(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
@@ -207,6 +228,17 @@ fn sanitize_chat_payload(mut payload: Value) -> Value {
         obj.remove("upstream_auth");
     }
     payload
+}
+
+fn authorize_admin(state: &GatewayState, headers: &HeaderMap) -> Result<(), Response> {
+    let Some(expected) = state.admin_token.as_deref() else {
+        return Err(error_response(StatusCode::FORBIDDEN, "admin_disabled", "admin endpoint disabled"));
+    };
+    let provided = extract_bearer_or_api_key(headers);
+    if provided != Some(expected) {
+        return Err(error_response(StatusCode::UNAUTHORIZED, "auth_failed", "invalid admin token"));
+    }
+    Ok(())
 }
 
 fn authorize(state: &GatewayState, headers: &HeaderMap) -> Result<DownstreamToken, Response> {
