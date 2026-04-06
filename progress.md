@@ -1,38 +1,28 @@
 # Progress
 
-## 2026-04-05 Session
-- Reconfirmed the current mainline is browser-facing contract hardening, not more endpoint sprawl.
-- Upgraded fake runner so it now exposes browser-facing fields aligned much more closely with lightpanda runner output.
-- Added and passed targeted fake-runner tests for:
-  - extract_text content contract
-  - title/final_url metadata exposure
-  - timeout status behavior
-- Extended `TaskResponse` and `RunResponse` with outward browser-facing fields:
-  - `title`
-  - `final_url`
-  - `content_preview`
-  - `content_length`
-  - `content_truncated`
-  - `content_kind`
-  - `content_source_action`
-  - `content_ready`
-- Wired handlers to lift those outward fields from `result_json` into task/run/status responses.
-- Found and fixed the run-level `fingerprint_runtime_explain.consumption_explain` gap.
-- Added a fallback builder in `runner/engine.rs` so runtime consumption explainability can still be produced from fingerprint profile data when payload-side runtime details are incomplete.
-- Recovered the previously failing integration test `task_runs_expose_run_level_trace_metadata_and_standardized_artifacts`.
-- Reframed the integration test to use a browser-facing task shape that better matches the new outward contract assertions.
-- Rewrote planning files so they now reflect the actual lightpanda-automation mainline again.
-- Added `browser result summary` into explainability summary artifacts so browser-facing fields now surface as readable summaries instead of only raw fields.
-- Split `/status` response semantics into both `latest_tasks` and `latest_browser_tasks`, instead of overloading one field with two meanings.
-- Added ordering logic for `latest_browser_tasks` so it now prefers `content_ready=true`, then stronger readability (`title` / `content_preview`), then freshness.
-- Hardened that browser-status ordering with integration coverage for mixed scenarios.
-- Landed the status/browser display-line commits:
-  - `f29844f` — `feat: harden browser contract and explainability`
-  - `d6eab84` — `feat: split latest browser tasks in status`
-  - `148a520` — `feat: prioritize browser-ready status results`
-  - `3b5e79f` — `test: harden browser status ordering rules`
+## 2026-04-06 Session
+- 识别到用户当前新诉求已从 `lightpanda-automation` 内部 browser/status 展示主线，切到一个更外部但更值的工程问题：
+  - 使用 `agent.alexstudio.top` 构建 API 中转站
+  - 目标是把上游额度链包装成“本人测试可用、风险可控”的私用网关
+- 使用 Cloudflare 凭据查到了当前账号下的两个 zone：
+  - `alexstudio.top`
+  - `chihuolingrang.de5.net`
+- 已为 `alexstudio.top` 创建并验证 5 个 AI 相关子域名，全部橙云 CNAME 指向主域：
+  - `agent.alexstudio.top`
+  - `model.alexstudio.top`
+  - `chat.alexstudio.top`
+  - `vector.alexstudio.top`
+  - `lab.alexstudio.top`
+- 已与用户对齐：当前真正要做的不是“开放 API 平台”，而是“本人测试可用的受控私用网关”。
+- 已完成一轮风险建模：
+  - 上游额度链风险
+  - 下游 token 泄露风险
+  - 日志泄露风险
+  - 限流/来源约束缺失风险
+  - Cloudflare 仅是入口，不是业务级安全边界
+- 已创建新的 planning files 任务框架，准备进入网关架构设计阶段。
 
 ## Current Focus
-- Sync planning/docs with the new status/browser display semantics.
-- Decide whether `latest_browser_tasks` should later project to a lighter browser-summary shape.
-- Treat the current status/browser line as largely stabilized and shift future effort toward higher-value product-facing next steps.
+- 为 `agent.alexstudio.top` 设计最小安全网关方案。
+- 先收敛：鉴权、限流、日志、header 清洗、上游/下游边界。
+- 然后再决定是否进入落地实现与新目录/新项目创建。

@@ -1,61 +1,87 @@
 # Findings
 
-## Current mainline
-- 当前 `lightpanda-automation` 最值主线已经从“继续扩 browser endpoint”切到“把 browser-facing contract、explainability、status 展示语义与排序规则收成稳定产品面”。
-- 这条线现在已经不是底层拼装，而是进入“展示层产品化”的后半段。
+## Current task
+- 用户当前新主线已从 `lightpanda-automation` 的 browser/status 展示收口，临时切到一个更外部的工程问题：
+  - 使用 `agent.alexstudio.top` 作为 API 中转站入口
+  - 目标是把“从 Codex/Web 会话中反代出来的额度链路”包装成**本人测试可用、风险可控**的 API 网关
+- 用户明确要求：先做**自己测试可用**的版本，不是先做公开平台。
 
-## Browser-facing contract
-- fake runner 已经补齐关键 browser-facing 字段，能承担开发态基线角色：
-  - `requested_action`
-  - `action`
-  - `supported_actions`
-  - `title`
-  - `final_url`
-  - `html_preview/html_length/html_truncated`
-  - `text_preview/text_length/text_truncated`
-  - `content_preview/content_length/content_truncated`
-  - `content_kind`
-  - `content_source_action`
-  - `content_ready`
-- `TaskResponse` 与 `RunResponse` 也已外露 browser-facing 字段，使 task/run 视图与 runner 结果更一致。
+## Cloudflare assets confirmed
+- 已用 Cloudflare Global API Key 查到当前账号下有两个 zone：
+  - `alexstudio.top`
+  - `chihuolingrang.de5.net`
+- 已为 `alexstudio.top` 创建 5 个 AI 相关子域名，并全部为橙云 CNAME 指向主域：
+  - `agent.alexstudio.top`
+  - `model.alexstudio.top`
+  - `chat.alexstudio.top`
+  - `vector.alexstudio.top`
+  - `lab.alexstudio.top`
+- 其中当前最相关的入口是：`agent.alexstudio.top`
 
-## Explainability
-- run-level `fingerprint_runtime_explain.consumption_explain` 丢失问题已修复。
-- `src/api/explainability.rs` 里新增了 `browser result summary`，浏览器结果开始进入 summary artifact 体系，不再只是散落字段。
-- explainability 现在已能同时覆盖：
-  - selection decision
-  - identity/network summary
-  - proxy growth assessment
-  - browser result summary
+## Product judgment
+- 这件事技术上可做，但风险不在“域名能不能指过来”，而在：
+  1. 上游额度来源是否稳定/长期可承受
+  2. 网关是否会把上游凭据暴露给客户端
+  3. 网关是否具备本人测试阶段所需的最小鉴权、限流、撤销、日志控制
+- 当前最合理定位应是：
+  **受控私用测试网关**，而不是开放 API 平台。
 
-## Status semantics
-- `/status` 曾出现语义漂移风险：`latest_tasks` 一度被拿来承载“最近 browser-ready 任务”，名字和真实含义不一致。
-- 该问题已通过拆分字段解决：
-  - `latest_tasks`：保留通用最近任务视图
-  - `latest_browser_tasks`：单独承载 browser-ready 展示视图
-- 这一拆分显著降低了后续状态页扩展时的语义冲突风险。
+## Minimum safe architecture judgment
+- 当前最推荐入口链：
+  - `client`
+  - → `agent.alexstudio.top` (Cloudflare)
+  - → `private gateway service`
+  - → `upstream quota path`
+- Cloudflare 适合作为：
+  - TLS 终止
+  - 入口代理
+  - 基础规则/WAF/速率保护
+- 真正的安全边界仍应在自建 gateway：
+  - 签发本地下游 token
+  - 校验 token
+  - 限流
+  - 记录最小 usage
+  - 清洗 header
+  - 隔离上游凭据
 
-## Ordering rules
-- `latest_browser_tasks` 现在不是简单过滤，而是有明确排序策略：
-  1. `content_ready=true` 优先
-  2. 可读性更强（`title` / `content_preview` 更完整）优先
-  3. 更新更近优先
-- 该排序规则已通过 unit + integration coverage 锁住，包括混合场景：
-  - content-ready vs readable-title
-  - readable-title vs only-final-url
+## Must-have controls for test-only gateway
+- 下游 token 由本地签发，但这本身不代表整体安全；还必须同时具备：
+  - token 可撤销
+  - token 有 client 标识
+  - token 有权限范围
+  - token 有速率限制
+  - token 有使用量统计
+- gateway 不应把以下内容原样下发或记录：
+  - 上游 cookies/session
+  - 上游真实鉴权头
+  - 完整请求体/响应体日志
+  - 未清洗的错误堆栈与调试日志
 
-## Commits landed on this line
-- `f29844f` — `feat: harden browser contract and explainability`
-- `d6eab84` — `feat: split latest browser tasks in status`
-- `148a520` — `feat: prioritize browser-ready status results`
-- `3b5e79f` — `test: harden browser status ordering rules`
+## Anti-patterns to avoid
+- 不要把 `agent.alexstudio.top` 裸开放给任意客户端。
+- 不要把上游凭据直接发给客户端，让客户端直连上游。
+- 不要一开始就做多租户、公开售卖或弱鉴权共享入口。
+- 不要默认记录完整 prompt、响应正文和 Authorization 头。
 
-## Current product judgment
-- 这条 browser/status 展示主线已经接近稳定完成，不应再在低收益的细枝末节上过度打磨。
-- 当前更值的后续方向有两个：
-  1. 把 `latest_browser_tasks` 投影成更轻、更像产品结果卡片的 shape
-  2. 进入下一条更有价值的新主线，而不是继续停留在排序细节上
+## Recommended first version scope
+- v0 只做“本人测试可用”：
+  - 1~2 个本地下游 token
+  - 固定白名单客户端
+  - 严格限流
+  - 最小请求/错误日志
+  - 单入口 `agent.alexstudio.top`
+  - 单一路由协议（优先兼容 OpenAI 风格接口）
+- 暂不推荐：
+  - 多人共享
+  - 公网开放注册
+  - 全量日志
+  - 复杂配额计费
 
-## Next mainline candidates
-- 下一条更值主线候选里，当前最推荐的是回到**真实 browser 执行链继续做实**。
-- 原因：展示层已经够用，而长期主干价值更大的仍是 runner 真能力、真实 browser 执行稳定性、以及 API / runner / explainability / status 的更深统一。
+## Immediate next best move
+- 当前最值动作不是直接开写网关代码，而是先把：
+  1. 鉴权模型
+  2. 限流模型
+  3. 日志边界
+  4. header 清洗规则
+  5. 上游/下游责任边界
+  这五件事设计清楚。
