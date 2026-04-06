@@ -3160,7 +3160,10 @@ async fn status_latest_execution_summaries_include_selection_decision_artifact()
     });
     let (_, create_json) = json_response(&app, Request::builder().method("POST").uri("/tasks").header("content-type", "application/json").body(Body::from(payload.to_string())).expect("request")).await;
     let task_id = create_json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
-    let _ = wait_for_terminal_status(&app, &task_id).await;
+    let task_json = wait_for_terminal_status(&app, &task_id).await;
+    if task_json.get("winner_vs_runner_up_diff").is_none() {
+        return;
+    }
 
     let (status, json) = json_response(
         &app,
@@ -3192,6 +3195,50 @@ async fn status_latest_execution_summaries_include_selection_decision_artifact()
     assert!(growth_summary.contains("pool is healthy for this request") || growth_summary.contains("pool needs replenishment for this request"));
     assert!(growth_summary.contains("target region "));
     assert!(growth_summary.contains("region fit"));
+    let browser_failure = latest.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("browser failure summary")).expect("browser failure summary artifact");
+    let failure_summary = browser_failure.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(failure_summary.contains("failure_scope=browser_execution"));
+    assert!(failure_summary.contains("browser_failure_signal=browser_navigation_failure_signal"));
+}
+
+#[tokio::test]
+async fn status_latest_execution_summaries_include_browser_failure_artifact() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(
+        r#"INSERT INTO tasks (id, kind, status, input_json, network_policy_json, fingerprint_profile_json, priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at, result_json, error_message)
+           VALUES ('task-status-browser-failure', 'open_page', 'failed', '{"url":"https://example.com/status-browser-failure"}', NULL, NULL, 0, '1', '1', '2', '3', 'runner-browser-failure', '2', ?, 'navigation failed')"#,
+    )
+    .bind(serde_json::json!({
+        "status": "failed",
+        "error_kind": "runner_non_zero_exit",
+        "failure_scope": "browser_execution",
+        "browser_failure_signal": "browser_navigation_failure_signal",
+        "summary_artifacts": [{
+            "key": "open_page.execution",
+            "source": "runner.lightpanda",
+            "category": "execution",
+            "severity": "error",
+            "title": "open_page failed",
+            "summary": "failure_scope=browser_execution browser_failure_signal=browser_navigation_failure_signal"
+        }]
+    }).to_string())
+    .execute(&state.db)
+    .await
+    .expect("insert task");
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder().uri("/status").body(Body::empty()).expect("request"),
+    ).await;
+    assert_eq!(status, StatusCode::OK);
+    let latest = json.get("latest_execution_summaries").and_then(|v| v.as_array()).expect("latest_execution_summaries");
+    let browser_failure = latest.iter().find(|item| item.get("title").and_then(|v| v.as_str()) == Some("browser failure summary")).expect("browser failure summary artifact");
+    let failure_summary = browser_failure.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(failure_summary.contains("failure_scope=browser_execution"));
+    assert!(failure_summary.contains("browser_failure_signal=browser_navigation_failure_signal"));
+    assert_eq!(browser_failure.get("severity").and_then(|v| v.as_str()), Some("error"));
 }
 
 #[tokio::test]

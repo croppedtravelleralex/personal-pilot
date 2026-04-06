@@ -544,6 +544,46 @@ fn browser_result_summary_artifact_from_parsed(parsed: Option<&Value>) -> Option
     })
 }
 
+fn browser_failure_summary_artifact_from_parsed(parsed: Option<&Value>) -> Option<SummaryArtifactResponse> {
+    let failure_scope = parsed?.get("failure_scope")?.as_str()?;
+    let browser_failure_signal = parsed
+        .and_then(|value| value.get("browser_failure_signal"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let status = parsed
+        .and_then(|value| value.get("status"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let error_kind = parsed
+        .and_then(|value| value.get("error_kind"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+
+    let severity = if failure_scope == "runner_timeout" || failure_scope == "browser_execution" {
+        "error"
+    } else {
+        "warning"
+    };
+
+    Some(SummaryArtifactResponse {
+        category: "execution".to_string(),
+        key: format!("browser.failure.{}", failure_scope),
+        source: "runner.browser_failure".to_string(),
+        severity: severity.to_string(),
+        title: "browser failure summary".to_string(),
+        summary: format!(
+            "failure_scope={} browser_failure_signal={} status={} error_kind={}",
+            failure_scope, browser_failure_signal, status, error_kind
+        ),
+        task_id: None,
+        task_kind: None,
+        task_status: None,
+        run_id: None,
+        attempt: None,
+        timestamp: None,
+    })
+}
+
 fn summary_artifacts_from_parsed(parsed: Option<&Value>) -> Vec<SummaryArtifactResponse> {
     let mut artifacts: Vec<SummaryArtifactResponse> = parsed
         .and_then(|value| value.get("summary_artifacts").cloned())
@@ -599,6 +639,13 @@ fn summary_artifacts_from_parsed(parsed: Option<&Value>) -> Vec<SummaryArtifactR
     let has_browser_result_summary = artifacts.iter().any(|item| item.title == "browser result summary");
     if !has_browser_result_summary {
         if let Some(artifact) = browser_result_summary_artifact_from_parsed(parsed) {
+            artifacts.push(artifact);
+        }
+    }
+
+    let has_browser_failure_summary = artifacts.iter().any(|item| item.title == "browser failure summary");
+    if !has_browser_failure_summary {
+        if let Some(artifact) = browser_failure_summary_artifact_from_parsed(parsed) {
             artifacts.push(artifact);
         }
     }
@@ -667,7 +714,24 @@ pub fn latest_execution_summaries(tasks: &[TaskResponse]) -> Vec<SummaryArtifact
         }
     }
 
-    items.sort_by_key(|(task_index, artifact)| (summary_severity_rank(&artifact.severity), *task_index));
+    fn summary_priority(item: &SummaryArtifactResponse) -> i32 {
+        match item.title.as_str() {
+            "browser failure summary" => 0,
+            "proxy selection decision" => 1,
+            "identity and network summary" => 2,
+            "browser result summary" => 3,
+            "proxy growth assessment" => 4,
+            _ => 5,
+        }
+    }
+
+    items.sort_by_key(|(task_index, artifact)| {
+        (
+            summary_severity_rank(&artifact.severity),
+            summary_priority(artifact),
+            *task_index,
+        )
+    });
     items.truncate(5);
     items.into_iter().map(|(_, artifact)| artifact).collect()
 }
@@ -1129,6 +1193,26 @@ mod tests {
         assert_eq!(latest[0].task_id.as_deref(), Some("task-2"));
         assert!(latest.iter().filter(|item| item.title == "duplicate title").count() == 1);
         assert!(latest.iter().any(|item| item.task_id.as_deref() == Some("task-1")));
+    }
+
+    #[test]
+    fn summary_artifacts_add_browser_failure_summary_when_failure_scope_present() {
+        let raw = serde_json::json!({
+            "status": "failed",
+            "error_kind": "runner_non_zero_exit",
+            "failure_scope": "browser_execution",
+            "browser_failure_signal": "browser_navigation_failure_signal"
+        })
+        .to_string();
+        let artifacts = summary_artifacts(Some(&raw));
+        let browser_failure = artifacts
+            .iter()
+            .find(|item| item.title == "browser failure summary")
+            .expect("browser failure summary artifact");
+        assert_eq!(browser_failure.key, "browser.failure.browser_execution");
+        assert_eq!(browser_failure.source, "runner.browser_failure");
+        assert_eq!(browser_failure.severity, "error");
+        assert!(browser_failure.summary.contains("browser_navigation_failure_signal"));
     }
 
     #[test]
