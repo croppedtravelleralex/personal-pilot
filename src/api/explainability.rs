@@ -198,6 +198,8 @@ pub struct TaskExplainability {
     pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
     pub identity_network_explain: Option<IdentityNetworkExplain>,
     pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
+    pub failure_scope: Option<String>,
+    pub browser_failure_signal: Option<String>,
     pub summary_artifacts: Vec<SummaryArtifactResponse>,
 }
 
@@ -758,6 +760,8 @@ pub fn build_task_explainability(
         None,
         timestamp,
     );
+    let failure_scope = content_string_field(parsed_ref, "failure_scope");
+    let browser_failure_signal = content_string_field(parsed_ref, "browser_failure_signal");
 
     TaskExplainability {
         fingerprint_resolution_status: fingerprint_resolution_status_from_parsed(
@@ -775,6 +779,8 @@ pub fn build_task_explainability(
         fingerprint_runtime_explain,
         identity_network_explain,
         winner_vs_runner_up_diff,
+        failure_scope,
+        browser_failure_signal,
         summary_artifacts,
     }
 }
