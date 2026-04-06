@@ -7,6 +7,7 @@ use tokio::{net::TcpListener, time::sleep};
 use AutoOpenBrowser::{
     network_identity::proxy_selection::proxy_selection_tuning_from_env,
     api::routes::build_router,
+    gateway::{build_gateway_router, gateway_state_from_env},
     app::state::AppState,
     db::init::init_db,
     queue::memory::MemoryTaskQueue,
@@ -24,6 +25,9 @@ async fn main() -> Result<()> {
         match cmd {
             "workflow" => {
                 return handle_workflow_cli(&args[2..]).await;
+            }
+            "gateway" => {
+                return run_gateway_server().await;
             }
             "--help" | "-h" | "help" => {
                 print_help();
@@ -75,6 +79,16 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+async fn run_gateway_server() -> Result<()> {
+    let state = gateway_state_from_env();
+    let app = build_gateway_router(state);
+    let addr: SocketAddr = env::var("GATEWAY_BIND").unwrap_or_else(|_| "127.0.0.1:8787".to_string()).parse()?;
+    let listener = TcpListener::bind(addr).await?;
+    println!("Agent gateway listening on http://{}", addr);
+    serve(listener, app).await?;
+    Ok(())
+}
+
 async fn handle_workflow_cli(args: &[String]) -> Result<()> {
     match args.first().map(|s| s.as_str()) {
         Some("tick") => {
@@ -109,6 +123,7 @@ async fn handle_workflow_cli(args: &[String]) -> Result<()> {
 fn print_help() {
     println!("AutoOpenBrowser usage:");
     println!("  AutoOpenBrowser                 Start API server");
+    println!("  AutoOpenBrowser gateway         Start private gateway server");
     println!("  AutoOpenBrowser workflow show   Show workflow state");
     println!("  AutoOpenBrowser workflow tick   Execute one workflow tick and persist RUN_STATE.json");
     println!("  AutoOpenBrowser workflow run-steps <n>   Execute n workflow steps and persist RUN_STATE.json");

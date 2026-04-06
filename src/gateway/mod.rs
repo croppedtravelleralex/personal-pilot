@@ -95,8 +95,14 @@ pub fn gateway_state_from_env() -> GatewayState {
     }
 }
 
-async fn gateway_health() -> impl IntoResponse {
-    Json(json!({"status":"ok","service":"agent-gateway-v0"}))
+async fn gateway_health(State(state): State<GatewayState>) -> impl IntoResponse {
+    Json(json!({
+        "status":"ok",
+        "service":"agent-gateway-v0",
+        "upstream_configured": state.config.upstream_base_url.is_some() && state.config.upstream_bearer_token.is_some(),
+        "requests_per_minute": state.config.requests_per_minute,
+        "concurrency_per_token": state.config.concurrency_per_token,
+    }))
 }
 
 async fn admin_usage(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
@@ -138,7 +144,8 @@ async fn chat_completions(State(state): State<GatewayState>, headers: HeaderMap,
         return resp;
     }
 
-    let model = payload.get("model").and_then(|v| v.as_str()).map(|v| v.to_string());
+    let sanitized_payload = sanitize_chat_payload(payload);
+    let model = sanitized_payload.get("model").and_then(|v| v.as_str()).map(|v| v.to_string());
 
     if let Some(upstream_base_url) = state.config.upstream_base_url.clone() {
         let Some(upstream_token) = state.config.upstream_bearer_token.clone() else {
@@ -151,7 +158,8 @@ async fn chat_completions(State(state): State<GatewayState>, headers: HeaderMap,
             .http_client
             .post(url)
             .bearer_auth(upstream_token)
-            .json(&payload)
+            .header("x-gateway-source", token.label.clone())
+            .json(&sanitized_payload)
             .send()
             .await;
         match response {
@@ -159,16 +167,13 @@ async fn chat_completions(State(state): State<GatewayState>, headers: HeaderMap,
                 let status = resp.status();
                 let body = match resp.json::<Value>().await {
                     Ok(body) => body,
-                    Err(_) => json!({"error": {"code": "upstream_invalid_json", "message": "upstream returned invalid json"}}),
+                    Err(_) => return error_with_usage(&state, &token, model, StatusCode::BAD_GATEWAY, "upstream_invalid_json", "upstream returned invalid json"),
                 };
                 log_usage(&state, &token, "/v1/chat/completions", model, Some("upstream".to_string()), status);
                 (status, Json(body)).into_response()
             }
-            Err(_) => {
-                let resp = error_response(StatusCode::BAD_GATEWAY, "upstream_unavailable", "failed to reach upstream");
-                log_usage(&state, &token, "/v1/chat/completions", model, Some("upstream".to_string()), StatusCode::BAD_GATEWAY);
-                resp
-            }
+            Err(err) if err.is_timeout() => error_with_usage(&state, &token, model, StatusCode::GATEWAY_TIMEOUT, "upstream_timeout", "upstream request timed out"),
+            Err(_) => error_with_usage(&state, &token, model, StatusCode::BAD_GATEWAY, "upstream_unavailable", "failed to reach upstream"),
         }
     } else {
         log_usage(&state, &token, "/v1/chat/completions", model.clone(), Some("skeleton".to_string()), StatusCode::OK);
@@ -192,6 +197,16 @@ async fn chat_completions(State(state): State<GatewayState>, headers: HeaderMap,
             }
         })).into_response()
     }
+}
+
+fn sanitize_chat_payload(mut payload: Value) -> Value {
+    if let Some(obj) = payload.as_object_mut() {
+        obj.remove("api_key");
+        obj.remove("authorization");
+        obj.remove("upstream_token");
+        obj.remove("upstream_auth");
+    }
+    payload
 }
 
 fn authorize(state: &GatewayState, headers: &HeaderMap) -> Result<DownstreamToken, Response> {
@@ -246,6 +261,11 @@ fn log_usage(state: &GatewayState, token: &DownstreamToken, path: &str, model: O
         let drain = guard.len() - 500;
         guard.drain(0..drain);
     }
+}
+
+fn error_with_usage(state: &GatewayState, token: &DownstreamToken, model: Option<String>, status: StatusCode, code: &str, message: &str) -> Response {
+    log_usage(state, token, "/v1/chat/completions", model, Some("upstream".to_string()), status);
+    error_response(status, code, message)
 }
 
 fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
@@ -343,5 +363,22 @@ mod tests {
         let app = build_gateway_router(test_state());
         let response = app.oneshot(Request::builder().uri("/admin/usage").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn sanitize_chat_payload_removes_dangerous_fields() {
+        let payload = json!({
+            "model": "agent-proxy-v0",
+            "api_key": "downstream",
+            "authorization": "Bearer leaked",
+            "upstream_token": "secret",
+            "messages": []
+        });
+        let sanitized = sanitize_chat_payload(payload);
+        let obj = sanitized.as_object().unwrap();
+        assert!(!obj.contains_key("api_key"));
+        assert!(!obj.contains_key("authorization"));
+        assert!(!obj.contains_key("upstream_token"));
+        assert!(obj.contains_key("model"));
     }
 }
