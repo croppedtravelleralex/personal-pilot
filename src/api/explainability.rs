@@ -1049,6 +1049,8 @@ mod tests {
                 fingerprint_runtime_explain: None,
                 identity_network_explain: None,
                 winner_vs_runner_up_diff: None,
+                failure_scope: None,
+                browser_failure_signal: None,
                 title: None,
                 final_url: None,
                 content_preview: None,
@@ -1108,6 +1110,8 @@ mod tests {
                 fingerprint_runtime_explain: None,
                 identity_network_explain: None,
                 winner_vs_runner_up_diff: None,
+                failure_scope: None,
+                browser_failure_signal: None,
                 title: None,
                 final_url: None,
                 content_preview: None,
@@ -1151,6 +1155,8 @@ mod tests {
                 fingerprint_runtime_explain: None,
                 identity_network_explain: None,
                 winner_vs_runner_up_diff: None,
+                failure_scope: None,
+                browser_failure_signal: None,
                 title: Some("Browser 1".to_string()),
                 final_url: Some("https://example.com/1".to_string()),
                 content_preview: None,
@@ -1181,6 +1187,8 @@ mod tests {
                 fingerprint_runtime_explain: None,
                 identity_network_explain: None,
                 winner_vs_runner_up_diff: None,
+                failure_scope: None,
+                browser_failure_signal: None,
                 title: None,
                 final_url: None,
                 content_preview: None,
@@ -1211,6 +1219,8 @@ mod tests {
                 fingerprint_runtime_explain: None,
                 identity_network_explain: None,
                 winner_vs_runner_up_diff: None,
+                failure_scope: None,
+                browser_failure_signal: None,
                 title: None,
                 final_url: Some("https://example.com/2".to_string()),
                 content_preview: Some("preview".to_string()),
@@ -1257,6 +1267,8 @@ mod tests {
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.proxy_provider.as_deref()), Some("pool-a"));
         assert_eq!(explain.identity_network_explain.as_ref().and_then(|v| v.fingerprint_runtime_explain.as_ref()).and_then(|v| v.fingerprint_budget_tag.as_deref()), Some("medium"));
         assert!(explain.winner_vs_runner_up_diff.is_some());
+        assert_eq!(explain.failure_scope.as_deref(), Some("browser_execution"));
+        assert_eq!(explain.browser_failure_signal.as_deref(), Some("browser_navigation_failure_signal"));
         assert_eq!(explain.summary_artifacts.len(), 5);
         assert!(explain.summary_artifacts.iter().all(|a| a.task_id.as_deref() == Some("task-1")));
         assert!(explain.summary_artifacts.iter().all(|a| a.task_kind.as_deref() == Some("open_page")));

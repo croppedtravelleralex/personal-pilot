@@ -3062,6 +3062,84 @@ async fn auto_selection_result_exposes_trust_score_components_and_candidate_prev
 }
 
 #[tokio::test]
+async fn task_and_run_views_expose_browser_failure_signal_fields() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let task_id = "task-browser-failure-fields";
+    let run_id = "run-browser-failure-fields";
+    sqlx::query(
+        r#"INSERT INTO tasks (id, kind, status, input_json, network_policy_json, fingerprint_profile_json, priority, created_at, queued_at, started_at, finished_at, runner_id, heartbeat_at, result_json, error_message)
+           VALUES (?, 'open_page', 'failed', '{"url":"https://example.com/browser-failure"}', NULL, NULL, 0, '1', '1', '2', '3', 'runner-browser-failure', '2', ?, 'navigation failed')"#,
+    )
+    .bind(task_id)
+    .bind(serde_json::json!({
+        "status": "failed",
+        "error_kind": "runner_non_zero_exit",
+        "failure_scope": "browser_execution",
+        "browser_failure_signal": "browser_navigation_failure_signal",
+        "summary_artifacts": [{
+            "key": "open_page.execution",
+            "source": "runner.lightpanda",
+            "category": "execution",
+            "severity": "error",
+            "title": "open_page failed",
+            "summary": "failure_scope=browser_execution browser_failure_signal=browser_navigation_failure_signal"
+        }]
+    }).to_string())
+    .execute(&state.db)
+    .await
+    .expect("insert task");
+
+    sqlx::query(
+        r#"INSERT INTO runs (id, task_id, status, attempt, runner_kind, result_json, error_message, started_at, finished_at)
+           VALUES (?, ?, 'failed', 1, 'lightpanda', ?, 'navigation failed', '2', '3')"#,
+    )
+    .bind(run_id)
+    .bind(task_id)
+    .bind(serde_json::json!({
+        "status": "failed",
+        "error_kind": "runner_non_zero_exit",
+        "failure_scope": "browser_execution",
+        "browser_failure_signal": "browser_navigation_failure_signal",
+        "summary_artifacts": [{
+            "key": "open_page.execution",
+            "source": "runner.lightpanda",
+            "category": "execution",
+            "severity": "error",
+            "title": "open_page failed",
+            "summary": "failure_scope=browser_execution browser_failure_signal=browser_navigation_failure_signal"
+        }]
+    }).to_string())
+    .execute(&state.db)
+    .await
+    .expect("insert run");
+
+    let (_, task_json) = json_response(
+        &app,
+        Request::builder()
+            .uri(format!("/tasks/{task_id}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(task_json.get("failure_scope").and_then(|v| v.as_str()), Some("browser_execution"));
+    assert_eq!(task_json.get("browser_failure_signal").and_then(|v| v.as_str()), Some("browser_navigation_failure_signal"));
+
+    let (_, runs_json) = json_response(
+        &app,
+        Request::builder()
+            .uri(format!("/tasks/{task_id}/runs"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    let runs = runs_json.as_array().expect("runs array");
+    assert_eq!(runs[0].get("failure_scope").and_then(|v| v.as_str()), Some("browser_execution"));
+    assert_eq!(runs[0].get("browser_failure_signal").and_then(|v| v.as_str()), Some("browser_navigation_failure_signal"));
+}
+
+#[tokio::test]
 async fn status_latest_execution_summaries_include_selection_decision_artifact() {
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
