@@ -210,6 +210,213 @@ async fn lightpanda_runner_timeout_marks_timed_out_and_cleans_state() {
 }
 
 #[tokio::test]
+async fn lightpanda_runner_browser_navigation_failure_maps_to_browser_execution() {
+    let _env_guard = lightpanda_env_lock().lock().await;
+    let script = make_stub_script(
+        "lightpanda_browser_navigation_failure",
+        "#!/usr/bin/env bash
+set -euo pipefail
+printf 'navigation failed while opening page\n' >&2
+exit 1
+",
+    );
+    std::env::set_var("LIGHTPANDA_BIN", &script);
+
+    let db_url = unique_db_url();
+    let (state, app) = build_lightpanda_test_app(&db_url).await.expect("build app");
+    let task_id = create_task(&app, "open_page", "https://example.com/navigation-fail", 5).await;
+
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_FAILED));
+
+    let (task_status, run_status, result_json_text, error_message, runner_id, heartbeat_at): (String, String, Option<String>, Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as(r#"SELECT t.status, r.status, t.result_json, t.error_message, t.runner_id, t.heartbeat_at
+                          FROM tasks t JOIN runs r ON r.task_id = t.id WHERE t.id = ? ORDER BY r.attempt DESC LIMIT 1"#)
+            .bind(&task_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("load browser execution rows");
+    assert_eq!(task_status, TASK_STATUS_FAILED);
+    assert_eq!(run_status, RUN_STATUS_FAILED);
+    let error_message = error_message.unwrap_or_default();
+    assert!(!error_message.is_empty());
+    assert!(runner_id.is_none());
+    assert!(heartbeat_at.is_none());
+
+    let result_json: Value = serde_json::from_str(result_json_text.as_deref().expect("result json")).expect("parse browser execution result");
+    assert_eq!(result_json.get("status").and_then(|v| v.as_str()), Some(RUN_STATUS_FAILED));
+    assert_eq!(result_json.get("error_kind").and_then(|v| v.as_str()), Some("runner_non_zero_exit"));
+    assert_eq!(result_json.get("failure_scope").and_then(|v| v.as_str()), Some("browser_execution"));
+    assert_eq!(
+        result_json.get("browser_failure_signal").and_then(|v| v.as_str()),
+        Some("browser_navigation_failure_signal")
+    );
+    assert_eq!(result_json.get("execution_stage").and_then(|v| v.as_str()), Some("navigate"));
+    assert!(
+        result_json
+            .get("stderr_preview")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("navigation failed")
+    );
+
+    std::env::remove_var("LIGHTPANDA_BIN");
+    let _ = std::fs::remove_file(script);
+}
+
+#[tokio::test]
+async fn lightpanda_runner_browser_dns_failure_maps_to_browser_execution() {
+    let _env_guard = lightpanda_env_lock().lock().await;
+    let script = make_stub_script(
+        "lightpanda_browser_dns_failure",
+        "#!/usr/bin/env bash
+set -euo pipefail
+printf 'dns name not resolved while opening page\n' >&2
+exit 1
+",
+    );
+    std::env::set_var("LIGHTPANDA_BIN", &script);
+
+    let db_url = unique_db_url();
+    let (state, app) = build_lightpanda_test_app(&db_url).await.expect("build app");
+    let task_id = create_task(&app, "open_page", "https://example.com/dns-fail", 5).await;
+
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_FAILED));
+
+    let (task_status, run_status, result_json_text, error_message, runner_id, heartbeat_at): (String, String, Option<String>, Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as(r#"SELECT t.status, r.status, t.result_json, t.error_message, t.runner_id, t.heartbeat_at
+                          FROM tasks t JOIN runs r ON r.task_id = t.id WHERE t.id = ? ORDER BY r.attempt DESC LIMIT 1"#)
+            .bind(&task_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("load browser dns rows");
+    assert_eq!(task_status, TASK_STATUS_FAILED);
+    assert_eq!(run_status, RUN_STATUS_FAILED);
+    let error_message = error_message.unwrap_or_default();
+    assert!(!error_message.is_empty());
+    assert!(runner_id.is_none());
+    assert!(heartbeat_at.is_none());
+
+    let result_json: Value = serde_json::from_str(result_json_text.as_deref().expect("result json")).expect("parse browser dns result");
+    assert_eq!(result_json.get("status").and_then(|v| v.as_str()), Some(RUN_STATUS_FAILED));
+    assert_eq!(result_json.get("error_kind").and_then(|v| v.as_str()), Some("runner_non_zero_exit"));
+    assert_eq!(result_json.get("failure_scope").and_then(|v| v.as_str()), Some("browser_execution"));
+    assert_eq!(
+        result_json.get("browser_failure_signal").and_then(|v| v.as_str()),
+        Some("browser_dns_failure_signal")
+    );
+    assert_eq!(result_json.get("execution_stage").and_then(|v| v.as_str()), Some("navigate"));
+    assert!(
+        result_json
+            .get("stderr_preview")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("dns name not resolved")
+    );
+
+    std::env::remove_var("LIGHTPANDA_BIN");
+    let _ = std::fs::remove_file(script);
+}
+
+#[tokio::test]
+async fn lightpanda_runner_browser_tls_failure_maps_to_browser_execution() {
+    let _env_guard = lightpanda_env_lock().lock().await;
+    let script = make_stub_script(
+        "lightpanda_browser_tls_failure",
+        "#!/usr/bin/env bash
+set -euo pipefail
+printf 'tls certificate failure while opening page\n' >&2
+exit 1
+",
+    );
+    std::env::set_var("LIGHTPANDA_BIN", &script);
+
+    let db_url = unique_db_url();
+    let (state, app) = build_lightpanda_test_app(&db_url).await.expect("build app");
+    let task_id = create_task(&app, "open_page", "https://example.com/tls-fail", 5).await;
+
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_FAILED));
+
+    let (task_status, run_status, result_json_text, error_message, runner_id, heartbeat_at): (String, String, Option<String>, Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as(r#"SELECT t.status, r.status, t.result_json, t.error_message, t.runner_id, t.heartbeat_at
+                          FROM tasks t JOIN runs r ON r.task_id = t.id WHERE t.id = ? ORDER BY r.attempt DESC LIMIT 1"#)
+            .bind(&task_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("load browser tls rows");
+    assert_eq!(task_status, TASK_STATUS_FAILED);
+    assert_eq!(run_status, RUN_STATUS_FAILED);
+    let error_message = error_message.unwrap_or_default();
+    assert!(!error_message.is_empty());
+    assert!(runner_id.is_none());
+    assert!(heartbeat_at.is_none());
+
+    let result_json: Value = serde_json::from_str(result_json_text.as_deref().expect("result json")).expect("parse browser tls result");
+    assert_eq!(result_json.get("status").and_then(|v| v.as_str()), Some(RUN_STATUS_FAILED));
+    assert_eq!(result_json.get("error_kind").and_then(|v| v.as_str()), Some("runner_non_zero_exit"));
+    assert_eq!(result_json.get("failure_scope").and_then(|v| v.as_str()), Some("browser_execution"));
+    assert_eq!(
+        result_json.get("browser_failure_signal").and_then(|v| v.as_str()),
+        Some("browser_tls_failure_signal")
+    );
+    assert_eq!(result_json.get("execution_stage").and_then(|v| v.as_str()), Some("navigate"));
+    assert!(
+        result_json
+            .get("stderr_preview")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("tls certificate failure")
+    );
+
+    std::env::remove_var("LIGHTPANDA_BIN");
+    let _ = std::fs::remove_file(script);
+}
+
+#[tokio::test]
+async fn lightpanda_runner_success_maps_to_no_browser_failure_signal() {
+    let _env_guard = lightpanda_env_lock().lock().await;
+    let script = make_stub_script(
+        "lightpanda_browser_success_control",
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '{"ok":true,"url":"https://example.com/success-control"}'
+"#,
+    );
+    std::env::set_var("LIGHTPANDA_BIN", &script);
+
+    let db_url = unique_db_url();
+    let (state, app) = build_lightpanda_test_app(&db_url).await.expect("build app");
+    let task_id = create_task(&app, "open_page", "https://example.com/success-control", 5).await;
+
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_SUCCEEDED));
+
+    let (task_status, run_status, result_json_text, error_message, runner_id, heartbeat_at): (String, String, Option<String>, Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as(r#"SELECT t.status, r.status, t.result_json, t.error_message, t.runner_id, t.heartbeat_at
+                          FROM tasks t JOIN runs r ON r.task_id = t.id WHERE t.id = ? ORDER BY r.attempt DESC LIMIT 1"#)
+            .bind(&task_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("load success control rows");
+    assert_eq!(task_status, TASK_STATUS_SUCCEEDED);
+    assert_eq!(run_status, TASK_STATUS_SUCCEEDED);
+    assert!(error_message.is_none());
+    assert!(runner_id.is_none());
+    assert!(heartbeat_at.is_none());
+
+    let result_json: Value = serde_json::from_str(result_json_text.as_deref().expect("result json")).expect("parse success control result");
+    assert_eq!(result_json.get("status").and_then(|v| v.as_str()), Some("succeeded"));
+    assert_eq!(result_json.get("failure_scope"), Some(&Value::Null));
+    assert_eq!(result_json.get("browser_failure_signal"), Some(&Value::Null));
+    assert_eq!(result_json.get("execution_stage").and_then(|v| v.as_str()), Some("action"));
+
+    std::env::remove_var("LIGHTPANDA_BIN");
+    let _ = std::fs::remove_file(script);
+}
+
+#[tokio::test]
 async fn lightpanda_runner_non_zero_exit_marks_failed() {
     let _env_guard = lightpanda_env_lock().lock().await;
     let script = make_stub_script(

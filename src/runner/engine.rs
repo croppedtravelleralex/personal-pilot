@@ -1238,18 +1238,48 @@ async fn build_proxy_growth_explain_json(
     }))
 }
 
-async fn update_proxy_health_after_execution(state: &AppState, proxy: Option<&RunnerProxySelection>, execution_status: RunnerOutcomeStatus) -> Result<()> {
+fn execution_failure_evidence(result_json: Option<&Value>) -> bool {
+    let Some(parsed) = result_json else { return false; };
+    let failure_scope = parsed.get("failure_scope").and_then(|v| v.as_str());
+    let execution_stage = parsed.get("execution_stage").and_then(|v| v.as_str());
+    matches!(
+        (failure_scope, execution_stage),
+        (Some("runner_process_exit"), Some(_))
+            | (Some("browser_execution"), Some(_))
+            | (Some("runner_timeout"), Some(_))
+    )
+}
+
+pub async fn update_proxy_health_after_execution(
+    state: &AppState,
+    proxy: Option<&RunnerProxySelection>,
+    execution_status: RunnerOutcomeStatus,
+    result_json: Option<&Value>,
+) -> Result<()> {
     let Some(proxy) = proxy else { return Ok(()); };
     let now = now_ts_string();
-    let (success_inc, failure_inc, cooldown_until): (i64, i64, Option<String>) = match execution_status {
-        RunnerOutcomeStatus::Succeeded => (1, 0, None),
-        RunnerOutcomeStatus::Failed => (0, 1, Some((now.parse::<u64>().unwrap_or(0) + 60).to_string())),
-        RunnerOutcomeStatus::Cancelled => (0, 0, None),
-        RunnerOutcomeStatus::TimedOut => (0, 1, Some((now.parse::<u64>().unwrap_or(0) + 180).to_string())),
+    let has_failure_evidence = execution_failure_evidence(result_json);
+    let (success_inc, failure_inc, cooldown_until, score_delta): (i64, i64, Option<String>, f64) = match execution_status {
+        RunnerOutcomeStatus::Succeeded => (1, 0, None, 0.01_f64),
+        RunnerOutcomeStatus::Cancelled => (0, 0, None, 0.0_f64),
+        RunnerOutcomeStatus::Failed => {
+            if has_failure_evidence {
+                (0, 1, Some((now.parse::<u64>().unwrap_or(0) + 60).to_string()), -0.02_f64)
+            } else {
+                (0, 0, None, 0.0_f64)
+            }
+        }
+        RunnerOutcomeStatus::TimedOut => {
+            if has_failure_evidence {
+                (0, 1, Some((now.parse::<u64>().unwrap_or(0) + 180).to_string()), -0.03_f64)
+            } else {
+                (0, 0, None, 0.0_f64)
+            }
+        }
     };
     sqlx::query(r#"UPDATE proxies SET success_count = success_count + ?, failure_count = failure_count + ?, last_used_at = ?, last_checked_at = ?, cooldown_until = ?, score = MAX(0.0, score + ?), updated_at = ? WHERE id = ?"#)
         .bind(success_inc).bind(failure_inc).bind(&now).bind(&now).bind(&cooldown_until)
-        .bind(match execution_status { RunnerOutcomeStatus::Succeeded => 0.01_f64, RunnerOutcomeStatus::Failed => -0.02_f64, RunnerOutcomeStatus::Cancelled => 0.0_f64, RunnerOutcomeStatus::TimedOut => -0.03_f64 })
+        .bind(score_delta)
         .bind(&now).bind(&proxy.id)
         .execute(&state.db).await?;
     refresh_proxy_trust_views_for_scope(&state.db, &proxy.id, proxy.provider.as_deref(), proxy.region.as_deref()).await?;
@@ -1678,7 +1708,7 @@ where
     let _ = heartbeat_handle.await;
 
     upsert_proxy_session_binding(state, &payload_for_binding, proxy_for_health.as_ref()).await?;
-    update_proxy_health_after_execution(state, proxy_for_health.as_ref(), execution.status).await?;
+    update_proxy_health_after_execution(state, proxy_for_health.as_ref(), execution.status, execution.result_json.as_ref()).await?;
 
     let finished_at = now_ts_string();
 

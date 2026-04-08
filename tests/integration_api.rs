@@ -6,14 +6,18 @@ use AutoOpenBrowser::{
     api::routes::build_router,
     app::build_app_state,
     db::init::init_db,
-    runner::fake::FakeRunner,
+    runner::{
+        fake::FakeRunner,
+        types::RunnerProxySelection,
+        RunnerOutcomeStatus,
+    },
     domain::{
         run::{RUN_STATUS_FAILED, RUN_STATUS_RUNNING},
         task::{
             TASK_STATUS_CANCELLED, TASK_STATUS_FAILED, TASK_STATUS_QUEUED, TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
         },
     },
-    runner::engine::reclaim_stale_running_tasks,
+    runner::engine::{reclaim_stale_running_tasks, update_proxy_health_after_execution},
 };
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -1516,6 +1520,96 @@ async fn proxy_health_is_not_penalized_after_cancelled_execution() {
     assert_eq!(success_count, 2);
     assert_eq!(failure_count, 1);
     assert!(cooldown_until.is_none());
+}
+
+#[tokio::test]
+async fn proxy_health_is_updated_after_failed_execution_with_stage_evidence() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-health-fail', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'manual', 'active', 0.95, 1, 0, NULL, NULL, NULL, '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+
+    let payload = serde_json::json!({
+        "kind": "fail",
+        "url": "https://example.com",
+        "timeout_seconds": 5,
+        "network_policy_json": {"mode": "required_proxy", "proxy_id": "proxy-health-fail"}
+    });
+    let (_, json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/tasks")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .expect("request"),
+    )
+    .await;
+    let task_id = json.get("id").and_then(|v| v.as_str()).expect("task id").to_string();
+    let task = wait_for_terminal_status(&app, &task_id).await;
+    assert_eq!(task.get("status").and_then(|v| v.as_str()), Some(TASK_STATUS_FAILED));
+
+    let (success_count, failure_count, cooldown_until, score): (i64, i64, Option<String>, f64) =
+        sqlx::query_as(r#"SELECT success_count, failure_count, cooldown_until, score FROM proxies WHERE id = 'proxy-health-fail'"#)
+            .fetch_one(&state.db)
+            .await
+            .expect("load proxy after fail");
+    assert_eq!(success_count, 1);
+    assert_eq!(failure_count, 1);
+    assert!(cooldown_until.is_some());
+    assert!(score < 0.95);
+}
+
+#[tokio::test]
+async fn proxy_health_skips_timeout_penalty_without_stage_evidence() {
+    let db_url = unique_db_url();
+    let db = init_db(&db_url).await.expect("init db");
+    let state = build_app_state(db.clone(), std::sync::Arc::new(FakeRunner), None, 1);
+
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, created_at, updated_at) VALUES ('proxy-health-no-evidence', 'http', '127.0.0.1', 8080, NULL, NULL, 'us-east', 'US', 'manual', 'active', 0.91, 4, 2, NULL, NULL, NULL, '1', '1')"#)
+        .execute(&state.db)
+        .await
+        .expect("insert proxy");
+
+    let proxy = RunnerProxySelection {
+        id: "proxy-health-no-evidence".to_string(),
+        scheme: "http".to_string(),
+        host: "127.0.0.1".to_string(),
+        port: 8080,
+        username: None,
+        password: None,
+        region: Some("us-east".to_string()),
+        country: Some("US".to_string()),
+        provider: Some("manual".to_string()),
+        score: 0.91,
+        resolution_status: "selected".to_string(),
+    };
+
+    update_proxy_health_after_execution(
+        &state,
+        Some(&proxy),
+        RunnerOutcomeStatus::TimedOut,
+        Some(&serde_json::json!({
+            "runner": "fake",
+            "status": "timed_out",
+            "error_kind": "timeout"
+        })),
+    )
+    .await
+    .expect("update proxy health");
+
+    let (success_count, failure_count, cooldown_until, score): (i64, i64, Option<String>, f64) =
+        sqlx::query_as(r#"SELECT success_count, failure_count, cooldown_until, score FROM proxies WHERE id = 'proxy-health-no-evidence'"#)
+            .fetch_one(&state.db)
+            .await
+            .expect("load proxy after no-evidence timeout");
+    assert_eq!(success_count, 4);
+    assert_eq!(failure_count, 2);
+    assert!(cooldown_until.is_none());
+    assert_eq!(score, 0.91);
 }
 
 #[tokio::test]

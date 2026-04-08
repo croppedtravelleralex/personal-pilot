@@ -23,6 +23,11 @@
   - cancelled -> execution_stage=action
 - 已完成 explainability 三面投影收口，确认 task detail / runs / status 的 browser failure summary 统一暴露 execution_stage。
 - 已新增 proxy health 边界回归测试，确认 runner_cancelled 不会误伤 trust feedback；当前执行后健康回写边界稳定为 success 加分、failed/timeout 扣分、cancelled 不处罚。
+- 已把执行后 proxy health/trust 回写收紧为“有阶段证据才处罚”，当前边界稳定为 success 加分、failed/timeout 仅在存在 failure_scope + execution_stage 证据时扣分、cancelled 不处罚。
+- 已补 FakeRunner failure evidence 测试基座，并新增回归覆盖：failed with stage evidence 会处罚；timeout without stage evidence 不处罚。
+- 已补 stable browser_execution 半真实样本基线，当前已可稳定复现并验证 browser_navigation_failure_signal / browser_dns_failure_signal / browser_tls_failure_signal，且三者均落成 failure_scope=browser_execution + execution_stage=navigate。
+- 已补 succeeded 对照样本，当前 browser_execution 长期回归矩阵已覆盖 navigation / dns / tls / succeeded，并可稳定区分成功样本与 browser failure signal 样本。
+- 已复跑 explainability 三面回归，确认 task detail / runs / status 对 browser failure evidence 的投影在 navigation / dns / tls 样本下仍保持一致。
   - lightpanda_runner_timeout_marks_timed_out_and_cleans_state
   - lightpanda_runner_non_zero_exit_marks_failed
   - task_and_run_views_expose_browser_failure_signal_fields
@@ -37,6 +42,6 @@
 - 推进 verify / trust score 从选前判断扩展到执行闭环。
 
 ## Next Step
-1. 先补可稳定复现 browser_failure_signal 的 browser execution 样本，优先避免继续用只会收敛成 timeout 的目标站点。
-2. 再推进 verify / trust score 执行前 / 执行中 / 执行后闭环，并评估是否需要对“有明确阶段证据的失败”做更细粒度负反馈。
-3. 再补一组 succeeded / timeout staged / browser execution / cancelled 的长期回归样本集，作为后续真实验收基线。
+1. 先补一条 succeeded 对照样本，并把 browser_execution 样本矩阵整理成 navigation / dns / tls / succeeded / cancelled / no-evidence-timeout 的长期回归基线。
+2. 再推进真实或半真实 verify / trust score 闭环验收，确认 failure_scope=browser_execution 的负反馈与 explainability 在更多样本下持续一致。
+3. 验收稳定后统一整理阶段提交，必要时再补真实环境 browser execution 样本作为最终验收对照。
