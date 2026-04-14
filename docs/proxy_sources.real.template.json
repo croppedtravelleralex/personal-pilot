@@ -1,0 +1,41 @@
+# Real proxy source template
+#
+# Copy this file to a local path outside git, then set:
+#   export AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG=/absolute/path/to/proxy_sources.real.json
+#
+# Notes:
+# - Use real, reachable proxy feeds only.
+# - This repo's demo seed files are for parser/dedupe smoke tests, not for producing active proxies.
+# - Prefer keeping real source files out of git and out of the repo working tree.
+[
+  {
+    "source_label": "real_primary_text",
+    "source_kind": "text_file",
+    "enabled": false,
+    "interval_seconds": 300,
+    "base_proxy_score": 1.2,
+    "config_json": {
+      "path": "/absolute/path/to/real_proxy_candidates_primary.txt"
+    }
+  },
+  {
+    "source_label": "real_secondary_json",
+    "source_kind": "json_file",
+    "enabled": false,
+    "interval_seconds": 600,
+    "base_proxy_score": 1.0,
+    "config_json": {
+      "path": "/absolute/path/to/real_proxy_candidates_secondary.json"
+    }
+  },
+  {
+    "source_label": "real_feed_url",
+    "source_kind": "text_url",
+    "enabled": false,
+    "interval_seconds": 900,
+    "base_proxy_score": 0.9,
+    "config_json": {
+      "url": "https://example.com/real-proxy-feed.txt"
+    }
+  }
+]
