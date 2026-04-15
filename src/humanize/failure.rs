@@ -211,10 +211,13 @@ mod tests {
     #[test]
     fn test_give_up_chance_respected() {
         let config = HumanizationConfig::from_level(super::super::config::HumanizationLevel::High);
-        let style = match &config.failure {
-            FailureStyle::Human { give_up_chance, .. } => give_up_chance,
+        let give_up_chance = match &config.failure {
+            FailureStyle::Human { give_up_chance, .. } => *give_up_chance,
             _ => panic!("expected Human style"),
         };
-        assert!(*give_up_chance > 0.1, "High level should have meaningful give_up_chance");
+        assert!(
+            give_up_chance > 0.1,
+            "High level should have meaningful give_up_chance"
+        );
     }
 }

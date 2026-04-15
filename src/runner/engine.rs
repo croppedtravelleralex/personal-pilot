@@ -7,12 +7,12 @@ use sqlx::Row;
 use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use uuid::Uuid;
 
+use crate::network_identity::fingerprint_consumption::{
+    build_lightpanda_runtime_projection, FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
+};
 use crate::network_identity::proxy_growth::{
     assess_proxy_pool_health, evaluate_region_match, proxy_pool_growth_policy_from_env,
     ProxyPoolInventorySnapshot,
-};
-use crate::network_identity::fingerprint_consumption::{
-    build_lightpanda_runtime_projection, FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
 };
 use crate::network_identity::proxy_selection::{
     apply_proxy_resolution_metadata, proxy_selection_base_where_sql,
@@ -23,6 +23,7 @@ use crate::{
         CandidateRankPreviewItem, TrustScoreComponents, WinnerVsRunnerUpDiff,
         WinnerVsRunnerUpDirection, WinnerVsRunnerUpFactor,
     },
+    api::handlers::apply_task_continuity_after_execution,
     app::state::AppState,
     behavior::{
         form::{
@@ -195,7 +196,9 @@ fn build_fingerprint_runtime_explain_json(
         .and_then(|v| v.get("consumption_source_of_truth"))
         .and_then(|v| v.as_str())
         .map(str::to_string)
-        .or_else(|| fingerprint_profile.map(|_| FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME.to_string()));
+        .or_else(|| {
+            fingerprint_profile.map(|_| FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME.to_string())
+        });
     let consumption_status = task_payload
         .get("fingerprint_runtime")
         .and_then(|v| v.get("consumption_status"))
@@ -422,6 +425,7 @@ fn no_eligible_proxy_execution(
 struct RunnerSessionContext {
     session_key: Option<String>,
     site_key: Option<String>,
+    persona_id: Option<String>,
     fingerprint_profile_id: Option<String>,
     requested_region: Option<String>,
     requested_provider: Option<String>,
@@ -1541,6 +1545,10 @@ async fn resolve_network_policy_for_task(
     let mut session_context = RunnerSessionContext {
         session_key: effective_session_key.clone(),
         site_key: task_site_key_from_payload(&payload_snapshot),
+        persona_id: payload_snapshot
+            .get("persona_id")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string()),
         fingerprint_profile_id: payload_snapshot
             .get("fingerprint_profile_id")
             .and_then(|value| value.as_str())
@@ -2058,16 +2066,17 @@ async fn upsert_proxy_session_binding(
     .then(|| now.clone());
     sqlx::query(
         r#"INSERT INTO proxy_session_bindings (
-               session_key, proxy_id, provider, region, fingerprint_profile_id, site_key,
+               session_key, proxy_id, provider, region, persona_id, fingerprint_profile_id, site_key,
                requested_region, requested_provider, cookies_json, cookie_updated_at,
                local_storage_json, session_storage_json, storage_updated_at,
                last_success_at, last_failure_at, last_used_at, expires_at, created_at, updated_at
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(session_key) DO UPDATE SET
              proxy_id = excluded.proxy_id,
              provider = excluded.provider,
              region = excluded.region,
+             persona_id = excluded.persona_id,
              fingerprint_profile_id = excluded.fingerprint_profile_id,
              site_key = excluded.site_key,
              requested_region = excluded.requested_region,
@@ -2087,6 +2096,7 @@ async fn upsert_proxy_session_binding(
     .bind(&proxy.id)
     .bind(session_context.requested_provider.as_ref().or(proxy.provider.as_ref()))
     .bind(session_context.requested_region.as_ref().or(proxy.region.as_ref()))
+    .bind(&session_context.persona_id)
     .bind(&session_context.fingerprint_profile_id)
     .bind(&session_context.site_key)
     .bind(&session_context.requested_region)
@@ -3507,29 +3517,50 @@ where
         fingerprint_profile_for_explain.as_ref(),
         proxy_for_health.as_ref(),
     );
-    let result_json = execution.result_json.map(|mut value: serde_json::Value| {
+    let mut result_json_value = execution.result_json;
+    if let Some(value) = result_json_value.as_mut() {
         if let serde_json::Value::Object(ref mut obj) = value {
             let mut summaries = execution
                 .summary_artifacts
                 .iter()
-                .map(|item| json!({
-                    "category": format!("{:?}", item.category).to_lowercase(),
-                    "key": item.key,
-                    "source": item.source,
-                    "severity": item.severity.as_str(),
-                    "title": item.title,
-                    "summary": item.summary,
-                    "run_id": run_id,
-                    "attempt": attempt,
-                    "timestamp": finished_at,
-                }))
+                .map(|item| {
+                    json!({
+                        "category": format!("{:?}", item.category).to_lowercase(),
+                        "key": item.key,
+                        "source": item.source,
+                        "severity": item.severity.as_str(),
+                        "title": item.title,
+                        "summary": item.summary,
+                        "run_id": run_id,
+                        "attempt": attempt,
+                        "timestamp": finished_at,
+                    })
+                })
                 .collect::<Vec<_>>();
             if let Some(proxy_growth_explain) = proxy_growth_explain.clone() {
-                let target_region = proxy_growth_explain.get("target_region").and_then(|v| v.as_str()).unwrap_or("none");
-                let selected_proxy_region = proxy_growth_explain.get("selected_proxy_region").and_then(|v| v.as_str()).unwrap_or("none");
-                let available_ratio_percent = proxy_growth_explain.get("health_assessment").and_then(|v| v.get("available_ratio_percent")).and_then(|v| v.as_i64()).unwrap_or(0);
-                let require_replenish = proxy_growth_explain.get("health_assessment").and_then(|v| v.get("require_replenish")).and_then(|v| v.as_bool()).unwrap_or(false);
-                let region_match_reason = proxy_growth_explain.get("region_match").and_then(|v| v.get("reason")).and_then(|v| v.as_str()).unwrap_or("none");
+                let target_region = proxy_growth_explain
+                    .get("target_region")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("none");
+                let selected_proxy_region = proxy_growth_explain
+                    .get("selected_proxy_region")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("none");
+                let available_ratio_percent = proxy_growth_explain
+                    .get("health_assessment")
+                    .and_then(|v| v.get("available_ratio_percent"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let require_replenish = proxy_growth_explain
+                    .get("health_assessment")
+                    .and_then(|v| v.get("require_replenish"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let region_match_reason = proxy_growth_explain
+                    .get("region_match")
+                    .and_then(|v| v.get("reason"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("none");
                 summaries.push(json!({
                     "category": "selection",
                     "key": format!("{}.proxy_growth", task_kind),
@@ -3559,9 +3590,20 @@ where
                 }));
                 obj.insert("proxy_growth_explain".to_string(), proxy_growth_explain);
             }
-            if fingerprint_runtime_explain.get("fingerprint_budget_tag").and_then(|v| v.as_str()).is_some() {
-                let budget = fingerprint_runtime_explain.get("fingerprint_budget_tag").and_then(|v| v.as_str()).unwrap_or("none");
-                let consistency = fingerprint_runtime_explain.get("fingerprint_consistency").and_then(|v| v.get("overall_status")).and_then(|v| v.as_str()).unwrap_or("none");
+            if fingerprint_runtime_explain
+                .get("fingerprint_budget_tag")
+                .and_then(|v| v.as_str())
+                .is_some()
+            {
+                let budget = fingerprint_runtime_explain
+                    .get("fingerprint_budget_tag")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("none");
+                let consistency = fingerprint_runtime_explain
+                    .get("fingerprint_consistency")
+                    .and_then(|v| v.get("overall_status"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("none");
                 summaries.push(json!({
                     "category": "summary",
                     "key": format!("{}.fingerprint_runtime", task_kind),
@@ -3578,18 +3620,33 @@ where
                     "timestamp": finished_at,
                 }));
             }
-            obj.insert("fingerprint_runtime_explain".to_string(), fingerprint_runtime_explain.clone());
+            obj.insert(
+                "fingerprint_runtime_explain".to_string(),
+                fingerprint_runtime_explain.clone(),
+            );
             obj.insert(
                 "behavior_profile_id".to_string(),
-                json!(behavior_profile.as_ref().map(|profile| profile.id.clone()).or(requested_behavior_profile_id.clone())),
+                json!(behavior_profile
+                    .as_ref()
+                    .map(|profile| profile.id.clone())
+                    .or(requested_behavior_profile_id.clone())),
             );
             obj.insert(
                 "behavior_profile_version".to_string(),
-                json!(behavior_profile.as_ref().map(|profile| profile.version).or(requested_behavior_profile_version)),
+                json!(behavior_profile
+                    .as_ref()
+                    .map(|profile| profile.version)
+                    .or(requested_behavior_profile_version)),
             );
             obj.insert(
                 "behavior_resolution_status".to_string(),
-                json!(if behavior_profile.is_some() { "resolved" } else if behavior_execution_mode.is_some() { "disabled" } else { "none" }),
+                json!(if behavior_profile.is_some() {
+                    "resolved"
+                } else if behavior_execution_mode.is_some() {
+                    "disabled"
+                } else {
+                    "none"
+                }),
             );
             obj.insert(
                 "behavior_execution_mode".to_string(),
@@ -3597,8 +3654,14 @@ where
             );
             obj.insert("page_archetype".to_string(), json!(page_archetype.clone()));
             obj.insert("behavior_seed".to_string(), json!(behavior_seed.clone()));
-            obj.insert("form_action_status".to_string(), json!(form_action_status.clone()));
-            obj.insert("form_action_mode".to_string(), json!(form_action_mode.clone()));
+            obj.insert(
+                "form_action_status".to_string(),
+                json!(form_action_status.clone()),
+            );
+            obj.insert(
+                "form_action_mode".to_string(),
+                json!(form_action_mode.clone()),
+            );
             obj.insert(
                 "form_action_retry_count".to_string(),
                 json!(form_action_retry_count),
@@ -3630,7 +3693,10 @@ where
                     "attempt": attempt,
                     "timestamp": finished_at,
                 }));
-                obj.insert("behavior_runtime_explain".to_string(), json!(runtime_explain));
+                obj.insert(
+                    "behavior_runtime_explain".to_string(),
+                    json!(runtime_explain),
+                );
             }
             obj.insert(
                 "identity_session_status".to_string(),
@@ -3640,7 +3706,10 @@ where
                 "cookie_restore_count".to_string(),
                 json!(session_context.cookie_restore_count),
             );
-            obj.insert("cookie_persist_count".to_string(), json!(cookie_persist_count));
+            obj.insert(
+                "cookie_persist_count".to_string(),
+                json!(cookie_persist_count),
+            );
             obj.insert(
                 "local_storage_restore_count".to_string(),
                 json!(session_context.local_storage_restore_count),
@@ -3715,8 +3784,20 @@ where
             }
             obj.insert("summary_artifacts".to_string(), json!(summaries));
         }
-        value.to_string()
-    });
+    }
+    if let Some(value) = result_json_value.as_mut() {
+        apply_task_continuity_after_execution(
+            state,
+            &task_id,
+            &run_id,
+            &task_kind,
+            task_status,
+            &payload_for_binding,
+            value,
+        )
+        .await?;
+    }
+    let result_json = result_json_value.as_ref().map(Value::to_string);
     let error_message = execution.error_message;
     let behavior_trace_lines = runner_behavior_trace_lines.unwrap_or_else(|| {
         build_behavior_trace_lines(

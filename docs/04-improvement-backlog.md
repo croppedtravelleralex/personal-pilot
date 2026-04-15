@@ -2,6 +2,24 @@
 
 ## P0
 
+### B-014 收口 continuity control-plane compile gap
+- 当前状态：
+  - 已完成本地主线收口
+  - `cargo check -q` 通过
+  - `cargo test --no-run -q --lib` 通过
+  - `cargo test --no-run -q` 通过
+  - `cargo build --release -q` 通过
+  - `cargo test --test integration_continuity_control_plane -- --nocapture` 通过（`8/8`）
+- 本轮完成：
+  - continuity schema / DTO / handlers / runner 最小兼容面已回到主线
+  - task terminal result 现在会稳定写入 `continuity_check_result`
+  - legacy slash-escaped JSON template fields 现在会兼容解析，不再把 `continuity_checks_json` 静默降成 `[]`
+- 结论：
+  - `B-014` 不再阻塞本地工程推进
+  - continuity 相关后续工作转入 `B-010` 兼容债和 `B-011/B-012` 平台扩展
+- 验收：
+  - 已完成
+
 ### B-001 远端验证 release/profile 脚本语法与行为
 - 范围：
   - `scripts/preflight_release_env.sh`
@@ -68,6 +86,15 @@
 - ?????
   - ??? task ?????????? session ??? task ???????? rollup/cache
   - dashboard ?? continuity overhead ??????
+
+## 2026-04-15 执行板补充
+
+- 下一阶段执行顺序固定为：
+  1. `B-003 stable_v1 30min x2 acceptance`
+  2. `B-001 gateway-upstream independent acceptance`
+  3. behavior active-path promotion
+  4. `B-012` 第二平台 continuity 模板
+- 本阶段不建议同时扩 UI 产品化、多平台大面积铺开、以及额外 explainability 重写。
 
 ## P1
 

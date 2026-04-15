@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use reqwest::Url;
 use serde_json::{json, Value};
 use sqlx::Row;
 use std::{
@@ -23,8 +24,8 @@ use crate::{
     domain::{
         run::{RUN_STATUS_CANCELLED, RUN_STATUS_RUNNING},
         task::{
-            TASK_STATUS_CANCELLED, TASK_STATUS_FAILED, TASK_STATUS_QUEUED, TASK_STATUS_RUNNING,
-            TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
+            TASK_STATUS_CANCELLED, TASK_STATUS_FAILED, TASK_STATUS_PENDING, TASK_STATUS_QUEUED,
+            TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
         },
     },
     network_identity::validator::validate_fingerprint_profile,
@@ -44,10 +45,11 @@ use super::{
     dto::{
         AuthMetricsResponse, BehaviorMetricsResponse, BrowserExtractTextRequest,
         BrowserGetFinalUrlRequest, BrowserGetHtmlRequest, BrowserGetTitleRequest,
-        BrowserOpenRequest, CancelTaskResponse, CreateFingerprintProfileRequest,
-        CreateProxyRequest, CreateTaskRequest, FingerprintMetricsResponse,
-        FingerprintProfileResponse, FormInputRequest, HealthResponse, LogResponse, PaginationQuery,
-        ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse,
+        BrowserOpenRequest, CancelTaskResponse, ContinuityHeartbeatTickItemResponse,
+        ContinuityHeartbeatTickResponse, CreateFingerprintProfileRequest, CreateProxyRequest,
+        CreateTaskRequest, FingerprintMetricsResponse, FingerprintProfileResponse,
+        FormInputRequest, HealthResponse, LogResponse, PaginationQuery, ProxyMetricsResponse,
+        ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse,
         ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse,
         ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem,
         ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary,
@@ -103,6 +105,1542 @@ fn sanitize_offset(offset: Option<i64>) -> i64 {
         Some(value) if value > 0 => value,
         _ => 0,
     }
+}
+
+const HEARTBEAT_METRICS_WINDOW_SECONDS: i64 = 86_400;
+
+#[derive(Debug, Clone)]
+struct ResolvedNetworkPolicyModel {
+    id: String,
+    region_anchor: Option<String>,
+    allow_same_country_fallback: bool,
+    allow_same_region_fallback: bool,
+    provider_preference: Option<String>,
+    network_policy_json: Value,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedContinuityPolicyModel {
+    id: String,
+    session_ttl_seconds: i64,
+    heartbeat_interval_seconds: i64,
+    site_group_mode: String,
+    recovery_enabled: bool,
+    protect_on_login_loss: bool,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedPlatformTemplateModel {
+    id: String,
+    platform_id: String,
+    readiness_level: String,
+    warm_paths_json: Value,
+    revisit_paths_json: Value,
+    stateful_paths_json: Value,
+    write_operation_paths_json: Value,
+    high_risk_paths_json: Value,
+    continuity_checks_json: Value,
+    identity_markers_json: Value,
+    identity_markers_source: Option<String>,
+    login_loss_signals_json: Value,
+    recovery_steps_json: Value,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct StorePlatformOverrideLookupRow {
+    admin_origin: Option<String>,
+    entry_origin: Option<String>,
+    entry_paths_json: Option<String>,
+    warm_paths_json: Option<String>,
+    revisit_paths_json: Option<String>,
+    stateful_paths_json: Option<String>,
+    high_risk_paths_json: Option<String>,
+    recovery_steps_json: Option<String>,
+    login_loss_signals_json: Option<String>,
+    identity_markers_json: Option<String>,
+    status: String,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedPersonaBundle {
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    country_anchor: String,
+    region_anchor: Option<String>,
+    locale: String,
+    timezone: String,
+    fingerprint_profile_id: String,
+    behavior_profile_id: Option<String>,
+    network_policy: ResolvedNetworkPolicyModel,
+    continuity_policy: ResolvedContinuityPolicyModel,
+    platform_template: Option<ResolvedPlatformTemplateModel>,
+    resolved_admin_origin: Option<String>,
+    resolved_entry_origin: Option<String>,
+    resolved_entry_paths: Vec<String>,
+    default_platform_origin: Option<String>,
+    origin_source: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ResolvedPersonaLookupRow {
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    country_anchor: String,
+    region_anchor: Option<String>,
+    locale: String,
+    timezone: String,
+    fingerprint_profile_id: String,
+    behavior_profile_id: Option<String>,
+    network_policy_id: String,
+    continuity_policy_id: String,
+    persona_status: String,
+    network_policy_region_anchor: Option<String>,
+    allow_same_country_fallback: i64,
+    allow_same_region_fallback: i64,
+    provider_preference: Option<String>,
+    network_policy_json: String,
+    network_status: String,
+    continuity_policy_lookup_id: String,
+    session_ttl_seconds: i64,
+    heartbeat_interval_seconds: i64,
+    site_group_mode: String,
+    recovery_enabled: i64,
+    protect_on_login_loss: i64,
+    continuity_status: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct HeartbeatPersonaCandidateRow {
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    heartbeat_interval_seconds: i64,
+}
+
+fn normalize_origin_value(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let parsed = Url::parse(trimmed).ok()?;
+    let scheme = parsed.scheme();
+    if !matches!(scheme, "http" | "https") {
+        return None;
+    }
+    if parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path() != "/"
+    {
+        return None;
+    }
+
+    Some(parsed.origin().ascii_serialization())
+}
+
+fn parse_json_text_compat(raw: &str) -> Option<Value> {
+    if let Ok(value) = serde_json::from_str::<Value>(raw) {
+        return Some(value);
+    }
+    if raw.contains("\\\"") {
+        let normalized = raw.replace("\\\"", "\"");
+        if let Ok(value) = serde_json::from_str::<Value>(&normalized) {
+            return Some(value);
+        }
+    }
+    serde_json::from_str::<String>(raw)
+        .ok()
+        .and_then(|value| serde_json::from_str::<Value>(&value).ok())
+}
+
+fn parse_json_text(raw: Option<String>, fallback: Value) -> Value {
+    raw.as_deref()
+        .and_then(parse_json_text_compat)
+        .unwrap_or(fallback)
+}
+
+fn parse_optional_json_text(raw: Option<String>) -> Option<Value> {
+    raw.as_deref().and_then(parse_json_text_compat)
+}
+
+fn merge_json_objects(base: Value, overlay: Value) -> Value {
+    let mut base_obj = match base {
+        Value::Object(obj) => obj,
+        _ => serde_json::Map::new(),
+    };
+    if let Value::Object(overlay_obj) = overlay {
+        for (key, value) in overlay_obj {
+            base_obj.insert(key, value);
+        }
+    }
+    Value::Object(base_obj)
+}
+
+fn path_patterns_from_value(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.as_str().map(str::trim))
+        .filter(|item| !item.is_empty())
+        .map(|item| item.to_string())
+        .collect()
+}
+
+fn url_matches_any_path(url: &str, patterns: &[String]) -> bool {
+    let parsed = Url::parse(url).ok();
+    let path = parsed
+        .as_ref()
+        .map(|value| value.path().to_string())
+        .unwrap_or_else(|| url.to_string());
+    patterns
+        .iter()
+        .any(|pattern| url.contains(pattern) || path.starts_with(pattern))
+}
+
+fn default_platform_origin(platform_id: &str) -> Option<&'static str> {
+    match platform_id.trim().to_ascii_lowercase().as_str() {
+        "amazon" | "amazon_seller_central" | "amazon-seller-central" => {
+            Some("https://sellercentral.amazon.com")
+        }
+        "ebay" | "ebay_seller_hub" | "ebay-seller-hub" => Some("https://www.ebay.com"),
+        "shopify" | "shopify_admin" | "shopify-admin" => Some("https://admin.shopify.com"),
+        "walmart" | "walmart_seller_center" | "walmart-seller-center" => {
+            Some("https://seller.walmart.com")
+        }
+        "tiktok_shop" | "tiktok-shop" | "tiktokshop" => Some("https://seller-us.tiktok.com"),
+        "xiaohongshu" | "xhs" => Some("https://seller.xiaohongshu.com"),
+        "independent_site" | "independent-site" | "independent" => Some("https://example.com"),
+        _ => None,
+    }
+}
+
+fn is_xiaohongshu_platform(platform_id: &str) -> bool {
+    matches!(
+        platform_id.trim().to_ascii_lowercase().as_str(),
+        "xiaohongshu" | "xhs"
+    )
+}
+
+fn is_sample_ready_template(template: &ResolvedPlatformTemplateModel) -> bool {
+    template
+        .readiness_level
+        .trim()
+        .eq_ignore_ascii_case("sample_ready")
+}
+
+fn heartbeat_task_kind_for_template(template: &ResolvedPlatformTemplateModel) -> &'static str {
+    if is_sample_ready_template(template) && is_xiaohongshu_platform(&template.platform_id) {
+        "extract_text"
+    } else {
+        "open_page"
+    }
+}
+
+fn resolve_heartbeat_target_candidates(
+    bundle: &ResolvedPersonaBundle,
+    template: &ResolvedPlatformTemplateModel,
+) -> Vec<String> {
+    if !bundle.resolved_entry_paths.is_empty() {
+        return bundle.resolved_entry_paths.clone();
+    }
+    [
+        &template.revisit_paths_json,
+        &template.warm_paths_json,
+        &template.stateful_paths_json,
+    ]
+    .into_iter()
+    .find_map(|value| {
+        let paths = path_patterns_from_value(value);
+        (!paths.is_empty()).then_some(paths)
+    })
+    .unwrap_or_default()
+}
+
+async fn heartbeat_target_index_for_persona(
+    state: &AppState,
+    persona_id: &str,
+    candidate_count: usize,
+) -> Result<usize, (StatusCode, String)> {
+    if candidate_count <= 1 {
+        return Ok(0);
+    }
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('heartbeat_scheduled', 'heartbeat_skipped', 'heartbeat_failed')"#,
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load heartbeat event count for persona {persona_id}: {err}"),
+        )
+    })?;
+    Ok((total.rem_euclid(candidate_count as i64)) as usize)
+}
+
+async fn resolve_heartbeat_target_path(
+    state: &AppState,
+    bundle: &ResolvedPersonaBundle,
+    template: &ResolvedPlatformTemplateModel,
+) -> Result<Option<String>, (StatusCode, String)> {
+    let candidates = resolve_heartbeat_target_candidates(bundle, template);
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    if is_sample_ready_template(template) && candidates.len() > 1 {
+        let index =
+            heartbeat_target_index_for_persona(state, &bundle.persona_id, candidates.len()).await?;
+        return Ok(candidates.get(index).cloned());
+    }
+    Ok(candidates.first().cloned())
+}
+
+fn join_origin_with_target(origin: &str, target_path: &str) -> Option<String> {
+    let trimmed = target_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Some(trimmed.to_string());
+    }
+    let normalized_path = if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    };
+    Url::parse(origin)
+        .ok()
+        .and_then(|value| value.join(&normalized_path).ok())
+        .map(|value| value.to_string())
+}
+
+fn resolve_heartbeat_target_url(
+    bundle: &ResolvedPersonaBundle,
+    target_path: &str,
+) -> Option<(String, String)> {
+    let trimmed = target_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Some((
+            trimmed.to_string(),
+            bundle
+                .origin_source
+                .clone()
+                .or_else(|| {
+                    bundle
+                        .default_platform_origin
+                        .as_ref()
+                        .map(|_| "platform_default".to_string())
+                })
+                .unwrap_or_else(|| "platform_default".to_string()),
+        ));
+    }
+
+    let candidates = [
+        (
+            bundle.resolved_entry_origin.as_deref(),
+            bundle.origin_source.as_deref(),
+        ),
+        (
+            bundle.resolved_admin_origin.as_deref(),
+            Some("store_override_admin"),
+        ),
+        (
+            bundle.default_platform_origin.as_deref(),
+            Some("platform_default"),
+        ),
+    ];
+    for (origin, source) in candidates {
+        let Some(origin) = origin else {
+            continue;
+        };
+        if let Some(target_url) = join_origin_with_target(origin, trimmed) {
+            return Some((target_url, source.unwrap_or("platform_default").to_string()));
+        }
+    }
+    None
+}
+
+async fn persona_has_inflight_task(
+    state: &AppState,
+    persona_id: &str,
+) -> Result<bool, (StatusCode, String)> {
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM tasks WHERE persona_id = ? AND status IN ('pending', 'queued', 'running')"#,
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to inspect in-flight task state for persona {persona_id}: {err}"),
+        )
+    })?;
+    Ok(count > 0)
+}
+
+async fn latest_persona_task_activity_ts(
+    state: &AppState,
+    persona_id: &str,
+) -> Result<Option<i64>, (StatusCode, String)> {
+    sqlx::query_scalar(
+        r#"SELECT MAX(CAST(COALESCE(finished_at, started_at, queued_at, created_at) AS INTEGER)) FROM tasks WHERE persona_id = ?"#,
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to inspect latest task activity for persona {persona_id}: {err}"),
+        )
+    })
+}
+
+fn merged_template_value(base: &Value, override_value: Option<&Value>) -> Value {
+    override_value.cloned().unwrap_or_else(|| base.clone())
+}
+
+async fn resolve_persona_bundle(
+    state: &AppState,
+    persona_id: &str,
+) -> Result<ResolvedPersonaBundle, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, ResolvedPersonaLookupRow>(
+        r#"
+        SELECT
+            p.id AS persona_id,
+            p.store_id,
+            p.platform_id,
+            p.country_anchor,
+            p.region_anchor,
+            p.locale,
+            p.timezone,
+            p.fingerprint_profile_id,
+            p.behavior_profile_id,
+            p.network_policy_id,
+            p.continuity_policy_id,
+            p.status AS persona_status,
+            np.region_anchor AS network_policy_region_anchor,
+            np.allow_same_country_fallback,
+            np.allow_same_region_fallback,
+            np.provider_preference,
+            np.network_policy_json,
+            np.status AS network_status,
+            cp.id AS continuity_policy_lookup_id,
+            cp.session_ttl_seconds,
+            cp.heartbeat_interval_seconds,
+            cp.site_group_mode,
+            cp.recovery_enabled,
+            cp.protect_on_login_loss,
+            cp.status AS continuity_status
+        FROM persona_profiles p
+        JOIN network_policies np ON np.id = p.network_policy_id
+        JOIN continuity_policies cp ON cp.id = p.continuity_policy_id
+        WHERE p.id = ?
+        "#,
+    )
+    .bind(persona_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to resolve persona profile: {err}"),
+        )
+    })?;
+
+    let Some(row) = row else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("persona profile not found: {persona_id}"),
+        ));
+    };
+
+    if !matches!(row.persona_status.as_str(), "active" | "degraded") {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("persona profile is not runnable: {}", row.persona_id),
+        ));
+    }
+    if row.network_status != "active" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("network policy is not active: {}", row.network_policy_id),
+        ));
+    }
+    if row.continuity_status != "active" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "continuity policy is not active: {}",
+                row.continuity_policy_id
+            ),
+        ));
+    }
+
+    let template_row = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            String,
+            String,
+        ),
+    >(
+        r#"
+        SELECT
+            id,
+            platform_id,
+            warm_paths_json,
+            revisit_paths_json,
+            stateful_paths_json,
+            write_operation_paths_json,
+            high_risk_paths_json,
+            continuity_checks_json,
+            identity_markers_json,
+            login_loss_signals_json,
+            recovery_steps_json,
+            readiness_level,
+            status
+        FROM platform_templates
+        WHERE platform_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&row.platform_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load platform template: {err}"),
+        )
+    })?;
+
+    let override_row = sqlx::query_as::<_, StorePlatformOverrideLookupRow>(
+        r#"
+        SELECT
+            admin_origin,
+            entry_origin,
+            entry_paths_json,
+            warm_paths_json,
+            revisit_paths_json,
+            stateful_paths_json,
+            high_risk_paths_json,
+            recovery_steps_json,
+            login_loss_signals_json,
+            identity_markers_json,
+            status
+        FROM store_platform_overrides
+        WHERE store_id = ? AND platform_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&row.store_id)
+    .bind(&row.platform_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load store platform override: {err}"),
+        )
+    })?;
+
+    let override_active = override_row
+        .as_ref()
+        .map(|row| row.status.as_str() == "active")
+        .unwrap_or(false);
+    let override_admin_origin = override_active
+        .then(|| {
+            override_row
+                .as_ref()
+                .and_then(|row| row.admin_origin.as_deref().and_then(normalize_origin_value))
+        })
+        .flatten();
+    let override_entry_origin = override_active
+        .then(|| {
+            override_row
+                .as_ref()
+                .and_then(|row| row.entry_origin.as_deref().and_then(normalize_origin_value))
+        })
+        .flatten();
+    let override_entry_paths = override_active
+        .then(|| {
+            override_row
+                .as_ref()
+                .and_then(|row| parse_optional_json_text(row.entry_paths_json.clone()))
+        })
+        .flatten()
+        .map(|value| path_patterns_from_value(&value))
+        .unwrap_or_default();
+    let default_origin = default_platform_origin(&row.platform_id).map(str::to_string);
+    let resolved_admin_origin = override_admin_origin
+        .clone()
+        .or_else(|| default_origin.clone());
+    let resolved_entry_origin = override_entry_origin
+        .clone()
+        .or_else(|| resolved_admin_origin.clone());
+    let origin_source = if override_entry_origin.is_some() {
+        Some("store_override_entry".to_string())
+    } else if override_admin_origin.is_some() {
+        Some("store_override_admin".to_string())
+    } else if default_origin.is_some() {
+        Some("platform_default".to_string())
+    } else {
+        None
+    };
+
+    let platform_template = template_row.and_then(
+        |(
+            template_id,
+            template_platform_id,
+            warm_paths_json,
+            revisit_paths_json,
+            stateful_paths_json,
+            write_operation_paths_json,
+            high_risk_paths_json,
+            continuity_checks_json,
+            identity_markers_json,
+            login_loss_signals_json,
+            recovery_steps_json,
+            readiness_level,
+            template_status,
+        )| {
+            if template_status != "active" {
+                return None;
+            }
+
+            let override_warm = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.warm_paths_json.clone()))
+                })
+                .flatten();
+            let override_revisit = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.revisit_paths_json.clone()))
+                })
+                .flatten();
+            let override_stateful = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.stateful_paths_json.clone()))
+                })
+                .flatten();
+            let override_high_risk = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.high_risk_paths_json.clone()))
+                })
+                .flatten();
+            let override_recovery = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.recovery_steps_json.clone()))
+                })
+                .flatten();
+            let override_login_signals = override_active
+                .then(|| {
+                    override_row.as_ref().and_then(|row| {
+                        parse_optional_json_text(row.login_loss_signals_json.clone())
+                    })
+                })
+                .flatten();
+            let override_identity_markers = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.identity_markers_json.clone()))
+                })
+                .flatten();
+            let base_identity_markers = parse_json_text(identity_markers_json.clone(), json!([]));
+            let resolved_identity_markers =
+                merged_template_value(&base_identity_markers, override_identity_markers.as_ref());
+            let base_identity_markers_present = base_identity_markers
+                .as_array()
+                .map(|items| !items.is_empty())
+                .unwrap_or(false);
+            let override_identity_markers_present = override_identity_markers
+                .as_ref()
+                .and_then(Value::as_array)
+                .map(|items| !items.is_empty())
+                .unwrap_or(false);
+
+            Some(ResolvedPlatformTemplateModel {
+                id: template_id,
+                platform_id: template_platform_id,
+                readiness_level,
+                warm_paths_json: merged_template_value(
+                    &parse_json_text(Some(warm_paths_json), json!([])),
+                    override_warm.as_ref(),
+                ),
+                revisit_paths_json: merged_template_value(
+                    &parse_json_text(Some(revisit_paths_json), json!([])),
+                    override_revisit.as_ref(),
+                ),
+                stateful_paths_json: merged_template_value(
+                    &parse_json_text(Some(stateful_paths_json), json!([])),
+                    override_stateful.as_ref(),
+                ),
+                write_operation_paths_json: parse_json_text(
+                    Some(write_operation_paths_json),
+                    json!([]),
+                ),
+                high_risk_paths_json: merged_template_value(
+                    &parse_json_text(Some(high_risk_paths_json), json!([])),
+                    override_high_risk.as_ref(),
+                ),
+                continuity_checks_json: parse_json_text(continuity_checks_json, json!([])),
+                identity_markers_json: resolved_identity_markers,
+                identity_markers_source: if override_identity_markers_present {
+                    Some("store_override".to_string())
+                } else if base_identity_markers_present {
+                    Some("platform_template".to_string())
+                } else {
+                    None
+                },
+                login_loss_signals_json: merged_template_value(
+                    &parse_json_text(login_loss_signals_json, json!([])),
+                    override_login_signals.as_ref(),
+                ),
+                recovery_steps_json: merged_template_value(
+                    &parse_json_text(recovery_steps_json, json!([])),
+                    override_recovery.as_ref(),
+                ),
+            })
+        },
+    );
+
+    Ok(ResolvedPersonaBundle {
+        persona_id: row.persona_id,
+        store_id: row.store_id,
+        platform_id: row.platform_id,
+        country_anchor: row.country_anchor,
+        region_anchor: row.region_anchor,
+        locale: row.locale,
+        timezone: row.timezone,
+        fingerprint_profile_id: row.fingerprint_profile_id,
+        behavior_profile_id: row.behavior_profile_id,
+        network_policy: ResolvedNetworkPolicyModel {
+            id: row.network_policy_id,
+            region_anchor: row.network_policy_region_anchor,
+            allow_same_country_fallback: row.allow_same_country_fallback != 0,
+            allow_same_region_fallback: row.allow_same_region_fallback != 0,
+            provider_preference: row.provider_preference,
+            network_policy_json: parse_json_text(Some(row.network_policy_json), json!({})),
+        },
+        continuity_policy: ResolvedContinuityPolicyModel {
+            id: row.continuity_policy_lookup_id,
+            session_ttl_seconds: row.session_ttl_seconds,
+            heartbeat_interval_seconds: row.heartbeat_interval_seconds,
+            site_group_mode: row.site_group_mode,
+            recovery_enabled: row.recovery_enabled != 0,
+            protect_on_login_loss: row.protect_on_login_loss != 0,
+        },
+        platform_template,
+        resolved_admin_origin,
+        resolved_entry_origin,
+        resolved_entry_paths: override_entry_paths,
+        default_platform_origin: default_origin,
+        origin_source,
+    })
+}
+
+fn manual_gate_category_from_inputs(
+    platform_id: Option<&str>,
+    task_kind: &str,
+    requested_operation_kind: Option<&str>,
+    requested_url: Option<&str>,
+) -> String {
+    let normalized_operation = requested_operation_kind
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty());
+    let normalized_url = requested_url
+        .and_then(|value| Url::parse(value).ok())
+        .map(|url| url.path().to_ascii_lowercase())
+        .unwrap_or_default();
+    let normalized_platform = platform_id
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    let normalized_task_kind = task_kind.trim().to_ascii_lowercase();
+
+    normalized_operation
+        .as_deref()
+        .and_then(|value| match value {
+            "content_publish" => Some("content_publish"),
+            "listing_publish" => Some("listing_publish"),
+            "price_inventory_change" => Some("price_inventory_change"),
+            "finance_payout" => Some("finance_payout"),
+            "security_account" => Some("security_account"),
+            "permissions_team" => Some("permissions_team"),
+            _ => None,
+        })
+        .or_else(|| {
+            let path = normalized_url.as_str();
+            if path.contains("/finance")
+                || path.contains("/payout")
+                || path.contains("/withdraw")
+                || path.contains("/settlement")
+                || path.contains("/billing")
+            {
+                Some("finance_payout")
+            } else if path.contains("/permissions")
+                || path.contains("/team")
+                || path.contains("/staff")
+                || path.contains("/users")
+                || path.contains("/roles")
+            {
+                Some("permissions_team")
+            } else if path.contains("/security")
+                || path.contains("/account")
+                || path.contains("/recovery")
+                || path.contains("/2fa")
+            {
+                Some("security_account")
+            } else if path.contains("/price")
+                || path.contains("/inventory")
+                || path.contains("/stock")
+                || path.contains("/sku")
+            {
+                Some("price_inventory_change")
+            } else if path.contains("/publish")
+                || path.contains("/notes")
+                || path.contains("/content")
+                || (normalized_platform == "xiaohongshu" && path.contains("/note"))
+            {
+                Some("content_publish")
+            } else if path.contains("/listing")
+                || path.contains("/product")
+                || path.contains("/products")
+                || path.contains("/item")
+                || normalized_task_kind.contains("listing")
+            {
+                Some("listing_publish")
+            } else {
+                None
+            }
+        })
+        .unwrap_or("security_account")
+        .to_string()
+}
+
+fn heartbeat_reason_bucket(reason: &str) -> &'static str {
+    match reason {
+        "persona_has_active_task" => "active_task",
+        "recent_persona_activity" | "heartbeat_not_due" => "recent_activity",
+        "platform_template_missing" => "template_missing",
+        "heartbeat_target_missing" => "no_target",
+        "heartbeat_target_is_high_risk" => "high_risk_target",
+        "heartbeat_target_origin_unresolved" => "origin_unresolved",
+        "heartbeat_due" => "scheduled_due",
+        _ => "other",
+    }
+}
+
+fn heartbeat_platform_cap_from_env() -> usize {
+    std::env::var("PERSONA_PILOT_HEARTBEAT_PLATFORM_CAP")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(3)
+}
+
+fn heartbeat_item(
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    status: &str,
+    reason: &str,
+    task_id: Option<String>,
+    target_url: Option<String>,
+    heartbeat_interval_seconds: i64,
+) -> ContinuityHeartbeatTickItemResponse {
+    ContinuityHeartbeatTickItemResponse {
+        persona_id,
+        store_id,
+        platform_id,
+        status: status.to_string(),
+        reason: reason.to_string(),
+        task_id,
+        target_url,
+        heartbeat_interval_seconds,
+    }
+}
+
+async fn append_heartbeat_event(
+    state: &AppState,
+    persona_id: &str,
+    store_id: &str,
+    platform_id: &str,
+    task_id: Option<&str>,
+    event_type: &str,
+    severity: &str,
+    reason: &str,
+    heartbeat_interval_seconds: i64,
+    target_path: Option<&str>,
+    target_url: Option<&str>,
+    origin_source: Option<&str>,
+    probe_action: Option<&str>,
+) -> Result<(), (StatusCode, String)> {
+    append_continuity_event(
+        state,
+        Some(persona_id),
+        Some(store_id),
+        Some(platform_id),
+        task_id,
+        None,
+        event_type,
+        severity,
+        Some(&json!({
+            "reason": reason,
+            "reason_bucket": heartbeat_reason_bucket(reason),
+            "heartbeat_interval_seconds": heartbeat_interval_seconds,
+            "target_path": target_path,
+            "target_url": target_url,
+            "origin_source": origin_source,
+            "probe_action": probe_action,
+            "task_id": task_id,
+        })),
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to record {event_type} event: {err}"),
+        )
+    })
+}
+
+async fn recent_heartbeat_failure_streak_24h(
+    state: &AppState,
+    persona_id: &str,
+) -> anyhow::Result<i64> {
+    let rows = sqlx::query_as::<_, (String,)>(
+        r#"SELECT event_type
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('heartbeat_scheduled', 'heartbeat_failed', 'heartbeat_skipped')
+             AND CAST(created_at AS INTEGER) >= CAST(strftime('%s','now') AS INTEGER) - ?
+           ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC"#,
+    )
+    .bind(persona_id)
+    .bind(HEARTBEAT_METRICS_WINDOW_SECONDS)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut streak = 0_i64;
+    for (event_type,) in rows {
+        match event_type.as_str() {
+            "heartbeat_failed" => streak += 1,
+            "heartbeat_skipped" => {}
+            "heartbeat_scheduled" => break,
+            _ => break,
+        }
+        if streak >= 3 {
+            return Ok(streak);
+        }
+    }
+
+    Ok(streak)
+}
+
+pub async fn append_continuity_event(
+    state: &AppState,
+    persona_id: Option<&str>,
+    store_id: Option<&str>,
+    platform_id: Option<&str>,
+    task_id: Option<&str>,
+    run_id: Option<&str>,
+    event_type: &str,
+    severity: &str,
+    event_json: Option<&Value>,
+) -> anyhow::Result<()> {
+    let event_id = format!("evt-{}", Uuid::new_v4());
+    let created_at = now_ts_string();
+    sqlx::query(
+        r#"INSERT INTO continuity_events (
+               id, persona_id, store_id, platform_id, task_id, run_id,
+               event_type, severity, event_json, created_at
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&event_id)
+    .bind(persona_id)
+    .bind(store_id)
+    .bind(platform_id)
+    .bind(task_id)
+    .bind(run_id)
+    .bind(event_type)
+    .bind(severity)
+    .bind(event_json.map(Value::to_string))
+    .bind(&created_at)
+    .execute(&state.db)
+    .await?;
+
+    if let (Some(persona_id), Some(store_id), Some(platform_id)) =
+        (persona_id, store_id, platform_id)
+    {
+        record_persona_health_snapshot(
+            state,
+            persona_id,
+            store_id,
+            platform_id,
+            event_type,
+            task_id,
+            event_json,
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn record_persona_health_snapshot(
+    state: &AppState,
+    persona_id: &str,
+    store_id: &str,
+    platform_id: &str,
+    event_type: &str,
+    task_id: Option<&str>,
+    event_json: Option<&Value>,
+) -> anyhow::Result<()> {
+    let active_session_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM proxy_session_bindings WHERE persona_id = ?")
+            .bind(persona_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(0);
+
+    let login_risk_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM continuity_events WHERE persona_id = ? AND event_type IN ('login_risk_detected', 'continuity_broken')",
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    let continuity_score = (active_session_count as f64 * 10.0) - (login_risk_count as f64 * 5.0);
+    let current_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM persona_profiles WHERE id = ?")
+            .bind(persona_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+    let pending_manual_gate_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM manual_gate_requests WHERE persona_id = ? AND status = 'pending'",
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+    let heartbeat_failure_streak = recent_heartbeat_failure_streak_24h(state, persona_id)
+        .await
+        .unwrap_or(0);
+    let last_task_at = latest_persona_task_activity_ts(state, persona_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|value| value.to_string());
+    let heartbeat_rows = sqlx::query_as::<_, (String, Option<String>, String)>(
+        r#"SELECT event_type, event_json, created_at
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('heartbeat_scheduled', 'heartbeat_skipped', 'heartbeat_failed')
+             AND CAST(created_at AS INTEGER) >= CAST(strftime('%s','now') AS INTEGER) - ?
+           ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC"#,
+    )
+    .bind(persona_id)
+    .bind(HEARTBEAT_METRICS_WINDOW_SECONDS)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    let mut heartbeat_scheduled_count = 0_i64;
+    let mut heartbeat_skipped_count = 0_i64;
+    let mut heartbeat_failed_count = 0_i64;
+    let mut heartbeat_skip_breakdown = serde_json::Map::new();
+    for (row_event_type, row_event_json, _) in &heartbeat_rows {
+        let parsed_json = row_event_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+        match row_event_type.as_str() {
+            "heartbeat_scheduled" => heartbeat_scheduled_count += 1,
+            "heartbeat_skipped" => {
+                heartbeat_skipped_count += 1;
+                if let Some(bucket) = parsed_json
+                    .as_ref()
+                    .and_then(|value| value.get("reason_bucket"))
+                    .and_then(|value| value.as_str())
+                {
+                    let current = heartbeat_skip_breakdown
+                        .get(bucket)
+                        .and_then(|value| value.as_i64())
+                        .unwrap_or(0);
+                    heartbeat_skip_breakdown.insert(bucket.to_string(), json!(current + 1));
+                }
+            }
+            "heartbeat_failed" => heartbeat_failed_count += 1,
+            _ => {}
+        }
+    }
+    let heartbeat_total =
+        heartbeat_scheduled_count + heartbeat_skipped_count + heartbeat_failed_count;
+    let heartbeat_success_ratio = if heartbeat_total > 0 {
+        heartbeat_scheduled_count as f64 / heartbeat_total as f64
+    } else {
+        0.0
+    };
+    let latest_heartbeat_json = heartbeat_rows
+        .first()
+        .and_then(|(_, event_json, _)| event_json.as_deref())
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+    let continuity_probe_rows = sqlx::query_as::<_, (String, Option<String>, String)>(
+        r#"SELECT event_type, event_json, created_at
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('browser_action_succeeded', 'browser_action_failed', 'heartbeat_failed', 'login_risk_detected', 'region_drift')
+             AND CAST(created_at AS INTEGER) >= CAST(strftime('%s','now') AS INTEGER) - ?
+           ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC"#,
+    )
+    .bind(persona_id)
+    .bind(HEARTBEAT_METRICS_WINDOW_SECONDS)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    let mut continuity_check_total = 0_i64;
+    let mut continuity_check_failed_count = 0_i64;
+    let mut continuity_check_skipped_count = 0_i64;
+    let mut last_probe_action = Value::Null;
+    let mut last_probe_path = Value::Null;
+    let mut last_continuity_check_results = Value::Null;
+    for (row_event_type, row_event_json, _) in &continuity_probe_rows {
+        let Some(parsed_json) = row_event_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        else {
+            continue;
+        };
+        if parsed_json
+            .get("probe_action")
+            .and_then(|value| value.as_str())
+            .is_none()
+        {
+            continue;
+        }
+        continuity_check_total += 1;
+        let failed_checks = parsed_json
+            .get("failed_checks")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let skipped_checks = parsed_json
+            .get("skipped_checks")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let matched_identity_marker = parsed_json
+            .get("matched_identity_marker")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let configured_identity_markers = parsed_json
+            .get("configured_identity_markers")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+        let identity_markers_source = parsed_json
+            .get("identity_markers_source")
+            .cloned()
+            .unwrap_or(Value::Null);
+        continuity_check_skipped_count += skipped_checks.len() as i64;
+        let has_failures =
+            !failed_checks.is_empty() || matches!(row_event_type.as_str(), "browser_action_failed");
+        if has_failures {
+            continuity_check_failed_count += 1;
+        }
+        if last_probe_action.is_null() {
+            last_probe_action = parsed_json
+                .get("probe_action")
+                .cloned()
+                .unwrap_or(Value::Null);
+            last_probe_path = parsed_json
+                .get("probe_path")
+                .cloned()
+                .unwrap_or(Value::Null);
+            last_continuity_check_results = json!({
+                "passed_checks": parsed_json.get("passed_checks").cloned().unwrap_or_else(|| json!([])),
+                "failed_checks": failed_checks,
+                "skipped_checks": skipped_checks,
+                "matched_identity_marker": matched_identity_marker.clone(),
+                "configured_identity_markers": configured_identity_markers.clone(),
+                "identity_markers_source": identity_markers_source.clone(),
+                "evidence_summary": parsed_json.get("evidence_summary").cloned().unwrap_or(Value::Null),
+            });
+        } else if !matched_identity_marker.is_null() {
+            if let Some(last_results) = last_continuity_check_results.as_object_mut() {
+                let current_marker_is_missing = last_results
+                    .get("matched_identity_marker")
+                    .map(Value::is_null)
+                    .unwrap_or(true);
+                if current_marker_is_missing {
+                    last_results.insert(
+                        "matched_identity_marker".to_string(),
+                        matched_identity_marker,
+                    );
+                    last_results.insert(
+                        "configured_identity_markers".to_string(),
+                        configured_identity_markers,
+                    );
+                    last_results.insert(
+                        "identity_markers_source".to_string(),
+                        identity_markers_source,
+                    );
+                }
+            }
+        }
+    }
+    let continuity_check_success_ratio = if continuity_check_total > 0 {
+        (continuity_check_total - continuity_check_failed_count) as f64
+            / continuity_check_total as f64
+    } else {
+        0.0
+    };
+    let snapshot_json = json!({
+        "heartbeat_window_24h": heartbeat_total,
+        "heartbeat_success_ratio_24h": heartbeat_success_ratio,
+        "heartbeat_failed_count_24h": heartbeat_failed_count,
+        "heartbeat_skip_breakdown_24h": heartbeat_skip_breakdown,
+        "last_heartbeat_reason": latest_heartbeat_json.as_ref().and_then(|value| value.get("reason")).cloned().unwrap_or(Value::Null),
+        "last_heartbeat_target_url": latest_heartbeat_json.as_ref().and_then(|value| value.get("target_url")).cloned().unwrap_or(Value::Null),
+        "last_origin_source": latest_heartbeat_json.as_ref().and_then(|value| value.get("origin_source")).cloned().unwrap_or(Value::Null),
+        "current_event_type": event_type,
+        "current_event_context": event_json.cloned().unwrap_or(Value::Null),
+        "last_task_id": task_id,
+        "heartbeat_failed_streak_24h": heartbeat_failure_streak,
+        "manual_gate_pending": pending_manual_gate_count > 0,
+        "last_continuity_check_results": last_continuity_check_results,
+        "continuity_check_success_ratio_24h": continuity_check_success_ratio,
+        "continuity_check_failed_count_24h": continuity_check_failed_count,
+        "continuity_check_skipped_count_24h": continuity_check_skipped_count,
+        "last_probe_action": last_probe_action,
+        "last_probe_path": last_probe_path,
+    });
+
+    let direct_frozen = matches!(
+        event_type,
+        "login_risk_detected" | "continuity_broken" | "region_drift" | "restore_failed_after_retry"
+    );
+    let status = if matches!(current_status.as_deref(), Some("frozen")) || direct_frozen {
+        "frozen"
+    } else if heartbeat_failure_streak >= 3 || matches!(event_type, "recovery_failed") {
+        "degraded"
+    } else if matches!(
+        event_type,
+        "heartbeat_scheduled" | "continuity_restored" | "continuity_persisted"
+    ) {
+        "active"
+    } else {
+        current_status.as_deref().unwrap_or("active")
+    };
+    let created_at = now_ts_string();
+    sqlx::query(
+        r#"INSERT INTO persona_health_snapshots (
+               id, persona_id, store_id, platform_id, status,
+               active_session_count, continuity_score, login_risk_count,
+               last_event_type, last_task_at, snapshot_json, created_at
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(format!("phs-{}", Uuid::new_v4()))
+    .bind(persona_id)
+    .bind(store_id)
+    .bind(platform_id)
+    .bind(status)
+    .bind(active_session_count)
+    .bind(continuity_score.max(0.0))
+    .bind(login_risk_count)
+    .bind(event_type)
+    .bind(last_task_at)
+    .bind(snapshot_json.to_string())
+    .bind(&created_at)
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query("UPDATE persona_profiles SET status = ?, updated_at = ? WHERE id = ?")
+        .bind(status)
+        .bind(&created_at)
+        .bind(persona_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(())
+}
+
+fn continuity_text_haystack(payload: &Value, result_json: &Value) -> String {
+    [
+        result_json.get("title").and_then(Value::as_str),
+        result_json.get("text_preview").and_then(Value::as_str),
+        result_json.get("content_preview").and_then(Value::as_str),
+        result_json.get("html_preview").and_then(Value::as_str),
+        result_json.get("final_url").and_then(Value::as_str),
+        payload.get("url").and_then(Value::as_str),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join("\n")
+    .to_ascii_lowercase()
+}
+
+fn continuity_probe_path(payload: &Value, result_json: &Value) -> Option<String> {
+    result_json
+        .get("final_url")
+        .and_then(Value::as_str)
+        .or_else(|| payload.get("url").and_then(Value::as_str))
+        .and_then(|value| Url::parse(value).ok())
+        .map(|value| value.path().to_string())
+}
+
+fn configured_identity_markers(template: &Value) -> Vec<String> {
+    template
+        .get("identity_markers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .collect()
+}
+
+fn continuity_check_names(template: &Value) -> Vec<String> {
+    template
+        .get("continuity_checks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .collect()
+}
+
+fn continuity_login_loss_signals(template: &Value) -> Vec<String> {
+    template
+        .get("login_loss_signals")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
+        .collect()
+}
+
+fn evaluate_continuity_probe_result(
+    task_kind: &str,
+    payload: &Value,
+    result_json: &Value,
+) -> Option<Value> {
+    let template = payload.get("platform_template")?;
+    let checks = continuity_check_names(template);
+    if checks.is_empty() {
+        return None;
+    }
+
+    let probe_path = continuity_probe_path(payload, result_json)?;
+    let haystack = continuity_text_haystack(payload, result_json);
+    let login_loss_signals = continuity_login_loss_signals(template);
+    let configured_markers = configured_identity_markers(template);
+    let matched_identity_marker = configured_markers.iter().find_map(|marker| {
+        haystack
+            .contains(&marker.to_ascii_lowercase())
+            .then(|| marker.clone())
+    });
+
+    let probe_path_lower = probe_path.to_ascii_lowercase();
+    let mut passed_checks = Vec::new();
+    let mut failed_checks = Vec::new();
+    let mut skipped_checks = Vec::new();
+
+    for check in checks {
+        let normalized = check.to_ascii_lowercase();
+        match normalized.as_str() {
+            "login_state" => {
+                if login_loss_signals
+                    .iter()
+                    .any(|signal| haystack.contains(signal) || probe_path_lower.contains(signal))
+                {
+                    failed_checks.push(check);
+                } else {
+                    passed_checks.push(check);
+                }
+            }
+            "identity" => {
+                if configured_markers.is_empty() {
+                    skipped_checks.push(check);
+                } else if matched_identity_marker.is_some() {
+                    passed_checks.push(check);
+                } else {
+                    failed_checks.push(check);
+                }
+            }
+            "region" => {
+                if payload
+                    .get("network_policy_json")
+                    .and_then(|value| value.get("region"))
+                    .and_then(Value::as_str)
+                    .is_some()
+                {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+            "dashboard" => {
+                if probe_path_lower.contains("/dashboard") || haystack.contains("dashboard") {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+            "notes" => {
+                if probe_path_lower.contains("/notes")
+                    || haystack.contains("/notes")
+                    || haystack.contains(" notes")
+                {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+            other => {
+                if probe_path_lower.contains(other) || haystack.contains(other) {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+        }
+    }
+
+    let evidence_summary = format!(
+        "probe_action={} probe_path={} passed={} failed={} skipped={}",
+        task_kind,
+        probe_path,
+        if passed_checks.is_empty() {
+            "none".to_string()
+        } else {
+            passed_checks.join(",")
+        },
+        if failed_checks.is_empty() {
+            "none".to_string()
+        } else {
+            failed_checks.join(",")
+        },
+        if skipped_checks.is_empty() {
+            "none".to_string()
+        } else {
+            skipped_checks.join(",")
+        }
+    );
+
+    Some(json!({
+        "probe_action": task_kind,
+        "probe_path": probe_path,
+        "passed_checks": passed_checks,
+        "failed_checks": failed_checks,
+        "skipped_checks": skipped_checks,
+        "matched_identity_marker": matched_identity_marker,
+        "configured_identity_markers": configured_markers,
+        "identity_markers_source": template.get("identity_markers_source").cloned().unwrap_or(Value::Null),
+        "evidence_summary": evidence_summary,
+    }))
+}
+
+pub async fn apply_task_continuity_after_execution(
+    state: &AppState,
+    task_id: &str,
+    run_id: &str,
+    task_kind: &str,
+    task_status: &str,
+    payload: &Value,
+    result_json: &mut Value,
+) -> anyhow::Result<()> {
+    if !is_browser_task_kind(task_kind) {
+        return Ok(());
+    }
+
+    let persona_id = payload.get("persona_id").and_then(Value::as_str);
+    let store_id = payload.get("store_id").and_then(Value::as_str);
+    let platform_id = payload.get("platform_id").and_then(Value::as_str);
+    let (Some(persona_id), Some(store_id), Some(platform_id)) = (persona_id, store_id, platform_id)
+    else {
+        return Ok(());
+    };
+
+    let Some(probe_result) = evaluate_continuity_probe_result(task_kind, payload, result_json)
+    else {
+        return Ok(());
+    };
+
+    if let Value::Object(obj) = result_json {
+        obj.insert("continuity_check_result".to_string(), probe_result.clone());
+    }
+
+    let event_type = if task_status == TASK_STATUS_SUCCEEDED {
+        "browser_action_succeeded"
+    } else {
+        "browser_action_failed"
+    };
+    let severity = if task_status == TASK_STATUS_SUCCEEDED {
+        "info"
+    } else {
+        "warning"
+    };
+
+    append_continuity_event(
+        state,
+        Some(persona_id),
+        Some(store_id),
+        Some(platform_id),
+        Some(task_id),
+        Some(run_id),
+        event_type,
+        severity,
+        Some(&probe_result),
+    )
+    .await?;
+
+    Ok(())
 }
 
 const BROWSER_PROXY_REQUIRED_MESSAGE: &str =
@@ -1740,6 +3278,10 @@ pub async fn status(
                     finished_at.as_deref().or(started_at.as_deref()),
                 );
                 TaskResponse {
+                    persona_id: None,
+                    platform_id: None,
+                    manual_gate_request_id: None,
+                    manual_gate_status: None,
                     fingerprint_resolution_status: explainability.fingerprint_resolution_status,
                     behavior_profile_id: explainability.behavior_profile_id,
                     behavior_profile_version: explainability.behavior_profile_version,
@@ -2590,6 +4132,10 @@ fn form_action_summary_json_from_parsed(parsed: Option<&Value>) -> Option<Value>
 fn create_task_response_from_payload(
     task_id: String,
     payload: &CreateTaskRequest,
+    task_status: String,
+    platform_id: Option<String>,
+    manual_gate_request_id: Option<String>,
+    manual_gate_status: Option<String>,
     execution_intent: &RunnerExecutionIntent,
     fingerprint_profile_version: Option<i64>,
     behavior_profile_id: Option<String>,
@@ -2610,8 +4156,12 @@ fn create_task_response_from_payload(
         Json(TaskResponse {
             id: task_id,
             kind: payload.kind.clone(),
-            status: TASK_STATUS_QUEUED.to_string(),
+            status: task_status,
             priority,
+            persona_id: payload.persona_id.clone(),
+            platform_id,
+            manual_gate_request_id,
+            manual_gate_status,
             started_at: None,
             finished_at: None,
             summary_artifacts: Vec::new(),
@@ -2677,6 +4227,62 @@ async fn create_task_from_payload(
     ensure_form_input_allowed_for_task(payload.kind.as_str(), payload.form_input.as_ref())?;
 
     let mut payload = payload;
+    let resolved_persona = match payload.persona_id.as_deref() {
+        Some(persona_id) => Some(resolve_persona_bundle(state, persona_id).await?),
+        None => None,
+    };
+    if let Some(bundle) = resolved_persona.as_ref() {
+        if payload.fingerprint_profile_id.is_none() {
+            payload.fingerprint_profile_id = Some(bundle.fingerprint_profile_id.clone());
+        }
+        if payload.behavior_profile_id.is_none() {
+            payload.behavior_profile_id = bundle.behavior_profile_id.clone();
+        }
+        let final_network_policy = merge_json_objects(
+            bundle.network_policy.network_policy_json.clone(),
+            payload
+                .network_policy_json
+                .clone()
+                .unwrap_or_else(|| json!({})),
+        );
+        let mut final_network_policy = match final_network_policy {
+            Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        final_network_policy.insert("country_anchor".to_string(), json!(bundle.country_anchor));
+        final_network_policy.insert(
+            "region_anchor".to_string(),
+            bundle
+                .region_anchor
+                .as_ref()
+                .map_or(Value::Null, |value| json!(value)),
+        );
+        final_network_policy.insert(
+            "allow_same_country_fallback".to_string(),
+            json!(bundle.network_policy.allow_same_country_fallback),
+        );
+        final_network_policy.insert(
+            "allow_same_region_fallback".to_string(),
+            json!(bundle.network_policy.allow_same_region_fallback),
+        );
+        final_network_policy.insert(
+            "network_policy_id".to_string(),
+            json!(bundle.network_policy.id),
+        );
+        final_network_policy.insert(
+            "continuity_policy_id".to_string(),
+            json!(bundle.continuity_policy.id),
+        );
+        final_network_policy.insert("persona_id".to_string(), json!(bundle.persona_id));
+        final_network_policy.insert("store_id".to_string(), json!(bundle.store_id));
+        final_network_policy.insert("platform_id".to_string(), json!(bundle.platform_id));
+        if let Some(provider_preference) = bundle.network_policy.provider_preference.as_deref() {
+            final_network_policy
+                .entry("provider".to_string())
+                .or_insert_with(|| json!(provider_preference));
+        }
+        payload.network_policy_json = Some(Value::Object(final_network_policy));
+    }
     let initial_execution_intent = normalize_execution_intent(&payload);
     payload.proxy_id = initial_execution_intent.proxy_id.clone();
     let network_profile_policy = load_network_profile_policy_value(
@@ -2731,10 +4337,62 @@ async fn create_task_from_payload(
         .form_input_redacted_json
         .as_ref()
         .map(Value::to_string);
+    let platform_id = resolved_persona
+        .as_ref()
+        .map(|bundle| bundle.platform_id.clone());
+    let created_at = now_ts_string();
+    let mut manual_gate_request_id: Option<String> = None;
+    let mut manual_gate_status: Option<String> = None;
+    let mut task_status = TASK_STATUS_QUEUED.to_string();
+    let mut queued_at = Some(created_at.clone());
+    let platform_template_json = resolved_persona.as_ref().and_then(|bundle| {
+        bundle.platform_template.as_ref().map(|template| {
+            json!({
+                "id": template.id,
+                "platform_id": template.platform_id,
+                "readiness_level": template.readiness_level,
+                "warm_paths": template.warm_paths_json,
+                "revisit_paths": template.revisit_paths_json,
+                "stateful_paths": template.stateful_paths_json,
+                "write_operation_paths": template.write_operation_paths_json,
+                "high_risk_paths": template.high_risk_paths_json,
+                "continuity_checks": template.continuity_checks_json,
+                "identity_markers": template.identity_markers_json,
+                "identity_markers_source": template.identity_markers_source,
+                "login_loss_signals": template.login_loss_signals_json,
+                "recovery_steps": template.recovery_steps_json,
+            })
+        })
+    });
+    let force_manual_gate = matches!(
+        payload.manual_gate_policy.as_deref(),
+        Some("always" | "force" | "required")
+    ) || matches!(
+        payload.requested_operation_kind.as_deref(),
+        Some("high_risk_write" | "credential_change" | "security_change" | "billing_change")
+    );
+    if let Some(bundle) = resolved_persona.as_ref() {
+        let url_is_high_risk = match (payload.url.as_deref(), bundle.platform_template.as_ref()) {
+            (Some(url), Some(template)) => {
+                let high_risk_paths = path_patterns_from_value(&template.high_risk_paths_json);
+                url_matches_any_path(url, &high_risk_paths)
+            }
+            _ => false,
+        };
+        if force_manual_gate || url_is_high_risk {
+            manual_gate_request_id = Some(format!("gate-{}", Uuid::new_v4()));
+            manual_gate_status = Some("pending".to_string());
+            task_status = TASK_STATUS_PENDING.to_string();
+            queued_at = None;
+        }
+    }
     let input_json = serde_json::json!({
         "url": payload.url.clone(),
         "script": payload.script.clone(),
         "timeout_seconds": payload.timeout_seconds,
+        "persona_id": payload.persona_id.clone(),
+        "store_id": resolved_persona.as_ref().map(|bundle| bundle.store_id.clone()),
+        "platform_id": platform_id.clone(),
         "identity_profile_id": behavior_compile.execution_intent.identity_profile_id.clone(),
         "fingerprint_profile_id": behavior_compile.execution_intent.fingerprint_profile_id.clone(),
         "fingerprint_profile_version": fingerprint_profile_version,
@@ -2746,11 +4404,19 @@ async fn create_task_from_payload(
         "execution_intent": behavior_compile.execution_intent_json.clone(),
         "behavior_policy_json": behavior_compile.behavior_policy_json.clone(),
         "network_policy_json": network_policy_value,
+        "platform_template": platform_template_json,
+        "continuity_context": resolved_persona.as_ref().map(|bundle| json!({
+            "session_ttl_seconds": bundle.continuity_policy.session_ttl_seconds,
+            "heartbeat_interval_seconds": bundle.continuity_policy.heartbeat_interval_seconds,
+            "site_group_mode": bundle.continuity_policy.site_group_mode,
+            "recovery_enabled": bundle.continuity_policy.recovery_enabled,
+            "protect_on_login_loss": bundle.continuity_policy.protect_on_login_loss,
+        })),
+        "requested_operation_kind": payload.requested_operation_kind.clone(),
+        "manual_gate_policy": payload.manual_gate_policy.clone(),
         "form_input": form_compile.form_input_redacted_json.clone(),
     })
     .to_string();
-    let created_at = now_ts_string();
-    let queued_at = now_ts_string();
 
     sqlx::query(
         r#"
@@ -2759,14 +4425,14 @@ async fn create_task_from_payload(
             execution_intent_json, fingerprint_profile_json, fingerprint_profile_id,
             fingerprint_profile_version, identity_profile_id, behavior_profile_id,
             behavior_profile_version, network_profile_id, session_profile_id,
-            form_input_redacted_json, priority,
+            persona_id, platform_id, manual_gate_request_id, form_input_redacted_json, priority,
             created_at, queued_at, started_at, finished_at, result_json, error_message
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
         "#,
     )
     .bind(&task_id)
     .bind(&payload.kind)
-    .bind(TASK_STATUS_QUEUED)
+    .bind(&task_status)
     .bind(&input_json)
     .bind(&network_policy_json)
     .bind(&behavior_policy_json)
@@ -2778,6 +4444,9 @@ async fn create_task_from_payload(
     .bind(behavior_compile.behavior_profile_version)
     .bind(&behavior_compile.execution_intent.network_profile_id)
     .bind(&behavior_compile.execution_intent.session_profile_id)
+    .bind(&payload.persona_id)
+    .bind(&platform_id)
+    .bind(&manual_gate_request_id)
     .bind(&form_input_redacted_json)
     .bind(priority)
     .bind(&created_at)
@@ -2839,9 +4508,99 @@ async fn create_task_from_payload(
         guard.insert(task_id.clone(), inline_secret_payload.clone());
     }
 
+    if let Some(bundle) = resolved_persona.as_ref() {
+        append_continuity_event(
+            state,
+            Some(&bundle.persona_id),
+            Some(&bundle.store_id),
+            Some(&bundle.platform_id),
+            Some(&task_id),
+            None,
+            "persona_selected",
+            "info",
+            Some(&json!({
+                "fingerprint_profile_id": bundle.fingerprint_profile_id,
+                "network_policy_id": bundle.network_policy.id,
+                "continuity_policy_id": bundle.continuity_policy.id,
+            })),
+        )
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to record persona_selected event: {err}"),
+            )
+        })?;
+    }
+
+    if let (Some(bundle), Some(gate_id)) =
+        (resolved_persona.as_ref(), manual_gate_request_id.as_ref())
+    {
+        let requested_action_kind = manual_gate_category_from_inputs(
+            Some(&bundle.platform_id),
+            &payload.kind,
+            payload.requested_operation_kind.as_deref(),
+            payload.url.as_deref(),
+        );
+        sqlx::query(
+            r#"INSERT INTO manual_gate_requests (
+                   id, task_id, persona_id, store_id, platform_id, requested_action_kind,
+                   requested_url, reason_code, reason_summary, status, resolution_note,
+                   created_at, updated_at, resolved_at
+               )
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?, NULL)"#,
+        )
+        .bind(gate_id)
+        .bind(&task_id)
+        .bind(&bundle.persona_id)
+        .bind(&bundle.store_id)
+        .bind(&bundle.platform_id)
+        .bind(&requested_action_kind)
+        .bind(&payload.url)
+        .bind("high_risk_path")
+        .bind("requested path matched platform high_risk_paths and requires manual confirmation")
+        .bind(&created_at)
+        .bind(&created_at)
+        .execute(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to insert manual gate request: {err}"),
+            )
+        })?;
+
+        append_continuity_event(
+            state,
+            Some(&bundle.persona_id),
+            Some(&bundle.store_id),
+            Some(&bundle.platform_id),
+            Some(&task_id),
+            None,
+            "manual_gate_requested",
+            "warning",
+            Some(&json!({
+                "manual_gate_request_id": gate_id,
+                "requested_url": payload.url,
+                "requested_action_kind": requested_action_kind,
+            })),
+        )
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to record manual_gate_requested event: {err}"),
+            )
+        })?;
+    }
+
     Ok(create_task_response_from_payload(
         task_id,
         &payload,
+        task_status,
+        platform_id,
+        manual_gate_request_id,
+        manual_gate_status,
         &behavior_compile.execution_intent,
         fingerprint_profile_version,
         behavior_compile.behavior_profile_id,
@@ -2856,6 +4615,432 @@ async fn create_task_from_payload(
         form_compile.form_action_mode,
         form_compile.form_action_summary_json,
     ))
+}
+
+pub async fn run_persona_heartbeat_tick(
+    state: &AppState,
+) -> Result<ContinuityHeartbeatTickResponse, (StatusCode, String)> {
+    let ticked_at = now_ts_string();
+    let now_ts = ticked_at.parse::<i64>().unwrap_or_default();
+    let candidates = sqlx::query_as::<_, HeartbeatPersonaCandidateRow>(
+        r#"
+        SELECT
+            p.id AS persona_id,
+            p.store_id,
+            p.platform_id,
+            cp.heartbeat_interval_seconds
+        FROM persona_profiles p
+        JOIN continuity_policies cp ON cp.id = p.continuity_policy_id
+        WHERE p.status IN ('active', 'degraded')
+          AND cp.status = 'active'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM manual_gate_requests mg
+              WHERE mg.persona_id = p.id
+                AND mg.status = 'pending'
+          )
+        ORDER BY
+            COALESCE((
+                SELECT MAX(CAST(e.created_at AS INTEGER))
+                FROM continuity_events e
+                WHERE e.persona_id = p.id
+                  AND e.event_type IN ('heartbeat_scheduled', 'heartbeat_failed', 'heartbeat_skipped')
+            ), 0) ASC,
+            p.platform_id ASC,
+            p.created_at ASC,
+            p.id ASC
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load persona heartbeat candidates: {err}"),
+        )
+    })?;
+
+    let mut items = Vec::with_capacity(candidates.len());
+    let mut scheduled_count = 0_i64;
+    let mut skipped_count = 0_i64;
+    let platform_cap = heartbeat_platform_cap_from_env();
+    let mut scheduled_per_platform = std::collections::BTreeMap::<String, usize>::new();
+
+    for candidate in candidates {
+        let heartbeat_interval_seconds = candidate.heartbeat_interval_seconds.max(60);
+        let platform_scheduled = scheduled_per_platform
+            .get(&candidate.platform_id)
+            .copied()
+            .unwrap_or(0);
+        if platform_scheduled >= platform_cap {
+            let item = heartbeat_item(
+                candidate.persona_id.clone(),
+                candidate.store_id.clone(),
+                candidate.platform_id.clone(),
+                "skipped",
+                "platform_cap_reached",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &candidate.persona_id,
+                &candidate.store_id,
+                &candidate.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        }
+        if persona_has_inflight_task(state, &candidate.persona_id).await? {
+            let item = heartbeat_item(
+                candidate.persona_id.clone(),
+                candidate.store_id.clone(),
+                candidate.platform_id.clone(),
+                "skipped",
+                "persona_has_active_task",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &candidate.persona_id,
+                &candidate.store_id,
+                &candidate.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        }
+
+        if let Some(last_activity_ts) =
+            latest_persona_task_activity_ts(state, &candidate.persona_id).await?
+        {
+            let elapsed_seconds = now_ts.saturating_sub(last_activity_ts);
+            if elapsed_seconds < heartbeat_interval_seconds {
+                let item = heartbeat_item(
+                    candidate.persona_id.clone(),
+                    candidate.store_id.clone(),
+                    candidate.platform_id.clone(),
+                    "skipped",
+                    "recent_persona_activity",
+                    None,
+                    None,
+                    heartbeat_interval_seconds,
+                );
+                append_heartbeat_event(
+                    state,
+                    &candidate.persona_id,
+                    &candidate.store_id,
+                    &candidate.platform_id,
+                    None,
+                    "heartbeat_skipped",
+                    "info",
+                    &item.reason,
+                    heartbeat_interval_seconds,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await?;
+                items.push(item);
+                skipped_count += 1;
+                continue;
+            }
+        }
+
+        let bundle = match resolve_persona_bundle(state, &candidate.persona_id).await {
+            Ok(value) => value,
+            Err((status, message)) if status == StatusCode::BAD_REQUEST => {
+                let reason = if message.contains("not active") || message.contains("not found") {
+                    "persona_not_active"
+                } else {
+                    "resolve_persona_failed"
+                };
+                let item = heartbeat_item(
+                    candidate.persona_id.clone(),
+                    candidate.store_id.clone(),
+                    candidate.platform_id.clone(),
+                    "failed",
+                    reason,
+                    None,
+                    None,
+                    heartbeat_interval_seconds,
+                );
+                append_heartbeat_event(
+                    state,
+                    &candidate.persona_id,
+                    &candidate.store_id,
+                    &candidate.platform_id,
+                    None,
+                    "heartbeat_failed",
+                    "warning",
+                    &item.reason,
+                    heartbeat_interval_seconds,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await?;
+                items.push(item);
+                continue;
+            }
+            Err(err) => return Err(err),
+        };
+
+        let Some(template) = bundle.platform_template.as_ref() else {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "skipped",
+                "platform_template_missing",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                bundle.origin_source.as_deref(),
+                None,
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        };
+
+        let heartbeat_task_kind = heartbeat_task_kind_for_template(template);
+        let Some(target_path) = resolve_heartbeat_target_path(state, &bundle, template).await?
+        else {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "skipped",
+                "heartbeat_target_missing",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                bundle.origin_source.as_deref(),
+                Some(heartbeat_task_kind),
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        };
+
+        let high_risk_paths = path_patterns_from_value(&template.high_risk_paths_json);
+        if url_matches_any_path(&target_path, &high_risk_paths) {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "skipped",
+                "heartbeat_target_is_high_risk",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                Some(&target_path),
+                None,
+                bundle.origin_source.as_deref(),
+                Some(heartbeat_task_kind),
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        }
+
+        let Some((target_url, origin_source)) = resolve_heartbeat_target_url(&bundle, &target_path)
+        else {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "failed",
+                "heartbeat_target_origin_unresolved",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_failed",
+                "warning",
+                &item.reason,
+                heartbeat_interval_seconds,
+                Some(&target_path),
+                None,
+                bundle.origin_source.as_deref(),
+                Some(heartbeat_task_kind),
+            )
+            .await?;
+            items.push(item);
+            continue;
+        };
+
+        let task_payload = CreateTaskRequest {
+            kind: heartbeat_task_kind.to_string(),
+            url: Some(target_url.clone()),
+            script: None,
+            timeout_seconds: Some(45),
+            priority: Some(-10),
+            persona_id: Some(bundle.persona_id.clone()),
+            identity_profile_id: None,
+            fingerprint_profile_id: None,
+            behavior_profile_id: bundle.behavior_profile_id.clone(),
+            network_profile_id: None,
+            session_profile_id: None,
+            proxy_id: None,
+            execution_intent: None,
+            behavior_policy_json: None,
+            network_policy_json: None,
+            requested_operation_kind: Some("heartbeat_revisit".to_string()),
+            manual_gate_policy: None,
+            form_input: None,
+        };
+
+        let (_, Json(task_response)) = match create_task_from_payload(state, task_payload).await {
+            Ok(value) => value,
+            Err((status, _)) if status == StatusCode::BAD_REQUEST => {
+                let item = heartbeat_item(
+                    bundle.persona_id.clone(),
+                    bundle.store_id.clone(),
+                    bundle.platform_id.clone(),
+                    "failed",
+                    "heartbeat_task_create_failed",
+                    None,
+                    Some(target_url.clone()),
+                    heartbeat_interval_seconds,
+                );
+                append_heartbeat_event(
+                    state,
+                    &bundle.persona_id,
+                    &bundle.store_id,
+                    &bundle.platform_id,
+                    None,
+                    "heartbeat_failed",
+                    "warning",
+                    &item.reason,
+                    heartbeat_interval_seconds,
+                    Some(&target_path),
+                    Some(&target_url),
+                    Some(&origin_source),
+                    Some(heartbeat_task_kind),
+                )
+                .await?;
+                items.push(item);
+                continue;
+            }
+            Err(err) => return Err(err),
+        };
+
+        let scheduled_task_id = task_response.id.clone();
+        append_heartbeat_event(
+            state,
+            &bundle.persona_id,
+            &bundle.store_id,
+            &bundle.platform_id,
+            Some(&scheduled_task_id),
+            "heartbeat_scheduled",
+            "info",
+            "heartbeat_due",
+            heartbeat_interval_seconds,
+            Some(&target_path),
+            Some(&target_url),
+            Some(&origin_source),
+            Some(heartbeat_task_kind),
+        )
+        .await?;
+
+        scheduled_count += 1;
+        *scheduled_per_platform
+            .entry(candidate.platform_id.clone())
+            .or_insert(0) += 1;
+        items.push(heartbeat_item(
+            bundle.persona_id,
+            bundle.store_id,
+            bundle.platform_id,
+            "scheduled",
+            "heartbeat_due",
+            Some(task_response.id),
+            Some(target_url),
+            heartbeat_interval_seconds,
+        ));
+    }
+
+    let evaluated_count = i64::try_from(items.len()).unwrap_or(0);
+    Ok(ContinuityHeartbeatTickResponse {
+        ticked_at,
+        evaluated_count,
+        scheduled_count,
+        skipped_count,
+        items,
+    })
 }
 
 pub async fn create_task(
@@ -2878,6 +5063,7 @@ pub async fn browser_open(
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        persona_id: None,
         identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
         behavior_profile_id: payload.behavior_profile_id,
@@ -2887,6 +5073,8 @@ pub async fn browser_open(
         execution_intent: payload.execution_intent,
         behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
         form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
@@ -2906,6 +5094,7 @@ pub async fn browser_get_html(
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        persona_id: None,
         identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
         behavior_profile_id: payload.behavior_profile_id,
@@ -2915,6 +5104,8 @@ pub async fn browser_get_html(
         execution_intent: payload.execution_intent,
         behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
         form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
@@ -2934,6 +5125,7 @@ pub async fn browser_get_title(
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        persona_id: None,
         identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
         behavior_profile_id: payload.behavior_profile_id,
@@ -2943,6 +5135,8 @@ pub async fn browser_get_title(
         execution_intent: payload.execution_intent,
         behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
         form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
@@ -2962,6 +5156,7 @@ pub async fn browser_get_final_url(
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        persona_id: None,
         identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
         behavior_profile_id: payload.behavior_profile_id,
@@ -2971,6 +5166,8 @@ pub async fn browser_get_final_url(
         execution_intent: payload.execution_intent,
         behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
         form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
@@ -2990,6 +5187,7 @@ pub async fn browser_extract_text(
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        persona_id: None,
         identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
         behavior_profile_id: payload.behavior_profile_id,
@@ -2999,6 +5197,8 @@ pub async fn browser_extract_text(
         execution_intent: payload.execution_intent,
         behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
         form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
@@ -3077,6 +5277,10 @@ pub async fn get_task(
                 finished_at.as_deref().or(started_at.as_deref()),
             );
             Ok(Json(TaskResponse {
+                persona_id: None,
+                platform_id: None,
+                manual_gate_request_id: None,
+                manual_gate_status: None,
                 fingerprint_resolution_status: explainability.fingerprint_resolution_status,
                 behavior_profile_id: explainability.behavior_profile_id,
                 behavior_profile_version: explainability.behavior_profile_version,

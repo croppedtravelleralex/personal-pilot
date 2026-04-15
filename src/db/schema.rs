@@ -154,7 +154,7 @@ CREATE INDEX IF NOT EXISTS idx_proxy_health_snapshots_proxy_created
 ON proxy_health_snapshots(proxy_id, created_at DESC);
 "#;
 
-pub const ALL_SCHEMA_SQL: [&str; 28] = [
+pub const ALL_SCHEMA_SQL: [&str; 36] = [
     CREATE_TASKS_TABLE_SQL,
     CREATE_RUNS_TABLE_SQL,
     CREATE_ARTIFACTS_TABLE_SQL,
@@ -165,6 +165,14 @@ pub const ALL_SCHEMA_SQL: [&str; 28] = [
     CREATE_IDENTITY_PROFILES_TABLE_SQL,
     CREATE_NETWORK_PROFILES_TABLE_SQL,
     CREATE_SESSION_PROFILES_TABLE_SQL,
+    CREATE_NETWORK_POLICIES_TABLE_SQL,
+    CREATE_CONTINUITY_POLICIES_TABLE_SQL,
+    CREATE_PLATFORM_TEMPLATES_TABLE_SQL,
+    CREATE_STORE_PLATFORM_OVERRIDES_TABLE_SQL,
+    CREATE_PERSONA_PROFILES_TABLE_SQL,
+    CREATE_MANUAL_GATE_REQUESTS_TABLE_SQL,
+    CREATE_CONTINUITY_EVENTS_TABLE_SQL,
+    CREATE_PERSONA_HEALTH_SNAPSHOTS_TABLE_SQL,
     CREATE_PROXIES_TABLE_SQL,
     CREATE_PROXY_HARVEST_RUNS_TABLE_SQL,
     CREATE_PROXY_HARVEST_SOURCES_TABLE_SQL,
@@ -269,6 +277,172 @@ CREATE TABLE IF NOT EXISTS session_profiles (
     retention_policy_json TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_NETWORK_POLICIES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS network_policies (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    country_anchor TEXT,
+    region_anchor TEXT,
+    allow_same_country_fallback INTEGER NOT NULL DEFAULT 0,
+    allow_same_region_fallback INTEGER NOT NULL DEFAULT 0,
+    provider_preference TEXT,
+    allowed_regions_json TEXT,
+    network_policy_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_CONTINUITY_POLICIES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS continuity_policies (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    session_ttl_seconds INTEGER NOT NULL DEFAULT 86400,
+    heartbeat_interval_seconds INTEGER NOT NULL DEFAULT 300,
+    site_group_mode TEXT NOT NULL DEFAULT 'host',
+    recovery_enabled INTEGER NOT NULL DEFAULT 1,
+    protect_on_login_loss INTEGER NOT NULL DEFAULT 1,
+    policy_json TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_PLATFORM_TEMPLATES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS platform_templates (
+    id TEXT PRIMARY KEY,
+    platform_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    warm_paths_json TEXT NOT NULL DEFAULT '[]',
+    revisit_paths_json TEXT NOT NULL DEFAULT '[]',
+    stateful_paths_json TEXT NOT NULL DEFAULT '[]',
+    write_operation_paths_json TEXT NOT NULL DEFAULT '[]',
+    high_risk_paths_json TEXT NOT NULL DEFAULT '[]',
+    allowed_regions_json TEXT,
+    preferred_locale TEXT,
+    preferred_timezone TEXT,
+    continuity_checks_json TEXT,
+    identity_markers_json TEXT,
+    login_loss_signals_json TEXT,
+    recovery_steps_json TEXT,
+    behavior_defaults_json TEXT,
+    event_chain_templates_json TEXT,
+    page_semantics_json TEXT,
+    readiness_level TEXT NOT NULL DEFAULT 'draft',
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_STORE_PLATFORM_OVERRIDES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS store_platform_overrides (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL,
+    platform_id TEXT NOT NULL,
+    admin_origin TEXT,
+    entry_origin TEXT,
+    entry_paths_json TEXT,
+    warm_paths_json TEXT,
+    revisit_paths_json TEXT,
+    stateful_paths_json TEXT,
+    high_risk_paths_json TEXT,
+    recovery_steps_json TEXT,
+    login_loss_signals_json TEXT,
+    identity_markers_json TEXT,
+    behavior_defaults_json TEXT,
+    event_chain_templates_json TEXT,
+    page_semantics_json TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_PERSONA_PROFILES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS persona_profiles (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL,
+    platform_id TEXT NOT NULL,
+    device_family TEXT NOT NULL DEFAULT 'desktop',
+    country_anchor TEXT NOT NULL,
+    region_anchor TEXT,
+    locale TEXT NOT NULL,
+    timezone TEXT NOT NULL,
+    fingerprint_profile_id TEXT NOT NULL,
+    behavior_profile_id TEXT,
+    network_policy_id TEXT NOT NULL,
+    continuity_policy_id TEXT NOT NULL,
+    credential_ref TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(fingerprint_profile_id) REFERENCES fingerprint_profiles(id),
+    FOREIGN KEY(behavior_profile_id) REFERENCES behavior_profiles(id),
+    FOREIGN KEY(network_policy_id) REFERENCES network_policies(id),
+    FOREIGN KEY(continuity_policy_id) REFERENCES continuity_policies(id)
+);
+"#;
+
+pub const CREATE_MANUAL_GATE_REQUESTS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS manual_gate_requests (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    persona_id TEXT,
+    store_id TEXT,
+    platform_id TEXT,
+    requested_action_kind TEXT NOT NULL,
+    requested_url TEXT,
+    reason_code TEXT NOT NULL,
+    reason_summary TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    resolution_note TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT,
+    FOREIGN KEY(task_id) REFERENCES tasks(id),
+    FOREIGN KEY(persona_id) REFERENCES persona_profiles(id)
+);
+"#;
+
+pub const CREATE_CONTINUITY_EVENTS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS continuity_events (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT,
+    store_id TEXT,
+    platform_id TEXT,
+    task_id TEXT,
+    run_id TEXT,
+    event_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    event_json TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(task_id) REFERENCES tasks(id),
+    FOREIGN KEY(run_id) REFERENCES runs(id),
+    FOREIGN KEY(persona_id) REFERENCES persona_profiles(id)
+);
+"#;
+
+pub const CREATE_PERSONA_HEALTH_SNAPSHOTS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS persona_health_snapshots (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    store_id TEXT,
+    platform_id TEXT,
+    status TEXT NOT NULL,
+    active_session_count INTEGER NOT NULL DEFAULT 0,
+    continuity_score REAL NOT NULL DEFAULT 0,
+    login_risk_count INTEGER NOT NULL DEFAULT 0,
+    last_event_type TEXT,
+    last_task_at TEXT,
+    snapshot_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(persona_id) REFERENCES persona_profiles(id)
 );
 "#;
 

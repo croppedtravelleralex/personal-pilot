@@ -63,6 +63,46 @@ async fn ensure_sqlite_parent_dir(database_url: &str) -> Result<()> {
     Ok(())
 }
 
+async fn bootstrap_continuity_seed_data(pool: &DbPool) -> Result<()> {
+    sqlx::query(
+        r#"INSERT OR IGNORE INTO platform_templates (
+               id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+               write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+               preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+               login_loss_signals_json, recovery_steps_json, behavior_defaults_json,
+               event_chain_templates_json, page_semantics_json, readiness_level, status,
+               created_at, updated_at
+           ) VALUES (
+               'tpl-canonical-xiaohongshu-sample-ready',
+               'xiaohongshu',
+               'Canonical XiaoHongShu Sample Ready',
+               '["/dashboard"]',
+               '["/dashboard","/notes"]',
+               '["/dashboard","/notes"]',
+               '["/publish","/products"]',
+               '["/security","/finance","/team","/permissions","/account","/inventory"]',
+               '["CN-31"]',
+               'zh-CN',
+               'Asia/Shanghai',
+               '["login_state","identity","region","dashboard","notes"]',
+               '[]',
+               '["login"]',
+               '["reload","revisit"]',
+               '{}',
+               '{}',
+               '{}',
+               'sample_ready',
+               'active',
+               '1',
+               '1'
+           )"#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 pub async fn init_db(database_url: &str) -> Result<DbPool> {
     ensure_sqlite_parent_dir(database_url).await?;
 
@@ -163,6 +203,27 @@ pub async fn init_db(database_url: &str) -> Result<DbPool> {
         "tasks",
         "session_profile_id",
         "ALTER TABLE tasks ADD COLUMN session_profile_id TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "tasks",
+        "persona_id",
+        "ALTER TABLE tasks ADD COLUMN persona_id TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "tasks",
+        "platform_id",
+        "ALTER TABLE tasks ADD COLUMN platform_id TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "tasks",
+        "manual_gate_request_id",
+        "ALTER TABLE tasks ADD COLUMN manual_gate_request_id TEXT",
     )
     .await?;
     ensure_column_exists(
@@ -301,6 +362,13 @@ pub async fn init_db(database_url: &str) -> Result<DbPool> {
     ensure_column_exists(
         &pool,
         "proxy_session_bindings",
+        "persona_id",
+        "ALTER TABLE proxy_session_bindings ADD COLUMN persona_id TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_session_bindings",
         "fingerprint_profile_id",
         "ALTER TABLE proxy_session_bindings ADD COLUMN fingerprint_profile_id TEXT",
     )
@@ -382,6 +450,7 @@ pub async fn init_db(database_url: &str) -> Result<DbPool> {
         "ALTER TABLE provider_risk_snapshots ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
     )
     .await?;
+    bootstrap_continuity_seed_data(&pool).await?;
     ensure_system_default_behavior_profile(&pool).await?;
     refresh_provider_risk_snapshots(&pool).await?;
     refresh_cached_trust_scores(&pool).await?;

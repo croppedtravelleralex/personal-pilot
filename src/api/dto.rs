@@ -216,6 +216,7 @@ pub struct CreateTaskRequest {
     pub script: Option<String>,
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
+    pub persona_id: Option<String>,
     pub identity_profile_id: Option<String>,
     pub fingerprint_profile_id: Option<String>,
     pub behavior_profile_id: Option<String>,
@@ -225,7 +226,30 @@ pub struct CreateTaskRequest {
     pub execution_intent: Option<ExecutionIntentRequest>,
     pub behavior_policy_json: Option<serde_json::Value>,
     pub network_policy_json: Option<serde_json::Value>,
+    pub requested_operation_kind: Option<String>,
+    pub manual_gate_policy: Option<String>,
     pub form_input: Option<FormInputRequest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContinuityHeartbeatTickItemResponse {
+    pub persona_id: String,
+    pub store_id: String,
+    pub platform_id: String,
+    pub status: String,
+    pub reason: String,
+    pub task_id: Option<String>,
+    pub target_url: Option<String>,
+    pub heartbeat_interval_seconds: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContinuityHeartbeatTickResponse {
+    pub ticked_at: String,
+    pub evaluated_count: i64,
+    pub scheduled_count: i64,
+    pub skipped_count: i64,
+    pub items: Vec<ContinuityHeartbeatTickItemResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -545,6 +569,10 @@ pub struct TaskResponse {
     pub kind: String,
     pub status: String,
     pub priority: i32,
+    pub persona_id: Option<String>,
+    pub platform_id: Option<String>,
+    pub manual_gate_request_id: Option<String>,
+    pub manual_gate_status: Option<String>,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub summary_artifacts: Vec<SummaryArtifactResponse>,

@@ -8,11 +8,13 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use super::config::HumanizationConfig;
-use super::failure::{ActionErrorCode, RetryDecision, humanized_retry_decision, suggested_approach};
-use super::scroll::{ScrollPlan, build_scroll_plan};
+use super::failure::{
+    humanized_retry_decision, suggested_approach, ActionErrorCode, RetryDecision,
+};
+use super::scroll::{build_scroll_plan, ScrollPlan};
 use super::timing::compute_action_gap;
-use super::trajectory::{ClickTarget, compute_click_target};
-use super::typing::{TypingPlan, build_typing_plan};
+use super::trajectory::{compute_click_target, ClickTarget};
+use super::typing::{build_typing_plan, TypingPlan};
 
 /// All possible action types that can be planned by the template engine / LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,10 +30,7 @@ pub enum LlmAction {
         offset: Option<OffsetOverride>,
     },
     /// Type text into an element
-    Type {
-        selector: String,
-        text: String,
-    },
+    Type { selector: String, text: String },
     /// Wait for a duration
     Wait { duration_ms: u32 },
     /// Take a screenshot
@@ -170,21 +169,13 @@ impl BehavioralMutationMiddleware {
     }
 
     /// Mutate a planned LLM action into an execution-ready MutatedAction
-    pub fn mutate(
-        &self,
-        action: LlmAction,
-        element_info: Option<&ElementBounds>,
-    ) -> MutatedAction {
+    pub fn mutate(&self, action: LlmAction, element_info: Option<&ElementBounds>) -> MutatedAction {
         // Compute the pre-action gap (human "decision" delay)
         let pre_gap_ms = compute_action_gap(&self.config);
 
         match action {
-            LlmAction::OpenBrowser { url } => {
-                MutatedAction::OpenBrowser { url, pre_gap_ms }
-            }
-            LlmAction::Goto { url } => {
-                MutatedAction::Goto { url, pre_gap_ms }
-            }
+            LlmAction::OpenBrowser { url } => MutatedAction::OpenBrowser { url, pre_gap_ms },
+            LlmAction::Goto { url } => MutatedAction::Goto { url, pre_gap_ms },
             LlmAction::Click { selector, offset } => {
                 let target = self.mutate_click(selector.clone(), offset, element_info);
                 MutatedAction::Click {
@@ -214,25 +205,28 @@ impl BehavioralMutationMiddleware {
                     jitter_ms: jitter,
                 }
             }
-            LlmAction::Screenshot { full_page } => {
-                MutatedAction::Screenshot { full_page, pre_gap_ms }
-            }
-            LlmAction::GetHtml { selector } => {
-                MutatedAction::GetHtml { selector, pre_gap_ms }
-            }
-            LlmAction::GetText { selector } => {
-                MutatedAction::GetText { selector, pre_gap_ms }
-            }
-            LlmAction::Scroll { direction, distance_px, target_selector } => {
+            LlmAction::Screenshot { full_page } => MutatedAction::Screenshot {
+                full_page,
+                pre_gap_ms,
+            },
+            LlmAction::GetHtml { selector } => MutatedAction::GetHtml {
+                selector,
+                pre_gap_ms,
+            },
+            LlmAction::GetText { selector } => MutatedAction::GetText {
+                selector,
+                pre_gap_ms,
+            },
+            LlmAction::Scroll {
+                direction,
+                distance_px,
+                target_selector,
+            } => {
                 let plan = self.mutate_scroll(direction, distance_px, target_selector);
                 MutatedAction::Scroll { plan, pre_gap_ms }
             }
-            LlmAction::ExecuteJs { script } => {
-                MutatedAction::ExecuteJs { script, pre_gap_ms }
-            }
-            LlmAction::CloseBrowser => {
-                MutatedAction::CloseBrowser { pre_gap_ms }
-            }
+            LlmAction::ExecuteJs { script } => MutatedAction::ExecuteJs { script, pre_gap_ms },
+            LlmAction::CloseBrowser => MutatedAction::CloseBrowser { pre_gap_ms },
         }
     }
 
@@ -342,7 +336,11 @@ mod tests {
         let mw = BehavioralMutationMiddleware::new(medium_config());
         let mutated = mw.mutate(LlmAction::Wait { duration_ms: 1000 }, None);
 
-        if let MutatedAction::Wait { duration_ms: _, jitter_ms } = mutated {
+        if let MutatedAction::Wait {
+            duration_ms: _,
+            jitter_ms,
+        } = mutated
+        {
             assert!(jitter_ms > 0, "jitter should be > 0 for Medium level");
         } else {
             panic!("expected Wait variant");
@@ -355,7 +353,11 @@ mod tests {
         let mw = BehavioralMutationMiddleware::new(config);
         let mutated = mw.mutate(LlmAction::Wait { duration_ms: 500 }, None);
 
-        if let MutatedAction::Wait { duration_ms, jitter_ms } = mutated {
+        if let MutatedAction::Wait {
+            duration_ms: _,
+            jitter_ms,
+        } = mutated
+        {
             assert_eq!(jitter_ms, 0, "no jitter at None level");
         } else {
             panic!("expected Wait");
@@ -369,7 +371,8 @@ mod tests {
         let decision = mw.decide_retry(&result, 0);
         assert!(matches!(
             decision.action,
-            RecoveryAction::RetryAfter { .. } | RecoveryAction::Retry
+            super::super::failure::RecoveryAction::RetryAfter { .. }
+                | super::super::failure::RecoveryAction::Retry
         ));
     }
 }

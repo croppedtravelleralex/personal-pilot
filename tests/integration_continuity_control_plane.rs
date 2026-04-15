@@ -3,10 +3,6 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use serde_json::{json, Value};
-use std::sync::Arc;
-use tower::ServiceExt;
-use uuid::Uuid;
 use persona_pilot::{
     api::{
         handlers::{append_continuity_event, run_persona_heartbeat_tick},
@@ -23,6 +19,10 @@ use persona_pilot::{
         fake::FakeRunner, spawn_runner_workers, RunnerExecutionResult, RunnerTask, TaskRunner,
     },
 };
+use serde_json::{json, Value};
+use std::sync::Arc;
+use tower::ServiceExt;
+use uuid::Uuid;
 
 fn unique_db_url() -> String {
     format!(
@@ -178,10 +178,7 @@ async fn build_test_app_with_runner(
     (state, app)
 }
 
-async fn wait_for_task_result_json(
-    db: &persona_pilot::db::init::DbPool,
-    task_id: &str,
-) -> Value {
+async fn wait_for_task_result_json(db: &persona_pilot::db::init::DbPool, task_id: &str) -> Value {
     for _ in 0..40 {
         let row = sqlx::query_as::<_, (String, Option<String>)>(
             "SELECT status, result_json FROM tasks WHERE id = ?",
@@ -228,7 +225,7 @@ async fn wait_for_continuity_event_json(
                FROM continuity_events
                WHERE persona_id = ?
                  AND event_type = ?
-               ORDER BY created_at DESC, id DESC
+               ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC
                LIMIT 1"#,
         )
         .bind(persona_id)
@@ -253,7 +250,7 @@ async fn wait_for_persona_health_snapshot_json(
             r#"SELECT snapshot_json
                FROM persona_health_snapshots
                WHERE persona_id = ?
-               ORDER BY created_at DESC, id DESC
+               ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC
                LIMIT 1"#,
         )
         .bind(persona_id)
@@ -590,7 +587,7 @@ async fn persona_health_snapshot_records_probe_summary_fields() {
         r#"SELECT snapshot_json
            FROM persona_health_snapshots
            WHERE persona_id = 'persona-probe-snapshot'
-           ORDER BY created_at DESC, id DESC
+           ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC
            LIMIT 1"#,
     )
     .fetch_one(&state.db)
@@ -605,13 +602,11 @@ async fn persona_health_snapshot_records_probe_summary_fields() {
         snapshot.get("last_probe_path").and_then(Value::as_str),
         Some("/dashboard")
     );
-    assert!(
-        snapshot
-            .get("last_continuity_check_results")
-            .and_then(|value| value.get("passed_checks"))
-            .and_then(Value::as_array)
-            .is_some()
-    );
+    assert!(snapshot
+        .get("last_continuity_check_results")
+        .and_then(|value| value.get("passed_checks"))
+        .and_then(Value::as_array)
+        .is_some());
 }
 
 #[tokio::test]
@@ -657,7 +652,10 @@ async fn xiaohongshu_store_identity_markers_flow_into_probe_event_and_snapshot()
         .expect("run heartbeat tick");
     assert_eq!(heartbeat.scheduled_count, 1);
     let heartbeat_item = heartbeat.items.first().expect("heartbeat item");
-    let task_id = heartbeat_item.task_id.as_deref().expect("heartbeat task id");
+    let task_id = heartbeat_item
+        .task_id
+        .as_deref()
+        .expect("heartbeat task id");
     assert_eq!(
         heartbeat_item.target_url.as_deref(),
         Some("https://seller.xiaohongshu.com/dashboard")
@@ -698,21 +696,22 @@ async fn xiaohongshu_store_identity_markers_flow_into_probe_event_and_snapshot()
         Some("store-identity-marker"),
         "unexpected continuity probe result: {probe}"
     );
-    assert!(
-        probe.get("passed_checks")
-            .and_then(Value::as_array)
-            .is_some_and(|values| values.iter().any(|value| value.as_str() == Some("identity")))
-    );
-    assert!(
-        probe.get("passed_checks")
-            .and_then(Value::as_array)
-            .is_some_and(|values| values.iter().any(|value| value.as_str() == Some("dashboard")))
-    );
-    assert!(
-        probe.get("skipped_checks")
-            .and_then(Value::as_array)
-            .is_some_and(|values| values.iter().any(|value| value.as_str() == Some("notes")))
-    );
+    assert!(probe
+        .get("passed_checks")
+        .and_then(Value::as_array)
+        .is_some_and(|values| values
+            .iter()
+            .any(|value| value.as_str() == Some("identity"))));
+    assert!(probe
+        .get("passed_checks")
+        .and_then(Value::as_array)
+        .is_some_and(|values| values
+            .iter()
+            .any(|value| value.as_str() == Some("dashboard"))));
+    assert!(probe
+        .get("skipped_checks")
+        .and_then(Value::as_array)
+        .is_some_and(|values| values.iter().any(|value| value.as_str() == Some("notes"))));
 
     let success_event = wait_for_continuity_event_json(
         &state.db,
@@ -726,14 +725,13 @@ async fn xiaohongshu_store_identity_markers_flow_into_probe_event_and_snapshot()
             .and_then(Value::as_str),
         Some("store-identity-marker")
     );
-    assert!(
-        success_event
-            .get("skipped_checks")
-            .and_then(Value::as_array)
-            .is_some_and(|values| values.iter().any(|value| value.as_str() == Some("notes")))
-    );
+    assert!(success_event
+        .get("skipped_checks")
+        .and_then(Value::as_array)
+        .is_some_and(|values| values.iter().any(|value| value.as_str() == Some("notes"))));
 
-    let snapshot = wait_for_persona_health_snapshot_json(&state.db, "persona-identity-marker").await;
+    let snapshot =
+        wait_for_persona_health_snapshot_json(&state.db, "persona-identity-marker").await;
     assert_eq!(
         snapshot
             .get("last_continuity_check_results")
@@ -741,10 +739,8 @@ async fn xiaohongshu_store_identity_markers_flow_into_probe_event_and_snapshot()
             .and_then(Value::as_str),
         Some("store-identity-marker")
     );
-    assert!(
-        snapshot
-            .get("continuity_check_skipped_count_24h")
-            .and_then(Value::as_i64)
-            .is_some_and(|value| value >= 1)
-    );
+    assert!(snapshot
+        .get("continuity_check_skipped_count_24h")
+        .and_then(Value::as_i64)
+        .is_some_and(|value| value >= 1));
 }
