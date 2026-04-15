@@ -1,30 +1,28 @@
-# Entry Summary Update Example (2026-04-02)
+# Entry Summary Update Example
 
 ## Scenario
 
-A future stage changes the active mainline.
-Before editing the README entry summary, check:
+A future change updates the active mainline or progress framing.
+Before touching any root summary, check:
 
-1. `STATUS.md` mainline line already reflects the new stage
-2. `TODO.md` only contains still-live next actions
-3. `PROGRESS.md` already records the newly landed milestone
-4. deferred freeze lines are still correct
+1. `/docs/02-current-state.md` already reflects the new reality
+2. `/docs/03-roadmap.md` and `/docs/04-improvement-backlog.md` already reflect the new direction
+3. `/TODO.md` only contains still-live next actions
+4. `/docs/root-entrypoint-map.md` still describes the correct routing
 
-## Example update flow
+## Example Update Flow
 
-### Step 1: update source-of-truth surfaces first
-- update `STATUS.md`
-- update `TODO.md`
-- update `PROGRESS.md`
+### Step 1: update canonical surfaces first
+- update `/docs/02-current-state.md`
+- update `/docs/03-roadmap.md` and/or `/docs/04-improvement-backlog.md`
+- update `/TODO.md`
 
-### Step 2: run the entry-summary checklist mentally
-- does README still match current stage?
-- is anything in README now stale?
-- is a frozen line being accidentally reopened by wording drift?
+### Step 2: run the consistency script
+- `python3 scripts/check_stage_entry_consistency.py`
 
-### Step 3: update README snapshot last
-Only after the above is aligned.
+### Step 3: refresh root entrypoints only if needed
+Only after the canonical docs are aligned.
 
-## Rule in one sentence
+## Rule In One Sentence
 
-> README entry summary is the last surface to update, not the first.
+> Root summaries are compatibility surfaces, not the primary record.

@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import subprocess
 import sys
+
 
 root = Path(__file__).resolve().parents[1]
 files = {
     "README": root / "README.md",
     "AI": root / "AI.md",
     "STATUS": root / "STATUS.md",
-    "CURRENT_TASK": root / "CURRENT_TASK.md",
     "PLAN": root / "PLAN.md",
-    "TODO": root / "TODO.md",
-    "progress": root / "progress.md",
+    "ROADMAP": root / "ROADMAP.md",
     "PROGRESS": root / "PROGRESS.md",
-    "RUNBOOK": root / "docs" / "agent-alexstudio-gateway-runbook.md",
-    "RELEASE_SCRIPT": root / "scripts" / "release_baseline_verify.sh",
-    "FAST_RELEASE_SCRIPT": root / "scripts" / "release_fast_verify.sh",
-    "PREFLIGHT_SCRIPT": root / "scripts" / "preflight_release_env.sh",
-    "GATEWAY_SCRIPT": root / "scripts" / "gateway_verify.sh",
+    "TODO": root / "TODO.md",
+    "DOCS_README": root / "docs" / "README.md",
+    "CURRENT_STATE": root / "docs" / "02-current-state.md",
+    "ROADMAP_DOC": root / "docs" / "03-roadmap.md",
+    "BACKLOG_DOC": root / "docs" / "04-improvement-backlog.md",
+    "PLAYBOOK_DOC": root / "docs" / "05-ai-maintenance-playbook.md",
+    "FINAL_PROGRESS_DOC": root / "docs" / "final-goal-progress-breakdown.md",
+    "RUNBOOK_DOC": root / "docs" / "agent-alexstudio-gateway-runbook.md",
+    "ROOT_MAP_DOC": root / "docs" / "root-entrypoint-map.md",
 }
 
 for name, path in files.items():
@@ -24,11 +28,7 @@ for name, path in files.items():
         print(f"[FAIL] missing required file: {path}")
         sys.exit(1)
 
-texts = {
-    name: path.read_text(encoding="utf-8")
-    for name, path in files.items()
-    if name not in {"RELEASE_SCRIPT", "FAST_RELEASE_SCRIPT", "PREFLIGHT_SCRIPT", "GATEWAY_SCRIPT"}
-}
+texts = {name: path.read_text(encoding="utf-8") for name, path in files.items()}
 checks = []
 
 
@@ -36,48 +36,62 @@ def ok(cond: bool, msg: str) -> None:
     checks.append((cond, msg))
 
 
-def head(text: str, lines: int = 120) -> str:
-    return "\n".join(text.splitlines()[:lines])
+def git_tracked_progress_entries() -> list[str]:
+    result = subprocess.run(
+        ["git", "ls-files", "--stage"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    entries = []
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        path = line.split("\t", 1)[1]
+        if path.lower() == "progress.md":
+            entries.append(path)
+    return entries
 
 
-snapshot_readme = head(texts["README"])
-snapshot_ai = head(texts["AI"])
-snapshot_status = head(texts["STATUS"])
-snapshot_current = head(texts["CURRENT_TASK"])
-snapshot_plan = head(texts["PLAN"])
-snapshot_progress = head(texts["progress"])
+root_entrypoints = {
+    "README": texts["README"],
+    "AI": texts["AI"],
+    "STATUS": texts["STATUS"],
+    "PLAN": texts["PLAN"],
+    "ROADMAP": texts["ROADMAP"],
+    "PROGRESS": texts["PROGRESS"],
+}
 
-ok("## Current Stage Snapshot" in texts["README"], "README contains Current Stage Snapshot")
-ok("93%" in snapshot_readme and "lightpanda serve + CDP" in snapshot_readme, "README snapshot records 93% serve+CDP baseline")
-ok("release_baseline_verify.sh" in snapshot_readme, "README snapshot includes strict release verify entry")
-ok("release_fast_verify.sh" in snapshot_readme, "README snapshot includes fast verify entry")
-ok("preflight_release_env.sh" in snapshot_readme, "README snapshot includes preflight entry")
-ok("93%" in snapshot_ai and "serve + CDP" in snapshot_ai, "AI snapshot records 93% serve+CDP baseline")
-ok("127.0.0.1:8787" in snapshot_status and "127.0.0.1:3000" in snapshot_status, "STATUS records both gateway and control-plane ports")
-ok("/usr/local/bin/lightpanda" in snapshot_status, "STATUS records real Lightpanda binary path")
-ok("no-token" in snapshot_status and "real-upstream" in snapshot_status, "STATUS distinguishes gateway no-token and real-upstream acceptance")
-ok("preflight_release_env.sh" in texts["STATUS"], "STATUS includes preflight script entry")
-ok("release_fast_verify.sh" in texts["STATUS"], "STATUS includes fast verify script entry")
-ok("src/runner/fake.rs" in snapshot_current and "fake/stub/test only" in snapshot_current, "CURRENT_TASK records fake runner boundary closeout")
-ok("88%" in snapshot_plan and "93%" in snapshot_plan, "PLAN records 88% -> 93% closeout")
-ok("src/runner/fake.rs" in texts["TODO"], "TODO keeps fake.rs trace item")
-ok("cargo test -q" in snapshot_progress and "93%" in snapshot_progress, "progress.md records green 93% baseline")
-ok("release_baseline_verify.sh" in texts["progress"], "progress.md records strict baseline script")
-ok("preflight_release_env.sh" in texts["progress"], "progress.md records preflight script")
-ok("127.0.0.1:8787" in texts["PROGRESS"] and "/usr/local/bin/lightpanda" in texts["PROGRESS"], "PROGRESS records runtime alignment facts")
-ok("release_fast_verify.sh" in texts["RUNBOOK"] and "preflight_release_env.sh" in texts["RUNBOOK"], "RUNBOOK includes preflight + fast verify commands")
-ok("no-token" in texts["RUNBOOK"] and "real-upstream" in texts["RUNBOOK"], "RUNBOOK distinguishes no-token and real-upstream validation")
+ok("/docs/README.md" in texts["README"], "README routes to docs/README.md")
+ok("/docs/root-entrypoint-map.md" in texts["README"], "README routes to docs/root-entrypoint-map.md")
+ok("/docs/02-current-state.md" in texts["STATUS"], "STATUS routes to docs/02-current-state.md")
+ok("upstream_configured=false" in texts["STATUS"], "STATUS keeps the gateway upstream guardrail")
+ok("/docs/05-ai-maintenance-playbook.md" in texts["AI"], "AI routes to docs/05-ai-maintenance-playbook.md")
+ok("/docs/03-roadmap.md" in texts["PLAN"] and "/docs/04-improvement-backlog.md" in texts["PLAN"], "PLAN routes to roadmap and backlog docs")
+ok("/docs/03-roadmap.md" in texts["ROADMAP"], "ROADMAP routes to docs/03-roadmap.md")
+ok("/docs/02-current-state.md" in texts["PROGRESS"], "PROGRESS routes to docs/02-current-state.md")
+ok("/docs/final-goal-progress-breakdown.md" in texts["PROGRESS"], "PROGRESS routes to docs/final-goal-progress-breakdown.md")
+ok("/PROGRESS.md" in texts["ROOT_MAP_DOC"], "root entrypoint map documents PROGRESS.md")
+ok("/README.md" in texts["ROOT_MAP_DOC"] and "/STATUS.md" in texts["ROOT_MAP_DOC"], "root entrypoint map lists root compatibility files")
+ok("Runtime Alive" in texts["CURRENT_STATE"], "02-current-state keeps the runtime section")
+ok("Build Status" in texts["CURRENT_STATE"], "02-current-state keeps the build section")
+ok("Reporting Rule From Now On" in texts["CURRENT_STATE"], "02-current-state keeps the reporting rule section")
+ok("Final Goal Progress Breakdown" in texts["FINAL_PROGRESS_DOC"], "final progress breakdown doc is present")
+ok("upstream_configured=false" in texts["RUNBOOK_DOC"], "gateway runbook keeps the shell-vs-upstream guardrail")
+ok("real-upstream acceptance blocked by current runtime state" in texts["RUNBOOK_DOC"], "gateway runbook keeps the real-upstream blocker wording")
 
-banned = ["fetch-based mainline", "lightpanda fetch"]
-for name, snapshot in [
-    ("README", snapshot_readme),
-    ("AI", snapshot_ai),
-    ("STATUS", snapshot_status),
-    ("CURRENT_TASK", snapshot_current),
-    ("PLAN", snapshot_plan),
-    ("progress", snapshot_progress),
-]:
-    ok(all(term not in snapshot for term in banned), f"{name} snapshot no longer treats fetch-based as current mainline")
+banned = [
+    "Stage-closeout baseline",
+    "**93%**",
+    "cargo test -q",
+    "real-upstream already closed",
+]
+for name, text in root_entrypoints.items():
+    ok(all(term not in text for term in banned), f"{name} entrypoint no longer carries stale stage-closeout wording")
+
+progress_entries = git_tracked_progress_entries()
+ok(progress_entries == ["PROGRESS.md"], "git tracks only PROGRESS.md as the root progress entrypoint")
 
 failed = False
 for cond, msg in checks:

@@ -1,29 +1,17 @@
-## 2026-04-14 Execution Snapshot
+# PLAN.md
 
-## Summary
-
-- Stage closeout has already moved from **88%** to **93%**.
-- The stable baseline is the repo-owned `lightpanda serve + CDP` path with release scripts, gateway verification, and dual-mode proxy reporting aligned.
-- The next work is closure work, not new Browser API surface.
-
-## Constraints
-
-- No new public endpoint.
-- No Browser 5 endpoint contract change.
-- No control-plane entry rename.
-- Keep `lightpanda serve + CDP` as the browser mainline.
+This root `PLAN.md` is a compatibility entrypoint.
+Canonical planning now lives in `/docs/03-roadmap.md` and `/docs/04-improvement-backlog.md`.
 
 ## Current Closure Order
 
-1. Keep top-level stage-entry docs aligned with the `93%` baseline.
-2. Close continuity control-plane Rust follow-up until `cargo test --tests` is green again.
-3. Validate gateway UI changes only after the Rust closure is complete.
+1. keep reporting split into `runtime alive`, `build status`, and `verification / acceptance status`
+2. recover or classify build/test blockers before claiming browser mainline progress
+3. keep gateway shell health separate from gateway upstream closure
 
-## Verification Chain
+## Planning Sources
 
-1. `bash scripts/preflight_release_env.sh`
-2. `bash scripts/release_baseline_verify.sh --with-upstream`
-3. `bash scripts/release_fast_verify.sh`
-4. `bash scripts/gateway_verify.sh no-token`
-5. `bash scripts/gateway_verify.sh real-upstream`
+- `/docs/03-roadmap.md` for the active path
+- `/docs/04-improvement-backlog.md` for open risks and follow-up work
+- `/TODO.md` for the short execution queue
 

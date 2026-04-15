@@ -1,31 +1,30 @@
-# Dual-Entry Snapshot Maintenance Example (2026-04-02)
+# Dual-Entry Snapshot Maintenance Example
 
 ## Scenario
 
-A future stage changes the active project mainline.
-Both `README.md` and `AI.md` contain Current Stage Snapshot blocks, so both must stay aligned.
+A future change updates the real runtime or acceptance story.
+The canonical docs under `/docs` must move first, while root entrypoints remain routing surfaces.
 
-## Correct order
+## Correct Order
 
-1. update `STATUS.md`
-2. update `TODO.md`
-3. update `PROGRESS.md`
+1. update `/docs/02-current-state.md`
+2. update `/docs/03-roadmap.md` and `/docs/04-improvement-backlog.md` as needed
+3. update `/TODO.md` if live priorities changed
 4. run:
 
 ```bash
 python3 scripts/check_stage_entry_consistency.py
 ```
 
-5. update `README.md` Current Stage Snapshot
-6. update `AI.md` Current Stage Snapshot
-7. rerun:
+5. update root entrypoints only if the doc map or reporting rule changed
+6. rerun:
 
 ```bash
 python3 scripts/check_stage_entry_consistency.py
 ```
 
-8. commit only after the script passes again
+7. commit only after the script passes again
 
 ## Rule
 
-> README and AI.md are twin stage-entry surfaces; neither should drift ahead of the other.
+> Root entrypoints follow canonical docs; they do not lead them.
