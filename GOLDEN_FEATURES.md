@@ -1,6 +1,6 @@
 # GOLDEN_FEATURES.md
 
-`AutoOpenBrowser` 的金子功能路线图。
+`PersonaPilot` 的金子功能路线图。
 
 > 金子功能 = 不是最先必须完成，但一旦做出来，会显著提高项目层次、研究价值和长期壁垒的能力。
 

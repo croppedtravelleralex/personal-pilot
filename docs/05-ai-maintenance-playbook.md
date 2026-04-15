@@ -1,4 +1,4 @@
-﻿# 05 AI 维护接手手册
+# 05 AI 维护接手手册
 
 ## 接手顺序
 
@@ -67,7 +67,7 @@
 
 ### 1. mode ??? AppState ?????
 - ????? `prod_live` / `demo_public` ?????? `build_app_state` / `build_test_app` ?????????
-- ????????? `AUTO_OPEN_BROWSER_PROXY_MODE` ????????? app ???
+- ????????? `PERSONA_PILOT_PROXY_MODE` ????????? app ???
 
 ### 2. verify-batch / status ?? mode-aware
 - `prod_live` ????? `demo-only` source
@@ -97,7 +97,7 @@
 ## 2026-04-13 本地验证补充规则
 
 ### 1. mode-aware 测试不要再直接依赖进程级环境变量竞态
-- `AUTO_OPEN_BROWSER_PROXY_MODE` 的集成测试已改为通过线程内 override 驱动 `build_app_state` / `build_test_app` 读取的 runtime mode。
+- `PERSONA_PILOT_PROXY_MODE` 的集成测试已改为通过线程内 override 驱动 `build_app_state` / `build_test_app` 读取的 runtime mode。
 - 如果后续新增 mode-aware 测试，优先复用现有 `ScopedEnvVar` 辅助，不要手写裸 `std::env::set_var` 后并行跑测试。
 - 这样可以避免测试并发时出现 `prod_live` / `demo_public` 串台，导致 `/status.mode`、`recent_hot_regions` 等断言偶发漂移。
 
@@ -354,7 +354,7 @@
   不要立刻把它判成链路错误；先确认是否是**旧 status contract**。
 - 当前兼容口径已固定为：
   - `preflight_release_env.sh`
-    - `/status.mode` 为空时，回退读取 `port 3000` 进程环境中的 `AUTO_OPEN_BROWSER_PROXY_MODE`
+    - `/status.mode` 为空时，回退读取 `port 3000` 进程环境中的 `PERSONA_PILOT_PROXY_MODE`
   - `proxy_longrun_report.py`
     - status snapshot 缺 `mode` 时，回退 driver raw payload 的 `mode`
     - status snapshot 缺 `recent_hot_regions` 时，回退 browser event 中的 `recent_hot_regions_during_request`

@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--db",
-        default=(ROOT_DIR / "data" / "auto_open_browser.db").as_posix(),
+        default=(ROOT_DIR / "data" / "persona_pilot.db").as_posix(),
         help="SQLite database path",
     )
     parser.add_argument(
@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--config",
-        default=os.environ.get("AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG", ""),
+        default=os.environ.get("PERSONA_PILOT_PROXY_HARVEST_CONFIG", ""),
         help="Optional proxy source config used to derive the selected source set",
     )
     parser.add_argument(

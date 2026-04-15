@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::time::Instant;
 
 fn perf_probe_enabled() -> bool {
-    std::env::var("AOB_PERF_PROBE")
+    std::env::var("PP_PERF_PROBE")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
         .unwrap_or(false)
 }

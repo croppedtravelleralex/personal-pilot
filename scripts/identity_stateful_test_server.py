@@ -19,10 +19,10 @@ STATEFUL_HTML_TEMPLATE = """<!doctype html>
       (() => {
         const params = new URLSearchParams(window.location.search);
         const slot = params.get("slot") || "default";
-        const cookieName = `aob_${slot}_cookie`;
-        const localKey = `aob_${slot}_local`;
-        const sessionKey = `aob_${slot}_session`;
-        const iterationKey = `aob_${slot}_iteration`;
+        const cookieName = `pp_${slot}_cookie`;
+        const localKey = `pp_${slot}_local`;
+        const sessionKey = `pp_${slot}_session`;
+        const iterationKey = `pp_${slot}_iteration`;
         const readCookie = (name) => {
           const token = document.cookie
             .split("; ")
@@ -94,10 +94,10 @@ FORM_HTML_TEMPLATE = """<!doctype html>
       (() => {
         const params = new URLSearchParams(window.location.search);
         const slot = params.get("slot") || "default";
-        const cookieName = `aob_${slot}_form_cookie`;
-        const localKey = `aob_${slot}_form_local`;
-        const sessionKey = `aob_${slot}_form_session`;
-        const iterationKey = `aob_${slot}_form_iteration`;
+        const cookieName = `pp_${slot}_form_cookie`;
+        const localKey = `pp_${slot}_form_local`;
+        const sessionKey = `pp_${slot}_form_session`;
+        const iterationKey = `pp_${slot}_form_iteration`;
         const form = document.getElementById("writer");
         const messageInput = document.getElementById("message");
         const notesInput = document.getElementById("notes");
@@ -159,7 +159,7 @@ FORM_HTML_TEMPLATE = """<!doctype html>
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AOBStatefulTest/1.0"
+    server_version = "PersonaPilotStatefulTest/1.0"
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)

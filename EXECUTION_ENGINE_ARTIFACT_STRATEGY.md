@@ -2,7 +2,7 @@
 
 ## 目标
 
-为 `lightpanda-automation` 明确一条低风险、可演进的 **执行引擎边界 + artifact 策略**，避免 runner / artifact / 持久化职责继续散落，影响后续 trust score、verify 和长期运行治理。
+为 `PersonaPilot` 明确一条低风险、可演进的 **执行引擎边界 + artifact 策略**，避免 runner / artifact / 持久化职责继续散落，影响后续 trust score、verify 和长期运行治理。
 
 ## 当前判断
 

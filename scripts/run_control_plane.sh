@@ -5,12 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="${ROOT_DIR}/control-plane.pid"
 OUT_FILE="${ROOT_DIR}/control-plane.out"
 ERR_FILE="${ROOT_DIR}/control-plane.err"
-BIN_PATH="${ROOT_DIR}/target/release/AutoOpenBrowser"
-HEALTH_URL="${AUTO_OPEN_BROWSER_HEALTH_URL:-http://127.0.0.1:3000/health}"
+BIN_PATH="${ROOT_DIR}/target/release/PersonaPilot"
+HEALTH_URL="${PERSONA_PILOT_HEALTH_URL:-http://127.0.0.1:3000/health}"
 PATH="/home/ubuntu/.cargo/bin:${PATH}"
 
-export AUTO_OPEN_BROWSER_RUNNER="${AUTO_OPEN_BROWSER_RUNNER:-lightpanda}"
-export AUTO_OPEN_BROWSER_PROXY_MODE="${AUTO_OPEN_BROWSER_PROXY_MODE:-prod_live}"
+export PERSONA_PILOT_RUNNER="${PERSONA_PILOT_RUNNER:-lightpanda}"
+export PERSONA_PILOT_PROXY_MODE="${PERSONA_PILOT_PROXY_MODE:-prod_live}"
 export LIGHTPANDA_BIN="${LIGHTPANDA_BIN:-/usr/local/bin/lightpanda}"
 
 list_control_plane_pids() {
@@ -45,9 +45,9 @@ for entry in os.listdir("/proc"):
         continue
     if cwd != root_dir:
         continue
-    if "AutoOpenBrowser" not in cmdline or " gateway" in cmdline:
+    if "PersonaPilot" not in cmdline or " gateway" in cmdline:
         continue
-    if "rustc --crate-name AutoOpenBrowser" in cmdline or "cargo build" in cmdline:
+    if "rustc --crate-name persona_pilot" in cmdline or "cargo build" in cmdline:
         continue
     emit(pid)
 PY
@@ -70,7 +70,7 @@ wait_for_health() {
 }
 
 build_release_if_needed() {
-  if [[ "${AUTO_OPEN_BROWSER_SKIP_BUILD:-0}" == "1" ]]; then
+  if [[ "${PERSONA_PILOT_SKIP_BUILD:-0}" == "1" ]]; then
     return 0
   fi
   echo "[run_control_plane] building release binary"

@@ -1,6 +1,6 @@
 # FINGERPRINT_BOUNDARY.md
 
-`lightpanda-automation` 浏览器指纹能力边界设计。
+`PersonaPilot` 浏览器指纹能力边界设计。
 
 ---
 

@@ -1,6 +1,6 @@
 # EXECUTION_STATE_MACHINE.md
 
-`AutoOpenBrowser` 自动执行状态机定义。
+`PersonaPilot` 自动执行状态机定义。
 
 ## 目标
 

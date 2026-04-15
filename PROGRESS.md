@@ -1,4 +1,4 @@
-# lightpanda-automation progress
+# PersonaPilot progress
 
 This root progress file is now a compatibility entrypoint.
 Canonical progress and reality tracking live in:

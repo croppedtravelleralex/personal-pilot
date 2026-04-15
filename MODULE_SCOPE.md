@@ -68,7 +68,7 @@
 ## 第一阶段目录建议
 
 ```text
-AutoOpenBrowser/
+PersonaPilot/
   Cargo.toml
   src/
     main.rs

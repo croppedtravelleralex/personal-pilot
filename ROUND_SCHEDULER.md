@@ -1,6 +1,6 @@
 # ROUND_SCHEDULER.md
 
-`AutoOpenBrowser` 的轮次调度器设计。
+`PersonaPilot` 的轮次调度器设计。
 
 ## 目标
 

@@ -1,6 +1,6 @@
 # FEATURES.md
 
-`lightpanda-automation` / `AutoOpenBrowser` 项目最终目标功能文档。
+`PersonaPilot` / `PersonaPilot` 项目最终目标功能文档。
 
 目的：单独回答一个问题——
 

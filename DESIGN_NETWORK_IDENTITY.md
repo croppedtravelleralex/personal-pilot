@@ -1,6 +1,6 @@
 # DESIGN_NETWORK_IDENTITY.md
 
-`AutoOpenBrowser` 的网络与身份层设计文档。
+`PersonaPilot` 的网络与身份层设计文档。
 
 聚焦三部分：
 

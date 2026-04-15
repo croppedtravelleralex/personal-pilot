@@ -11,6 +11,9 @@ use crate::network_identity::proxy_growth::{
     assess_proxy_pool_health, evaluate_region_match, proxy_pool_growth_policy_from_env,
     ProxyPoolInventorySnapshot,
 };
+use crate::network_identity::fingerprint_consumption::{
+    build_lightpanda_runtime_projection, FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
+};
 use crate::network_identity::proxy_selection::{
     apply_proxy_resolution_metadata, proxy_selection_base_where_sql,
     proxy_selection_order_by_trust_score_sql_with_tuning, resolved_proxy_json,
@@ -88,7 +91,7 @@ fn fingerprint_perf_budget_tag_from_profile_json(
 }
 
 fn medium_budget_limit(worker_count: usize) -> usize {
-    std::env::var("AUTO_OPEN_BROWSER_FP_MEDIUM_MAX_CONCURRENCY")
+    std::env::var("PERSONA_PILOT_FP_MEDIUM_MAX_CONCURRENCY")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .filter(|v| *v > 0)
@@ -96,7 +99,7 @@ fn medium_budget_limit(worker_count: usize) -> usize {
 }
 
 fn heavy_budget_limit(worker_count: usize) -> usize {
-    std::env::var("AUTO_OPEN_BROWSER_FP_HEAVY_MAX_CONCURRENCY")
+    std::env::var("PERSONA_PILOT_FP_HEAVY_MAX_CONCURRENCY")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .filter(|v| *v > 0)
@@ -104,7 +107,7 @@ fn heavy_budget_limit(worker_count: usize) -> usize {
 }
 
 fn claim_candidate_scan_limit() -> i64 {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_CLAIM_SCAN_LIMIT")
+    std::env::var("PERSONA_PILOT_RUNNER_CLAIM_SCAN_LIMIT")
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
         .filter(|v| *v > 0)
@@ -155,50 +158,44 @@ fn build_fingerprint_runtime_explain_json(
         .cloned()
         .or_else(|| {
             fingerprint_profile.map(|profile| {
-                let declared_fields = profile
-                    .profile_json
-                    .as_object()
-                    .map(|obj| {
-                        obj.keys()
-                            .filter(|key| *key != "id" && *key != "name" && *key != "version")
-                            .cloned()
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                let resolved_fields = declared_fields
-                    .iter()
-                    .filter(|field| matches!(field.as_str(), "timezone" | "locale" | "accept_language" | "headers"))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let applied_fields = resolved_fields.clone();
-                let ignored_fields = declared_fields
-                    .iter()
-                    .filter(|field| !resolved_fields.iter().any(|resolved| resolved == *field))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let consumption_status = if declared_fields.is_empty() {
-                    "metadata_only"
-                } else if applied_fields.is_empty() {
-                    "ignored_only"
-                } else if ignored_fields.is_empty() {
-                    "fully_consumed"
-                } else {
-                    "partially_consumed"
-                };
+                let projection = build_lightpanda_runtime_projection(
+                    &profile.id,
+                    profile.version,
+                    &profile.profile_json,
+                );
                 json!({
-                    "declared_fields": declared_fields,
-                    "resolved_fields": resolved_fields,
-                    "applied_fields": applied_fields,
-                    "ignored_fields": ignored_fields,
-                    "declared_count": declared_fields.len(),
-                    "resolved_count": resolved_fields.len(),
-                    "applied_count": applied_fields.len(),
-                    "ignored_count": ignored_fields.len(),
-                    "consumption_status": consumption_status,
-                    "partial_support_warning": (!ignored_fields.is_empty()).then_some("some declared fingerprint fields were not consumed by the current lightpanda runner")
+                    "declared_fields": projection.consumption.declared_fields,
+                    "resolved_fields": projection.consumption.resolved_fields,
+                    "applied_fields": projection.consumption.applied_fields,
+                    "ignored_fields": projection.consumption.ignored_fields,
+                    "declared_count": projection.consumption.declared_count(),
+                    "resolved_count": projection.consumption.resolved_count(),
+                    "applied_count": projection.consumption.applied_count(),
+                    "ignored_count": projection.consumption.ignored_count(),
+                    "consumption_status": projection.consumption.consumption_status,
+                    "consumption_version": projection.consumption.consumption_version,
+                    "partial_support_warning": projection.consumption.partial_support_warning
                 })
             })
         });
+    let consumption_version = task_payload
+        .get("fingerprint_runtime")
+        .and_then(|v| v.get("consumption_version"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            consumption_explain
+                .as_ref()
+                .and_then(|v| v.get("consumption_version"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
+    let consumption_source_of_truth = task_payload
+        .get("fingerprint_runtime")
+        .and_then(|v| v.get("consumption_source_of_truth"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| fingerprint_profile.map(|_| FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME.to_string()));
     let consumption_status = task_payload
         .get("fingerprint_runtime")
         .and_then(|v| v.get("consumption_status"))
@@ -257,6 +254,8 @@ fn build_fingerprint_runtime_explain_json(
     json!({
         "fingerprint_budget_tag": budget_tag,
         "fingerprint_consistency": consistency,
+        "consumption_source_of_truth": consumption_source_of_truth,
+        "consumption_version": consumption_version,
         "consumption_status": consumption_status,
         "warning": warning,
         "consumption_explain": consumption_explain,
@@ -326,6 +325,30 @@ fn extract_proxy_selection(payload: &Value) -> Option<RunnerProxySelection> {
             .and_then(|v| v.as_str())
             .unwrap_or("resolved")
             .to_string(),
+        source_label: proxy_obj
+            .get("source_label")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        source_tier: proxy_obj
+            .get("source_tier")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        verification_path: proxy_obj
+            .get("verification_path")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        last_verify_source: proxy_obj
+            .get("last_verify_source")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        last_exit_country: proxy_obj
+            .get("last_exit_country")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        last_exit_region: proxy_obj
+            .get("last_exit_region")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
     })
 }
 
@@ -1717,6 +1740,36 @@ async fn resolve_network_policy_for_task(
                 .and_then(|value| value.as_str())
                 .unwrap_or("resolved")
                 .to_string(),
+            source_label: policy_obj
+                .get("resolved_proxy")
+                .and_then(|value| value.get("source_label"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            source_tier: policy_obj
+                .get("resolved_proxy")
+                .and_then(|value| value.get("source_tier"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            verification_path: policy_obj
+                .get("resolved_proxy")
+                .and_then(|value| value.get("verification_path"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            last_verify_source: policy_obj
+                .get("resolved_proxy")
+                .and_then(|value| value.get("last_verify_source"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            last_exit_country: policy_obj
+                .get("resolved_proxy")
+                .and_then(|value| value.get("last_exit_country"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            last_exit_region: policy_obj
+                .get("resolved_proxy")
+                .and_then(|value| value.get("last_exit_region"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
         };
         let mut resolved = resolved_proxy_json(
             id.clone(),

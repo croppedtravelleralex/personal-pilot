@@ -1,4 +1,4 @@
-# lightpanda-automation
+# PersonaPilot
 
 This root `README.md` is now a compatibility entrypoint.
 Canonical maintenance docs live under `/docs`.

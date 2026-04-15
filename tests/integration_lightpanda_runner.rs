@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tower::ServiceExt;
-use AutoOpenBrowser::{
+use persona_pilot::{
     api::routes::build_router,
     app::build_app_state,
     db::init::init_db,
@@ -34,7 +34,7 @@ fn unique_db_url() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    format!("sqlite:///tmp/auto_open_browser_lightpanda_test_{nanos}.db")
+    format!("sqlite:///tmp/persona_pilot_lightpanda_test_{nanos}.db")
 }
 
 async fn json_response(app: &axum::Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -72,10 +72,10 @@ async fn wait_for_terminal_status(app: &axum::Router, task_id: &str) -> Value {
 
 async fn build_lightpanda_test_app(
     database_url: &str,
-) -> anyhow::Result<(AutoOpenBrowser::app::state::AppState, axum::Router)> {
+) -> anyhow::Result<(persona_pilot::app::state::AppState, axum::Router)> {
     let db = init_db(database_url).await?;
     seed_active_proxy(&db, DEFAULT_LIGHTPANDA_TEST_PROXY_ID, "lp-test", "us-east").await;
-    let runner: Arc<dyn AutoOpenBrowser::runner::TaskRunner> =
+    let runner: Arc<dyn persona_pilot::runner::TaskRunner> =
         Arc::new(LightpandaRunner::default());
     let state = build_app_state(db, runner.clone(), None, 1);
     spawn_runner_workers(state.clone(), runner, 1).await;
@@ -158,7 +158,7 @@ async fn create_browser_task_with_payload(
 }
 
 async fn load_result_row(
-    state: &AutoOpenBrowser::app::state::AppState,
+    state: &persona_pilot::app::state::AppState,
     task_id: &str,
 ) -> (
     String,
@@ -353,7 +353,7 @@ impl FakeCdpServer {
                                 local_storage,
                                 session_storage,
                                 ..
-                            } if expression.contains("__AOB_STORAGE_SNAPSHOT__") => json!({
+                            } if expression.contains("__PP_STORAGE_SNAPSHOT__") => json!({
                                 "result": {
                                     "type": "object",
                                     "value": {
@@ -363,7 +363,7 @@ impl FakeCdpServer {
                                 }
                             }),
                             FakeCdpScenario::Success { .. }
-                                if expression.contains("__AOB_STORAGE_RESTORE__") =>
+                                if expression.contains("__PP_STORAGE_RESTORE__") =>
                             {
                                 json!({
                                     "result": {
@@ -798,7 +798,7 @@ async fn lightpanda_runner_auto_session_restores_and_persists_cookies() {
                     .and_then(|value| value.get("expression"))
                     .and_then(Value::as_str)
                     .map(|expression| {
-                        expression.contains("__AOB_STORAGE_RESTORE__")
+                        expression.contains("__PP_STORAGE_RESTORE__")
                             && expression.contains("\"theme\":\"dark\"")
                             && expression.contains("\"step\":\"1\"")
                     })

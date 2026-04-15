@@ -105,7 +105,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--db",
-        default=(ROOT_DIR / "data" / "auto_open_browser.db").as_posix(),
+        default=(ROOT_DIR / "data" / "persona_pilot.db").as_posix(),
         help="SQLite database path",
     )
     parser.add_argument(
@@ -329,7 +329,7 @@ def http_json(url: str, timeout_seconds: int) -> dict[str, object]:
         url,
         headers={
             "Accept": "application/json",
-            "User-Agent": "lightpanda-automation/prod-proxy-geo-enrich",
+            "User-Agent": "PersonaPilot/prod-proxy-geo-enrich",
         },
     )
     with urllib.request.urlopen(request, timeout=timeout_seconds) as response:

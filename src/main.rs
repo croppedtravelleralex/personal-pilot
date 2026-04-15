@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail, Result};
 use axum::serve;
 use tokio::{net::TcpListener, time::sleep};
 
-use AutoOpenBrowser::{
+use persona_pilot::{
     api::{handlers::run_proxy_replenish_mvp_tick, routes::build_router},
     app::{build_app_state, state::AppState},
     db::init::init_db,
@@ -46,9 +46,9 @@ async fn main() -> Result<()> {
         }
     }
 
-    let database_url = "sqlite://data/auto_open_browser.db";
+    let database_url = "sqlite://data/persona_pilot.db";
     let db = init_db(database_url).await?;
-    let api_key = std::env::var("AUTO_OPEN_BROWSER_API_KEY")
+    let api_key = std::env::var("PERSONA_PILOT_API_KEY")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
 
     let workflow_state = WorkflowExecutionState::ensure_default_state_file(
         DEFAULT_WORKFLOW_STATE_PATH,
-        "AutoOpenBrowser",
+        "PersonaPilot",
     )?;
     let worker_count = runner_concurrency_from_env();
     let state = build_app_state(db, runner.clone(), api_key, worker_count);
@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let listener = TcpListener::bind(addr).await?;
 
-    println!("AutoOpenBrowser listening on http://{}", addr);
+    println!("PersonaPilot listening on http://{}", addr);
     println!("Database initialized at {}", database_url);
     println!("Runner kind: {:?}", RunnerKind::from_env());
     println!("Runner concurrency: {}", worker_count);
@@ -185,7 +185,7 @@ async fn run_gateway_server() -> Result<()> {
 async fn handle_workflow_cli(args: &[String]) -> Result<()> {
     match args.first().map(|s| s.as_str()) {
         Some("tick") => {
-            let state = tick_workflow_file(DEFAULT_WORKFLOW_STATE_PATH, "AutoOpenBrowser")?;
+            let state = tick_workflow_file(DEFAULT_WORKFLOW_STATE_PATH, "PersonaPilot")?;
             println!(
                 "workflow tick ok: stage={:?}, iteration={}, focus={}",
                 state.stage, state.loop_iteration, state.current_focus
@@ -197,7 +197,7 @@ async fn handle_workflow_cli(args: &[String]) -> Result<()> {
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(1);
             let state =
-                run_minimal_cycle_steps(DEFAULT_WORKFLOW_STATE_PATH, "AutoOpenBrowser", steps)?;
+                run_minimal_cycle_steps(DEFAULT_WORKFLOW_STATE_PATH, "PersonaPilot", steps)?;
             println!(
                 "workflow run-steps ok: steps={}, stage={:?}, iteration={}",
                 steps, state.stage, state.loop_iteration
@@ -210,7 +210,7 @@ async fn handle_workflow_cli(args: &[String]) -> Result<()> {
             let allow_push = args.iter().any(|a| a == "--allow-push");
             let state = WorkflowExecutionState::ensure_default_state_file(
                 DEFAULT_WORKFLOW_STATE_PATH,
-                "AutoOpenBrowser",
+                "PersonaPilot",
             )?;
             let changed = run_workflow_commit_push(&state, allow_push)?;
             println!(
@@ -221,7 +221,7 @@ async fn handle_workflow_cli(args: &[String]) -> Result<()> {
         Some("show") => {
             let state = WorkflowExecutionState::ensure_default_state_file(
                 DEFAULT_WORKFLOW_STATE_PATH,
-                "AutoOpenBrowser",
+                "PersonaPilot",
             )?;
             println!("{}", serde_json::to_string_pretty(&state)?);
         }
@@ -233,16 +233,16 @@ async fn handle_workflow_cli(args: &[String]) -> Result<()> {
 }
 
 fn print_help() {
-    println!("AutoOpenBrowser usage:");
-    println!("  AutoOpenBrowser                 Start API server");
-    println!("  AutoOpenBrowser gateway         Start private gateway server");
-    println!("  AutoOpenBrowser workflow show   Show workflow state");
+    println!("PersonaPilot usage:");
+    println!("  PersonaPilot                 Start API server");
+    println!("  PersonaPilot gateway         Start private gateway server");
+    println!("  PersonaPilot workflow show   Show workflow state");
     println!(
-        "  AutoOpenBrowser workflow tick   Execute one workflow tick and persist RUN_STATE.json"
+        "  PersonaPilot workflow tick   Execute one workflow tick and persist RUN_STATE.json"
     );
-    println!("  AutoOpenBrowser workflow run-steps <n>   Execute n workflow steps and persist RUN_STATE.json");
-    println!("  AutoOpenBrowser workflow daemon [--interval-seconds N] [--ticks M] [--allow-push]   Run periodic workflow ticks");
-    println!("  AutoOpenBrowser workflow commit-push [--allow-push]   Commit current changes and optionally push when allowed");
+    println!("  PersonaPilot workflow run-steps <n>   Execute n workflow steps and persist RUN_STATE.json");
+    println!("  PersonaPilot workflow daemon [--interval-seconds N] [--ticks M] [--allow-push]   Run periodic workflow ticks");
+    println!("  PersonaPilot workflow commit-push [--allow-push]   Commit current changes and optionally push when allowed");
 }
 
 async fn run_workflow_daemon(args: &[String]) -> Result<()> {
@@ -284,7 +284,7 @@ async fn run_workflow_daemon(args: &[String]) -> Result<()> {
     );
     let mut executed = 0usize;
     loop {
-        let state = tick_workflow_file(DEFAULT_WORKFLOW_STATE_PATH, "AutoOpenBrowser")?;
+        let state = tick_workflow_file(DEFAULT_WORKFLOW_STATE_PATH, "PersonaPilot")?;
         if state.stage == WorkflowStage::CommitPush {
             let changed = run_workflow_commit_push(&state, allow_push)?;
             println!(

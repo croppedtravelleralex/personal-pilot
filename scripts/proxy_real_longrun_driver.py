@@ -37,27 +37,27 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--base-url",
-        default=os.environ.get("AUTO_OPEN_BROWSER_BASE_URL", DEFAULT_BASE_URL),
+        default=os.environ.get("PERSONA_PILOT_BASE_URL", DEFAULT_BASE_URL),
         help="Control-plane base URL",
     )
     parser.add_argument(
         "--api-key",
-        default=os.environ.get("AUTO_OPEN_BROWSER_API_KEY", ""),
+        default=os.environ.get("PERSONA_PILOT_API_KEY", ""),
         help="Optional API key for protected control-plane endpoints",
     )
     parser.add_argument(
         "--db",
-        default=(ROOT_DIR / "data" / "auto_open_browser.db").as_posix(),
+        default=(ROOT_DIR / "data" / "persona_pilot.db").as_posix(),
         help="SQLite database path used by proxy_harvest_mvp.py",
     )
     parser.add_argument(
         "--config",
-        default=os.environ.get("AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG", ""),
-        help="Real proxy source config path; defaults to AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG",
+        default=os.environ.get("PERSONA_PILOT_PROXY_HARVEST_CONFIG", ""),
+        help="Real proxy source config path; defaults to PERSONA_PILOT_PROXY_HARVEST_CONFIG",
     )
     parser.add_argument(
         "--mode",
-        default=os.environ.get("AUTO_OPEN_BROWSER_PROXY_MODE", MODE_DEMO_PUBLIC),
+        default=os.environ.get("PERSONA_PILOT_PROXY_MODE", MODE_DEMO_PUBLIC),
         help="Expected proxy runtime mode: demo_public or prod_live",
     )
     parser.add_argument(
@@ -347,7 +347,7 @@ def env_int(*names: str) -> int | None:
 def validate_config_path(config_path: str, allow_demo: bool, mode: str) -> Path:
     if not config_path.strip():
         raise SystemExit(
-            "missing real config: set --config or AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG",
+            "missing real config: set --config or PERSONA_PILOT_PROXY_HARVEST_CONFIG",
         )
     resolved = resolve_path(config_path)
     if not resolved.exists():

@@ -14,7 +14,7 @@
 ## 已完成的 profiling 基础设施
 
 ### 已有最小观测埋点
-通过 `AOB_PERF_PROBE=1` 已覆盖：
+通过 `PP_PERF_PROBE=1` 已覆盖：
 
 #### 写侧
 - `refresh_provider_risk_snapshots`

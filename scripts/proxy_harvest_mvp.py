@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 
-DEFAULT_DB_PATH = "data/auto_open_browser.db"
+DEFAULT_DB_PATH = "data/persona_pilot.db"
 
 
 def now_ts() -> str:
@@ -74,7 +74,7 @@ def resolve_source_config_paths(
 def default_config_path() -> str:
     return resolve_local_path(
         Path.cwd(),
-        os.environ.get("AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG", "data/proxy_sources.json"),
+        os.environ.get("PERSONA_PILOT_PROXY_HARVEST_CONFIG", "data/proxy_sources.json"),
     )
 
 

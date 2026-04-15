@@ -5,9 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 PRESET="${PROXY_VERIFY_REAL_PRESET:-legacy}"
-MODE="${AUTO_OPEN_BROWSER_PROXY_MODE:-prod_live}"
-DB_PATH="${PROXY_VERIFY_REAL_DB:-${ROOT_DIR}/data/auto_open_browser.db}"
-CONFIG_PATH="${PROXY_VERIFY_REAL_CONFIG:-${AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG:-}}"
+MODE="${PERSONA_PILOT_PROXY_MODE:-prod_live}"
+DB_PATH="${PROXY_VERIFY_REAL_DB:-${ROOT_DIR}/data/persona_pilot.db}"
+CONFIG_PATH="${PROXY_VERIFY_REAL_CONFIG:-${PERSONA_PILOT_PROXY_HARVEST_CONFIG:-}}"
 GEO_ENRICH_LIMIT="${PROXY_VERIFY_REAL_GEO_ENRICH_LIMIT:-200}"
 
 usage() {
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${CONFIG_PATH}" ]]; then
-  echo "[prod-live-maintenance] missing config path: set --config or AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG" >&2
+  echo "[prod-live-maintenance] missing config path: set --config or PERSONA_PILOT_PROXY_HARVEST_CONFIG" >&2
   exit 1
 fi
 

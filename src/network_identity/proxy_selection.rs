@@ -479,157 +479,157 @@ pub fn proxy_selection_order_sql_with_tuning(tuning: &ProxySelectionTuning) -> S
 
 pub fn proxy_selection_tuning_from_env() -> ProxySelectionTuning {
     let mut tuning = default_proxy_selection_tuning();
-    if let Ok(value) = std::env::var("AOB_PROXY_STALE_AFTER_SECONDS") {
+    if let Ok(value) = std::env::var("PP_PROXY_STALE_AFTER_SECONDS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.stale_after_seconds = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_RECENT_FAILURE_HEAVY_WINDOW_SECONDS") {
+    if let Ok(value) = std::env::var("PP_PROXY_RECENT_FAILURE_HEAVY_WINDOW_SECONDS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.recent_failure_heavy_window_seconds = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_RECENT_FAILURE_LIGHT_WINDOW_SECONDS") {
+    if let Ok(value) = std::env::var("PP_PROXY_RECENT_FAILURE_LIGHT_WINDOW_SECONDS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.recent_failure_light_window_seconds = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_PROVIDER_FAILURE_MARGIN") {
+    if let Ok(value) = std::env::var("PP_PROXY_PROVIDER_FAILURE_MARGIN") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.provider_failure_margin = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_PROVIDER_REGION_CLUSTER_WINDOW_SECONDS") {
+    if let Ok(value) = std::env::var("PP_PROXY_PROVIDER_REGION_CLUSTER_WINDOW_SECONDS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.provider_region_failure_cluster_window_seconds = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_PROVIDER_REGION_CLUSTER_COUNT") {
+    if let Ok(value) = std::env::var("PP_PROXY_PROVIDER_REGION_CLUSTER_COUNT") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.provider_region_failure_cluster_count = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_RAW_SCORE_WEIGHT_TENTHS") {
+    if let Ok(value) = std::env::var("PP_PROXY_RAW_SCORE_WEIGHT_TENTHS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.raw_score_weight_tenths = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_OK_BONUS") {
+    if let Ok(value) = std::env::var("PP_PROXY_VERIFY_OK_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.verify_ok_bonus = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_GEO_MATCH_BONUS") {
+    if let Ok(value) = std::env::var("PP_PROXY_VERIFY_GEO_MATCH_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.verify_geo_match_bonus = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_GEO_MISMATCH_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_GEO_MISMATCH_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.geo_mismatch_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_REGION_MISMATCH_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_REGION_MISMATCH_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.region_mismatch_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_SMOKE_UPSTREAM_OK_BONUS") {
+    if let Ok(value) = std::env::var("PP_PROXY_SMOKE_UPSTREAM_OK_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.smoke_upstream_ok_bonus = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_HEAVY_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_VERIFY_FAILED_HEAVY_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.verify_failed_heavy_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_LIGHT_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_VERIFY_FAILED_LIGHT_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.verify_failed_light_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_BASE_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_VERIFY_FAILED_BASE_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.verify_failed_base_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_MISSING_VERIFY_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_MISSING_VERIFY_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.missing_verify_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_STALE_VERIFY_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_STALE_VERIFY_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.stale_verify_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_ANONYMITY_ELITE_BONUS") {
+    if let Ok(value) = std::env::var("PP_PROXY_ANONYMITY_ELITE_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.anonymity_elite_bonus = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_ANONYMITY_ANONYMOUS_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_ANONYMITY_ANONYMOUS_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.anonymity_anonymous_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_ANONYMITY_TRANSPARENT_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_ANONYMITY_TRANSPARENT_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.anonymity_transparent_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_LOW_LATENCY_BONUS") {
+    if let Ok(value) = std::env::var("PP_PROXY_LOW_LATENCY_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.low_latency_bonus = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_MEDIUM_LATENCY_BONUS") {
+    if let Ok(value) = std::env::var("PP_PROXY_MEDIUM_LATENCY_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.medium_latency_bonus = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_HIGH_LATENCY_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_HIGH_LATENCY_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.high_latency_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_VERY_HIGH_LATENCY_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_VERY_HIGH_LATENCY_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.very_high_latency_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_EXIT_IP_NOT_PUBLIC_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_EXIT_IP_NOT_PUBLIC_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.exit_ip_not_public_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_PROTOCOL_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_PROBE_ERROR_PROTOCOL_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.probe_error_protocol_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_UPSTREAM_MISSING_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_PROBE_ERROR_UPSTREAM_MISSING_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.probe_error_upstream_missing_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_CONNECT_FAILED_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_PROBE_ERROR_CONNECT_FAILED_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.probe_error_connect_failed_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_SITE_SUCCESS_BONUS") {
+    if let Ok(value) = std::env::var("PP_PROXY_SITE_SUCCESS_BONUS") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.site_success_bonus = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_SITE_FAILURE_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_SITE_FAILURE_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.site_failure_penalty = parsed;
         }
     }
-    if let Ok(value) = std::env::var("AOB_PROXY_SITE_BROWSER_FAILURE_PENALTY") {
+    if let Ok(value) = std::env::var("PP_PROXY_SITE_BROWSER_FAILURE_PENALTY") {
         if let Ok(parsed) = value.parse::<i64>() {
             tuning.site_browser_failure_penalty = parsed;
         }

@@ -1097,7 +1097,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        format!("sqlite:///tmp/auto_open_browser_behavior_test_{nanos}.db")
+        format!("sqlite:///tmp/persona_pilot_behavior_test_{nanos}.db")
     }
 
     async fn seed_behavior_profile(db: &DbPool, profile_id: &str, allowed_primitives: &[&str]) {

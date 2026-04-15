@@ -1,7 +1,7 @@
 # Findings
 
 ## Current task
-- 用户当前新主线已从 `lightpanda-automation` 的 browser/status 展示收口，临时切到一个更外部的工程问题：
+- 用户当前新主线已从 `PersonaPilot` 的 browser/status 展示收口，临时切到一个更外部的工程问题：
   - 使用 `agent.alexstudio.top` 作为 API 中转站入口
   - 目标是把“从 Codex/Web 会话中反代出来的额度链路”包装成**本人测试可用、风险可控**的 API 网关
 - 用户明确要求：先做**自己测试可用**的版本，不是先做公开平台。

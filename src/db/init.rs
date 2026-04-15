@@ -13,7 +13,7 @@ use crate::behavior::{system_default_behavior_profile, RESOURCE_STATUS_ACTIVE};
 pub type DbPool = Pool<Sqlite>;
 
 fn perf_probe_enabled() -> bool {
-    std::env::var("AOB_PERF_PROBE")
+    std::env::var("PP_PERF_PROBE")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
         .unwrap_or(false)
 }
@@ -896,7 +896,7 @@ mod scoped_refresh_tests {
 
     fn unique_db_url() -> String {
         format!(
-            "sqlite:///tmp/auto_open_browser-db-init-test-{}.db",
+            "sqlite:///tmp/persona_pilot-db-init-test-{}.db",
             uuid::Uuid::new_v4()
         )
     }

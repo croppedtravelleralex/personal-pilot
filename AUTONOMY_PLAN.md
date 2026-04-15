@@ -218,7 +218,7 @@ bug 环固定格式：
 
 ---
 
-## 当前项目适配说明（lightpanda-automation）
+## 当前项目适配说明（PersonaPilot）
 
 当前项目主循环重点：
 1. trust score 核心化

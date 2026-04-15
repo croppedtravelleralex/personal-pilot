@@ -20,7 +20,7 @@ Suggested commands:
 - Check for zombie or lingering browser processes
 
 Suggested commands:
-- `ps -ef | grep -E "lightpanda|AutoOpenBrowser"`
+- `ps -ef | grep -E "lightpanda|PersonaPilot"`
 - `pgrep -af lightpanda`
 
 ### 3. File descriptor growth
@@ -36,9 +36,9 @@ Suggested commands:
 - Inspect whether task / run / proxy-log growth matches expectations
 
 Suggested commands:
-- `du -h data/auto_open_browser.db`
-- `sqlite3 data/auto_open_browser.db ".tables"`
-- `sqlite3 data/auto_open_browser.db "SELECT COUNT(*) FROM tasks;"`
+- `du -h data/persona_pilot.db`
+- `sqlite3 data/persona_pilot.db ".tables"`
+- `sqlite3 data/persona_pilot.db "SELECT COUNT(*) FROM tasks;"`
 
 ## Phase 2: Targeted Risk Paths
 

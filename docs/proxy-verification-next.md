@@ -31,9 +31,9 @@ Use a configurable probe endpoint that returns JSON like:
 ```
 
 Add environment variables:
-- `AUTO_OPEN_BROWSER_PROXY_PROBE_URL`
-- `AUTO_OPEN_BROWSER_PROXY_PROBE_TIMEOUT_MS`
-- `AUTO_OPEN_BROWSER_PROXY_PROBE_EXPECT_COUNTRY` (optional)
+- `PERSONA_PILOT_PROXY_PROBE_URL`
+- `PERSONA_PILOT_PROXY_PROBE_TIMEOUT_MS`
+- `PERSONA_PILOT_PROXY_PROBE_EXPECT_COUNTRY` (optional)
 
 ### Stage 3: verdict model
 Compute and persist:

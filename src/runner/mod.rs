@@ -23,7 +23,7 @@ pub enum RunnerKind {
 
 impl RunnerKind {
     pub fn from_env() -> Self {
-        match std::env::var("AUTO_OPEN_BROWSER_RUNNER")
+        match std::env::var("PERSONA_PILOT_RUNNER")
             .ok()
             .unwrap_or_else(|| "fake".to_string())
             .to_ascii_lowercase()
@@ -36,7 +36,7 @@ impl RunnerKind {
 }
 
 pub fn runner_concurrency_from_env() -> usize {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_CONCURRENCY")
+    std::env::var("PERSONA_PILOT_RUNNER_CONCURRENCY")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| *value > 0)
@@ -44,14 +44,14 @@ pub fn runner_concurrency_from_env() -> usize {
 }
 
 pub fn runner_reclaim_seconds_from_env() -> Option<u64> {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_RECLAIM_SECONDS")
+    std::env::var("PERSONA_PILOT_RUNNER_RECLAIM_SECONDS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
 }
 
 pub fn runner_heartbeat_interval_seconds_from_env() -> u64 {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_HEARTBEAT_SECONDS")
+    std::env::var("PERSONA_PILOT_RUNNER_HEARTBEAT_SECONDS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -59,7 +59,7 @@ pub fn runner_heartbeat_interval_seconds_from_env() -> u64 {
 }
 
 pub fn runner_claim_retry_limit_from_env() -> u32 {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_CLAIM_RETRY_LIMIT")
+    std::env::var("PERSONA_PILOT_RUNNER_CLAIM_RETRY_LIMIT")
         .ok()
         .and_then(|value| value.parse::<u32>().ok())
         .filter(|value| *value > 0)
@@ -67,7 +67,7 @@ pub fn runner_claim_retry_limit_from_env() -> u32 {
 }
 
 pub fn runner_idle_backoff_min_ms_from_env() -> u64 {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MIN_MS")
+    std::env::var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MIN_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -75,7 +75,7 @@ pub fn runner_idle_backoff_min_ms_from_env() -> u64 {
 }
 
 pub fn runner_idle_backoff_max_ms_from_env() -> u64 {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MAX_MS")
+    std::env::var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MAX_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -90,14 +90,14 @@ pub fn next_runner_idle_backoff_ms(current_ms: u64) -> u64 {
 }
 
 pub fn runner_idle_backoff_jitter_ms_from_env() -> u64 {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_JITTER_MS")
+    std::env::var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_JITTER_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(50)
 }
 
 pub fn runner_error_backoff_max_ms_from_env() -> u64 {
-    std::env::var("AUTO_OPEN_BROWSER_RUNNER_ERROR_BACKOFF_MAX_MS")
+    std::env::var("PERSONA_PILOT_RUNNER_ERROR_BACKOFF_MAX_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -205,9 +205,9 @@ mod tests {
 
     #[test]
     fn next_runner_idle_backoff_respects_bounds() {
-        std::env::set_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MIN_MS", "200");
-        std::env::set_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MAX_MS", "1000");
-        std::env::set_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_JITTER_MS", "20");
+        std::env::set_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MIN_MS", "200");
+        std::env::set_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MAX_MS", "1000");
+        std::env::set_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_JITTER_MS", "20");
 
         assert_eq!(next_runner_idle_backoff_ms(200), 400);
         assert_eq!(next_runner_idle_backoff_ms(400), 800);
@@ -217,8 +217,8 @@ mod tests {
         assert!(with_runner_backoff_jitter(200, 1) >= 200);
         assert!(with_runner_backoff_jitter(200, 1) <= 220);
 
-        std::env::remove_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MIN_MS");
-        std::env::remove_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MAX_MS");
-        std::env::remove_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_JITTER_MS");
+        std::env::remove_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MIN_MS");
+        std::env::remove_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MAX_MS");
+        std::env::remove_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_JITTER_MS");
     }
 }

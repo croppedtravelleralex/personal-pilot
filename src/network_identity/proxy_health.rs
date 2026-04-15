@@ -100,7 +100,7 @@ struct SnapshotHistoryRow {
 }
 
 pub fn proxy_health_tick_interval_seconds_from_env() -> u64 {
-    env::var("AOB_PROXY_HEALTH_TICK_INTERVAL_SECONDS")
+    env::var("PP_PROXY_HEALTH_TICK_INTERVAL_SECONDS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -108,7 +108,7 @@ pub fn proxy_health_tick_interval_seconds_from_env() -> u64 {
 }
 
 pub fn proxy_health_stale_after_seconds_from_env() -> i64 {
-    env::var("AOB_PROXY_HEALTH_STALE_AFTER_SECONDS")
+    env::var("PP_PROXY_HEALTH_STALE_AFTER_SECONDS")
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .filter(|value| *value > 0)
@@ -116,7 +116,7 @@ pub fn proxy_health_stale_after_seconds_from_env() -> i64 {
 }
 
 pub fn proxy_health_batch_limit_from_env() -> i64 {
-    env::var("AOB_PROXY_HEALTH_BATCH_LIMIT")
+    env::var("PP_PROXY_HEALTH_BATCH_LIMIT")
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .filter(|value| *value > 0)
@@ -124,7 +124,7 @@ pub fn proxy_health_batch_limit_from_env() -> i64 {
 }
 
 pub fn proxy_health_inter_proxy_delay_ms_from_env() -> u64 {
-    env::var("AOB_PROXY_HEALTH_INTER_PROXY_DELAY_MS")
+    env::var("PP_PROXY_HEALTH_INTER_PROXY_DELAY_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(DEFAULT_PROXY_HEALTH_INTER_PROXY_DELAY_MS)

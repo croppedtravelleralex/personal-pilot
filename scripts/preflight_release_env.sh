@@ -6,14 +6,14 @@ cd "$ROOT"
 
 PROFILE="public-smoke"
 
-AOB_BASE_URL="${AUTO_OPEN_BROWSER_BASE_URL:-http://127.0.0.1:3000}"
+PP_BASE_URL="${PERSONA_PILOT_BASE_URL:-http://127.0.0.1:3000}"
 GATEWAY_BASE_URL="${GATEWAY_VERIFY_BASE_URL:-http://127.0.0.1:8787}"
-AOB_SERVER_BIN="${AOB_SERVER_BIN:-$ROOT/target/debug/AutoOpenBrowser}"
-GATEWAY_BIN="${GATEWAY_VERIFY_BIN:-$ROOT/target/release/AutoOpenBrowser}"
+PP_SERVER_BIN="${PP_SERVER_BIN:-$ROOT/target/debug/PersonaPilot}"
+GATEWAY_BIN="${GATEWAY_VERIFY_BIN:-$ROOT/target/release/PersonaPilot}"
 REAL_LIGHTPANDA_BIN="${REAL_LIGHTPANDA_BIN:-/usr/local/bin/lightpanda}"
 ENV_FILE="${GATEWAY_VERIFY_ENV_FILE:-$ROOT/.env.gateway}"
-PROXY_CONFIG_PATH="${AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG:-$ROOT/data/proxy_sources.json}"
-EXPECTED_MODE="${AUTO_OPEN_BROWSER_PROXY_MODE:-demo_public}"
+PROXY_CONFIG_PATH="${PERSONA_PILOT_PROXY_HARVEST_CONFIG:-$ROOT/data/proxy_sources.json}"
+EXPECTED_MODE="${PERSONA_PILOT_PROXY_MODE:-demo_public}"
 CONTINUITY_PROFILE_ID="${PROXY_VERIFY_REAL_FINGERPRINT_PROFILE_ID:-${PROXY_REAL_LONGRUN_FINGERPRINT_PROFILE_ID:-}}"
 
 usage() {
@@ -181,9 +181,9 @@ PY
 load_status_snapshot() {
   local tmp
   tmp="$(mktemp)"
-  if ! curl -fsS "$AOB_BASE_URL/status" > "$tmp"; then
+  if ! curl -fsS "$PP_BASE_URL/status" > "$tmp"; then
     rm -f "$tmp"
-    fail_with "cdp_unhealthy" "control plane status endpoint is unavailable: $AOB_BASE_URL/status" "control_plane"
+    fail_with "cdp_unhealthy" "control plane status endpoint is unavailable: $PP_BASE_URL/status" "control_plane"
   fi
   printf '%s' "$tmp"
 }
@@ -231,7 +231,7 @@ check_control_plane_port() {
   [[ -n "$pid" ]] || fail_with "cdp_unhealthy" "port 3000 is not listening" "control_plane"
   local cmd
   cmd="$(pid_cmdline "$pid")"
-  [[ "$cmd" == *"AutoOpenBrowser"* ]] || fail_with "port_conflict" "port 3000 owner is not AutoOpenBrowser (pid=$pid cmd='$cmd')" "port_guard"
+  [[ "$cmd" == *"PersonaPilot"* ]] || fail_with "port_conflict" "port 3000 owner is not PersonaPilot (pid=$pid cmd='$cmd')" "port_guard"
   ok "port 3000 owner: pid=$pid"
 }
 
@@ -244,7 +244,7 @@ check_gateway_port() {
   fi
   local cmd
   cmd="$(pid_cmdline "$pid")"
-  [[ "$cmd" == *"AutoOpenBrowser"* ]] || fail_with "port_conflict" "port 8787 occupied by non repo-owned process (pid=$pid cmd='$cmd')" "port_guard"
+  [[ "$cmd" == *"PersonaPilot"* ]] || fail_with "port_conflict" "port 8787 occupied by non repo-owned process (pid=$pid cmd='$cmd')" "port_guard"
   ok "port 8787 owner: pid=$pid"
 }
 
@@ -252,9 +252,9 @@ check_control_plane_health() {
   local normalized_expected_mode
   normalized_expected_mode="$(normalize_mode "$EXPECTED_MODE")"
   local status_3000
-  status_3000="$(http_status "$AOB_BASE_URL/health")"
-  [[ "$status_3000" == "200" ]] || fail_with "cdp_unhealthy" "control plane health not ready: $AOB_BASE_URL/health status=$status_3000" "control_plane"
-  ok "control plane health: $AOB_BASE_URL/health status=200"
+  status_3000="$(http_status "$PP_BASE_URL/health")"
+  [[ "$status_3000" == "200" ]] || fail_with "cdp_unhealthy" "control plane health not ready: $PP_BASE_URL/health status=$status_3000" "control_plane"
+  ok "control plane health: $PP_BASE_URL/health status=200"
 
   local status_file
   status_file="$(load_status_snapshot)"
@@ -267,7 +267,7 @@ check_control_plane_health() {
     local control_plane_pid
     control_plane_pid="$(port_pid 3000 || true)"
     if [[ -n "$control_plane_pid" ]]; then
-      runtime_mode="$(pid_env_var "$control_plane_pid" "AUTO_OPEN_BROWSER_PROXY_MODE")"
+      runtime_mode="$(pid_env_var "$control_plane_pid" "PERSONA_PILOT_PROXY_MODE")"
     fi
   fi
   runtime_mode="$(normalize_mode "$runtime_mode")"
@@ -275,11 +275,11 @@ check_control_plane_health() {
 
   case "$PROFILE" in
     public-smoke)
-      [[ "$normalized_expected_mode" == "demo_public" ]] || fail_with "preflight_failed" "public-smoke requires AUTO_OPEN_BROWSER_PROXY_MODE=demo_public, got $EXPECTED_MODE" "mode_guard"
+      [[ "$normalized_expected_mode" == "demo_public" ]] || fail_with "preflight_failed" "public-smoke requires PERSONA_PILOT_PROXY_MODE=demo_public, got $EXPECTED_MODE" "mode_guard"
       [[ "$runtime_mode" == "demo_public" ]] || fail_with "preflight_failed" "public-smoke requires /status mode=demo_public, got ${runtime_mode:-<empty>}" "mode_guard"
       ;;
     prod-live)
-      [[ "$normalized_expected_mode" == "prod_live" ]] || fail_with "preflight_failed" "prod-live requires AUTO_OPEN_BROWSER_PROXY_MODE=prod_live, got $EXPECTED_MODE" "mode_guard"
+      [[ "$normalized_expected_mode" == "prod_live" ]] || fail_with "preflight_failed" "prod-live requires PERSONA_PILOT_PROXY_MODE=prod_live, got $EXPECTED_MODE" "mode_guard"
       [[ "$runtime_mode" == "prod_live" ]] || fail_with "preflight_failed" "prod-live requires /status mode=prod_live, got ${runtime_mode:-<empty>}" "mode_guard"
       ;;
   esac
@@ -327,9 +327,9 @@ main() {
 
   case "$PROFILE" in
     public-smoke)
-      require_exec "$AOB_SERVER_BIN" "AutoOpenBrowser debug binary"
+      require_exec "$PP_SERVER_BIN" "PersonaPilot debug binary"
       require_exec "$REAL_LIGHTPANDA_BIN" "Lightpanda binary"
-      require_exec "$GATEWAY_BIN" "AutoOpenBrowser release binary"
+      require_exec "$GATEWAY_BIN" "PersonaPilot release binary"
       require_file "$ENV_FILE" "gateway env file"
       check_control_plane_port
       check_gateway_port
@@ -337,14 +337,14 @@ main() {
       check_public_smoke_config
       ;;
     prod-live)
-      require_exec "$AOB_SERVER_BIN" "AutoOpenBrowser debug binary"
+      require_exec "$PP_SERVER_BIN" "PersonaPilot debug binary"
       require_exec "$REAL_LIGHTPANDA_BIN" "Lightpanda binary"
       check_control_plane_port
       check_control_plane_health
       check_prod_live_contract
       ;;
     gateway-upstream)
-      require_exec "$GATEWAY_BIN" "AutoOpenBrowser release binary"
+      require_exec "$GATEWAY_BIN" "PersonaPilot release binary"
       require_file "$ENV_FILE" "gateway env file"
       check_gateway_port
       ;;

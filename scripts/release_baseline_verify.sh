@@ -12,8 +12,8 @@ SKIP_BROWSER=0
 SKIP_ANOMALIES=0
 SKIP_GATEWAY=0
 
-AOB_BASE_URL="${AUTO_OPEN_BROWSER_BASE_URL:-http://127.0.0.1:3000}"
-AOB_SERVER_BIN="${AOB_SERVER_BIN:-$ROOT/target/debug/AutoOpenBrowser}"
+PP_BASE_URL="${PERSONA_PILOT_BASE_URL:-http://127.0.0.1:3000}"
+PP_SERVER_BIN="${PP_SERVER_BIN:-$ROOT/target/debug/PersonaPilot}"
 REAL_LIGHTPANDA_BIN="${REAL_LIGHTPANDA_BIN:-/usr/local/bin/lightpanda}"
 TEMP_STUB_DIR="${RELEASE_VERIFY_TEMP_DIR:-/tmp}"
 TEMP_TIMEOUT_STUB="$TEMP_STUB_DIR/lightpanda_timeout_stub.sh"
@@ -184,7 +184,7 @@ record_skip() {
 }
 
 list_api_pids() {
-  pgrep -f 'AutoOpenBrowser$' || true
+  pgrep -f 'PersonaPilot$' || true
 }
 
 stop_api_server() {
@@ -215,17 +215,17 @@ stop_api_server() {
 
 start_api_with_runner_bin() {
   local runner_bin="$1"
-  if [[ ! -x "$AOB_SERVER_BIN" ]]; then
-    echo "[release-verify] missing api binary: $AOB_SERVER_BIN" >&2
+  if [[ ! -x "$PP_SERVER_BIN" ]]; then
+    echo "[release-verify] missing api binary: $PP_SERVER_BIN" >&2
     return 1
   fi
-  AUTO_OPEN_BROWSER_RUNNER=lightpanda \
+  PERSONA_PILOT_RUNNER=lightpanda \
   LIGHTPANDA_BIN="$runner_bin" \
-  nohup "$AOB_SERVER_BIN" > "$ROOT/aob.release-verify.out" 2>&1 &
+  nohup "$PP_SERVER_BIN" > "$ROOT/pp.release-verify.out" 2>&1 &
 }
 
 wait_api_health() {
-  local url="$AOB_BASE_URL/health"
+  local url="$PP_BASE_URL/health"
   for _ in $(seq 1 60); do
     if curl -sS "$url" >/dev/null 2>&1; then
       return 0
@@ -263,7 +263,7 @@ ensure_real_api_online() {
 
 run_lightpanda_case() {
   local mode="$1"
-  AUTO_OPEN_BROWSER_BASE_URL="$AOB_BASE_URL" bash scripts/lightpanda_verify.sh "$mode"
+  PERSONA_PILOT_BASE_URL="$PP_BASE_URL" bash scripts/lightpanda_verify.sh "$mode"
 }
 
 run_anomaly_case_with_bin() {
@@ -273,7 +273,7 @@ run_anomaly_case_with_bin() {
   stop_api_server
   start_api_with_runner_bin "$runner_bin"
   wait_api_health
-  AUTO_OPEN_BROWSER_BASE_URL="$AOB_BASE_URL" bash scripts/lightpanda_verify.sh "$mode"
+  PERSONA_PILOT_BASE_URL="$PP_BASE_URL" bash scripts/lightpanda_verify.sh "$mode"
 }
 
 parse_preflight_result() {
@@ -362,7 +362,7 @@ PY
 latest_browser_context() {
   local tmp
   tmp="$(mktemp)"
-  if ! curl -fsS "$AOB_BASE_URL/status?limit=20&offset=0" > "$tmp"; then
+  if ! curl -fsS "$PP_BASE_URL/status?limit=20&offset=0" > "$tmp"; then
     rm -f "$tmp"
     return 1
   fi
@@ -560,7 +560,7 @@ write_summary_report() {
     echo "skip_browser=$SKIP_BROWSER"
     echo "skip_anomalies=$SKIP_ANOMALIES"
     echo "skip_gateway=$SKIP_GATEWAY"
-    echo "aob_base_url=$AOB_BASE_URL"
+    echo "persona_pilot_base_url=$PP_BASE_URL"
     echo "real_lightpanda_bin=$REAL_LIGHTPANDA_BIN"
     if [[ "$PROFILE" == "prod-live" || -f "$LONGRUN_REPORT_JSON" ]]; then
       append_prod_live_report_metrics
@@ -599,7 +599,7 @@ on_exit() {
 
 run_public_smoke_profile() {
   run_step "stage entry consistency" "preflight_failed" "stage_entry" python3 scripts/check_stage_entry_consistency.py
-  run_step "control plane health" "cdp_unhealthy" "control_plane" curl -fsS "$AOB_BASE_URL/health"
+  run_step "control plane health" "cdp_unhealthy" "control_plane" curl -fsS "$PP_BASE_URL/health"
 
   if [[ "$SKIP_BROWSER" == "0" ]]; then
     run_browser_case open "browser_open_failed"
@@ -633,7 +633,7 @@ run_public_smoke_profile() {
 }
 
 run_prod_live_profile() {
-  run_step "control plane health" "cdp_unhealthy" "control_plane" curl -fsS "$AOB_BASE_URL/health"
+  run_step "control plane health" "cdp_unhealthy" "control_plane" curl -fsS "$PP_BASE_URL/health"
 
   if [[ "$SKIP_BROWSER" == "0" ]]; then
     run_browser_case open "browser_open_failed"

@@ -8,7 +8,7 @@ use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::ServiceExt;
 use uuid::Uuid;
-use AutoOpenBrowser::{
+use persona_pilot::{
     api::{handlers::run_proxy_replenish_mvp_tick, routes::build_router},
     app::build_app_state,
     build_test_app,
@@ -33,7 +33,7 @@ struct ScopedEnvVar {
 
 impl ScopedEnvVar {
     fn set(key: &str, value: &str) -> Self {
-        if key == "AUTO_OPEN_BROWSER_PROXY_MODE" {
+        if key == "PERSONA_PILOT_PROXY_MODE" {
             let previous = set_proxy_runtime_mode_override(Some(value));
             return Self {
                 key: key.to_string(),
@@ -66,7 +66,7 @@ impl Drop for ScopedEnvVar {
 }
 
 fn unique_db_url() -> String {
-    format!("sqlite:///tmp/auto_open_browser_test_{}.db", Uuid::new_v4())
+    format!("sqlite:///tmp/persona_pilot_test_{}.db", Uuid::new_v4())
 }
 
 async fn json_response(app: &axum::Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -750,8 +750,8 @@ async fn cancel_after_retry_race_returns_stable_conflict_or_cancelled() {
 
 #[tokio::test]
 async fn status_exposes_worker_backoff_parameterization() {
-    std::env::set_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MIN_MS", "333");
-    std::env::set_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MAX_MS", "4444");
+    std::env::set_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MIN_MS", "333");
+    std::env::set_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MAX_MS", "4444");
 
     let db_url = unique_db_url();
     let (_state, app) = build_test_app(&db_url).await.expect("build app");
@@ -765,8 +765,8 @@ async fn status_exposes_worker_backoff_parameterization() {
     )
     .await;
 
-    std::env::remove_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MIN_MS");
-    std::env::remove_var("AUTO_OPEN_BROWSER_RUNNER_IDLE_BACKOFF_MAX_MS");
+    std::env::remove_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MIN_MS");
+    std::env::remove_var("PERSONA_PILOT_RUNNER_IDLE_BACKOFF_MAX_MS");
 
     assert_eq!(status, StatusCode::OK);
     let worker = json.get("worker").expect("worker");
@@ -3542,7 +3542,7 @@ async fn verify_batch_enqueues_verify_proxy_tasks() {
 
 #[tokio::test]
 async fn verify_batch_executes_verify_tasks_and_persists_proxy_results() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "demo_public");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "demo_public");
     let listener_one = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind listener one");
@@ -3752,7 +3752,7 @@ async fn status_exposes_verify_metrics_summary() {
 
 #[tokio::test]
 async fn status_exposes_mode_and_effective_proxy_pool_ratio_fields() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
 
@@ -3874,7 +3874,7 @@ async fn verify_batch_skips_recently_verified_proxy_when_only_stale() {
 
 #[tokio::test]
 async fn verify_batch_filters_demo_only_sources_out_of_prod_live_mode() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
 
@@ -4079,7 +4079,7 @@ async fn verify_batch_respects_max_per_provider_cap() {
 
 #[tokio::test]
 async fn verify_batch_prioritizes_underrepresented_source_when_top1_is_concentrated() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
 
@@ -4263,7 +4263,7 @@ async fn verify_batch_is_persisted_and_queryable() {
 
 #[tokio::test]
 async fn replenish_tick_global_prioritizes_underrepresented_source_candidates() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, _app) = build_test_app(&db_url).await.expect("build app");
 
@@ -4323,7 +4323,7 @@ async fn replenish_tick_global_prioritizes_underrepresented_source_candidates() 
 
 #[tokio::test]
 async fn verify_batch_prioritizes_underrepresented_provider_when_source_balanced() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
 
@@ -4398,7 +4398,7 @@ async fn verify_batch_prioritizes_underrepresented_provider_when_source_balanced
 
 #[tokio::test]
 async fn replenish_tick_global_prioritizes_underrepresented_provider_candidates() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, _app) = build_test_app(&db_url).await.expect("build app");
 
@@ -6133,10 +6133,10 @@ async fn proxy_explain_endpoint_exposes_provider_risk_version_visibility_fields(
         .await
         .expect("insert proxy");
 
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh snapshots");
-    AutoOpenBrowser::db::init::refresh_cached_trust_scores(&state.db)
+    persona_pilot::db::init::refresh_cached_trust_scores(&state.db)
         .await
         .expect("refresh caches");
     sqlx::query("UPDATE provider_risk_snapshots SET version = version + 1 WHERE provider = 'pool-version-fields'")
@@ -6525,7 +6525,7 @@ async fn provider_risk_snapshots_are_materialized_on_init() {
         .await
         .expect("insert proxies");
 
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&db)
         .await
         .expect("refresh snapshots");
     let risk_hit: i64 = sqlx::query_scalar(
@@ -6550,7 +6550,7 @@ async fn provider_region_risk_snapshots_are_materialized_on_refresh() {
         .await
         .expect("insert proxies");
 
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&db)
         .await
         .expect("refresh snapshots");
     let risk_hit: i64 = sqlx::query_scalar("SELECT risk_hit FROM provider_region_risk_snapshots WHERE provider = 'pool-pr' AND region = 'us-east'")
@@ -6573,14 +6573,14 @@ async fn targeted_provider_snapshot_refresh_updates_only_requested_provider() {
         .await
         .expect("insert proxies");
 
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&db)
         .await
         .expect("refresh all");
     sqlx::query("UPDATE proxies SET failure_count = 20 WHERE provider = 'pool-b'")
         .execute(&db)
         .await
         .expect("update pool-b");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshot_for_provider(&db, Some("pool-b"))
+    persona_pilot::db::init::refresh_provider_risk_snapshot_for_provider(&db, Some("pool-b"))
         .await
         .expect("refresh pool-b only");
 
@@ -6611,10 +6611,10 @@ async fn trust_score_cache_is_materialized_and_reused() {
         .await
         .expect("insert proxy");
 
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&db)
         .await
         .expect("refresh risk snapshots");
-    AutoOpenBrowser::db::init::refresh_cached_trust_scores(&db)
+    persona_pilot::db::init::refresh_cached_trust_scores(&db)
         .await
         .expect("refresh trust score cache");
     let cached: i64 =
@@ -6637,10 +6637,10 @@ async fn auto_selection_can_order_by_cached_trust_score() {
         .execute(&state.db)
         .await
         .expect("insert proxies");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh provider risk snapshots");
-    AutoOpenBrowser::db::init::refresh_cached_trust_scores(&state.db)
+    persona_pilot::db::init::refresh_cached_trust_scores(&state.db)
         .await
         .expect("refresh cached trust scores");
 
@@ -6685,10 +6685,10 @@ async fn scoped_cached_trust_score_refresh_updates_provider_group() {
         .await
         .expect("insert proxies");
 
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&db)
         .await
         .expect("refresh risk snapshots");
-    AutoOpenBrowser::db::init::refresh_cached_trust_scores_for_provider(&db, Some("pool-scope"))
+    persona_pilot::db::init::refresh_cached_trust_scores_for_provider(&db, Some("pool-scope"))
         .await
         .expect("refresh cached trust by provider");
     let cached_one: i64 = sqlx::query_scalar(
@@ -6716,10 +6716,10 @@ async fn trust_cache_check_endpoint_reports_sync_status() {
         .execute(&state.db)
         .await
         .expect("insert proxy");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh risk snapshots");
-    AutoOpenBrowser::db::init::refresh_cached_trust_scores(&state.db)
+    persona_pilot::db::init::refresh_cached_trust_scores(&state.db)
         .await
         .expect("refresh trust cache");
 
@@ -6758,7 +6758,7 @@ async fn trust_cache_repair_endpoint_repairs_drifted_cache() {
         .execute(&state.db)
         .await
         .expect("insert proxy");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh risk snapshots");
 
@@ -6799,7 +6799,7 @@ async fn trust_cache_scan_and_batch_repair_endpoints_work() {
         .execute(&state.db)
         .await
         .expect("insert proxies");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh risk snapshots");
 
@@ -6859,7 +6859,7 @@ async fn trust_cache_maintenance_endpoint_repairs_all_drift() {
         .execute(&state.db)
         .await
         .expect("insert proxies");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh risk snapshots");
 
@@ -6900,7 +6900,7 @@ async fn trust_cache_scan_supports_limit_and_only_drifted_filters() {
         .execute(&state.db)
         .await
         .expect("insert proxies");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh risk snapshots");
 
@@ -7187,10 +7187,10 @@ async fn proxy_explain_candidate_preview_roundtrips_as_typed_shape() {
         .execute(&state.db)
         .await
         .expect("insert proxies");
-    AutoOpenBrowser::db::init::refresh_provider_risk_snapshots(&state.db)
+    persona_pilot::db::init::refresh_provider_risk_snapshots(&state.db)
         .await
         .expect("refresh provider risk snapshots");
-    AutoOpenBrowser::db::init::refresh_cached_trust_scores(&state.db)
+    persona_pilot::db::init::refresh_cached_trust_scores(&state.db)
         .await
         .expect("refresh cached trust scores");
 
@@ -9146,7 +9146,7 @@ async fn status_exposes_proxy_harvest_source_summaries() {
 
 #[tokio::test]
 async fn create_task_persists_typed_proxy_columns() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
     sqlx::query(
@@ -9214,7 +9214,7 @@ async fn create_task_persists_typed_proxy_columns() {
 
 #[tokio::test]
 async fn status_exposes_recent_hot_regions_and_inventory_concentration() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
     let now = SystemTime::now()
@@ -9378,7 +9378,7 @@ async fn status_exposes_recent_hot_regions_and_inventory_concentration() {
 
 #[tokio::test]
 async fn status_exposes_effective_geo_quality_fields_per_source() {
-    let _mode_guard = ScopedEnvVar::set("AUTO_OPEN_BROWSER_PROXY_MODE", "prod_live");
+    let _mode_guard = ScopedEnvVar::set("PERSONA_PILOT_PROXY_MODE", "prod_live");
     let db_url = unique_db_url();
     let (state, app) = build_test_app(&db_url).await.expect("build app");
 

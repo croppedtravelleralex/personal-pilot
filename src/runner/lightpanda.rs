@@ -26,6 +26,10 @@ use crate::{
         BehaviorBudget, BehaviorRuntimeExplain, BehaviorTraceSummary,
     },
     domain::run::RUN_STATUS_TIMED_OUT,
+    network_identity::fingerprint_consumption::{
+        build_lightpanda_runtime_projection, FingerprintConsumptionSnapshot,
+        FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
+    },
     runner::{
         RunnerBehaviorPlan, RunnerCancelResult, RunnerCapabilities, RunnerExecutionResult,
         RunnerFormActionPlan, RunnerFormErrorSignals, RunnerFormFieldPlan, RunnerOutcomeStatus,
@@ -51,6 +55,7 @@ struct LightpandaFingerprintRuntime {
     envs: Vec<(String, String)>,
     applied_fields: Vec<String>,
     ignored_fields: Vec<String>,
+    consumption: FingerprintConsumptionSnapshot,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -775,58 +780,14 @@ fn profile_value_as_env_string(value: &Value) -> Option<String> {
 
 fn build_lightpanda_fingerprint_runtime(task: &RunnerTask) -> Option<LightpandaFingerprintRuntime> {
     let profile = task.fingerprint_profile.as_ref()?;
-    let profile_obj = profile.profile_json.as_object()?;
-
-    let field_map = [
-        ("accept_language", "LIGHTPANDA_FP_ACCEPT_LANGUAGE"),
-        ("timezone", "LIGHTPANDA_FP_TIMEZONE"),
-        ("locale", "LIGHTPANDA_FP_LOCALE"),
-        ("platform", "LIGHTPANDA_FP_PLATFORM"),
-        ("user_agent", "LIGHTPANDA_FP_USER_AGENT"),
-        ("viewport_width", "LIGHTPANDA_FP_VIEWPORT_WIDTH"),
-        ("viewport_height", "LIGHTPANDA_FP_VIEWPORT_HEIGHT"),
-        ("screen_width", "LIGHTPANDA_FP_SCREEN_WIDTH"),
-        ("screen_height", "LIGHTPANDA_FP_SCREEN_HEIGHT"),
-        ("device_pixel_ratio", "LIGHTPANDA_FP_DEVICE_PIXEL_RATIO"),
-        ("hardware_concurrency", "LIGHTPANDA_FP_HARDWARE_CONCURRENCY"),
-        ("device_memory_gb", "LIGHTPANDA_FP_DEVICE_MEMORY_GB"),
-    ];
-
-    let mut envs = Vec::new();
-    let mut applied_fields = Vec::new();
-    let mut ignored_fields = Vec::new();
-
-    envs.push(("LIGHTPANDA_FP_PROFILE_ID".to_string(), profile.id.clone()));
-    envs.push((
-        "LIGHTPANDA_FP_PROFILE_VERSION".to_string(),
-        profile.version.to_string(),
-    ));
-    applied_fields.push("profile_id".to_string());
-    applied_fields.push("profile_version".to_string());
-
-    for (field, env_name) in field_map {
-        match profile_obj.get(field) {
-            Some(value) => match profile_value_as_env_string(value) {
-                Some(value) => {
-                    envs.push((env_name.to_string(), value));
-                    applied_fields.push(field.to_string());
-                }
-                None => ignored_fields.push(field.to_string()),
-            },
-            None => {}
-        }
-    }
-
-    for key in profile_obj.keys() {
-        if !field_map.iter().any(|(field, _)| field == key) {
-            ignored_fields.push(key.clone());
-        }
-    }
+    let projection =
+        build_lightpanda_runtime_projection(&profile.id, profile.version, &profile.profile_json);
 
     Some(LightpandaFingerprintRuntime {
-        envs,
-        applied_fields,
-        ignored_fields,
+        envs: projection.envs,
+        applied_fields: projection.consumption.applied_fields.clone(),
+        ignored_fields: projection.consumption.ignored_fields.clone(),
+        consumption: projection.consumption,
     })
 }
 
@@ -931,19 +892,8 @@ fn result_payload(
     };
 
     let fingerprint_runtime_json = fingerprint_runtime.map(|runtime| {
-        let supported_field_count = runtime
-            .applied_fields
-            .iter()
-            .filter(|field| *field != "profile_id" && *field != "profile_version")
-            .count();
-        let unsupported_field_count = runtime.ignored_fields.len();
-        let declared_fields = runtime
-            .applied_fields
-            .iter()
-            .chain(runtime.ignored_fields.iter())
-            .filter(|field| *field != "profile_id" && *field != "profile_version")
-            .cloned()
-            .collect::<Vec<_>>();
+        let supported_field_count = runtime.consumption.applied_count();
+        let unsupported_field_count = runtime.consumption.ignored_count();
         let consumption_status = fingerprint_consumption_status(runtime);
 
         json!({
@@ -955,18 +905,21 @@ fn result_payload(
             "supported_field_count": supported_field_count,
             "unsupported_field_count": unsupported_field_count,
             "consumption_status": consumption_status,
-            "warning": (!runtime.ignored_fields.is_empty()).then_some("fingerprint profile contains fields that lightpanda does not currently consume"),
+            "consumption_source_of_truth": FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
+            "consumption_version": runtime.consumption.consumption_version,
+            "warning": runtime.consumption.partial_support_warning,
             "consumption_explain": {
-                "declared_fields": declared_fields,
-                "resolved_fields": runtime.applied_fields.iter().filter(|field| *field != "profile_id" && *field != "profile_version").cloned().collect::<Vec<_>>(),
-                "applied_fields": runtime.applied_fields.iter().filter(|field| *field != "profile_id" && *field != "profile_version").cloned().collect::<Vec<_>>(),
-                "ignored_fields": runtime.ignored_fields,
-                "declared_count": declared_fields.len(),
-                "resolved_count": supported_field_count,
-                "applied_count": supported_field_count,
-                "ignored_count": unsupported_field_count,
+                "declared_fields": runtime.consumption.declared_fields,
+                "resolved_fields": runtime.consumption.resolved_fields,
+                "applied_fields": runtime.consumption.applied_fields,
+                "ignored_fields": runtime.consumption.ignored_fields,
+                "declared_count": runtime.consumption.declared_count(),
+                "resolved_count": runtime.consumption.resolved_count(),
+                "applied_count": runtime.consumption.applied_count(),
+                "ignored_count": runtime.consumption.ignored_count(),
                 "consumption_status": consumption_status,
-                "partial_support_warning": (!runtime.ignored_fields.is_empty()).then_some("some declared fingerprint fields were not consumed by the current lightpanda runner")
+                "consumption_version": runtime.consumption.consumption_version,
+                "partial_support_warning": runtime.consumption.partial_support_warning
             }
         })
     });
@@ -1530,7 +1483,7 @@ fn storage_restore_expression(
     });
     format!(
         r#"(() => {{
-  const __AOB_STORAGE_RESTORE__ = true;
+  const __PP_STORAGE_RESTORE__ = true;
   const payload = {payload};
   const normalize = (value) => {{
     if (!value || typeof value !== "object" || Array.isArray(value)) {{
@@ -1557,7 +1510,7 @@ fn storage_restore_expression(
 
 fn storage_snapshot_expression() -> &'static str {
     r#"(() => {
-  const __AOB_STORAGE_SNAPSHOT__ = true;
+  const __PP_STORAGE_SNAPSHOT__ = true;
   const readStore = (store) => {
     const items = {};
     for (let i = 0; i < store.length; i += 1) {
@@ -1644,7 +1597,7 @@ fn form_seed_value(task: &RunnerTask) -> i64 {
 fn selector_presence_expression(selector: &str) -> String {
     format!(
         r#"(() => {{
-  const __AOB_SELECTOR_PRESENCE__ = true;
+  const __PP_SELECTOR_PRESENCE__ = true;
   const selector = {selector};
   const element = document.querySelector(selector);
   return {{
@@ -1659,7 +1612,7 @@ fn selector_presence_expression(selector: &str) -> String {
 fn selector_visible_expression(selector: &str) -> String {
     format!(
         r#"(() => {{
-  const __AOB_SELECTOR_VISIBLE__ = true;
+  const __PP_SELECTOR_VISIBLE__ = true;
   const selector = {selector};
   const element = document.querySelector(selector);
   const rect = element ? element.getBoundingClientRect() : null;
@@ -1683,7 +1636,7 @@ fn selector_visible_expression(selector: &str) -> String {
 fn field_state_expression(selector: &str) -> String {
     format!(
         r#"(() => {{
-  const __AOB_FIELD_STATE__ = true;
+  const __PP_FIELD_STATE__ = true;
   const selector = {selector};
   const element = document.querySelector(selector);
   const value = element && "value" in element ? String(element.value ?? "") : "";
@@ -1702,7 +1655,7 @@ fn field_state_expression(selector: &str) -> String {
 fn focus_element_expression(selector: &str) -> String {
     format!(
         r#"(() => {{
-  const __AOB_FOCUS_ELEMENT__ = true;
+  const __PP_FOCUS_ELEMENT__ = true;
   const selector = {selector};
   const element = document.querySelector(selector);
   if (!element) {{
@@ -1720,7 +1673,7 @@ fn focus_element_expression(selector: &str) -> String {
 fn blur_element_expression(selector: &str) -> String {
     format!(
         r#"(() => {{
-  const __AOB_BLUR_ELEMENT__ = true;
+  const __PP_BLUR_ELEMENT__ = true;
   const selector = {selector};
   const element = document.querySelector(selector);
   if (!element) {{
@@ -1741,7 +1694,7 @@ fn hover_candidate_expression(selector_or_heuristic: Option<&str>) -> String {
         .unwrap_or_else(|| "null".to_string());
     format!(
         r#"(() => {{
-  const __AOB_HOVER_CANDIDATE__ = true;
+  const __PP_HOVER_CANDIDATE__ = true;
   const requestedSelector = {selector};
   const isVisible = (element) => {{
     if (!element) {{
@@ -1772,7 +1725,7 @@ fn hover_candidate_expression(selector_or_heuristic: Option<&str>) -> String {
 fn clear_with_corrections_expression(selector: &str, seed: i64) -> String {
     format!(
         r#"(() => {{
-  const __AOB_CLEAR_WITH_CORRECTIONS__ = true;
+  const __PP_CLEAR_WITH_CORRECTIONS__ = true;
   const selector = {selector};
   const seed = {seed};
   const element = document.querySelector(selector);
@@ -1814,7 +1767,7 @@ fn clear_with_corrections_expression(selector: &str, seed: i64) -> String {
 fn type_with_rhythm_expression(selector: &str, text: &str, seed: i64, role: &str) -> String {
     format!(
         r#"(() => {{
-  const __AOB_TYPE_WITH_RHYTHM__ = true;
+  const __PP_TYPE_WITH_RHYTHM__ = true;
   const selector = {selector};
   const text = {text};
   const seed = {seed};
@@ -1857,7 +1810,7 @@ fn type_with_rhythm_expression(selector: &str, text: &str, seed: i64, role: &str
 fn click_selector_expression(selector: &str) -> String {
     format!(
         r#"(() => {{
-  const __AOB_CLICK_SELECTOR__ = true;
+  const __PP_CLICK_SELECTOR__ = true;
   const selector = {selector};
   const element = document.querySelector(selector);
   if (!element) {{
@@ -1881,7 +1834,7 @@ fn click_selector_expression(selector: &str) -> String {
 fn checkbox_toggle_expression(selector: &str, desired_checked: bool) -> String {
     format!(
         r#"(() => {{
-  const __AOB_CHECKBOX_TOGGLE__ = true;
+  const __PP_CHECKBOX_TOGGLE__ = true;
   const selector = {selector};
   const desiredChecked = {desired_checked};
   const element = document.querySelector(selector);
@@ -1911,7 +1864,7 @@ fn success_probe_expression(
 ) -> String {
     format!(
         r#"(() => {{
-  const __AOB_SUCCESS_PROBE__ = true;
+  const __PP_SUCCESS_PROBE__ = true;
   const readySelector = {ready_selector};
   const urlPatterns = {url_patterns};
   const titleContains = {title_contains};
@@ -1935,7 +1888,7 @@ fn success_probe_expression(
 fn error_signal_probe_expression(error_signals: &RunnerFormErrorSignals) -> String {
     format!(
         r#"(() => {{
-  const __AOB_ERROR_SIGNAL_PROBE__ = true;
+  const __PP_ERROR_SIGNAL_PROBE__ = true;
   const groups = {groups};
   const isVisible = (element) => {{
     if (!element) {{
@@ -1979,7 +1932,7 @@ fn submit_no_effect_probe_expression(
         .unwrap_or_else(|| "null".to_string());
     format!(
         r#"(() => {{
-  const __AOB_SUBMIT_NO_EFFECT_PROBE__ = true;
+  const __PP_SUBMIT_NO_EFFECT_PROBE__ = true;
   const primaryFormSelector = {primary_form_selector};
   const submitSelector = {submit_selector};
   const isVisible = (element) => {{

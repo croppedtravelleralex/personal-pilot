@@ -10,7 +10,7 @@ DOWNSTREAM_TOKEN="${GATEWAY_VERIFY_DOWNSTREAM_TOKEN:-alex-local-test-token}"
 ADMIN_TOKEN="${GATEWAY_VERIFY_ADMIN_TOKEN:-alex-gateway-admin-local}"
 CHAT_MODEL="${GATEWAY_VERIFY_MODEL:-date-now-gpt-5.4}"
 CHAT_PROMPT="${GATEWAY_VERIFY_PROMPT:-Reply with the single word ok.}"
-GATEWAY_BIN="${GATEWAY_VERIFY_BIN:-$ROOT/target/release/AutoOpenBrowser}"
+GATEWAY_BIN="${GATEWAY_VERIFY_BIN:-$ROOT/target/release/PersonaPilot}"
 ENV_FILE="${GATEWAY_VERIFY_ENV_FILE:-$ROOT/.env.gateway}"
 GATEWAY_LOG="${GATEWAY_VERIFY_LOG:-$ROOT/gateway.verify.out}"
 
@@ -97,7 +97,7 @@ PY
 }
 
 list_gateway_pids() {
-  pgrep -f "AutoOpenBrowser gateway" || true
+  pgrep -f "PersonaPilot gateway" || true
 }
 
 stop_gateway() {

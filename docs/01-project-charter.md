@@ -2,7 +2,7 @@
 
 ## 项目目标
 
-`lightpanda-automation` 是一个围绕 Browser API、代理池、指纹配置、任务编排与 explainability 的自动化控制面项目。
+`PersonaPilot` 是一个围绕 Browser API、代理池、指纹配置、任务编排与 explainability 的自动化控制面项目。
 
 当前外部合同以现有 Browser API 和控制面主入口为准，本轮整改不改外部主入口名称。
 

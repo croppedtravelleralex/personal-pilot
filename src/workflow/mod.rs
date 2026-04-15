@@ -238,7 +238,7 @@ impl WorkflowExecutionState {
             project: value
                 .get("project")
                 .and_then(|v| v.as_str())
-                .unwrap_or("AutoOpenBrowser")
+                .unwrap_or("PersonaPilot")
                 .to_string(),
             loop_enabled: value.get("schedulerStatus").and_then(|v| v.as_str()) == Some("running"),
             loop_iteration: value
@@ -799,7 +799,7 @@ mod tests {
     fn workflow_state_roundtrip_works() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("RUN_STATE.json");
-        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let mut state = WorkflowExecutionState::new("PersonaPilot");
         state.loop_enabled = true;
         state.next_suggestions = vec![WorkflowSuggestion {
             title: "实现工作流状态机骨架".to_string(),
@@ -814,7 +814,7 @@ mod tests {
 
     #[test]
     fn workflow_state_enters_bug_cycle_after_threshold() {
-        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let mut state = WorkflowExecutionState::new("PersonaPilot");
         state.completed_since_bug_cycle = 3;
         assert!(state.should_enter_bug_cycle());
         state.advance_after_success();
@@ -827,7 +827,7 @@ mod tests {
 
     #[test]
     fn workflow_state_failure_redirects_to_bug_scan() {
-        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let mut state = WorkflowExecutionState::new("PersonaPilot");
         state.stage = WorkflowStage::Execute;
         state.mark_failure("integration test failed");
         assert_eq!(state.stage, WorkflowStage::BugScan);
@@ -838,7 +838,7 @@ mod tests {
 
     #[test]
     fn workflow_state_enters_blocked_after_too_many_failures() {
-        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let mut state = WorkflowExecutionState::new("PersonaPilot");
         state.mark_failure("fail-1");
         state.mark_failure("fail-2");
         state.mark_failure("fail-3");
@@ -849,7 +849,7 @@ mod tests {
     #[test]
     fn workflow_state_can_migrate_legacy_run_state() {
         let legacy = r#"{
-          "project": "AutoOpenBrowser",
+          "project": "PersonaPilot",
           "currentRound": 78,
           "roundType": "plan",
           "currentObjective": "进入 build 轮，新增具体 SQLite schema 设计文档。",
@@ -873,9 +873,9 @@ mod tests {
     fn ensure_default_state_file_creates_new_state() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("RUN_STATE.json");
-        let state = WorkflowExecutionState::ensure_default_state_file(&path, "AutoOpenBrowser")
+        let state = WorkflowExecutionState::ensure_default_state_file(&path, "PersonaPilot")
             .expect("ensure state");
-        assert_eq!(state.project, "AutoOpenBrowser");
+        assert_eq!(state.project, "PersonaPilot");
         assert!(path.exists());
         assert!(!state.next_suggestions.is_empty());
     }
@@ -891,7 +891,7 @@ mod tests {
 
     #[test]
     fn minimal_cycle_step_advances_plan_execute_verify() {
-        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let mut state = WorkflowExecutionState::new("PersonaPilot");
         assert_eq!(state.stage, WorkflowStage::Plan);
         run_minimal_cycle_step(&mut state);
         assert_eq!(state.stage, WorkflowStage::Execute);
@@ -905,7 +905,7 @@ mod tests {
 
     #[test]
     fn cooldown_stage_uses_configured_delay_in_summary() {
-        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let mut state = WorkflowExecutionState::new("PersonaPilot");
         state.stage = WorkflowStage::Cooldown;
         state.cooldown_seconds = 45;
         run_minimal_cycle_step(&mut state);
@@ -914,7 +914,7 @@ mod tests {
 
     #[test]
     fn dispatch_top_suggestions_executes_first_two_items() {
-        let mut state = WorkflowExecutionState::new("AutoOpenBrowser");
+        let mut state = WorkflowExecutionState::new("PersonaPilot");
         let result = dispatch_top_suggestions(&mut state, 2);
         assert_eq!(result.executed.len(), 2);
         assert_eq!(state.last_executed_actions.len(), 2);
@@ -928,7 +928,7 @@ mod tests {
     fn tick_workflow_file_updates_run_state_on_disk() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("RUN_STATE.json");
-        let state = tick_workflow_file(&path, "AutoOpenBrowser").expect("tick workflow file");
+        let state = tick_workflow_file(&path, "PersonaPilot").expect("tick workflow file");
         assert_eq!(state.stage, WorkflowStage::Execute);
         let loaded = WorkflowExecutionState::load(&path).expect("load saved workflow state");
         assert_eq!(loaded.stage, WorkflowStage::Execute);
@@ -939,7 +939,7 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("RUN_STATE.json");
         let state =
-            run_minimal_cycle_steps(&path, "AutoOpenBrowser", 3).expect("run workflow steps");
+            run_minimal_cycle_steps(&path, "PersonaPilot", 3).expect("run workflow steps");
         assert_eq!(state.stage, WorkflowStage::BugScan);
         let loaded = WorkflowExecutionState::load(&path).expect("load saved workflow state");
         assert_eq!(loaded.stage, WorkflowStage::BugScan);

@@ -62,7 +62,7 @@ use super::{
 };
 
 fn perf_probe_enabled() -> bool {
-    std::env::var("AOB_PERF_PROBE")
+    std::env::var("PP_PERF_PROBE")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
         .unwrap_or(false)
 }
@@ -1657,7 +1657,7 @@ pub async fn health(
     let counts = load_counts(&state).await?;
     Ok(Json(HealthResponse {
         status: "ok".to_string(),
-        service: "AutoOpenBrowser".to_string(),
+        service: "PersonaPilot".to_string(),
         queue_len: counts.queued as usize,
         counts,
     }))
@@ -1810,7 +1810,7 @@ pub async fn status(
     let latest_browser_tasks = latest_browser_ready_tasks(&latest_tasks, 3);
 
     let response = StatusResponse {
-        service: "AutoOpenBrowser".to_string(),
+        service: "PersonaPilot".to_string(),
         queue_len: counts.queued as usize,
         counts,
         worker: WorkerStatusResponse {

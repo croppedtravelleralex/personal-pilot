@@ -2,7 +2,7 @@
 
 ## 样本范围
 
-本轮使用 `AOB_PERF_PROBE=1` 对以下测试路径采样：
+本轮使用 `PP_PERF_PROBE=1` 对以下测试路径采样：
 
 1. `scoped_trust_refresh_helper_limits_cache_refresh_when_risk_flags_do_not_change`
 2. `scoped_trust_refresh_helper_updates_provider_group_and_falls_back_for_providerless_proxy`

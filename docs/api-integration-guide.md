@@ -87,7 +87,7 @@ curl -s "$BASE_URL/health"
 ```json
 {
   "status": "ok",
-  "service": "auto_open_browser",
+  "service": "persona_pilot",
   "queue_len": 0,
   "counts": {
     "total": 12,

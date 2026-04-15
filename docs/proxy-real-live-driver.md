@@ -65,7 +65,7 @@ With a valid fingerprint profile id and repeated visits to the same host:
 推荐：
 
 ```bash
-AUTO_OPEN_BROWSER_PROXY_MODE=prod_live \
+PERSONA_PILOT_PROXY_MODE=prod_live \
 bash scripts/proxy_mainline_verify.sh real-live
 ```
 
@@ -82,7 +82,7 @@ python3 scripts/proxy_real_longrun_driver.py --mode prod_live ...
 Recommended:
 
 - keep the real config outside the repo working tree
-- set `AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG=/absolute/path/to/proxy_sources.real.json`
+- set `PERSONA_PILOT_PROXY_HARVEST_CONFIG=/absolute/path/to/proxy_sources.real.json`
 
 The driver rejects:
 
@@ -137,7 +137,7 @@ If the config file is `/srv/lightpanda/proxy_sources.real.json`, the relative pa
 - `PROXY_VERIFY_REAL_AUTO_BROWSER_REGIONS_FROM_DB`
 - `PROXY_VERIFY_REAL_MAX_BROWSER_REGIONS`
 - `PROXY_VERIFY_REAL_FINGERPRINT_PROFILE_ID`
-- `AUTO_OPEN_BROWSER_API_KEY`
+- `PERSONA_PILOT_API_KEY`
 
 ## Outputs
 

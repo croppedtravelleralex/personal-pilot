@@ -42,23 +42,23 @@ fn env_u64(key: &str) -> Option<u64> {
 pub fn proxy_pool_growth_policy_from_env() -> ProxyPoolGrowthPolicy {
     let defaults = default_proxy_pool_growth_policy();
     ProxyPoolGrowthPolicy {
-        min_available_ratio_percent: env_i64("AUTO_OPEN_BROWSER_PROXY_MIN_ACTIVE_RATIO_PERCENT")
+        min_available_ratio_percent: env_i64("PERSONA_PILOT_PROXY_MIN_ACTIVE_RATIO_PERCENT")
             .filter(|value| *value > 0)
             .unwrap_or(defaults.min_available_ratio_percent),
-        max_available_ratio_percent: env_i64("AUTO_OPEN_BROWSER_PROXY_MAX_ACTIVE_RATIO_PERCENT")
+        max_available_ratio_percent: env_i64("PERSONA_PILOT_PROXY_MAX_ACTIVE_RATIO_PERCENT")
             .filter(|value| *value > 0)
             .unwrap_or(defaults.max_available_ratio_percent),
-        min_available_total: env_i64("AUTO_OPEN_BROWSER_PROXY_MIN_ACTIVE_TOTAL")
+        min_available_total: env_i64("PERSONA_PILOT_PROXY_MIN_ACTIVE_TOTAL")
             .filter(|value| *value > 0)
             .unwrap_or(defaults.min_available_total),
-        min_available_per_region: env_i64("AUTO_OPEN_BROWSER_PROXY_MIN_ACTIVE_PER_REGION")
+        min_available_per_region: env_i64("PERSONA_PILOT_PROXY_MIN_ACTIVE_PER_REGION")
             .filter(|value| *value > 0)
             .unwrap_or(defaults.min_available_per_region),
-        high_concurrency_threshold: env_i64("AUTO_OPEN_BROWSER_PROXY_HIGH_CONCURRENCY_THRESHOLD")
+        high_concurrency_threshold: env_i64("PERSONA_PILOT_PROXY_HIGH_CONCURRENCY_THRESHOLD")
             .filter(|value| *value > 0)
             .unwrap_or(defaults.high_concurrency_threshold),
         high_concurrency_min_available_total: env_i64(
-            "AUTO_OPEN_BROWSER_PROXY_HIGH_CONCURRENCY_MIN_ACTIVE_TOTAL",
+            "PERSONA_PILOT_PROXY_HIGH_CONCURRENCY_MIN_ACTIVE_TOTAL",
         )
         .filter(|value| *value > 0)
         .unwrap_or(defaults.high_concurrency_min_available_total),
@@ -66,31 +66,31 @@ pub fn proxy_pool_growth_policy_from_env() -> ProxyPoolGrowthPolicy {
 }
 
 pub fn proxy_replenish_tick_interval_seconds_from_env() -> u64 {
-    env_u64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_TICK_SECONDS")
+    env_u64("PERSONA_PILOT_PROXY_REPLENISH_TICK_SECONDS")
         .filter(|value| *value > 0)
         .unwrap_or(60)
 }
 
 pub fn proxy_replenish_region_batch_limit_from_env() -> i64 {
-    env_i64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_REGION_BATCH_LIMIT")
+    env_i64("PERSONA_PILOT_PROXY_REPLENISH_REGION_BATCH_LIMIT")
         .filter(|value| *value > 0)
         .unwrap_or(5)
 }
 
 pub fn proxy_replenish_global_batch_limit_from_env() -> i64 {
-    env_i64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_GLOBAL_BATCH_LIMIT")
+    env_i64("PERSONA_PILOT_PROXY_REPLENISH_GLOBAL_BATCH_LIMIT")
         .filter(|value| *value > 0)
         .unwrap_or(10)
 }
 
 pub fn proxy_replenish_total_batch_limit_from_env() -> i64 {
-    env_i64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_TOTAL_BATCH_LIMIT")
+    env_i64("PERSONA_PILOT_PROXY_REPLENISH_TOTAL_BATCH_LIMIT")
         .filter(|value| *value > 0)
         .unwrap_or(20)
 }
 
 pub fn proxy_harvest_tick_interval_seconds_from_env() -> u64 {
-    env_u64("AUTO_OPEN_BROWSER_PROXY_HARVEST_TICK_SECONDS")
+    env_u64("PERSONA_PILOT_PROXY_HARVEST_TICK_SECONDS")
         .filter(|value| *value > 0)
         .unwrap_or(30)
 }

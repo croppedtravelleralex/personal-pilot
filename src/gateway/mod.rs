@@ -147,7 +147,7 @@ pub async fn gateway_state_from_env() -> AnyhowResult<GatewayState> {
     let database_url = std::env::var("GATEWAY_DATABASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| "sqlite://data/auto_open_browser.db".to_string());
+        .unwrap_or_else(|| "sqlite://data/persona_pilot.db".to_string());
     let control_base_url = std::env::var("GATEWAY_CONTROL_BASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -288,7 +288,7 @@ fn rewrite_dashboard_base(html: &str, base_path: &str, bootstrap: Option<Value>)
 async fn gateway_health(State(state): State<GatewayState>) -> impl IntoResponse {
     Json(json!({
         "status":"ok",
-        "service":"agent-gateway-v0",
+        "service":"persona-pilot-gateway-v0",
         "upstream_configured": state.config.upstream_base_url.is_some() && state.config.upstream_bearer_token.is_some(),
         "requests_per_minute": state.config.requests_per_minute,
         "concurrency_per_token": state.config.concurrency_per_token,
@@ -549,7 +549,7 @@ async fn chat_completions(
             StatusCode::OK,
         );
         Json(json!({
-            "id": "chatcmpl-agent-gateway-v0",
+            "id": "chatcmpl-persona-pilot-gateway-v0",
             "object": "chat.completion",
             "created": 1775450000,
             "model": model.unwrap_or_else(|| "agent-proxy-v0".to_string()),

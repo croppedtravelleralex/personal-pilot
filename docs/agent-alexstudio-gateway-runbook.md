@@ -4,7 +4,7 @@ Updated: 2026-04-15
 
 ## Current Truth Source
 
-- Repo path: `/home/ubuntu/SelfMadeprojects/lightpanda-automation`
+- Repo path: `/home/ubuntu/SelfMadeprojects/PersonaPilot`
 - Repo-owned control plane: `127.0.0.1:3000`
 - Repo-owned gateway: `127.0.0.1:8787`
 - Noise process: `/root` ??? `openclaw-gateway` ??????????????

@@ -1,7 +1,7 @@
 # Real proxy source template
 #
 # Copy this file to a local path outside git, then set:
-#   export AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG=/absolute/path/to/proxy_sources.real.json
+#   export PERSONA_PILOT_PROXY_HARVEST_CONFIG=/absolute/path/to/proxy_sources.real.json
 #
 # Notes:
 # - Use real, reachable proxy feeds only.

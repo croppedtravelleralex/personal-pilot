@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
-use AutoOpenBrowser::{
+use persona_pilot::{
     api::{
         handlers::{append_continuity_event, run_persona_heartbeat_tick},
         routes::build_router,
@@ -26,7 +26,7 @@ use AutoOpenBrowser::{
 
 fn unique_db_url() -> String {
     format!(
-        "sqlite:///tmp/auto_open_browser_continuity_test_{}.db",
+        "sqlite:///tmp/persona_pilot_continuity_test_{}.db",
         Uuid::new_v4()
     )
 }
@@ -51,7 +51,7 @@ async fn json_response(app: &axum::Router, request: Request<Body>) -> (StatusCod
 }
 
 async fn seed_persona_bundle(
-    db: &AutoOpenBrowser::db::init::DbPool,
+    db: &persona_pilot::db::init::DbPool,
     persona_id: &str,
     store_id: &str,
     platform_id: &str,
@@ -133,7 +133,7 @@ async fn seed_persona_bundle(
 }
 
 async fn seed_active_proxy(
-    db: &AutoOpenBrowser::db::init::DbPool,
+    db: &persona_pilot::db::init::DbPool,
     proxy_id: &str,
     provider: &str,
     region: &str,
@@ -161,7 +161,7 @@ async fn seed_active_proxy(
     .expect("insert active proxy");
 }
 
-async fn build_state_without_workers(database_url: &str) -> AutoOpenBrowser::app::state::AppState {
+async fn build_state_without_workers(database_url: &str) -> persona_pilot::app::state::AppState {
     let db = init_db(database_url).await.expect("init db");
     let runner: Arc<dyn TaskRunner> = Arc::new(FakeRunner);
     build_app_state(db, runner, None, 1)
@@ -170,7 +170,7 @@ async fn build_state_without_workers(database_url: &str) -> AutoOpenBrowser::app
 async fn build_test_app_with_runner(
     database_url: &str,
     runner: Arc<dyn TaskRunner>,
-) -> (AutoOpenBrowser::app::state::AppState, axum::Router) {
+) -> (persona_pilot::app::state::AppState, axum::Router) {
     let db = init_db(database_url).await.expect("init db");
     let state = build_app_state(db, runner.clone(), None, 1);
     spawn_runner_workers(state.clone(), runner, 1).await;
@@ -179,7 +179,7 @@ async fn build_test_app_with_runner(
 }
 
 async fn wait_for_task_result_json(
-    db: &AutoOpenBrowser::db::init::DbPool,
+    db: &persona_pilot::db::init::DbPool,
     task_id: &str,
 ) -> Value {
     for _ in 0..40 {
@@ -218,7 +218,7 @@ async fn wait_for_task_result_json(
 }
 
 async fn wait_for_continuity_event_json(
-    db: &AutoOpenBrowser::db::init::DbPool,
+    db: &persona_pilot::db::init::DbPool,
     persona_id: &str,
     event_type: &str,
 ) -> Value {
@@ -245,7 +245,7 @@ async fn wait_for_continuity_event_json(
 }
 
 async fn wait_for_persona_health_snapshot_json(
-    db: &AutoOpenBrowser::db::init::DbPool,
+    db: &persona_pilot::db::init::DbPool,
     persona_id: &str,
 ) -> Value {
     for _ in 0..40 {

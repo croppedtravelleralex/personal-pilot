@@ -2,7 +2,7 @@
 
 ## 样本范围
 
-本轮使用 `AOB_PERF_PROBE=1` 对更接近真实任务流的三条路径采样：
+本轮使用 `PP_PERF_PROBE=1` 对更接近真实任务流的三条路径采样：
 
 1. `verify_proxy_task_kind_executes_and_persists_result`
 2. `auto_selection_result_exposes_trust_score_components_and_candidate_preview`

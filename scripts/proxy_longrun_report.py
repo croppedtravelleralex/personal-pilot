@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--api-key",
-        default=os.environ.get("AUTO_OPEN_BROWSER_API_KEY", ""),
+        default=os.environ.get("PERSONA_PILOT_API_KEY", ""),
         help="Optional API key for protected control-plane endpoints",
     )
     parser.add_argument(
@@ -1471,7 +1471,7 @@ def collect_live_samples(
     samples: list[dict[str, object]] = []
     errors: list[str] = []
     status_snapshots: list[dict[str, object]] = []
-    fallback_mode = str(os.environ.get("AUTO_OPEN_BROWSER_PROXY_MODE") or "")
+    fallback_mode = str(os.environ.get("PERSONA_PILOT_PROXY_MODE") or "")
     total_samples = max(args.samples, 1)
     for index in range(total_samples):
         try:
@@ -1503,7 +1503,7 @@ def main() -> int:
         samples,
         errors,
         events,
-        fallback_mode=str(run_context.get("mode") or os.environ.get("AUTO_OPEN_BROWSER_PROXY_MODE") or ""),
+        fallback_mode=str(run_context.get("mode") or os.environ.get("PERSONA_PILOT_PROXY_MODE") or ""),
     )
     source_summary = build_source_quality_summary(status_snapshots)
     summary["preset"] = str(run_context.get("preset") or "unknown")

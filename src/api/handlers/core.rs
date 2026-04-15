@@ -38,7 +38,7 @@ use crate::api::{
 };
 
 fn perf_probe_enabled() -> bool {
-    std::env::var("AOB_PERF_PROBE")
+    std::env::var("PP_PERF_PROBE")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
         .unwrap_or(false)
 }
@@ -101,11 +101,11 @@ fn round_ratio_percent(numerator: i64, denominator: i64) -> f64 {
 }
 
 async fn send_telegram_message_if_configured(text: &str) {
-    let bot_token = match std::env::var("AUTO_OPEN_BROWSER_TELEGRAM_BOT_TOKEN") {
+    let bot_token = match std::env::var("PERSONA_PILOT_TELEGRAM_BOT_TOKEN") {
         Ok(value) if !value.trim().is_empty() => value,
         _ => return,
     };
-    let chat_id = match std::env::var("AUTO_OPEN_BROWSER_TELEGRAM_CHAT_ID") {
+    let chat_id = match std::env::var("PERSONA_PILOT_TELEGRAM_CHAT_ID") {
         Ok(value) if !value.trim().is_empty() => value,
         _ => return,
     };
@@ -1198,7 +1198,7 @@ fn heartbeat_reason_bucket(reason: &str) -> &'static str {
 }
 
 fn heartbeat_platform_cap_from_env() -> usize {
-    std::env::var("AUTO_OPEN_BROWSER_HEARTBEAT_PLATFORM_CAP")
+    std::env::var("PERSONA_PILOT_HEARTBEAT_PLATFORM_CAP")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| *value > 0)
@@ -3504,7 +3504,7 @@ pub async fn health(
     let counts = load_counts(&state).await?;
     Ok(Json(HealthResponse {
         status: "ok".to_string(),
-        service: "AutoOpenBrowser".to_string(),
+        service: "PersonaPilot".to_string(),
         queue_len: counts.queued as usize,
         counts,
     }))
@@ -3591,7 +3591,7 @@ pub async fn status(
     let latest_browser_tasks = latest_browser_ready_tasks(&latest_tasks, 3);
 
     let response = StatusResponse {
-        service: "AutoOpenBrowser".to_string(),
+        service: "PersonaPilot".to_string(),
         mode: crate::network_identity::proxy_harvest::proxy_runtime_mode_from_env(),
         queue_len: counts.queued as usize,
         counts,

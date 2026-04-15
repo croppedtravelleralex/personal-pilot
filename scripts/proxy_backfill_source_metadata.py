@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 
-DEFAULT_DB_PATH = "data/auto_open_browser.db"
+DEFAULT_DB_PATH = "data/persona_pilot.db"
 
 
 def parse_args() -> argparse.Namespace:

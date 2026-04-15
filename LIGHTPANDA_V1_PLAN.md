@@ -125,7 +125,7 @@
 
 只要满足以下条件，就算 V1 成立：
 
-1. 设置 `AUTO_OPEN_BROWSER_RUNNER=lightpanda` 后，系统不再只是返回占位失败
+1. 设置 `PERSONA_PILOT_RUNNER=lightpanda` 后，系统不再只是返回占位失败
 2. 传入合法 `url` 时，runner 至少执行一次真实页面访问
 3. 成功与失败都能写回现有任务状态链路
 4. 日志和结果能看出这是 `lightpanda` 的真实执行，而不是 fake 分支

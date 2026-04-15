@@ -102,6 +102,12 @@ pub struct RunnerProxySelection {
     pub provider: Option<String>,
     pub score: f64,
     pub resolution_status: String,
+    pub source_label: Option<String>,
+    pub source_tier: Option<String>,
+    pub verification_path: Option<String>,
+    pub last_verify_source: Option<String>,
+    pub last_exit_country: Option<String>,
+    pub last_exit_region: Option<String>,
 }
 
 #[derive(Debug, Clone)]

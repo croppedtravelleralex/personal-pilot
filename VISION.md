@@ -10,7 +10,7 @@
 
 ## 最终效果
 
-`AutoOpenBrowser` 最终应当是一个：
+`PersonaPilot` 最终应当是一个：
 
 - 运行在 Ubuntu 上
 - 主要供个人**学习与研发**使用

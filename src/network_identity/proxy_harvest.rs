@@ -1,5 +1,6 @@
 use std::{
     fs,
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -12,6 +13,41 @@ use uuid::Uuid;
 
 use crate::app::state::AppState;
 
+static PROXY_RUNTIME_MODE_OVERRIDE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn proxy_runtime_mode_override_cell() -> &'static Mutex<Option<String>> {
+    PROXY_RUNTIME_MODE_OVERRIDE.get_or_init(|| Mutex::new(None))
+}
+
+pub fn set_proxy_runtime_mode_override(value: Option<&str>) -> Option<String> {
+    let mut guard = proxy_runtime_mode_override_cell()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous = guard.clone();
+    *guard = value.map(|raw| raw.trim().to_string()).filter(|raw| !raw.is_empty());
+    previous
+}
+
+pub fn proxy_runtime_mode_from_env() -> String {
+    let override_value = proxy_runtime_mode_override_cell()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone();
+    if let Some(value) = override_value {
+        return normalize_proxy_runtime_mode(&value);
+    }
+    let env_value = std::env::var("PERSONA_PILOT_PROXY_MODE").unwrap_or_default();
+    normalize_proxy_runtime_mode(&env_value)
+}
+
+fn normalize_proxy_runtime_mode(raw: &str) -> String {
+    match raw.trim() {
+        "prod_live" => "prod_live".to_string(),
+        "demo_public" => "demo_public".to_string(),
+        _ => "demo_public".to_string(),
+    }
+}
+
 fn now_ts_string() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -21,7 +57,7 @@ fn now_ts_string() -> String {
 }
 
 fn default_config_path() -> String {
-    std::env::var("AUTO_OPEN_BROWSER_PROXY_HARVEST_CONFIG")
+    std::env::var("PERSONA_PILOT_PROXY_HARVEST_CONFIG")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "data/proxy_sources.json".to_string())
@@ -1000,7 +1036,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        format!("sqlite:///tmp/auto_open_browser_proxy_harvest_test_{nanos}.db")
+        format!("sqlite:///tmp/persona_pilot_proxy_harvest_test_{nanos}.db")
     }
 
     #[test]

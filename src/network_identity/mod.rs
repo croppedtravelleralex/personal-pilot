@@ -11,3 +11,5 @@ pub mod proxy_health;
 pub mod fingerprint_policy;
 
 pub mod fingerprint_consistency;
+
+pub mod fingerprint_consumption;
