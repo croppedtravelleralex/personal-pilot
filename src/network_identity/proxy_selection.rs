@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProxySelectionTuning {
     pub stale_after_seconds: i64,
@@ -32,6 +31,9 @@ pub struct ProxySelectionTuning {
     pub probe_error_protocol_penalty: i64,
     pub probe_error_upstream_missing_penalty: i64,
     pub probe_error_connect_failed_penalty: i64,
+    pub site_success_bonus: i64,
+    pub site_failure_penalty: i64,
+    pub site_browser_failure_penalty: i64,
     pub soft_min_score_penalty: i64,
 }
 
@@ -66,6 +68,9 @@ impl Default for ProxySelectionTuning {
             probe_error_protocol_penalty: 6,
             probe_error_upstream_missing_penalty: 5,
             probe_error_connect_failed_penalty: 8,
+            site_success_bonus: 3,
+            site_failure_penalty: 6,
+            site_browser_failure_penalty: 2,
             soft_min_score_penalty: 6,
         }
     }
@@ -199,7 +204,6 @@ pub fn proxy_selection_order_sql() -> &'static str {
     "#
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,10 +229,18 @@ mod tests {
         let env_tuning = proxy_selection_tuning_from_env();
         assert!(env_tuning.stale_after_seconds > 0);
         assert_eq!(rules.len(), 4);
-        assert!(rules.iter().any(|r| r.tier == ProxySelectionTier::HardFilter));
-        assert!(rules.iter().any(|r| r.tier == ProxySelectionTier::StrongPositiveSignal));
-        assert!(rules.iter().any(|r| r.tier == ProxySelectionTier::RiskPenalty));
-        assert!(rules.iter().any(|r| r.tier == ProxySelectionTier::ResourceBalancing));
+        assert!(rules
+            .iter()
+            .any(|r| r.tier == ProxySelectionTier::HardFilter));
+        assert!(rules
+            .iter()
+            .any(|r| r.tier == ProxySelectionTier::StrongPositiveSignal));
+        assert!(rules
+            .iter()
+            .any(|r| r.tier == ProxySelectionTier::RiskPenalty));
+        assert!(rules
+            .iter()
+            .any(|r| r.tier == ProxySelectionTier::ResourceBalancing));
     }
 
     #[test]
@@ -245,7 +257,9 @@ mod tests {
         let provider_region_decay = provider_region_recent_failure_decay_sql();
         assert!(provider_region_decay.contains("HAVING COUNT(*) >= 2"));
         let recent_decay = proxy_recent_failure_decay_sql();
-        assert!(recent_decay.contains("CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 1800"));
+        assert!(
+            recent_decay.contains("CAST(last_verify_at AS INTEGER) >= CAST(? AS INTEGER) - 1800")
+        );
         assert!(provider_weight.contains("HAVING SUM(failure_count) >= SUM(success_count) + 5"));
         let tuned = proxy_selection_order_sql_with_tuning(&default_proxy_selection_tuning());
         assert!(tuned.contains("provider_risk_snapshots"));
@@ -254,7 +268,8 @@ mod tests {
         assert!(trust.contains("last_verify_status = 'ok' THEN 30"));
         assert!(trust.contains("last_verify_at IS NULL THEN 12"));
         assert!(trust.contains("CAST(score * 10 AS INTEGER)"));
-        let order_by = proxy_selection_order_by_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
+        let order_by =
+            proxy_selection_order_by_trust_score_sql_with_tuning(&default_proxy_selection_tuning());
         assert!(!order_by.contains("score DESC, score DESC"));
         assert!(!order_by.contains("score DESC"));
         assert!(sql.contains("{provider_region_recent_failure_decay}"));
@@ -287,9 +302,7 @@ mod tests {
         assert!(trust.contains("THEN 11"));
         assert!(trust.contains("CAST(score * 7 AS INTEGER)"));
     }
-
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ProxyResolutionMode {
@@ -321,7 +334,6 @@ pub fn apply_proxy_resolution_metadata(
     }
 }
 
-
 #[cfg(test)]
 mod metadata_tests {
     use super::*;
@@ -330,10 +342,12 @@ mod metadata_tests {
     fn proxy_resolution_status_matches_sticky_and_unresolved_modes() {
         assert_eq!(proxy_resolution_status(None, false), "unresolved");
         assert_eq!(proxy_resolution_status(None, true), "resolved");
-        assert_eq!(proxy_resolution_status(Some("sess-1"), true), "resolved_sticky");
+        assert_eq!(
+            proxy_resolution_status(Some("sess-1"), true),
+            "resolved_sticky"
+        );
     }
 }
-
 
 #[allow(clippy::too_many_arguments)]
 pub fn resolved_proxy_json(
@@ -362,7 +376,6 @@ pub fn resolved_proxy_json(
     })
 }
 
-
 #[cfg(test)]
 mod json_tests {
     use super::*;
@@ -383,10 +396,12 @@ mod json_tests {
         );
         assert_eq!(value.get("id").and_then(|v| v.as_str()), Some("proxy-1"));
         assert_eq!(value.get("port").and_then(|v| v.as_i64()), Some(8080));
-        assert_eq!(value.get("provider").and_then(|v| v.as_str()), Some("pool-a"));
+        assert_eq!(
+            value.get("provider").and_then(|v| v.as_str()),
+            Some("pool-a")
+        );
     }
 }
-
 
 pub fn proxy_long_term_weight_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
     format!(
@@ -407,7 +422,8 @@ pub fn provider_long_term_weight_sql_with_tuning(_tuning: &ProxySelectionTuning)
                          AND prs.risk_hit != 0
                    ) THEN 1
                    ELSE 0
-                 END ASC,".to_string()
+                 END ASC,"
+        .to_string()
 }
 
 pub fn proxy_recent_failure_decay_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
@@ -422,7 +438,9 @@ pub fn proxy_recent_failure_decay_sql_with_tuning(tuning: &ProxySelectionTuning)
     )
 }
 
-pub fn provider_region_recent_failure_decay_sql_with_tuning(_tuning: &ProxySelectionTuning) -> String {
+pub fn provider_region_recent_failure_decay_sql_with_tuning(
+    _tuning: &ProxySelectionTuning,
+) -> String {
     "                 CASE
                    WHEN provider IS NOT NULL AND region IS NOT NULL AND EXISTS (
                        SELECT 1 FROM provider_region_risk_snapshots prrs
@@ -431,108 +449,193 @@ pub fn provider_region_recent_failure_decay_sql_with_tuning(_tuning: &ProxySelec
                          AND prrs.risk_hit != 0
                    ) THEN 1
                    ELSE 0
-                 END ASC,".to_string()
+                 END ASC,"
+        .to_string()
 }
 
 pub fn proxy_selection_order_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
     proxy_selection_order_sql()
-        .replace("{provider_region_recent_failure_decay}", &provider_region_recent_failure_decay_sql_with_tuning(tuning))
-        .replace("{recent_failure_decay}", &proxy_recent_failure_decay_sql_with_tuning(tuning))
-        .replace("{provider_long_term_weight}", &provider_long_term_weight_sql_with_tuning(tuning))
-        .replace("{long_term_weight}", &proxy_long_term_weight_sql_with_tuning(tuning))
-        .replace("{stale_after_seconds}", &tuning.stale_after_seconds.to_string())
+        .replace(
+            "{provider_region_recent_failure_decay}",
+            &provider_region_recent_failure_decay_sql_with_tuning(tuning),
+        )
+        .replace(
+            "{recent_failure_decay}",
+            &proxy_recent_failure_decay_sql_with_tuning(tuning),
+        )
+        .replace(
+            "{provider_long_term_weight}",
+            &provider_long_term_weight_sql_with_tuning(tuning),
+        )
+        .replace(
+            "{long_term_weight}",
+            &proxy_long_term_weight_sql_with_tuning(tuning),
+        )
+        .replace(
+            "{stale_after_seconds}",
+            &tuning.stale_after_seconds.to_string(),
+        )
 }
-
 
 pub fn proxy_selection_tuning_from_env() -> ProxySelectionTuning {
     let mut tuning = default_proxy_selection_tuning();
     if let Ok(value) = std::env::var("AOB_PROXY_STALE_AFTER_SECONDS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.stale_after_seconds = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.stale_after_seconds = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_RECENT_FAILURE_HEAVY_WINDOW_SECONDS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.recent_failure_heavy_window_seconds = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.recent_failure_heavy_window_seconds = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_RECENT_FAILURE_LIGHT_WINDOW_SECONDS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.recent_failure_light_window_seconds = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.recent_failure_light_window_seconds = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_PROVIDER_FAILURE_MARGIN") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.provider_failure_margin = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.provider_failure_margin = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_PROVIDER_REGION_CLUSTER_WINDOW_SECONDS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.provider_region_failure_cluster_window_seconds = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.provider_region_failure_cluster_window_seconds = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_PROVIDER_REGION_CLUSTER_COUNT") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.provider_region_failure_cluster_count = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.provider_region_failure_cluster_count = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_RAW_SCORE_WEIGHT_TENTHS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.raw_score_weight_tenths = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.raw_score_weight_tenths = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_OK_BONUS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_ok_bonus = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.verify_ok_bonus = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_GEO_MATCH_BONUS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_geo_match_bonus = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.verify_geo_match_bonus = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_GEO_MISMATCH_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.geo_mismatch_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.geo_mismatch_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_REGION_MISMATCH_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.region_mismatch_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.region_mismatch_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_SMOKE_UPSTREAM_OK_BONUS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.smoke_upstream_ok_bonus = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.smoke_upstream_ok_bonus = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_HEAVY_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_failed_heavy_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.verify_failed_heavy_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_LIGHT_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_failed_light_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.verify_failed_light_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_VERIFY_FAILED_BASE_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.verify_failed_base_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.verify_failed_base_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_MISSING_VERIFY_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.missing_verify_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.missing_verify_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_STALE_VERIFY_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.stale_verify_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.stale_verify_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_ANONYMITY_ELITE_BONUS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.anonymity_elite_bonus = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.anonymity_elite_bonus = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_ANONYMITY_ANONYMOUS_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.anonymity_anonymous_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.anonymity_anonymous_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_ANONYMITY_TRANSPARENT_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.anonymity_transparent_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.anonymity_transparent_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_LOW_LATENCY_BONUS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.low_latency_bonus = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.low_latency_bonus = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_MEDIUM_LATENCY_BONUS") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.medium_latency_bonus = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.medium_latency_bonus = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_HIGH_LATENCY_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.high_latency_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.high_latency_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_VERY_HIGH_LATENCY_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.very_high_latency_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.very_high_latency_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_EXIT_IP_NOT_PUBLIC_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.exit_ip_not_public_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.exit_ip_not_public_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_PROTOCOL_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.probe_error_protocol_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.probe_error_protocol_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_UPSTREAM_MISSING_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.probe_error_upstream_missing_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.probe_error_upstream_missing_penalty = parsed;
+        }
     }
     if let Ok(value) = std::env::var("AOB_PROXY_PROBE_ERROR_CONNECT_FAILED_PENALTY") {
-        if let Ok(parsed) = value.parse::<i64>() { tuning.probe_error_connect_failed_penalty = parsed; }
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.probe_error_connect_failed_penalty = parsed;
+        }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_SITE_SUCCESS_BONUS") {
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.site_success_bonus = parsed;
+        }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_SITE_FAILURE_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.site_failure_penalty = parsed;
+        }
+    }
+    if let Ok(value) = std::env::var("AOB_PROXY_SITE_BROWSER_FAILURE_PENALTY") {
+        if let Ok(parsed) = value.parse::<i64>() {
+            tuning.site_browser_failure_penalty = parsed;
+        }
     }
     tuning
 }
-
 
 pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
     let stale = tuning.stale_after_seconds;
@@ -591,8 +694,9 @@ pub fn proxy_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> Strin
     )
 }
 
-
-pub fn proxy_selection_order_by_trust_score_sql_with_tuning(tuning: &ProxySelectionTuning) -> String {
+pub fn proxy_selection_order_by_trust_score_sql_with_tuning(
+    tuning: &ProxySelectionTuning,
+) -> String {
     let trust = proxy_trust_score_sql_with_tuning(tuning);
     format!(
         "({trust}) DESC, COALESCE(last_used_at, '0') ASC, created_at ASC",
@@ -600,15 +704,16 @@ pub fn proxy_selection_order_by_trust_score_sql_with_tuning(tuning: &ProxySelect
     )
 }
 
-
 pub fn proxy_selection_order_by_cached_trust_score_sql() -> String {
-    "COALESCE(cached_trust_score, -999999) DESC, COALESCE(last_used_at, '0') ASC, created_at ASC".to_string()
+    "COALESCE(cached_trust_score, -999999) DESC, COALESCE(last_used_at, '0') ASC, created_at ASC"
+        .to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyTrustScoreComponentWeights {
     pub verify_ok_bonus: i64,
     pub verify_geo_match_bonus: i64,
+    pub site_success_bonus: i64,
     pub geo_mismatch_penalty: i64,
     pub region_mismatch_penalty: i64,
     pub smoke_upstream_ok_bonus: i64,
@@ -620,12 +725,17 @@ pub struct ProxyTrustScoreComponentWeights {
     pub raw_score_weight_tenths: i64,
     pub provider_failure_margin: i64,
     pub provider_region_failure_cluster_count: i64,
+    pub site_failure_penalty: i64,
+    pub site_browser_failure_penalty: i64,
 }
 
-pub fn proxy_trust_score_component_weights(tuning: &ProxySelectionTuning) -> ProxyTrustScoreComponentWeights {
+pub fn proxy_trust_score_component_weights(
+    tuning: &ProxySelectionTuning,
+) -> ProxyTrustScoreComponentWeights {
     ProxyTrustScoreComponentWeights {
         verify_ok_bonus: tuning.verify_ok_bonus,
         verify_geo_match_bonus: tuning.verify_geo_match_bonus,
+        site_success_bonus: tuning.site_success_bonus,
         geo_mismatch_penalty: tuning.geo_mismatch_penalty,
         region_mismatch_penalty: tuning.region_mismatch_penalty,
         smoke_upstream_ok_bonus: tuning.smoke_upstream_ok_bonus,
@@ -637,5 +747,7 @@ pub fn proxy_trust_score_component_weights(tuning: &ProxySelectionTuning) -> Pro
         raw_score_weight_tenths: tuning.raw_score_weight_tenths,
         provider_failure_margin: tuning.provider_failure_margin,
         provider_region_failure_cluster_count: tuning.provider_region_failure_cluster_count,
+        site_failure_penalty: tuning.site_failure_penalty,
+        site_browser_failure_penalty: tuning.site_browser_failure_penalty,
     }
 }

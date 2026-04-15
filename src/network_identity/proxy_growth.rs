@@ -27,6 +27,74 @@ pub fn default_proxy_pool_growth_policy() -> ProxyPoolGrowthPolicy {
     ProxyPoolGrowthPolicy::default()
 }
 
+fn env_i64(key: &str) -> Option<i64> {
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+}
+
+fn env_u64(key: &str) -> Option<u64> {
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+}
+
+pub fn proxy_pool_growth_policy_from_env() -> ProxyPoolGrowthPolicy {
+    let defaults = default_proxy_pool_growth_policy();
+    ProxyPoolGrowthPolicy {
+        min_available_ratio_percent: env_i64("AUTO_OPEN_BROWSER_PROXY_MIN_ACTIVE_RATIO_PERCENT")
+            .filter(|value| *value > 0)
+            .unwrap_or(defaults.min_available_ratio_percent),
+        max_available_ratio_percent: env_i64("AUTO_OPEN_BROWSER_PROXY_MAX_ACTIVE_RATIO_PERCENT")
+            .filter(|value| *value > 0)
+            .unwrap_or(defaults.max_available_ratio_percent),
+        min_available_total: env_i64("AUTO_OPEN_BROWSER_PROXY_MIN_ACTIVE_TOTAL")
+            .filter(|value| *value > 0)
+            .unwrap_or(defaults.min_available_total),
+        min_available_per_region: env_i64("AUTO_OPEN_BROWSER_PROXY_MIN_ACTIVE_PER_REGION")
+            .filter(|value| *value > 0)
+            .unwrap_or(defaults.min_available_per_region),
+        high_concurrency_threshold: env_i64("AUTO_OPEN_BROWSER_PROXY_HIGH_CONCURRENCY_THRESHOLD")
+            .filter(|value| *value > 0)
+            .unwrap_or(defaults.high_concurrency_threshold),
+        high_concurrency_min_available_total: env_i64(
+            "AUTO_OPEN_BROWSER_PROXY_HIGH_CONCURRENCY_MIN_ACTIVE_TOTAL",
+        )
+        .filter(|value| *value > 0)
+        .unwrap_or(defaults.high_concurrency_min_available_total),
+    }
+}
+
+pub fn proxy_replenish_tick_interval_seconds_from_env() -> u64 {
+    env_u64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_TICK_SECONDS")
+        .filter(|value| *value > 0)
+        .unwrap_or(60)
+}
+
+pub fn proxy_replenish_region_batch_limit_from_env() -> i64 {
+    env_i64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_REGION_BATCH_LIMIT")
+        .filter(|value| *value > 0)
+        .unwrap_or(5)
+}
+
+pub fn proxy_replenish_global_batch_limit_from_env() -> i64 {
+    env_i64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_GLOBAL_BATCH_LIMIT")
+        .filter(|value| *value > 0)
+        .unwrap_or(10)
+}
+
+pub fn proxy_replenish_total_batch_limit_from_env() -> i64 {
+    env_i64("AUTO_OPEN_BROWSER_PROXY_REPLENISH_TOTAL_BATCH_LIMIT")
+        .filter(|value| *value > 0)
+        .unwrap_or(20)
+}
+
+pub fn proxy_harvest_tick_interval_seconds_from_env() -> u64 {
+    env_u64("AUTO_OPEN_BROWSER_PROXY_HARVEST_TICK_SECONDS")
+        .filter(|value| *value > 0)
+        .unwrap_or(30)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProxyPoolInventorySnapshot {
     pub total: i64,
@@ -59,7 +127,9 @@ pub fn assess_proxy_pool_health(
     };
 
     let required_min_total = if snapshot.inflight_tasks >= policy.high_concurrency_threshold {
-        policy.high_concurrency_min_available_total.max(policy.min_available_total)
+        policy
+            .high_concurrency_min_available_total
+            .max(policy.min_available_total)
     } else {
         policy.min_available_total
     };
@@ -67,7 +137,8 @@ pub fn assess_proxy_pool_health(
     let below_min_ratio = available_ratio_percent < policy.min_available_ratio_percent;
     let above_max_ratio = available_ratio_percent > policy.max_available_ratio_percent;
     let below_min_total = snapshot.available < required_min_total;
-    let below_min_region = snapshot.region.is_some() && snapshot.available_in_region < policy.min_available_per_region;
+    let below_min_region =
+        snapshot.region.is_some() && snapshot.available_in_region < policy.min_available_per_region;
 
     let healthy_ratio_band = if below_min_ratio {
         "below_min"
@@ -112,16 +183,24 @@ pub struct RegionMatchEvaluation {
     pub reason: &'static str,
 }
 
-pub fn evaluate_region_match(target_region: Option<&str>, proxy_region: Option<&str>) -> RegionMatchEvaluation {
-    match (target_region.map(str::trim).filter(|v| !v.is_empty()), proxy_region.map(str::trim).filter(|v| !v.is_empty())) {
-        (Some(target), Some(proxy)) if target.eq_ignore_ascii_case(proxy) => RegionMatchEvaluation {
-            target_region: Some(target.to_string()),
-            proxy_region: Some(proxy.to_string()),
-            match_mode: "region_preferred",
-            matches: true,
-            score: 100,
-            reason: "exact_region_match",
-        },
+pub fn evaluate_region_match(
+    target_region: Option<&str>,
+    proxy_region: Option<&str>,
+) -> RegionMatchEvaluation {
+    match (
+        target_region.map(str::trim).filter(|v| !v.is_empty()),
+        proxy_region.map(str::trim).filter(|v| !v.is_empty()),
+    ) {
+        (Some(target), Some(proxy)) if target.eq_ignore_ascii_case(proxy) => {
+            RegionMatchEvaluation {
+                target_region: Some(target.to_string()),
+                proxy_region: Some(proxy.to_string()),
+                match_mode: "region_preferred",
+                matches: true,
+                score: 100,
+                reason: "exact_region_match",
+            }
+        }
         (Some(target), Some(proxy)) => RegionMatchEvaluation {
             target_region: Some(target.to_string()),
             proxy_region: Some(proxy.to_string()),

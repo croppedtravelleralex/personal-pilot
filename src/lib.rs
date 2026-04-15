@@ -1,13 +1,15 @@
 #![allow(non_snake_case)]
-pub mod app;
 pub mod api;
-pub mod domain;
+pub mod app;
+pub mod behavior;
 pub mod db;
+pub mod domain;
+pub mod gateway;
+pub mod humanize;
+pub mod network_identity;
 pub mod queue;
 pub mod runner;
-pub mod network_identity;
 pub mod workflow;
-pub mod gateway;
 
 use std::sync::Arc;
 
@@ -29,7 +31,10 @@ pub async fn build_test_app(database_url: &str) -> anyhow::Result<(AppState, Rou
     Ok((state, app))
 }
 
-pub async fn build_test_app_with_db(database_url: &str, db: DbPool) -> anyhow::Result<(AppState, Router)> {
+pub async fn build_test_app_with_db(
+    database_url: &str,
+    db: DbPool,
+) -> anyhow::Result<(AppState, Router)> {
     let _ = database_url;
     let runner: Arc<dyn TaskRunner> = Arc::new(FakeRunner);
     let state = build_app_state(db, runner.clone(), None, 1);

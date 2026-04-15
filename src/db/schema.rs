@@ -4,8 +4,18 @@ CREATE TABLE IF NOT EXISTS tasks (
     kind TEXT NOT NULL,
     status TEXT NOT NULL,
     input_json TEXT NOT NULL,
+    form_input_redacted_json TEXT,
     network_policy_json TEXT,
+    behavior_policy_json TEXT,
+    execution_intent_json TEXT,
     fingerprint_profile_json TEXT,
+    fingerprint_profile_id TEXT,
+    fingerprint_profile_version INTEGER,
+    identity_profile_id TEXT,
+    behavior_profile_id TEXT,
+    behavior_profile_version INTEGER,
+    network_profile_id TEXT,
+    session_profile_id TEXT,
     priority INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     queued_at TEXT,
@@ -65,7 +75,6 @@ CREATE INDEX IF NOT EXISTS idx_proxies_provider_region_verify
 ON proxies(provider, region, last_verify_status, last_verify_at);
 "#;
 
-
 pub const CREATE_PROVIDER_RISK_SNAPSHOTS_TABLE_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS provider_risk_snapshots (
     provider TEXT PRIMARY KEY,
@@ -88,24 +97,93 @@ CREATE TABLE IF NOT EXISTS provider_region_risk_snapshots (
 );
 "#;
 
-pub const ALL_SCHEMA_SQL: [&str; 15] = [
+pub const CREATE_DASHBOARD_ONBOARDING_DRAFTS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS dashboard_onboarding_drafts (
+    id TEXT PRIMARY KEY,
+    share_token TEXT NOT NULL UNIQUE,
+    share_expires_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    login_url TEXT NOT NULL,
+    site_key TEXT NOT NULL,
+    success_hint TEXT,
+    behavior_profile_id TEXT,
+    identity_profile_id TEXT,
+    session_profile_id TEXT,
+    fingerprint_profile_id TEXT,
+    proxy_id TEXT,
+    credential_mode TEXT NOT NULL DEFAULT 'alias',
+    credential_ref TEXT,
+    inferred_contract_json TEXT,
+    final_contract_json TEXT,
+    site_policy_id TEXT,
+    site_policy_version INTEGER,
+    shadow_task_id TEXT,
+    active_success_task_id TEXT,
+    active_failure_task_id TEXT,
+    continuity_task_id TEXT,
+    evidence_summary_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_PROXY_HEALTH_SNAPSHOTS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS proxy_health_snapshots (
+    id TEXT PRIMARY KEY,
+    proxy_id TEXT NOT NULL,
+    overall_score REAL NOT NULL,
+    grade TEXT NOT NULL,
+    identity_score REAL,
+    privacy_score REAL,
+    fraud_score REAL,
+    mail_reputation_score REAL,
+    network_quality_score REAL,
+    site_access_score REAL,
+    browser_privacy_score REAL,
+    probe_ok INTEGER NOT NULL DEFAULT 0,
+    probe_latency_ms INTEGER,
+    error TEXT,
+    summary_json TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(proxy_id) REFERENCES proxies(id)
+);
+"#;
+
+pub const CREATE_PROXY_HEALTH_SNAPSHOTS_PROXY_CREATED_INDEX_SQL: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_proxy_health_snapshots_proxy_created
+ON proxy_health_snapshots(proxy_id, created_at DESC);
+"#;
+
+pub const ALL_SCHEMA_SQL: [&str; 28] = [
     CREATE_TASKS_TABLE_SQL,
     CREATE_RUNS_TABLE_SQL,
     CREATE_ARTIFACTS_TABLE_SQL,
     CREATE_LOGS_TABLE_SQL,
     CREATE_FINGERPRINT_PROFILES_TABLE_SQL,
+    CREATE_BEHAVIOR_PROFILES_TABLE_SQL,
+    CREATE_SITE_BEHAVIOR_POLICIES_TABLE_SQL,
+    CREATE_IDENTITY_PROFILES_TABLE_SQL,
+    CREATE_NETWORK_PROFILES_TABLE_SQL,
+    CREATE_SESSION_PROFILES_TABLE_SQL,
     CREATE_PROXIES_TABLE_SQL,
+    CREATE_PROXY_HARVEST_RUNS_TABLE_SQL,
+    CREATE_PROXY_HARVEST_SOURCES_TABLE_SQL,
+    CREATE_PROXY_SITE_STATS_TABLE_SQL,
+    CREATE_BEHAVIOR_SITE_STATS_TABLE_SQL,
     CREATE_PROXY_SESSION_BINDINGS_TABLE_SQL,
     CREATE_PROXIES_SELECTION_INDEX_SQL,
     CREATE_PROXY_SESSION_BINDINGS_LOOKUP_INDEX_SQL,
     CREATE_PROXIES_VERIFY_STATE_INDEX_SQL,
+    CREATE_PROXIES_ENDPOINT_DEDUPE_INDEX_SQL,
     CREATE_VERIFY_BATCHES_CREATED_AT_INDEX_SQL,
     CREATE_TASKS_KIND_STATUS_INDEX_SQL,
     CREATE_PROXIES_PROVIDER_REGION_VERIFY_INDEX_SQL,
     CREATE_PROVIDER_RISK_SNAPSHOTS_TABLE_SQL,
     CREATE_PROVIDER_REGION_RISK_SNAPSHOTS_TABLE_SQL,
+    CREATE_DASHBOARD_ONBOARDING_DRAFTS_TABLE_SQL,
+    CREATE_PROXY_HEALTH_SNAPSHOTS_TABLE_SQL,
+    CREATE_PROXY_HEALTH_SNAPSHOTS_PROXY_CREATED_INDEX_SQL,
 ];
-
 
 pub const CREATE_FINGERPRINT_PROFILES_TABLE_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS fingerprint_profiles (
@@ -120,6 +198,79 @@ CREATE TABLE IF NOT EXISTS fingerprint_profiles (
 );
 "#;
 
+pub const CREATE_BEHAVIOR_PROFILES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS behavior_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'draft',
+    tags_json TEXT,
+    profile_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_SITE_BEHAVIOR_POLICIES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS site_behavior_policies (
+    id TEXT PRIMARY KEY,
+    version INTEGER NOT NULL DEFAULT 1,
+    site_key TEXT NOT NULL,
+    page_archetype TEXT,
+    action_kind TEXT,
+    behavior_profile_id TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 0,
+    required INTEGER NOT NULL DEFAULT 0,
+    override_json TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(behavior_profile_id) REFERENCES behavior_profiles(id)
+);
+"#;
+
+pub const CREATE_IDENTITY_PROFILES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS identity_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'draft',
+    fingerprint_profile_id TEXT,
+    behavior_profile_id TEXT,
+    network_profile_id TEXT,
+    identity_json TEXT NOT NULL,
+    secret_aliases_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(fingerprint_profile_id) REFERENCES fingerprint_profiles(id),
+    FOREIGN KEY(behavior_profile_id) REFERENCES behavior_profiles(id)
+);
+"#;
+
+pub const CREATE_NETWORK_PROFILES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS network_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'draft',
+    network_policy_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_SESSION_PROFILES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS session_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'draft',
+    continuity_mode TEXT NOT NULL,
+    retention_policy_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
 
 pub const CREATE_PROXIES_TABLE_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS proxies (
@@ -159,11 +310,87 @@ CREATE TABLE IF NOT EXISTS proxies (
     cached_trust_score INTEGER,
     trust_score_cached_at TEXT,
     provider_risk_version_seen INTEGER,
+    source_label TEXT,
+    proxy_health_score REAL,
+    proxy_health_grade TEXT,
+    proxy_health_checked_at TEXT,
+    proxy_health_summary_json TEXT,
+    last_seen_at TEXT,
+    promoted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 "#;
 
+pub const CREATE_PROXY_HARVEST_RUNS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS proxy_harvest_runs (
+    id TEXT PRIMARY KEY,
+    source_label TEXT,
+    source_kind TEXT,
+    fetched_count INTEGER NOT NULL DEFAULT 0,
+    accepted_count INTEGER NOT NULL DEFAULT 0,
+    deduped_count INTEGER NOT NULL DEFAULT 0,
+    rejected_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    summary_json TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT
+);
+"#;
+
+pub const CREATE_PROXY_HARVEST_SOURCES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS proxy_harvest_sources (
+    source_label TEXT PRIMARY KEY,
+    source_kind TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    config_json TEXT,
+    interval_seconds INTEGER NOT NULL DEFAULT 300,
+    base_proxy_score REAL NOT NULL DEFAULT 1.0,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    backoff_until TEXT,
+    last_run_started_at TEXT,
+    last_run_finished_at TEXT,
+    last_run_status TEXT,
+    last_error TEXT,
+    health_score REAL NOT NULL DEFAULT 100.0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#;
+
+pub const CREATE_PROXY_SITE_STATS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS proxy_site_stats (
+    proxy_id TEXT NOT NULL,
+    site_key TEXT NOT NULL,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    last_success_at TEXT,
+    last_failure_at TEXT,
+    last_failure_scope TEXT,
+    last_browser_failure_signal TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (proxy_id, site_key),
+    FOREIGN KEY(proxy_id) REFERENCES proxies(id)
+);
+"#;
+
+pub const CREATE_BEHAVIOR_SITE_STATS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS behavior_site_stats (
+    behavior_profile_id TEXT NOT NULL,
+    site_key TEXT NOT NULL,
+    page_archetype TEXT NOT NULL,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    timeout_count INTEGER NOT NULL DEFAULT 0,
+    abort_count INTEGER NOT NULL DEFAULT 0,
+    avg_added_latency_ms INTEGER,
+    last_success_at TEXT,
+    last_failure_at TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (behavior_profile_id, site_key, page_archetype),
+    FOREIGN KEY(behavior_profile_id) REFERENCES behavior_profiles(id)
+);
+"#;
 
 pub const CREATE_PROXY_SESSION_BINDINGS_TABLE_SQL: &str = r#"
 
@@ -186,6 +413,17 @@ CREATE TABLE IF NOT EXISTS proxy_session_bindings (
     proxy_id TEXT NOT NULL,
     provider TEXT,
     region TEXT,
+    fingerprint_profile_id TEXT,
+    site_key TEXT,
+    requested_region TEXT,
+    requested_provider TEXT,
+    cookies_json TEXT,
+    cookie_updated_at TEXT,
+    local_storage_json TEXT,
+    session_storage_json TEXT,
+    storage_updated_at TEXT,
+    last_success_at TEXT,
+    last_failure_at TEXT,
     last_used_at TEXT NOT NULL,
     expires_at TEXT,
     created_at TEXT NOT NULL,
@@ -193,7 +431,6 @@ CREATE TABLE IF NOT EXISTS proxy_session_bindings (
     FOREIGN KEY(proxy_id) REFERENCES proxies(id)
 );
 "#;
-
 
 pub const CREATE_PROXIES_SELECTION_INDEX_SQL: &str = r#"
 CREATE INDEX IF NOT EXISTS idx_proxies_selection
@@ -205,10 +442,14 @@ CREATE INDEX IF NOT EXISTS idx_proxy_session_bindings_lookup
 ON proxy_session_bindings(proxy_id, provider, region, expires_at, last_used_at);
 "#;
 
-
 pub const CREATE_PROXIES_VERIFY_STATE_INDEX_SQL: &str = r#"
 CREATE INDEX IF NOT EXISTS idx_proxies_verify_state
 ON proxies(status, last_verify_status, last_verify_at, cooldown_until);
+"#;
+
+pub const CREATE_PROXIES_ENDPOINT_DEDUPE_INDEX_SQL: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_proxies_endpoint_dedupe
+ON proxies(scheme, host, port, username, provider, region);
 "#;
 
 pub const CREATE_VERIFY_BATCHES_CREATED_AT_INDEX_SQL: &str = r#"

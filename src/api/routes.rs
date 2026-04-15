@@ -1,12 +1,33 @@
-use axum::{middleware, routing::{get, post}, Router};
+use axum::{
+    middleware,
+    routing::{get, post},
+    Router,
+};
 
 use crate::app::state::AppState;
 
-use super::{auth::auth_middleware, handlers::{
-    browser_extract_text, browser_get_final_url, browser_get_html, browser_get_title, browser_open, cancel_task, create_fingerprint_profile, create_proxy, create_task, get_fingerprint_profile,
-    check_proxy_trust_cache, explain_proxy_selection, get_proxy, get_task, get_task_logs, get_task_runs, health, list_fingerprint_profiles, maintain_proxy_trust_cache, repair_proxy_trust_cache, repair_proxy_trust_cache_batch, scan_proxy_trust_cache,
-    get_verify_batch, list_proxies, list_verify_batches, retry_task, smoke_test_proxy, verify_batch_proxies, verify_proxy, status,
-}};
+use super::{
+    auth::auth_middleware,
+    behavior_handlers::{
+        create_behavior_profile, create_identity_profile, create_network_profile,
+        create_session_profile, create_site_behavior_policy, delete_behavior_profile,
+        delete_identity_profile, delete_network_profile, delete_session_profile,
+        delete_site_behavior_policy, get_behavior_profile, get_identity_profile,
+        get_network_profile, get_session_profile, get_site_behavior_policy, list_behavior_profiles,
+        list_identity_profiles, list_network_profiles, list_session_profiles,
+        list_site_behavior_policies, patch_behavior_profile, patch_identity_profile,
+        patch_network_profile, patch_session_profile, patch_site_behavior_policy,
+    },
+    handlers::{
+        browser_extract_text, browser_get_final_url, browser_get_html, browser_get_title,
+        browser_open, cancel_task, check_proxy_trust_cache, create_fingerprint_profile,
+        create_proxy, create_task, explain_proxy_selection, get_fingerprint_profile, get_proxy,
+        get_task, get_task_logs, get_task_runs, get_verify_batch, health,
+        list_fingerprint_profiles, list_proxies, list_verify_batches, maintain_proxy_trust_cache,
+        repair_proxy_trust_cache, repair_proxy_trust_cache_batch, retry_task,
+        scan_proxy_trust_cache, smoke_test_proxy, status, verify_batch_proxies, verify_proxy,
+    },
+};
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
@@ -18,18 +39,86 @@ pub fn build_router(state: AppState) -> Router {
         .route("/browser/title", post(browser_get_title))
         .route("/browser/final-url", post(browser_get_final_url))
         .route("/browser/text", post(browser_extract_text))
-        .route("/fingerprint-profiles", post(create_fingerprint_profile).get(list_fingerprint_profiles))
+        .route(
+            "/behavior-profiles",
+            post(create_behavior_profile).get(list_behavior_profiles),
+        )
+        .route(
+            "/behavior-profiles/:id",
+            get(get_behavior_profile)
+                .patch(patch_behavior_profile)
+                .delete(delete_behavior_profile),
+        )
+        .route(
+            "/identity-profiles",
+            post(create_identity_profile).get(list_identity_profiles),
+        )
+        .route(
+            "/identity-profiles/:id",
+            get(get_identity_profile)
+                .patch(patch_identity_profile)
+                .delete(delete_identity_profile),
+        )
+        .route(
+            "/network-profiles",
+            post(create_network_profile).get(list_network_profiles),
+        )
+        .route(
+            "/network-profiles/:id",
+            get(get_network_profile)
+                .patch(patch_network_profile)
+                .delete(delete_network_profile),
+        )
+        .route(
+            "/session-profiles",
+            post(create_session_profile).get(list_session_profiles),
+        )
+        .route(
+            "/session-profiles/:id",
+            get(get_session_profile)
+                .patch(patch_session_profile)
+                .delete(delete_session_profile),
+        )
+        .route(
+            "/site-behavior-policies",
+            post(create_site_behavior_policy).get(list_site_behavior_policies),
+        )
+        .route(
+            "/site-behavior-policies/:id",
+            get(get_site_behavior_policy)
+                .patch(patch_site_behavior_policy)
+                .delete(delete_site_behavior_policy),
+        )
+        .route(
+            "/fingerprint-profiles",
+            post(create_fingerprint_profile).get(list_fingerprint_profiles),
+        )
         .route("/proxies", post(create_proxy).get(list_proxies))
-        .route("/proxies/verify-batch", post(verify_batch_proxies).get(list_verify_batches))
+        .route(
+            "/proxies/verify-batch",
+            post(verify_batch_proxies).get(list_verify_batches),
+        )
         .route("/proxies/verify-batch/:id", get(get_verify_batch))
         .route("/fingerprint-profiles/:id", get(get_fingerprint_profile))
         .route("/proxies/:id", get(get_proxy))
         .route("/proxies/:id/explain", get(explain_proxy_selection))
-        .route("/proxies/:id/trust-cache-check", get(check_proxy_trust_cache))
-        .route("/proxies/:id/trust-cache-repair", post(repair_proxy_trust_cache))
+        .route(
+            "/proxies/:id/trust-cache-check",
+            get(check_proxy_trust_cache),
+        )
+        .route(
+            "/proxies/:id/trust-cache-repair",
+            post(repair_proxy_trust_cache),
+        )
         .route("/proxies/trust-cache-scan", get(scan_proxy_trust_cache))
-        .route("/proxies/trust-cache-repair-batch", post(repair_proxy_trust_cache_batch))
-        .route("/proxies/trust-cache-maintenance", post(maintain_proxy_trust_cache))
+        .route(
+            "/proxies/trust-cache-repair-batch",
+            post(repair_proxy_trust_cache_batch),
+        )
+        .route(
+            "/proxies/trust-cache-maintenance",
+            post(maintain_proxy_trust_cache),
+        )
         .route("/proxies/:id/smoke", post(smoke_test_proxy))
         .route("/proxies/:id/verify", post(verify_proxy))
         .route("/tasks/:id", get(get_task))

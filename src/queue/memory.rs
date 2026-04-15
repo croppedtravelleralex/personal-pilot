@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, sync::{Arc, Mutex}};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Debug, Clone)]
 pub struct MemoryTaskQueue {
@@ -13,12 +16,18 @@ impl MemoryTaskQueue {
     }
 
     pub fn push(&self, task_id: String) {
-        let mut guard = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.push_back(task_id);
     }
 
     pub fn push_unique(&self, task_id: String) -> bool {
-        let mut guard = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if guard.iter().any(|id| id == &task_id) {
             false
         } else {
@@ -28,12 +37,18 @@ impl MemoryTaskQueue {
     }
 
     pub fn pop(&self) -> Option<String> {
-        let mut guard = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.pop_front()
     }
 
     pub fn remove(&self, task_id: &str) -> bool {
-        let mut guard = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(index) = guard.iter().position(|id| id == task_id) {
             guard.remove(index);
             true
@@ -43,7 +58,10 @@ impl MemoryTaskQueue {
     }
 
     pub fn len(&self) -> usize {
-        let guard = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.len()
     }
 }

@@ -68,6 +68,65 @@ pub struct BrowserSummaryResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyPoolStatusSummary {
+    pub total: i64,
+    pub active: i64,
+    pub candidate: i64,
+    pub candidate_rejected: i64,
+    pub active_ratio_percent: i64,
+    pub hot_regions: Vec<String>,
+    pub region_shortages: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyReplenishMetricsSummary {
+    pub recent_batches: i64,
+    pub promotion_rate: f64,
+    pub reject_rate: f64,
+    pub fallback_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentitySessionMetricsSummary {
+    pub active_sessions: i64,
+    pub reused_sessions: i64,
+    pub created_sessions: i64,
+    pub cookie_restore_count: i64,
+    pub cookie_persist_count: i64,
+    pub local_storage_restore_count: i64,
+    pub local_storage_persist_count: i64,
+    pub session_storage_restore_count: i64,
+    pub session_storage_persist_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxySiteMetricsSummary {
+    pub tracked_sites: i64,
+    pub site_records: i64,
+    pub top_failing_sites: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehaviorMetricsResponse {
+    pub runs_with_behavior: i64,
+    pub shadow_runs: i64,
+    pub active_runs: i64,
+    pub aborted_by_budget: i64,
+    pub avg_added_latency_ms: i64,
+    pub top_behavior_profiles: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthMetricsResponse {
+    pub auth_runs: i64,
+    pub auth_success_runs: i64,
+    pub auth_failed_runs: i64,
+    pub auth_blocked_missing_contract: i64,
+    pub auth_transient_retries: i64,
+    pub auth_inline_secret_unavailable: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub service: String,
     pub queue_len: usize,
@@ -76,9 +135,78 @@ pub struct StatusResponse {
     pub fingerprint_metrics: FingerprintMetricsResponse,
     pub proxy_metrics: ProxyMetricsResponse,
     pub verify_metrics: VerifyMetricsResponse,
+    pub proxy_pool_status: ProxyPoolStatusSummary,
+    pub proxy_replenish_metrics: ProxyReplenishMetricsSummary,
+    pub proxy_harvest_metrics: crate::network_identity::proxy_harvest::ProxyHarvestMetrics,
+    pub proxy_site_metrics: ProxySiteMetricsSummary,
+    pub identity_session_metrics: IdentitySessionMetricsSummary,
+    pub behavior_metrics: BehaviorMetricsResponse,
+    pub auth_metrics: AuthMetricsResponse,
     pub latest_execution_summaries: Vec<SummaryArtifactResponse>,
     pub latest_tasks: Vec<TaskResponse>,
     pub latest_browser_tasks: Vec<TaskResponse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ExecutionIntentRequest {
+    pub identity_profile_id: Option<String>,
+    pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub session_profile_id: Option<String>,
+    pub proxy_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehaviorBudgetRequest {
+    pub max_added_latency_ms: Option<i64>,
+    pub timeout_reserve_ms: Option<i64>,
+    pub max_step_count: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehaviorPolicyRequest {
+    pub mode: Option<String>,
+    pub page_archetype: Option<String>,
+    pub allow_site_overrides: Option<bool>,
+    pub budget: Option<BehaviorBudgetRequest>,
+    pub plan_seed: Option<String>,
+    pub allowed_primitives: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormFieldInputRequest {
+    pub key: String,
+    pub role: String,
+    pub selector: Option<String>,
+    pub required: Option<bool>,
+    pub sensitive: Option<bool>,
+    pub value: Option<serde_json::Value>,
+    pub secret_ref: Option<String>,
+    pub bundle_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormSubmitInputRequest {
+    pub selector: Option<String>,
+    pub trigger: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormSuccessInputRequest {
+    pub ready_selector: Option<String>,
+    pub url_patterns: Option<Vec<String>>,
+    pub title_contains: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormInputRequest {
+    pub mode: String,
+    pub form_selector: Option<String>,
+    pub secret_bundle_ref: Option<String>,
+    pub fields: Vec<FormFieldInputRequest>,
+    pub submit: Option<FormSubmitInputRequest>,
+    pub success: Option<FormSuccessInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,9 +216,16 @@ pub struct CreateTaskRequest {
     pub script: Option<String>,
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
+    pub identity_profile_id: Option<String>,
     pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub session_profile_id: Option<String>,
     pub proxy_id: Option<String>,
+    pub execution_intent: Option<ExecutionIntentRequest>,
+    pub behavior_policy_json: Option<serde_json::Value>,
     pub network_policy_json: Option<serde_json::Value>,
+    pub form_input: Option<FormInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,9 +233,16 @@ pub struct BrowserOpenRequest {
     pub url: String,
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
+    pub identity_profile_id: Option<String>,
     pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub session_profile_id: Option<String>,
     pub proxy_id: Option<String>,
+    pub execution_intent: Option<ExecutionIntentRequest>,
+    pub behavior_policy_json: Option<serde_json::Value>,
     pub network_policy_json: Option<serde_json::Value>,
+    pub form_input: Option<FormInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,9 +250,16 @@ pub struct BrowserGetHtmlRequest {
     pub url: String,
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
+    pub identity_profile_id: Option<String>,
     pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub session_profile_id: Option<String>,
     pub proxy_id: Option<String>,
+    pub execution_intent: Option<ExecutionIntentRequest>,
+    pub behavior_policy_json: Option<serde_json::Value>,
     pub network_policy_json: Option<serde_json::Value>,
+    pub form_input: Option<FormInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,9 +267,16 @@ pub struct BrowserGetTitleRequest {
     pub url: String,
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
+    pub identity_profile_id: Option<String>,
     pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub session_profile_id: Option<String>,
     pub proxy_id: Option<String>,
+    pub execution_intent: Option<ExecutionIntentRequest>,
+    pub behavior_policy_json: Option<serde_json::Value>,
     pub network_policy_json: Option<serde_json::Value>,
+    pub form_input: Option<FormInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,9 +284,16 @@ pub struct BrowserGetFinalUrlRequest {
     pub url: String,
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
+    pub identity_profile_id: Option<String>,
     pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub session_profile_id: Option<String>,
     pub proxy_id: Option<String>,
+    pub execution_intent: Option<ExecutionIntentRequest>,
+    pub behavior_policy_json: Option<serde_json::Value>,
     pub network_policy_json: Option<serde_json::Value>,
+    pub form_input: Option<FormInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,9 +301,16 @@ pub struct BrowserExtractTextRequest {
     pub url: String,
     pub timeout_seconds: Option<i64>,
     pub priority: Option<i32>,
+    pub identity_profile_id: Option<String>,
     pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub session_profile_id: Option<String>,
     pub proxy_id: Option<String>,
+    pub execution_intent: Option<ExecutionIntentRequest>,
+    pub behavior_policy_json: Option<serde_json::Value>,
     pub network_policy_json: Option<serde_json::Value>,
+    pub form_input: Option<FormInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,6 +363,7 @@ pub struct WinnerVsRunnerUpDiff {
 pub struct TrustScoreComponents {
     pub verify_ok_bonus: i64,
     pub verify_geo_match_bonus: i64,
+    pub site_success_bonus: i64,
     pub geo_mismatch_penalty: i64,
     pub region_mismatch_penalty: i64,
     pub geo_risk_penalty: i64,
@@ -214,6 +385,7 @@ pub struct TrustScoreComponents {
     pub exit_ip_not_public_penalty: i64,
     pub probe_error_penalty: i64,
     pub verify_risk_penalty: i64,
+    pub site_failure_penalty: i64,
     pub soft_min_score_penalty: i64,
 }
 
@@ -254,7 +426,8 @@ pub struct RegionMatchExplain {
 pub struct ProxyGrowthExplain {
     pub target_region: Option<String>,
     pub selected_proxy_region: Option<String>,
-    pub inventory_snapshot: Option<crate::network_identity::proxy_growth::ProxyPoolInventorySnapshot>,
+    pub inventory_snapshot:
+        Option<crate::network_identity::proxy_growth::ProxyPoolInventorySnapshot>,
     pub health_assessment: Option<ProxyPoolHealthAssessmentExplain>,
     pub region_match: Option<RegionMatchExplain>,
 }
@@ -295,7 +468,8 @@ pub struct ConsumptionExplain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FingerprintRuntimeExplain {
     pub fingerprint_budget_tag: Option<String>,
-    pub fingerprint_consistency: Option<crate::network_identity::fingerprint_consistency::FingerprintConsistencyAssessment>,
+    pub fingerprint_consistency:
+        Option<crate::network_identity::fingerprint_consistency::FingerprintConsistencyAssessment>,
     pub consumption_explain: Option<ConsumptionExplain>,
 }
 
@@ -321,6 +495,14 @@ pub struct ExecutionIdentity {
     pub fingerprint_profile_version: Option<i64>,
     pub fingerprint_resolution_status: Option<String>,
     pub fingerprint_runtime_explain: Option<FingerprintRuntimeExplain>,
+    pub behavior_profile_id: Option<String>,
+    pub behavior_profile_version: Option<i64>,
+    pub behavior_resolution_status: Option<String>,
+    pub behavior_execution_mode: Option<String>,
+    pub page_archetype: Option<String>,
+    pub behavior_seed: Option<String>,
+    pub behavior_runtime_explain: Option<crate::behavior::BehaviorRuntimeExplain>,
+    pub behavior_trace_summary: Option<crate::behavior::BehaviorTraceSummary>,
     pub proxy_id: Option<String>,
     pub proxy_provider: Option<String>,
     pub proxy_region: Option<String>,
@@ -328,6 +510,13 @@ pub struct ExecutionIdentity {
     pub selection_reason_summary: Option<String>,
     pub selection_explain: Option<ProxySelectionExplain>,
     pub trust_score_total: Option<i64>,
+    pub identity_session_status: Option<String>,
+    pub cookie_restore_count: Option<i64>,
+    pub cookie_persist_count: Option<i64>,
+    pub local_storage_restore_count: Option<i64>,
+    pub local_storage_persist_count: Option<i64>,
+    pub session_storage_restore_count: Option<i64>,
+    pub session_storage_persist_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -341,6 +530,13 @@ pub struct IdentityNetworkExplain {
     pub proxy_resolution_status: Option<String>,
     pub selection_reason_summary: Option<String>,
     pub trust_score_total: Option<i64>,
+    pub identity_session_status: Option<String>,
+    pub cookie_restore_count: Option<i64>,
+    pub cookie_persist_count: Option<i64>,
+    pub local_storage_restore_count: Option<i64>,
+    pub local_storage_persist_count: Option<i64>,
+    pub session_storage_restore_count: Option<i64>,
+    pub session_storage_persist_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -355,6 +551,18 @@ pub struct TaskResponse {
     pub fingerprint_profile_id: Option<String>,
     pub fingerprint_profile_version: Option<i64>,
     pub fingerprint_resolution_status: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub behavior_profile_version: Option<i64>,
+    pub behavior_resolution_status: Option<String>,
+    pub behavior_execution_mode: Option<String>,
+    pub page_archetype: Option<String>,
+    pub behavior_seed: Option<String>,
+    pub behavior_runtime_explain: Option<crate::behavior::BehaviorRuntimeExplain>,
+    pub behavior_trace_summary: Option<crate::behavior::BehaviorTraceSummary>,
+    pub form_action_status: Option<String>,
+    pub form_action_mode: Option<String>,
+    pub form_action_retry_count: Option<i64>,
+    pub form_action_summary_json: Option<serde_json::Value>,
     pub proxy_id: Option<String>,
     pub proxy_provider: Option<String>,
     pub proxy_region: Option<String>,
@@ -389,6 +597,18 @@ pub struct RunResponse {
     pub finished_at: Option<String>,
     pub error_message: Option<String>,
     pub summary_artifacts: Vec<SummaryArtifactResponse>,
+    pub behavior_profile_id: Option<String>,
+    pub behavior_profile_version: Option<i64>,
+    pub behavior_resolution_status: Option<String>,
+    pub behavior_execution_mode: Option<String>,
+    pub page_archetype: Option<String>,
+    pub behavior_seed: Option<String>,
+    pub behavior_runtime_explain: Option<crate::behavior::BehaviorRuntimeExplain>,
+    pub behavior_trace_summary: Option<crate::behavior::BehaviorTraceSummary>,
+    pub form_action_status: Option<String>,
+    pub form_action_mode: Option<String>,
+    pub form_action_retry_count: Option<i64>,
+    pub form_action_summary_json: Option<serde_json::Value>,
     pub proxy_id: Option<String>,
     pub proxy_provider: Option<String>,
     pub proxy_region: Option<String>,
@@ -422,7 +642,6 @@ pub struct LogResponse {
     pub created_at: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateFingerprintProfileRequest {
     pub id: String,
@@ -445,6 +664,168 @@ pub struct FingerprintProfileResponse {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateBehaviorProfileRequest {
+    pub id: String,
+    pub name: String,
+    pub status: Option<String>,
+    pub tags_json: Option<String>,
+    pub profile_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateBehaviorProfileRequest {
+    pub name: Option<String>,
+    pub status: Option<String>,
+    pub tags_json: Option<String>,
+    pub profile_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehaviorProfileResponse {
+    pub id: String,
+    pub name: String,
+    pub version: i64,
+    pub status: String,
+    pub tags_json: Option<String>,
+    pub profile_json: serde_json::Value,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateIdentityProfileRequest {
+    pub id: String,
+    pub name: String,
+    pub status: Option<String>,
+    pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub identity_json: serde_json::Value,
+    pub secret_aliases_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateIdentityProfileRequest {
+    pub name: Option<String>,
+    pub status: Option<String>,
+    pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub identity_json: Option<serde_json::Value>,
+    pub secret_aliases_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityProfileResponse {
+    pub id: String,
+    pub name: String,
+    pub version: i64,
+    pub status: String,
+    pub fingerprint_profile_id: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub network_profile_id: Option<String>,
+    pub identity_json: serde_json::Value,
+    pub secret_aliases_json: Option<serde_json::Value>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateNetworkProfileRequest {
+    pub id: String,
+    pub name: String,
+    pub status: Option<String>,
+    pub network_policy_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateNetworkProfileRequest {
+    pub name: Option<String>,
+    pub status: Option<String>,
+    pub network_policy_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkProfileResponse {
+    pub id: String,
+    pub name: String,
+    pub version: i64,
+    pub status: String,
+    pub network_policy_json: serde_json::Value,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSessionProfileRequest {
+    pub id: String,
+    pub name: String,
+    pub status: Option<String>,
+    pub continuity_mode: String,
+    pub retention_policy_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSessionProfileRequest {
+    pub name: Option<String>,
+    pub status: Option<String>,
+    pub continuity_mode: Option<String>,
+    pub retention_policy_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionProfileResponse {
+    pub id: String,
+    pub name: String,
+    pub version: i64,
+    pub status: String,
+    pub continuity_mode: String,
+    pub retention_policy_json: Option<serde_json::Value>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSiteBehaviorPolicyRequest {
+    pub id: String,
+    pub site_key: String,
+    pub page_archetype: Option<String>,
+    pub action_kind: Option<String>,
+    pub behavior_profile_id: String,
+    pub priority: Option<i64>,
+    pub required: Option<bool>,
+    pub override_json: Option<serde_json::Value>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSiteBehaviorPolicyRequest {
+    pub site_key: Option<String>,
+    pub page_archetype: Option<String>,
+    pub action_kind: Option<String>,
+    pub behavior_profile_id: Option<String>,
+    pub priority: Option<i64>,
+    pub required: Option<bool>,
+    pub override_json: Option<serde_json::Value>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteBehaviorPolicyResponse {
+    pub id: String,
+    pub version: i64,
+    pub site_key: String,
+    pub page_archetype: Option<String>,
+    pub action_kind: Option<String>,
+    pub behavior_profile_id: String,
+    pub priority: i64,
+    pub required: bool,
+    pub override_json: Option<serde_json::Value>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateProxyRequest {
@@ -499,7 +880,6 @@ pub struct ProxyResponse {
     pub updated_at: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxySmokeResponse {
     pub id: String,
@@ -542,7 +922,6 @@ pub struct ProxyVerifyResponse {
     pub message: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyVerifyBatchRequest {
     pub provider: Option<String>,
@@ -578,7 +957,6 @@ pub struct ProxyVerifyBatchResponse {
     pub status: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyBatchResponse {
     pub id: String,
@@ -604,7 +982,6 @@ pub struct VerifyBatchListQuery {
     pub offset: Option<i64>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxySelectionExplainResponse {
     pub proxy_id: String,
@@ -621,7 +998,6 @@ pub struct ProxySelectionExplainResponse {
     pub winner_vs_runner_up_diff: Option<WinnerVsRunnerUpDiff>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyTrustCacheCheckResponse {
     pub proxy_id: String,
@@ -631,7 +1007,6 @@ pub struct ProxyTrustCacheCheckResponse {
     pub in_sync: bool,
     pub cached_at: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyTrustCacheRepairResponse {
@@ -643,7 +1018,6 @@ pub struct ProxyTrustCacheRepairResponse {
     pub repaired: bool,
     pub cached_at: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyTrustCacheScanItem {
@@ -671,7 +1045,6 @@ pub struct ProxyTrustCacheRepairBatchResponse {
     pub items: Vec<ProxyTrustCacheScanItem>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyTrustCacheMaintenanceResponse {
     pub scanned_before: usize,
@@ -680,7 +1053,6 @@ pub struct ProxyTrustCacheMaintenanceResponse {
     pub remaining_drifted: usize,
     pub ok: bool,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyTrustCacheScanQuery {

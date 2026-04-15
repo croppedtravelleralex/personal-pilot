@@ -22,7 +22,11 @@ pub fn ensure_transition(from: &TaskStatus, to: &TaskStatus) -> Result<()> {
     if can_transition(from, to) {
         Ok(())
     } else {
-        Err(anyhow!("invalid task status transition: {} -> {}", from, to))
+        Err(anyhow!(
+            "invalid task status transition: {} -> {}",
+            from,
+            to
+        ))
     }
 }
 

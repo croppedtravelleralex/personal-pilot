@@ -1,763 +1,372 @@
-<!DOCTYPE html>
-<html lang="en">
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Behavior Realism Dashboard</title>
+    <link rel="stylesheet" href="./app.css?v=20260414c" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="shell-sidebar glass-panel">
+        <section class="brand-block">
+          <div class="brand-mark">BR</div>
+          <div>
+            <p class="eyebrow">Behavior Realism Dashboard</p>
+            <h1>行为拟真控制台</h1>
+            <p class="muted">监控优先 · 极简操作 · 高级接入收口</p>
+          </div>
+        </section>
 
-<head>
-	<meta charset="utf-8">
-	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-	<meta name="description" content="Lightpanda Automation Gateway Dashboard">
-	<meta name="author" content="Alexander Anderson">
-	<meta name="keywords" content="lightpanda, automation, gateway, dashboard, browser, proxy, monitoring">
+        <nav class="primary-nav desktop-nav" aria-label="主导航">
+          <button class="nav-item active" data-page="overview"><span class="nav-icon" data-icon="overview"></span><span>总览 Overview</span></button>
+          <button class="nav-item" data-page="onboarding"><span class="nav-icon" data-icon="onboarding"></span><span>授权站点（高级）</span></button>
+          <button class="nav-item" data-page="settings"><span class="nav-icon" data-icon="settings"></span><span>设置 Settings</span></button>
+        </nav>
 
-	<link rel="preconnect" href="https://fonts.gstatic.com">
-	<link rel="shortcut icon" href="img/icons/icon-48x48.png" />
+        <section class="side-card glass-subpanel">
+          <div class="section-header mini">
+            <div>
+              <p class="eyebrow">默认用法</p>
+              <h3>日常只看总览</h3>
+            </div>
+          </div>
+          <ul class="helper-list">
+            <li><strong>总览</strong>：先看系统是否正常、哪里异常、最近发生了什么。</li>
+            <li><strong>授权站点（高级）</strong>：只在接入新站点、补 contract、复查验证证据时使用。</li>
+            <li><strong>设置</strong>：只调整主题、刷新、摘要模式，不影响后端服务。</li>
+          </ul>
+        </section>
 
-	<title>Lightpanda Automation Gateway</title>
+        <details class="side-card side-accordion glass-subpanel">
+          <summary>
+            <span>
+              <span class="eyebrow">访问会话</span>
+              <strong>管理令牌</strong>
+            </span>
+            <span class="accordion-hint">日常可不展开</span>
+          </summary>
+          <div class="accordion-body">
+            <label class="field-label-block" for="adminToken">
+              <span>管理令牌</span>
+              <input id="adminToken" type="password" placeholder="内部环境会自动接通；这里保留手动覆盖入口" />
+            </label>
+            <div class="button-row">
+              <button id="saveTokenBtn" class="primary-button">保存令牌</button>
+            </div>
+            <p class="muted tiny">浏览器端只持有 gateway admin token，不直接暴露 control-plane API key。</p>
+          </div>
+        </details>
+      </aside>
 
-	<link href="css/app.css" rel="stylesheet">
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-</head>
+      <div class="shell-main">
+        <header class="shell-topbar glass-panel">
+          <div class="topbar-main">
+            <div class="status-cluster">
+              <span id="statusLight" class="status-light"></span>
+              <div>
+                <p class="eyebrow">系统状态</p>
+                <h2 id="systemTitle">行为拟真控制台</h2>
+                <p id="systemSubtitle" class="muted">Monitoring-first operator console</p>
+              </div>
+            </div>
+            <nav class="primary-nav compact-nav" aria-label="主导航">
+              <button class="nav-item active" data-page="overview"><span class="nav-icon" data-icon="overview"></span><span>总览</span></button>
+              <button class="nav-item" data-page="onboarding"><span class="nav-icon" data-icon="onboarding"></span><span>授权站点</span></button>
+              <button class="nav-item" data-page="settings"><span class="nav-icon" data-icon="settings"></span><span>设置</span></button>
+            </nav>
+          </div>
+          <div class="topbar-meta">
+            <span id="runtimeModeBadge" class="meta-pill">模式 -</span>
+            <span id="dataSourceBadge" class="meta-pill">数据源 -</span>
+            <span id="refreshBadge" class="meta-pill">刷新 -</span>
+            <span id="summaryBadge" class="meta-pill">摘要 -</span>
+            <div class="timestamp-box">
+              <span class="eyebrow">上次刷新</span>
+              <strong id="lastRefreshText">--</strong>
+            </div>
+            <div class="timestamp-box">
+              <span class="eyebrow">数据新鲜度</span>
+              <strong id="freshnessText">等待首次加载</strong>
+            </div>
+            <div class="timestamp-box wide">
+              <span class="eyebrow">Gateway 请求摘要</span>
+              <strong id="gatewayStatsHeadline">0</strong>
+              <small id="gatewayStatsSubline" class="muted">等待统计</small>
+            </div>
+          </div>
+        </header>
 
-<body>
-	<div class="wrapper">
-		<nav id="sidebar" class="sidebar js-sidebar">
-			<div class="sidebar-content js-simplebar">
-				<a class="sidebar-brand" href="/dashboard/">
-          <span class="align-middle">Lightpanda Gateway</span>
-        </a>
+        <section id="statusNotice" class="status-notice hidden" aria-live="polite"></section>
 
-				<ul class="sidebar-nav">
-					<li class="sidebar-header">
-						Control Surface
-					</li>
+        <main class="page-stack">
+          <section id="page-overview" class="page active">
+            <section class="hero-card glass-panel">
+              <div class="section-header split">
+                <div>
+                  <p class="eyebrow">总览 Overview</p>
+                  <h2>先看系统，再看异常，再看最近任务</h2>
+                  <p class="muted">首页只保留刷新和筛选，不把高级接入动作堆在首屏。</p>
+                </div>
+                <div class="overview-controls">
+                  <button id="manualRefreshBtn" class="primary-button">立即刷新</button>
+                  <label class="field-inline"><span>刷新频率</span><select id="overviewRefreshInterval"></select></label>
+                  <label class="field-inline"><span>状态筛选</span><select id="overviewStatusFilter"></select></label>
+                  <label class="field-inline"><span>站点筛选</span><select id="overviewSiteFilter"></select></label>
+                </div>
+              </div>
+            </section>
 
-					<li class="sidebar-item active">
-						<a class="sidebar-link" href="/dashboard/">
-              <i class="align-middle" data-feather="sliders"></i> <span class="align-middle">Overview</span>
-            </a>
-					</li>
+            <section id="overviewPrimaryCards" class="primary-card-grid dense-four"></section>
+            <section id="overviewSecondaryMetrics" class="mini-metric-strip glass-panel"></section>
+            <section class="overview-v4-grid">
+              <section class="glass-panel section-panel proxy-health-panel overview-span-7">
+                <div class="section-header split">
+                  <div>
+                    <p class="eyebrow">代理健康平台</p>
+                    <h3>低频巡检 + 分数段分布 + 来源对比</h3>
+                    <p class="muted">默认 60 分钟 / 并发 1 的健康巡检，用于监控和复盘，不直接改代理选择主链路。</p>
+                  </div>
+                  <div id="proxyHealthHeadline" class="proxy-health-headline"></div>
+                </div>
+                <div class="proxy-health-grid-v4">
+                  <article class="proxy-health-card proxy-health-chart-card">
+                    <h4>等级分布</h4>
+                    <div id="proxyHealthGradeChart" class="proxy-health-chart"></div>
+                    <div id="proxyHealthGradeLegend" class="proxy-health-legend"></div>
+                  </article>
+                  <article class="proxy-health-card">
+                    <h4>分数段分布</h4>
+                    <div id="proxyHealthScoreBandChart" class="distribution-panel"></div>
+                  </article>
+                  <article class="proxy-health-card proxy-health-source-card">
+                    <h4>采集源健康对比</h4>
+                    <div id="proxyHealthSourceComparison" class="distribution-panel"></div>
+                  </article>
+                  <article class="proxy-health-card proxy-health-low-card">
+                    <div class="section-header mini">
+                      <div>
+                        <h4>低分 / 过期代理</h4>
+                        <p class="muted tiny">优先显示未巡检、过期、低等级和探测失败代理。</p>
+                      </div>
+                    </div>
+                    <div id="proxyHealthReasonBuckets" class="bucket-chip-row"></div>
+                    <div id="proxyHealthLowList" class="proxy-health-low-list"></div>
+                  </article>
+                </div>
+              </section>
 
-					<li class="sidebar-item">
-						<a class="sidebar-link" href="/admin/stats">
-              <i class="align-middle" data-feather="bar-chart-2"></i> <span class="align-middle">Raw Stats API</span>
-            </a>
-					</li>
+              <aside class="glass-panel section-panel task-detail-panel overview-span-5">
+                <div class="section-header mini">
+                  <div>
+                    <p class="eyebrow">任务详情</p>
+                    <h3>右侧详情面板</h3>
+                  </div>
+                </div>
+                <div id="overviewTaskDetail"></div>
+              </aside>
 
-					<li class="sidebar-item">
-						<a class="sidebar-link" href="/admin/usage">
-              <i class="align-middle" data-feather="activity"></i> <span class="align-middle">Usage Feed API</span>
-            </a>
-					</li>
+              <article class="glass-panel section-panel overview-span-7">
+                <div class="section-header split">
+                  <div>
+                    <p class="eyebrow">异常与最近任务</p>
+                    <h3>先看失败、超时、阻止，再看最近执行</h3>
+                    <p class="muted tiny">列表固定显示中文简化；点击某条任务后，在右侧看详细中文和技术原文。</p>
+                  </div>
+                  <div class="segmented-control" aria-label="任务标签">
+                    <button class="segment active" data-task-tab="all">全部</button>
+                    <button class="segment" data-task-tab="failed">失败</button>
+                    <button class="segment" data-task-tab="timed_out">超时</button>
+                    <button class="segment" data-task-tab="running">运行中</button>
+                  </div>
+                </div>
+                <div class="insight-toolbar">
+                  <div class="segmented-control" aria-label="任务分布视图">
+                    <button class="segment active" data-task-insight="failure">失败原因</button>
+                    <button class="segment" data-task-insight="kind">任务类型</button>
+                  </div>
+                  <p class="muted tiny">用于快速判断最近任务主要在失败什么、或集中在执行什么类型。</p>
+                </div>
+                <div id="overviewTaskInsight" class="task-insight-panel"></div>
+                <div id="overviewAlertList" class="alert-list"></div>
+                <div id="overviewTaskList" class="task-list selectable-task-list"></div>
+              </article>
 
-					<li class="sidebar-item">
-						<a class="sidebar-link" href="/health">
-              <i class="align-middle" data-feather="heart"></i> <span class="align-middle">Health Check</span>
-            </a>
-					</li>
+              <aside class="overview-side-column overview-span-5">
+                <article class="glass-panel section-panel">
+                  <div class="section-header mini"><div><p class="eyebrow">代理池与采集源</p><h3>实时健康</h3></div></div>
+                  <div id="proxySourceGrid" class="proxy-source-grid"></div>
+                </article>
+                <article class="glass-panel section-panel">
+                  <div class="section-header mini"><div><p class="eyebrow">最近连续性异常</p><h3>Continuity</h3></div></div>
+                  <div id="continuityList" class="continuity-list"></div>
+                </article>
+                <article class="glass-panel section-panel">
+                  <div class="section-header mini"><div><p class="eyebrow">最近站点验证状态</p><h3>Authorized Sites</h3></div></div>
+                  <div id="siteRollupList" class="site-rollup-list"></div>
+                </article>
+              </aside>
+            </section>
 
-					<li class="sidebar-item">
-						<a class="sidebar-link" href="/v1/models">
-              <i class="align-middle" data-feather="cpu"></i> <span class="align-middle">Models API</span>
-            </a>
-					</li>
-				</ul>
+            <section class="fold-grid">
+              <details class="glass-panel fold-panel priority-wide" open><summary>连续性明细</summary><div id="foldContinuityList" class="continuity-list"></div></details>
+              <details class="glass-panel fold-panel" open><summary>会话持久化统计</summary><div id="sessionStats" class="session-stats"></div></details>
+              <details class="glass-panel fold-panel"><summary>已接入站点摘要</summary><div id="foldSiteList" class="site-summary-list"></div></details>
+              <details class="glass-panel fold-panel"><summary>Phase 4A 收口检查项</summary><ul id="phaseChecklist" class="checklist"></ul></details>
+            </section>
+          </section>
+          <section id="page-onboarding" class="page">
+            <section class="hero-card glass-panel">
+              <div class="section-header split">
+                <div>
+                  <p class="eyebrow">授权站点（高级）</p>
+                  <h2>Authorized Site Onboarding</h2>
+                  <p class="muted">只在接入新站点、补 contract、复查验证证据时使用。</p>
+                </div>
+              </div>
+              <div class="explain-grid">
+                <article class="explain-card"><strong>什么时候用</strong><p>当你要把一个新的已授权站点接入系统，并让它可发布、可验证、可复盘。</p></article>
+                <article class="explain-card"><strong>什么时候不用</strong><p>如果只是看系统是否正常、看最近任务和异常，不需要进入这一页。</p></article>
+                <article class="explain-card"><strong>最少步骤</strong><p>登录地址 → 自动发现 → 补齐 password / submit / ready selector → 发布并验证。</p></article>
+              </div>
+              <div id="onboardingStepList" class="onboarding-stepper" aria-label="接入步骤">
+                <div class="step-pill active"><span>1</span><strong>基础配置</strong><small>只填登录地址、身份、凭证和代理</small></div>
+                <div class="step-pill"><span>2</span><strong>自动发现</strong><small>自动识别表单和错误信号</small></div>
+                <div class="step-pill"><span>3</span><strong>发布验证</strong><small>Shadow → Active → Continuity</small></div>
+              </div>
+            </section>
 
-				<div class="sidebar-cta">
-					<div class="sidebar-cta-content">
-						<strong class="d-inline-block mb-2">Gateway Status</strong>
-						<div class="mb-3 text-sm">
-							This page is now the live dashboard shell for Lightpanda Automation gateway access.
-						</div>
-						<div class="d-grid">
-							<a href="/health" class="btn btn-primary">Open Health Endpoint</a>
-						</div>
-					</div>
-				</div>
-			</div>
-		</nav>
+            <section class="advanced-layout">
+              <article class="glass-panel section-panel">
+                <div class="section-header mini"><div><p class="eyebrow">第 1 步</p><h3>基础配置</h3></div></div>
+                <div id="onboardingSiteList" class="draft-list"></div>
+              </article>
 
-		<div class="main">
-			<nav class="navbar navbar-expand navbar-light navbar-bg">
-				<a class="sidebar-toggle js-sidebar-toggle">
-          <i class="hamburger align-self-center"></i>
-        </a>
+              <article class="glass-panel section-panel">
+                <div class="section-header split">
+                  <div><p class="eyebrow">第 1 步</p><h3>当前选中站点 · 接入详情</h3></div>
+                  <span id="onboardingActionHint" class="muted">推荐路径：填写登录页 → 自动发现 → 补齐 selector → 发布并验证</span>
+                </div>
+                <div id="onboardingSelectionMeta"></div>
+                <p class="muted tiny">如果你不知道大多数配置怎么选，通常只需要填登录地址、选择身份别名，其余保持默认或自动即可。</p>
+                <div class="form-grid two-columns">
+                  <label class="field-label-block">登录页地址<input id="loginUrl" type="url" placeholder="https://example.com/login" /></label>
+                  <label class="field-label-block">成功提示（可选）<input id="successHint" type="text" placeholder="例如：登录后首屏的 ready selector" /></label>
+                  <label class="field-label-block">身份配置<select id="identityProfile"></select></label>
+                  <label class="field-label-block">代理<select id="proxyId"></select></label>
+                  <label class="field-label-block">凭证来源<select id="credentialMode"><option value="alias">身份别名（推荐）</option><option value="inline_once">一次性内联输入</option></select></label>
+                  <label class="field-label-block two-columns-span">凭证引用<input id="credentialRef" type="text" placeholder="identity://alias" /></label>
+                </div>
+                <details class="subfold">
+                  <summary>高级设置（大多数情况下不用改）</summary>
+                  <div class="form-grid two-columns advanced-settings-grid">
+                    <label class="field-label-block">行为配置<select id="behaviorProfile"></select></label>
+                    <label class="field-label-block">会话配置<select id="sessionProfile"></select></label>
+                    <label class="field-label-block two-columns-span">指纹配置<select id="fingerprintProfile"></select></label>
+                  </div>
+                </details>
+                <div id="inlineCredentialPanel" class="inline-panel hidden">
+                  <div class="form-grid two-columns">
+                    <label class="field-label-block">一次性用户名<input id="inlineUsername" type="text" placeholder="仅本次验证使用" /></label>
+                    <label class="field-label-block">一次性密码<input id="inlinePassword" type="password" placeholder="不会持久化到服务端" /></label>
+                  </div>
+                </div>
+                <div class="button-row wrap">
+                  <button id="createDraftBtn" class="primary-button">创建草稿</button>
+                  <button id="saveDraftBtn" class="ghost-button">保存草稿</button>
+                  <button id="copyLinkBtn" class="ghost-button">复制草稿链接</button>
+                </div>
+                <p id="shareLinkPreview" class="muted tiny">当前草稿还没有分享链接。</p>
+              </article>
 
-				<div class="navbar-collapse collapse">
-					<ul class="navbar-nav navbar-align">
-						<li class="nav-item dropdown">
-							<a class="nav-icon dropdown-toggle" href="#" id="alertsDropdown" data-bs-toggle="dropdown">
-								<div class="position-relative">
-									<i class="align-middle" data-feather="bell"></i>
-									<span class="indicator">4</span>
-								</div>
-							</a>
-							<div class="dropdown-menu dropdown-menu-lg dropdown-menu-end py-0" aria-labelledby="alertsDropdown">
-								<div class="dropdown-menu-header">
-									Gateway reminders
-								</div>
-								<div class="list-group">
-									<a href="#" class="list-group-item">
-										<div class="row g-0 align-items-center">
-											<div class="col-2">
-												<i class="text-danger" data-feather="alert-circle"></i>
-											</div>
-											<div class="col-10">
-												<div class="text-dark">Dashboard shell is live</div>
-												<div class="text-muted small mt-1">Static route is now served from /dashboard/.</div>
-												<div class="text-muted small mt-1">just now</div>
-											</div>
-										</div>
-									</a>
-									<a href="#" class="list-group-item">
-										<div class="row g-0 align-items-center">
-											<div class="col-2">
-												<i class="text-warning" data-feather="shield"></i>
-											</div>
-											<div class="col-10">
-												<div class="text-dark">Admin endpoints still require token</div>
-												<div class="text-muted small mt-1">/admin/stats and /admin/usage stay protected.</div>
-												<div class="text-muted small mt-1">now</div>
-											</div>
-										</div>
-									</a>
-									<a href="#" class="list-group-item">
-										<div class="row g-0 align-items-center">
-											<div class="col-2">
-												<i class="text-primary" data-feather="cpu"></i>
-											</div>
-											<div class="col-10">
-												<div class="text-dark">Models endpoint exposed</div>
-												<div class="text-muted small mt-1">Use /v1/models for downstream catalog checks.</div>
-												<div class="text-muted small mt-1">now</div>
-											</div>
-										</div>
-									</a>
-								</div>
-								<div class="dropdown-menu-footer">
-									<a href="/health" class="text-muted">Open live health check</a>
-								</div>
-							</div>
-						</li>
-						<li class="nav-item dropdown">
-							<a class="nav-icon dropdown-toggle" href="#" id="messagesDropdown" data-bs-toggle="dropdown">
-								<div class="position-relative">
-									<i class="align-middle" data-feather="message-square"></i>
-								</div>
-							</a>
-							<div class="dropdown-menu dropdown-menu-lg dropdown-menu-end py-0" aria-labelledby="messagesDropdown">
-								<div class="dropdown-menu-header">
-									<div class="position-relative">
-										Control notes
-									</div>
-								</div>
-								<div class="list-group">
-									<a href="#" class="list-group-item">
-										<div class="row g-0 align-items-center">
-											<div class="col-2">
-												<img src="img/avatars/avatar-5.jpg" class="avatar img-fluid rounded-circle" alt="Gateway note">
-											</div>
-											<div class="col-10 ps-2">
-												<div class="text-dark">UI shell connected</div>
-												<div class="text-muted small mt-1">Next step is replacing template cards with real stats.</div>
-												<div class="text-muted small mt-1">just now</div>
-											</div>
-										</div>
-									</a>
-								</div>
-							</div>
-						</li>
-					</ul>
-				</div>
-			</nav>
-									<a href="#" class="list-group-item">
-										<div class="row g-0 align-items-center">
-											<div class="col-2">
-												<img src="img/avatars/avatar-2.jpg" class="avatar img-fluid rounded-circle" alt="William Harris">
-											</div>
-											<div class="col-10 ps-2">
-												<div class="text-dark">William Harris</div>
-												<div class="text-muted small mt-1">Curabitur ligula sapien euismod vitae.</div>
-												<div class="text-muted small mt-1">2h ago</div>
-											</div>
-										</div>
-									</a>
-									<a href="#" class="list-group-item">
-										<div class="row g-0 align-items-center">
-											<div class="col-2">
-												<img src="img/avatars/avatar-4.jpg" class="avatar img-fluid rounded-circle" alt="Christina Mason">
-											</div>
-											<div class="col-10 ps-2">
-												<div class="text-dark">Christina Mason</div>
-												<div class="text-muted small mt-1">Pellentesque auctor neque nec urna.</div>
-												<div class="text-muted small mt-1">4h ago</div>
-											</div>
-										</div>
-									</a>
-									<a href="#" class="list-group-item">
-										<div class="row g-0 align-items-center">
-											<div class="col-2">
-												<img src="img/avatars/avatar-3.jpg" class="avatar img-fluid rounded-circle" alt="Sharon Lessman">
-											</div>
-											<div class="col-10 ps-2">
-												<div class="text-dark">Sharon Lessman</div>
-												<div class="text-muted small mt-1">Aenean tellus metus, bibendum sed, posuere ac, mattis non.</div>
-												<div class="text-muted small mt-1">5h ago</div>
-											</div>
-										</div>
-									</a>
-								</div>
-								<div class="dropdown-menu-footer">
-									<a href="#" class="text-muted">Show all messages</a>
-								</div>
-							</div>
-						</li>
-						<li class="nav-item dropdown">
-							<a class="nav-icon dropdown-toggle d-inline-block d-sm-none" href="#" data-bs-toggle="dropdown">
-                <i class="align-middle" data-feather="settings"></i>
-              </a>
+              <article class="glass-panel section-panel">
+                <div class="section-header mini"><div><p class="eyebrow">第 2 步</p><h3>自动发现 + Contract Review</h3></div></div>
+                <div class="button-row wrap">
+                  <button id="discoverBtn" class="primary-button">自动发现</button>
+                  <button id="publishBtn" class="ghost-button">发布站点策略</button>
+                  <button id="validateBtn" class="ghost-button">发布并验证</button>
+                </div>
+                <p class="muted tiny">真正必须补齐的关键项只有 3 个：password selector、submit selector、success.ready_selector。</p>
+                <div id="onboardingDisabledReasons" class="hint-list"></div>
+                <div class="form-grid two-columns">
+                  <label class="field-label-block">主表单 selector<input id="primaryFormSelector" type="text" /></label>
+                  <label class="field-label-block">用户名 selector<input id="usernameSelector" type="text" /></label>
+                  <label class="field-label-block">密码 selector<input id="passwordSelector" type="text" /></label>
+                  <label class="field-label-block">记住我 selector<input id="rememberSelector" type="text" /></label>
+                  <label class="field-label-block">提交按钮 selector<input id="submitSelector" type="text" /></label>
+                  <label class="field-label-block">成功 ready selector<input id="readySelector" type="text" /></label>
+                  <label class="field-label-block">登录失败信号<input id="loginErrorSignals" type="text" placeholder=".login-error,.alert-danger" /></label>
+                  <label class="field-label-block">字段错误信号<input id="fieldErrorSignals" type="text" placeholder=".field-error,.invalid-feedback" /></label>
+                  <label class="field-label-block">账号锁定信号<input id="accountLockedSignals" type="text" placeholder=".account-locked" /></label>
+                </div>
+                <pre id="inferredContract" class="json-box"></pre>
+              </article>
 
-							<a class="nav-link dropdown-toggle d-none d-sm-inline-block" href="#" data-bs-toggle="dropdown">
-                <img src="img/avatars/avatar.jpg" class="avatar img-fluid rounded me-1" alt="Charles Hall" /> <span class="text-dark">Charles Hall</span>
-              </a>
-							<div class="dropdown-menu dropdown-menu-end">
-								<a class="dropdown-item" href="/health"><i class="align-middle me-1" data-feather="heart"></i> Health</a>
-								<a class="dropdown-item" href="#"><i class="align-middle me-1" data-feather="pie-chart"></i> Gateway Overview</a>
-								<div class="dropdown-divider"></div>
-								<a class="dropdown-item" href="index.html"><i class="align-middle me-1" data-feather="settings"></i> Settings & Privacy</a>
-								<a class="dropdown-item" href="#"><i class="align-middle me-1" data-feather="help-circle"></i> Help Center</a>
-								<div class="dropdown-divider"></div>
-								<a class="dropdown-item" href="#">Log out</a>
-							</div>
-						</li>
-					</ul>
-				</div>
-			</nav>
+              <article class="glass-panel section-panel">
+                <div class="section-header mini"><div><p class="eyebrow">第 3 步</p><h3>发布与验证</h3></div></div>
+                <details class="subfold">
+                  <summary>高级验证按钮（业务失败 / 重试观察）</summary>
+                  <div class="button-row wrap">
+                    <button id="failureBtn" class="ghost-button">业务失败样本</button>
+                    <button id="retryBtn" class="ghost-button">重试观察样本</button>
+                  </div>
+                </details>
+                <div id="recentValidationList" class="validation-list"></div>
+              </article>
 
-			<main class="content">
-				<div class="container-fluid p-0">
+              <article class="glass-panel section-panel advanced-span-2">
+                <div class="section-header split"><div><p class="eyebrow">证据详情</p><h3>中文摘要 + 技术原文</h3></div></div>
+                <div id="onboardingEvidenceTabs" class="evidence-tab-row"></div>
+                <div id="onboardingEvidenceBody"></div>
+                <details class="subfold"><summary>原始 evidence JSON</summary><pre id="evidenceJson" class="json-box"></pre></details>
+              </article>
+            </section>
+          </section>
 
-					<h1 class="h3 mb-3"><strong>Lightpanda Automation</strong> Gateway Dashboard</h1>
+          <section id="page-settings" class="page">
+            <section class="hero-card glass-panel">
+              <div class="section-header split">
+                <div>
+                  <p class="eyebrow">设置 Settings</p>
+                  <h2>主题、刷新、摘要、密度</h2>
+                  <p class="muted">这些设置只保存在当前浏览器 localStorage，不写服务端。</p>
+                </div>
+              </div>
+            </section>
 
-					<div class="row">
-						<div class="col-xl-6 col-xxl-5 d-flex">
-							<div class="w-100">
-								<div class="row">
-									<div class="col-sm-6">
-										<div class="card">
-											<div class="card-body">
-												<div class="row">
-													<div class="col mt-0">
-														<h5 class="card-title">Sales</h5>
-													</div>
+            <section class="settings-grid">
+              <article class="glass-panel section-panel">
+                <div class="section-header mini"><div><p class="eyebrow">外观</p><h3>主题与壁纸</h3></div></div>
+                <div class="form-grid two-columns">
+                  <label class="field-label-block">主题模式<select id="settingThemeMode"></select></label>
+                  <label class="field-label-block">色调<select id="settingAccentMode"></select></label>
+                  <label class="field-label-block two-columns-span">壁纸<select id="settingWallpaper"></select></label>
+                </div>
+                <div id="wallpaperPreview" class="wallpaper-preview-grid"></div>
+              </article>
 
-													<div class="col-auto">
-														<div class="stat text-primary">
-															<i class="align-middle" data-feather="truck"></i>
-														</div>
-													</div>
-												</div>
-												<h1 class="mt-1 mb-3">2.382</h1>
-												<div class="mb-0">
-													<span class="text-danger">-3.65%</span>
-													<span class="text-muted">Since last week</span>
-												</div>
-											</div>
-										</div>
-										<div class="card">
-											<div class="card-body">
-												<div class="row">
-													<div class="col mt-0">
-														<h5 class="card-title">Visitors</h5>
-													</div>
+              <article class="glass-panel section-panel">
+                <div class="section-header mini"><div><p class="eyebrow">数据刷新</p><h3>刷新与摘要</h3></div></div>
+                <div class="form-grid two-columns">
+                  <label class="field-label-block">刷新频率<select id="settingRefreshInterval"></select></label>
+                  <label class="field-label-block">摘要模式<select id="settingSummaryMode"></select></label>
+                  <label class="field-label-block">卡片密度<select id="settingDensity"></select></label>
+                  <label class="field-label-block">动画<select id="settingMotion"></select></label>
+                </div>
+                <div id="settingsSummary" class="settings-summary-grid"></div>
+              </article>
+            </section>
+          </section>
+        </main>
 
-													<div class="col-auto">
-														<div class="stat text-primary">
-															<i class="align-middle" data-feather="users"></i>
-														</div>
-													</div>
-												</div>
-												<h1 class="mt-1 mb-3">14.212</h1>
-												<div class="mb-0">
-													<span class="text-success">5.25%</span>
-													<span class="text-muted">Since last week</span>
-												</div>
-											</div>
-										</div>
-									</div>
-									<div class="col-sm-6">
-										<div class="card">
-											<div class="card-body">
-												<div class="row">
-													<div class="col mt-0">
-														<h5 class="card-title">Earnings</h5>
-													</div>
+        <footer class="shell-footer glass-panel">
+          <span id="footerSummary">刷新间隔：10 秒</span>
+          <span id="footerContinuity">连续性事件：0</span>
+        </footer>
+      </div>
+    </div>
 
-													<div class="col-auto">
-														<div class="stat text-primary">
-															<i class="align-middle" data-feather="dollar-sign"></i>
-														</div>
-													</div>
-												</div>
-												<h1 class="mt-1 mb-3">$21.300</h1>
-												<div class="mb-0">
-													<span class="text-success">6.65%</span>
-													<span class="text-muted">Since last week</span>
-												</div>
-											</div>
-										</div>
-										<div class="card">
-											<div class="card-body">
-												<div class="row">
-													<div class="col mt-0">
-														<h5 class="card-title">Orders</h5>
-													</div>
-
-													<div class="col-auto">
-														<div class="stat text-primary">
-															<i class="align-middle" data-feather="shopping-cart"></i>
-														</div>
-													</div>
-												</div>
-												<h1 class="mt-1 mb-3">64</h1>
-												<div class="mb-0">
-													<span class="text-danger">-2.25%</span>
-													<span class="text-muted">Since last week</span>
-												</div>
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-
-						<div class="col-xl-6 col-xxl-7">
-							<div class="card flex-fill w-100">
-								<div class="card-header">
-
-									<h5 class="card-title mb-0">Recent Movement</h5>
-								</div>
-								<div class="card-body py-3">
-									<div class="chart chart-sm">
-										<canvas id="chartjs-dashboard-line"></canvas>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<div class="row">
-						<div class="col-12 col-md-6 col-xxl-3 d-flex order-2 order-xxl-3">
-							<div class="card flex-fill w-100">
-								<div class="card-header">
-
-									<h5 class="card-title mb-0">Browser Usage</h5>
-								</div>
-								<div class="card-body d-flex">
-									<div class="align-self-center w-100">
-										<div class="py-3">
-											<div class="chart chart-xs">
-												<canvas id="chartjs-dashboard-pie"></canvas>
-											</div>
-										</div>
-
-										<table class="table mb-0">
-											<tbody>
-												<tr>
-													<td>Chrome</td>
-													<td class="text-end">4306</td>
-												</tr>
-												<tr>
-													<td>Firefox</td>
-													<td class="text-end">3801</td>
-												</tr>
-												<tr>
-													<td>IE</td>
-													<td class="text-end">1689</td>
-												</tr>
-											</tbody>
-										</table>
-									</div>
-								</div>
-							</div>
-						</div>
-						<div class="col-12 col-md-12 col-xxl-6 d-flex order-3 order-xxl-2">
-							<div class="card flex-fill w-100">
-								<div class="card-header">
-
-									<h5 class="card-title mb-0">Real-Time</h5>
-								</div>
-								<div class="card-body px-4">
-									<div id="world_map" style="height:350px;"></div>
-								</div>
-							</div>
-						</div>
-						<div class="col-12 col-md-6 col-xxl-3 d-flex order-1 order-xxl-1">
-							<div class="card flex-fill">
-								<div class="card-header">
-
-									<h5 class="card-title mb-0">Calendar</h5>
-								</div>
-								<div class="card-body d-flex">
-									<div class="align-self-center w-100">
-										<div class="chart">
-											<div id="datetimepicker-dashboard"></div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<div class="row">
-						<div class="col-12 col-lg-8 col-xxl-9 d-flex">
-							<div class="card flex-fill">
-								<div class="card-header">
-
-									<h5 class="card-title mb-0">Latest Projects</h5>
-								</div>
-								<table class="table table-hover my-0">
-									<thead>
-										<tr>
-											<th>Name</th>
-											<th class="d-none d-xl-table-cell">Start Date</th>
-											<th class="d-none d-xl-table-cell">End Date</th>
-											<th>Status</th>
-											<th class="d-none d-md-table-cell">Assignee</th>
-										</tr>
-									</thead>
-									<tbody>
-										<tr>
-											<td>Project Apollo</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-success">Done</span></td>
-											<td class="d-none d-md-table-cell">Vanessa Tucker</td>
-										</tr>
-										<tr>
-											<td>Project Fireball</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-danger">Cancelled</span></td>
-											<td class="d-none d-md-table-cell">William Harris</td>
-										</tr>
-										<tr>
-											<td>Project Hades</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-success">Done</span></td>
-											<td class="d-none d-md-table-cell">Sharon Lessman</td>
-										</tr>
-										<tr>
-											<td>Project Nitro</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-warning">In progress</span></td>
-											<td class="d-none d-md-table-cell">Vanessa Tucker</td>
-										</tr>
-										<tr>
-											<td>Project Phoenix</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-success">Done</span></td>
-											<td class="d-none d-md-table-cell">William Harris</td>
-										</tr>
-										<tr>
-											<td>Project X</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-success">Done</span></td>
-											<td class="d-none d-md-table-cell">Sharon Lessman</td>
-										</tr>
-										<tr>
-											<td>Project Romeo</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-success">Done</span></td>
-											<td class="d-none d-md-table-cell">Christina Mason</td>
-										</tr>
-										<tr>
-											<td>Project Wombat</td>
-											<td class="d-none d-xl-table-cell">01/01/2023</td>
-											<td class="d-none d-xl-table-cell">31/06/2023</td>
-											<td><span class="badge bg-warning">In progress</span></td>
-											<td class="d-none d-md-table-cell">William Harris</td>
-										</tr>
-									</tbody>
-								</table>
-							</div>
-						</div>
-						<div class="col-12 col-lg-4 col-xxl-3 d-flex">
-							<div class="card flex-fill w-100">
-								<div class="card-header">
-
-									<h5 class="card-title mb-0">Monthly Sales</h5>
-								</div>
-								<div class="card-body d-flex w-100">
-									<div class="align-self-center chart chart-lg">
-										<canvas id="chartjs-dashboard-bar"></canvas>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-				</div>
-			</main>
-
-			<footer class="footer">
-				<div class="container-fluid">
-					<div class="row text-muted">
-						<div class="col-6 text-start">
-							<p class="mb-0">
-								<span class="text-muted"><strong>Lightpanda Automation</strong> gateway dashboard shell</span>&copy;
-							</p>
-						</div>
-						<div class="col-6 text-end">
-							<ul class="list-inline">
-								<li class="list-inline-item">
-									<a class="text-muted" href="https://adminkit.io/" target="_blank">Support</a>
-								</li>
-								<li class="list-inline-item">
-									<a class="text-muted" href="https://adminkit.io/" target="_blank">Help Center</a>
-								</li>
-								<li class="list-inline-item">
-									<a class="text-muted" href="https://adminkit.io/" target="_blank">Privacy</a>
-								</li>
-								<li class="list-inline-item">
-									<a class="text-muted" href="https://adminkit.io/" target="_blank">Terms</a>
-								</li>
-							</ul>
-						</div>
-					</div>
-				</div>
-			</footer>
-		</div>
-	</div>
-
-	<script src="js/app.js"></script>
-
-	<script>
-		document.addEventListener("DOMContentLoaded", function() {
-			var ctx = document.getElementById("chartjs-dashboard-line").getContext("2d");
-			var gradient = ctx.createLinearGradient(0, 0, 0, 225);
-			gradient.addColorStop(0, "rgba(215, 227, 244, 1)");
-			gradient.addColorStop(1, "rgba(215, 227, 244, 0)");
-			// Line chart
-			new Chart(document.getElementById("chartjs-dashboard-line"), {
-				type: "line",
-				data: {
-					labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-					datasets: [{
-						label: "Sales ($)",
-						fill: true,
-						backgroundColor: gradient,
-						borderColor: window.theme.primary,
-						data: [
-							2115,
-							1562,
-							1584,
-							1892,
-							1587,
-							1923,
-							2566,
-							2448,
-							2805,
-							3438,
-							2917,
-							3327
-						]
-					}]
-				},
-				options: {
-					maintainAspectRatio: false,
-					legend: {
-						display: false
-					},
-					tooltips: {
-						intersect: false
-					},
-					hover: {
-						intersect: true
-					},
-					plugins: {
-						filler: {
-							propagate: false
-						}
-					},
-					scales: {
-						xAxes: [{
-							reverse: true,
-							gridLines: {
-								color: "rgba(0,0,0,0.0)"
-							}
-						}],
-						yAxes: [{
-							ticks: {
-								stepSize: 1000
-							},
-							display: true,
-							borderDash: [3, 3],
-							gridLines: {
-								color: "rgba(0,0,0,0.0)"
-							}
-						}]
-					}
-				}
-			});
-		});
-	</script>
-	<script>
-		document.addEventListener("DOMContentLoaded", function() {
-			// Pie chart
-			new Chart(document.getElementById("chartjs-dashboard-pie"), {
-				type: "pie",
-				data: {
-					labels: ["Chrome", "Firefox", "IE"],
-					datasets: [{
-						data: [4306, 3801, 1689],
-						backgroundColor: [
-							window.theme.primary,
-							window.theme.warning,
-							window.theme.danger
-						],
-						borderWidth: 5
-					}]
-				},
-				options: {
-					responsive: !window.MSInputMethodContext,
-					maintainAspectRatio: false,
-					legend: {
-						display: false
-					},
-					cutoutPercentage: 75
-				}
-			});
-		});
-	</script>
-	<script>
-		document.addEventListener("DOMContentLoaded", function() {
-			// Bar chart
-			new Chart(document.getElementById("chartjs-dashboard-bar"), {
-				type: "bar",
-				data: {
-					labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-					datasets: [{
-						label: "This year",
-						backgroundColor: window.theme.primary,
-						borderColor: window.theme.primary,
-						hoverBackgroundColor: window.theme.primary,
-						hoverBorderColor: window.theme.primary,
-						data: [54, 67, 41, 55, 62, 45, 55, 73, 60, 76, 48, 79],
-						barPercentage: .75,
-						categoryPercentage: .5
-					}]
-				},
-				options: {
-					maintainAspectRatio: false,
-					legend: {
-						display: false
-					},
-					scales: {
-						yAxes: [{
-							gridLines: {
-								display: false
-							},
-							stacked: false,
-							ticks: {
-								stepSize: 20
-							}
-						}],
-						xAxes: [{
-							stacked: false,
-							gridLines: {
-								color: "transparent"
-							}
-						}]
-					}
-				}
-			});
-		});
-	</script>
-	<script>
-		document.addEventListener("DOMContentLoaded", function() {
-			var markers = [{
-					coords: [31.230391, 121.473701],
-					name: "Shanghai"
-				},
-				{
-					coords: [28.704060, 77.102493],
-					name: "Delhi"
-				},
-				{
-					coords: [6.524379, 3.379206],
-					name: "Lagos"
-				},
-				{
-					coords: [35.689487, 139.691711],
-					name: "Tokyo"
-				},
-				{
-					coords: [23.129110, 113.264381],
-					name: "Guangzhou"
-				},
-				{
-					coords: [40.7127837, -74.0059413],
-					name: "New York"
-				},
-				{
-					coords: [34.052235, -118.243683],
-					name: "Los Angeles"
-				},
-				{
-					coords: [41.878113, -87.629799],
-					name: "Chicago"
-				},
-				{
-					coords: [51.507351, -0.127758],
-					name: "London"
-				},
-				{
-					coords: [40.416775, -3.703790],
-					name: "Madrid "
-				}
-			];
-			var map = new jsVectorMap({
-				map: "world",
-				selector: "#world_map",
-				zoomButtons: true,
-				markers: markers,
-				markerStyle: {
-					initial: {
-						r: 9,
-						strokeWidth: 7,
-						stokeOpacity: .4,
-						fill: window.theme.primary
-					},
-					hover: {
-						fill: window.theme.primary,
-						stroke: window.theme.primary
-					}
-				},
-				zoomOnScroll: false
-			});
-			window.addEventListener("resize", () => {
-				map.updateSize();
-			});
-		});
-	</script>
-	<script>
-		document.addEventListener("DOMContentLoaded", function() {
-			var date = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
-			var defaultDate = date.getUTCFullYear() + "-" + (date.getUTCMonth() + 1) + "-" + date.getUTCDate();
-			document.getElementById("datetimepicker-dashboard").flatpickr({
-				inline: true,
-				prevArrow: "<span title=\"Previous month\">&laquo;</span>",
-				nextArrow: "<span title=\"Next month\">&raquo;</span>",
-				defaultDate: defaultDate
-			});
-		});
-	</script>
-
-</body>
-
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="./app.js?v=20260414c"></script>
+  </body>
 </html>

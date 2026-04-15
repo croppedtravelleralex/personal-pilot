@@ -1,12 +1,13 @@
 pub mod state;
 
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
-    db::init::DbPool,
-    queue::memory::MemoryTaskQueue,
-    network_identity::proxy_selection::proxy_selection_tuning_from_env,
-    runner::TaskRunner,
+    db::init::DbPool, network_identity::proxy_selection::proxy_selection_tuning_from_env,
+    queue::memory::MemoryTaskQueue, runner::TaskRunner,
 };
 
 use self::state::AppState;
@@ -24,5 +25,6 @@ pub fn build_app_state(
         runner,
         worker_count,
         proxy_selection_tuning: proxy_selection_tuning_from_env(),
+        inline_secret_vault: Arc::new(Mutex::new(HashMap::new())),
     }
 }

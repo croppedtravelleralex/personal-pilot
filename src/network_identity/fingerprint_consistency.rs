@@ -38,7 +38,9 @@ fn timezone_matches_region(timezone: Option<&str>, region: Option<&str>) -> Opti
     let region = norm(region)?;
 
     let ok = match region.as_str() {
-        "us-east" | "us" | "virginia" | "new-york" => timezone.contains("new_york") || timezone.contains("detroit"),
+        "us-east" | "us" | "virginia" | "new-york" => {
+            timezone.contains("new_york") || timezone.contains("detroit")
+        }
         "us-west" | "california" | "oregon" => timezone.contains("los_angeles"),
         "eu-west" | "london" | "uk" => timezone.contains("london"),
         "de" | "germany" | "berlin" => timezone.contains("berlin"),
@@ -66,46 +68,114 @@ pub fn assess_fingerprint_proxy_region_consistency(
     let lang_p = locale_prefix(accept_language);
 
     let target_proxy = match (target.as_deref(), proxy.as_deref()) {
-        (Some(t), Some(p)) if t == p => ConsistencyCheckItem { name: "target_region_vs_proxy_region".to_string(), status: ConsistencyStatus::ExactMatch, reason: "target_and_proxy_region_match".to_string() },
-        (Some(_), Some(_)) => ConsistencyCheckItem { name: "target_region_vs_proxy_region".to_string(), status: ConsistencyStatus::Mismatch, reason: "target_and_proxy_region_mismatch".to_string() },
-        (Some(_), None) => ConsistencyCheckItem { name: "target_region_vs_proxy_region".to_string(), status: ConsistencyStatus::MissingContext, reason: "proxy_region_missing".to_string() },
-        _ => ConsistencyCheckItem { name: "target_region_vs_proxy_region".to_string(), status: ConsistencyStatus::MissingContext, reason: "target_region_not_requested".to_string() },
+        (Some(t), Some(p)) if t == p => ConsistencyCheckItem {
+            name: "target_region_vs_proxy_region".to_string(),
+            status: ConsistencyStatus::ExactMatch,
+            reason: "target_and_proxy_region_match".to_string(),
+        },
+        (Some(_), Some(_)) => ConsistencyCheckItem {
+            name: "target_region_vs_proxy_region".to_string(),
+            status: ConsistencyStatus::Mismatch,
+            reason: "target_and_proxy_region_mismatch".to_string(),
+        },
+        (Some(_), None) => ConsistencyCheckItem {
+            name: "target_region_vs_proxy_region".to_string(),
+            status: ConsistencyStatus::MissingContext,
+            reason: "proxy_region_missing".to_string(),
+        },
+        _ => ConsistencyCheckItem {
+            name: "target_region_vs_proxy_region".to_string(),
+            status: ConsistencyStatus::MissingContext,
+            reason: "target_region_not_requested".to_string(),
+        },
     };
     checks.push(target_proxy);
 
     let proxy_exit = match (proxy.as_deref(), exit.as_deref()) {
-        (Some(p), Some(e)) if p == e => ConsistencyCheckItem { name: "proxy_region_vs_exit_region".to_string(), status: ConsistencyStatus::ExactMatch, reason: "proxy_and_exit_region_match".to_string() },
-        (Some(_), Some(_)) => ConsistencyCheckItem { name: "proxy_region_vs_exit_region".to_string(), status: ConsistencyStatus::Mismatch, reason: "proxy_and_exit_region_mismatch".to_string() },
-        (Some(_), None) => ConsistencyCheckItem { name: "proxy_region_vs_exit_region".to_string(), status: ConsistencyStatus::MissingContext, reason: "exit_region_missing".to_string() },
-        _ => ConsistencyCheckItem { name: "proxy_region_vs_exit_region".to_string(), status: ConsistencyStatus::MissingContext, reason: "proxy_region_missing".to_string() },
+        (Some(p), Some(e)) if p == e => ConsistencyCheckItem {
+            name: "proxy_region_vs_exit_region".to_string(),
+            status: ConsistencyStatus::ExactMatch,
+            reason: "proxy_and_exit_region_match".to_string(),
+        },
+        (Some(_), Some(_)) => ConsistencyCheckItem {
+            name: "proxy_region_vs_exit_region".to_string(),
+            status: ConsistencyStatus::Mismatch,
+            reason: "proxy_and_exit_region_mismatch".to_string(),
+        },
+        (Some(_), None) => ConsistencyCheckItem {
+            name: "proxy_region_vs_exit_region".to_string(),
+            status: ConsistencyStatus::MissingContext,
+            reason: "exit_region_missing".to_string(),
+        },
+        _ => ConsistencyCheckItem {
+            name: "proxy_region_vs_exit_region".to_string(),
+            status: ConsistencyStatus::MissingContext,
+            reason: "proxy_region_missing".to_string(),
+        },
     };
     checks.push(proxy_exit);
 
-    let timezone_check = match timezone_matches_region(timezone, target.as_deref().or(proxy.as_deref())) {
-        Some(true) => ConsistencyCheckItem { name: "timezone_vs_region".to_string(), status: ConsistencyStatus::SoftMatch, reason: "timezone_matches_region_family".to_string() },
-        Some(false) => ConsistencyCheckItem { name: "timezone_vs_region".to_string(), status: ConsistencyStatus::SuspiciousCombination, reason: "timezone_looks_inconsistent_with_region".to_string() },
-        None => ConsistencyCheckItem { name: "timezone_vs_region".to_string(), status: ConsistencyStatus::MissingContext, reason: "timezone_or_region_missing_or_unknown_mapping".to_string() },
-    };
+    let timezone_check =
+        match timezone_matches_region(timezone, target.as_deref().or(proxy.as_deref())) {
+            Some(true) => ConsistencyCheckItem {
+                name: "timezone_vs_region".to_string(),
+                status: ConsistencyStatus::SoftMatch,
+                reason: "timezone_matches_region_family".to_string(),
+            },
+            Some(false) => ConsistencyCheckItem {
+                name: "timezone_vs_region".to_string(),
+                status: ConsistencyStatus::SuspiciousCombination,
+                reason: "timezone_looks_inconsistent_with_region".to_string(),
+            },
+            None => ConsistencyCheckItem {
+                name: "timezone_vs_region".to_string(),
+                status: ConsistencyStatus::MissingContext,
+                reason: "timezone_or_region_missing_or_unknown_mapping".to_string(),
+            },
+        };
     checks.push(timezone_check);
 
     let locale_lang = match (locale_p.as_deref(), lang_p.as_deref()) {
-        (Some(l), Some(a)) if l == a => ConsistencyCheckItem { name: "locale_vs_accept_language".to_string(), status: ConsistencyStatus::ExactMatch, reason: "locale_and_accept_language_match".to_string() },
-        (Some(_), Some(_)) => ConsistencyCheckItem { name: "locale_vs_accept_language".to_string(), status: ConsistencyStatus::SuspiciousCombination, reason: "locale_and_accept_language_mismatch".to_string() },
-        _ => ConsistencyCheckItem { name: "locale_vs_accept_language".to_string(), status: ConsistencyStatus::MissingContext, reason: "locale_or_accept_language_missing".to_string() },
+        (Some(l), Some(a)) if l == a => ConsistencyCheckItem {
+            name: "locale_vs_accept_language".to_string(),
+            status: ConsistencyStatus::ExactMatch,
+            reason: "locale_and_accept_language_match".to_string(),
+        },
+        (Some(_), Some(_)) => ConsistencyCheckItem {
+            name: "locale_vs_accept_language".to_string(),
+            status: ConsistencyStatus::SuspiciousCombination,
+            reason: "locale_and_accept_language_mismatch".to_string(),
+        },
+        _ => ConsistencyCheckItem {
+            name: "locale_vs_accept_language".to_string(),
+            status: ConsistencyStatus::MissingContext,
+            reason: "locale_or_accept_language_missing".to_string(),
+        },
     };
     checks.push(locale_lang);
 
-    let overall_status = if checks.iter().any(|c| c.status == ConsistencyStatus::Mismatch) {
+    let overall_status = if checks
+        .iter()
+        .any(|c| c.status == ConsistencyStatus::Mismatch)
+    {
         ConsistencyStatus::Mismatch
-    } else if checks.iter().any(|c| c.status == ConsistencyStatus::SuspiciousCombination) {
+    } else if checks
+        .iter()
+        .any(|c| c.status == ConsistencyStatus::SuspiciousCombination)
+    {
         ConsistencyStatus::SuspiciousCombination
-    } else if checks.iter().all(|c| c.status == ConsistencyStatus::ExactMatch || c.status == ConsistencyStatus::SoftMatch) {
+    } else if checks.iter().all(|c| {
+        c.status == ConsistencyStatus::ExactMatch || c.status == ConsistencyStatus::SoftMatch
+    }) {
         ConsistencyStatus::ExactMatch
     } else {
         ConsistencyStatus::MissingContext
     };
 
-    FingerprintConsistencyAssessment { overall_status, checks }
+    FingerprintConsistencyAssessment {
+        overall_status,
+        checks,
+    }
 }
 
 #[cfg(test)]
@@ -123,7 +193,10 @@ mod tests {
             Some("en-US,en;q=0.9"),
         );
         assert_eq!(assessment.overall_status, ConsistencyStatus::ExactMatch);
-        assert!(assessment.checks.iter().any(|c| c.name == "timezone_vs_region" && c.status == ConsistencyStatus::SoftMatch));
+        assert!(assessment
+            .checks
+            .iter()
+            .any(|c| c.name == "timezone_vs_region" && c.status == ConsistencyStatus::SoftMatch));
     }
 
     #[test]
@@ -137,7 +210,11 @@ mod tests {
             Some("en-GB,en;q=0.9"),
         );
         assert_eq!(assessment.overall_status, ConsistencyStatus::Mismatch);
-        assert!(assessment.checks.iter().any(|c| c.name == "target_region_vs_proxy_region" && c.status == ConsistencyStatus::Mismatch));
+        assert!(assessment
+            .checks
+            .iter()
+            .any(|c| c.name == "target_region_vs_proxy_region"
+                && c.status == ConsistencyStatus::Mismatch));
     }
 
     #[test]
@@ -150,8 +227,19 @@ mod tests {
             Some("zh-CN"),
             Some("en-US,en;q=0.9"),
         );
-        assert_eq!(assessment.overall_status, ConsistencyStatus::SuspiciousCombination);
-        assert!(assessment.checks.iter().any(|c| c.name == "timezone_vs_region" && c.status == ConsistencyStatus::SuspiciousCombination));
-        assert!(assessment.checks.iter().any(|c| c.name == "locale_vs_accept_language" && c.status == ConsistencyStatus::SuspiciousCombination));
+        assert_eq!(
+            assessment.overall_status,
+            ConsistencyStatus::SuspiciousCombination
+        );
+        assert!(assessment
+            .checks
+            .iter()
+            .any(|c| c.name == "timezone_vs_region"
+                && c.status == ConsistencyStatus::SuspiciousCombination));
+        assert!(assessment
+            .checks
+            .iter()
+            .any(|c| c.name == "locale_vs_accept_language"
+                && c.status == ConsistencyStatus::SuspiciousCombination));
     }
 }

@@ -3,16 +3,23 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use std::{net::SocketAddr, time::{Instant, SystemTime, UNIX_EPOCH}};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::Row;
+use std::{
+    net::SocketAddr,
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 use crate::{
-    network_identity::validator::validate_fingerprint_profile,
-    db::init::{provider_risk_version_state_for_proxy, refresh_cached_trust_score_for_proxy, refresh_proxy_trust_views_for_scope},
     app::state::AppState,
+    behavior::compile_behavior_plan,
+    behavior::form::compile_form_action_plan,
+    db::init::{
+        provider_risk_version_state_for_proxy, refresh_cached_trust_score_for_proxy,
+        refresh_proxy_trust_views_for_scope,
+    },
     domain::{
         run::{RUN_STATUS_CANCELLED, RUN_STATUS_RUNNING},
         task::{
@@ -20,16 +27,38 @@ use crate::{
             TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
         },
     },
+    network_identity::validator::validate_fingerprint_profile,
+    network_identity::{
+        proxy_growth::{
+            assess_proxy_pool_health, proxy_pool_growth_policy_from_env,
+            proxy_replenish_global_batch_limit_from_env,
+            proxy_replenish_region_batch_limit_from_env,
+            proxy_replenish_total_batch_limit_from_env, ProxyPoolInventorySnapshot,
+        },
+        proxy_harvest::load_proxy_harvest_metrics,
+    },
+    runner::RunnerExecutionIntent,
 };
 
 use super::{
     dto::{
-    BrowserExtractTextRequest, BrowserGetFinalUrlRequest, BrowserGetHtmlRequest, BrowserGetTitleRequest, BrowserOpenRequest, CancelTaskResponse, CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
-    FingerprintMetricsResponse, FingerprintProfileResponse, HealthResponse, LogResponse,
-    PaginationQuery, ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, VerifyBatchListQuery, VerifyBatchResponse, VerifyMetricsResponse,
-    RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, WorkerStatusResponse,
+        AuthMetricsResponse, BehaviorMetricsResponse, BrowserExtractTextRequest,
+        BrowserGetFinalUrlRequest, BrowserGetHtmlRequest, BrowserGetTitleRequest,
+        BrowserOpenRequest, CancelTaskResponse, CreateFingerprintProfileRequest,
+        CreateProxyRequest, CreateTaskRequest, FingerprintMetricsResponse,
+        FingerprintProfileResponse, FormInputRequest, HealthResponse, LogResponse, PaginationQuery,
+        ProxyMetricsResponse, ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse,
+        ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse,
+        ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem,
+        ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary,
+        ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse,
+        RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, VerifyBatchListQuery,
+        VerifyBatchResponse, VerifyMetricsResponse, WorkerStatusResponse,
     },
-    explainability::{build_task_explainability, content_bool_field, content_i64_field, content_string_field, enrich_summary_artifacts, latest_browser_ready_tasks, latest_execution_summaries},
+    explainability::{
+        build_task_explainability, content_bool_field, content_i64_field, content_string_field,
+        enrich_summary_artifacts, latest_browser_ready_tasks, latest_execution_summaries,
+    },
 };
 
 fn perf_probe_enabled() -> bool {
@@ -76,6 +105,78 @@ fn sanitize_offset(offset: Option<i64>) -> i64 {
     }
 }
 
+const BROWSER_PROXY_REQUIRED_MESSAGE: &str =
+    "direct mode is forbidden for browser tasks; browser access must use proxy pool";
+
+fn is_browser_task_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "open_page" | "get_html" | "get_title" | "get_final_url" | "extract_text"
+    )
+}
+
+fn is_candidate_proxy_status(status: &str) -> bool {
+    matches!(status, "candidate" | "candidate_rejected")
+}
+
+fn normalize_browser_task_request(
+    mut payload: CreateTaskRequest,
+) -> Result<CreateTaskRequest, (StatusCode, String)> {
+    if !is_browser_task_kind(payload.kind.as_str()) {
+        return Ok(payload);
+    }
+
+    let mut policy_obj = match payload.network_policy_json.take() {
+        Some(Value::Object(obj)) => obj,
+        Some(Value::Null) | None => serde_json::Map::new(),
+        Some(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "network_policy_json must be an object for browser tasks".to_string(),
+            ))
+        }
+    };
+
+    if policy_obj
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .map(|mode| mode.eq_ignore_ascii_case("direct"))
+        .unwrap_or(false)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            BROWSER_PROXY_REQUIRED_MESSAGE.to_string(),
+        ));
+    }
+
+    policy_obj.insert("mode".to_string(), json!("required_proxy"));
+    policy_obj.insert("require_proxy".to_string(), json!(true));
+    if let Some(proxy_id) = payload.proxy_id.as_deref() {
+        policy_obj
+            .entry("proxy_id".to_string())
+            .or_insert_with(|| json!(proxy_id));
+    }
+
+    payload.network_policy_json = Some(Value::Object(policy_obj));
+    Ok(payload)
+}
+
+fn ensure_form_input_allowed_for_task(
+    kind: &str,
+    form_input: Option<&FormInputRequest>,
+) -> Result<(), (StatusCode, String)> {
+    if form_input.is_none() {
+        return Ok(());
+    }
+    if kind != "open_page" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "form_input is only supported for open_page tasks and /browser/open".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(sqlx::FromRow)]
 struct ProxyRow {
     id: String,
@@ -114,30 +215,45 @@ struct ProxyRow {
     updated_at: String,
 }
 
-
 pub async fn run_proxy_verify_probe(
     state: &AppState,
     proxy_id: &str,
 ) -> Result<ProxyVerifyResponse, (StatusCode, String)> {
-    let row = sqlx::query_as::<_, (String, i64, Option<String>, Option<String>)>(r#"SELECT host, port, country, region FROM proxies WHERE id = ?"#)
-        .bind(proxy_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy for verify: {err}")))?;
+    let row = sqlx::query_as::<_, (String, i64, Option<String>, Option<String>, String)>(
+        r#"SELECT host, port, country, region, status FROM proxies WHERE id = ?"#,
+    )
+    .bind(proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load proxy for verify: {err}"),
+        )
+    })?;
 
-    let Some((host, port, expected_country, expected_region)) = row else {
-        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+    let Some((host, port, expected_country, expected_region, prior_proxy_status)) = row else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
     };
 
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .map_err(|err| (StatusCode::BAD_REQUEST, format!("proxy address is invalid for verify: {err}")))?;
+    let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("proxy address is invalid for verify: {err}"),
+        )
+    })?;
 
     let started = Instant::now();
-    let mut stream = tokio::time::timeout(std::time::Duration::from_secs(5), tokio::net::TcpStream::connect(addr))
-        .await
-        .ok()
-        .and_then(|result| result.ok());
+    let mut stream = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::net::TcpStream::connect(addr),
+    )
+    .await
+    .ok()
+    .and_then(|result| result.ok());
     let reachable = stream.is_some();
     let mut protocol_ok = false;
     let mut upstream_ok = false;
@@ -149,8 +265,17 @@ pub async fn run_proxy_verify_probe(
     let mut identity_fields_complete: Option<bool> = None;
     let mut exit_ip_public: Option<bool> = None;
     let mut anonymity_level: Option<String> = None;
-    let mut probe_error: Option<String> = if reachable { None } else { Some("proxy verify tcp connect failed".to_string()) };
-    let mut probe_error_category: Option<String> = if reachable { None } else { Some("connect_failed".to_string()) };
+    let mut invalid_identity_echo = false;
+    let mut probe_error: Option<String> = if reachable {
+        None
+    } else {
+        Some("proxy verify tcp connect failed".to_string())
+    };
+    let mut probe_error_category: Option<String> = if reachable {
+        None
+    } else {
+        Some("connect_failed".to_string())
+    };
     let mut verify_message = if reachable {
         "tcp connect succeeded but verify probe did not complete".to_string()
     } else {
@@ -162,30 +287,81 @@ pub async fn run_proxy_verify_probe(
 Host: verify.example:443
 
 ";
-        if tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.write_all(probe)).await.ok().is_some() {
+        if tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            stream_ref.write_all(probe),
+        )
+        .await
+        .ok()
+        .is_some()
+        {
             let mut buf = [0_u8; 1024];
-            if let Ok(Ok(n)) = tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.read(&mut buf)).await {
+            if let Ok(Ok(n)) =
+                tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.read(&mut buf))
+                    .await
+            {
                 if n > 0 {
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
                     let text_lower = text.to_ascii_lowercase();
-                    if text_lower.contains("http/1.1") || text_lower.contains("http/1.0") {
+                    let is_http_response =
+                        text_lower.starts_with("http/1.1") || text_lower.starts_with("http/1.0");
+                    let connect_established = is_http_response
+                        && (text_lower.starts_with("http/1.1 200")
+                            || text_lower.starts_with("http/1.0 200")
+                            || text_lower.contains("connection established"));
+                    if is_http_response {
                         protocol_ok = true;
                         let has_via = text_lower.contains("via:");
-                        let has_forwarded = text_lower.contains("forwarded:") || text_lower.contains("x-forwarded-for:");
-                        anonymity_level = Some(if has_forwarded { "transparent".to_string() } else if has_via { "anonymous".to_string() } else { "elite".to_string() });
-                        exit_ip = parse_probe_field(&text, "ip").filter(|v| looks_like_ip(v));
+                        let has_forwarded = text_lower.contains("forwarded:")
+                            || text_lower.contains("x-forwarded-for:");
+                        anonymity_level = Some(if has_forwarded {
+                            "transparent".to_string()
+                        } else if has_via {
+                            "anonymous".to_string()
+                        } else {
+                            "elite".to_string()
+                        });
+                        let raw_exit_ip = parse_probe_field(&text, "ip");
+                        exit_ip = raw_exit_ip
+                            .as_deref()
+                            .filter(|v| looks_like_ip(v))
+                            .map(str::to_string);
+                        invalid_identity_echo = raw_exit_ip.is_some() && exit_ip.is_none();
                         exit_country = parse_probe_field(&text, "country");
                         exit_region = parse_probe_field(&text, "region");
                         exit_ip_public = exit_ip.as_deref().map(ip_is_public);
-                        identity_fields_complete = Some(exit_ip.is_some() && exit_country.is_some() && exit_region.is_some());
-                        upstream_ok = identity_fields_complete.unwrap_or(false) && exit_ip_public != Some(false);
-                        geo_match_ok = expected_country.as_ref().map(|expected| exit_country.as_ref().map(|actual| actual.eq_ignore_ascii_case(expected)).unwrap_or(false));
-                        region_match_ok = expected_region.as_ref().map(|expected| exit_region.as_ref().map(|actual| actual.eq_ignore_ascii_case(expected)).unwrap_or(false));
-                        verify_message = format!("proxy verify completed ip={:?} public_ip={:?} country={:?} region={:?} region_match={:?}", exit_ip, exit_ip_public, exit_country, exit_region, region_match_ok);
+                        identity_fields_complete = Some(
+                            exit_ip.is_some() && exit_country.is_some() && exit_region.is_some(),
+                        );
+                        let identity_echo_ok = identity_fields_complete.unwrap_or(false)
+                            && exit_ip_public != Some(false);
+                        upstream_ok = identity_echo_ok || connect_established;
+                        geo_match_ok = exit_country.as_ref().and_then(|actual| {
+                            expected_country
+                                .as_ref()
+                                .map(|expected| actual.eq_ignore_ascii_case(expected))
+                        });
+                        region_match_ok = exit_region.as_ref().and_then(|actual| {
+                            expected_region
+                                .as_ref()
+                                .map(|expected| actual.eq_ignore_ascii_case(expected))
+                        });
+                        verify_message = if connect_established && !identity_echo_ok {
+                            format!(
+                                "proxy verify established CONNECT tunnel without identity echo fields anonymity={:?}",
+                                anonymity_level
+                            )
+                        } else {
+                            format!(
+                                "proxy verify completed ip={:?} public_ip={:?} country={:?} region={:?} region_match={:?}",
+                                exit_ip, exit_ip_public, exit_country, exit_region, region_match_ok
+                            )
+                        };
                         probe_error = None;
                         probe_error_category = None;
                     } else {
-                        verify_message = format!("proxy verify got non-http response: {text_lower}");
+                        verify_message =
+                            format!("proxy verify got non-http response: {text_lower}");
                         probe_error = Some(verify_message.clone());
                         probe_error_category = Some("protocol_invalid".to_string());
                     }
@@ -194,7 +370,12 @@ Host: verify.example:443
         }
     }
 
-    if reachable && protocol_ok && exit_ip_public == Some(false) {
+    if reachable && protocol_ok && invalid_identity_echo {
+        upstream_ok = false;
+        probe_error = Some("verify probe returned invalid exit ip".to_string());
+        probe_error_category = Some("invalid_exit_ip".to_string());
+    } else if reachable && protocol_ok && exit_ip_public == Some(false) {
+        upstream_ok = false;
         probe_error = Some("verify probe reported non-public exit ip".to_string());
         probe_error_category = Some("exit_ip_not_public".to_string());
     } else if reachable && protocol_ok && !upstream_ok {
@@ -203,34 +384,73 @@ Host: verify.example:443
     }
     let latency_ms = Some(started.elapsed().as_millis());
     let latency_ms_i64 = latency_ms.and_then(|v| i64::try_from(v).ok());
-    let status = if reachable && protocol_ok && upstream_ok { "ok" } else { "failed" };
-    let verification_confidence = Some(if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) && region_match_ok != Some(false) && anonymity_level.as_deref() == Some("elite") {
-        0.98
-    } else if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) && region_match_ok != Some(false) {
-        0.95
-    } else if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) {
-        0.86
-    } else if reachable && protocol_ok && upstream_ok {
-        0.68
-    } else if reachable && protocol_ok {
-        0.45
-    } else if reachable {
-        0.20
+    let status = if reachable && protocol_ok && upstream_ok {
+        "ok"
     } else {
-        0.05
-    });
+        "failed"
+    };
+    let verification_confidence = Some(
+        if reachable
+            && protocol_ok
+            && upstream_ok
+            && geo_match_ok == Some(true)
+            && region_match_ok != Some(false)
+            && anonymity_level.as_deref() == Some("elite")
+        {
+            0.98
+        } else if reachable
+            && protocol_ok
+            && upstream_ok
+            && geo_match_ok == Some(true)
+            && region_match_ok != Some(false)
+        {
+            0.95
+        } else if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) {
+            0.86
+        } else if reachable && protocol_ok && upstream_ok {
+            0.68
+        } else if reachable && protocol_ok {
+            0.45
+        } else if reachable {
+            0.20
+        } else {
+            0.05
+        },
+    );
     let verification_score_delta = Some(
         (if status == "ok" { 8 } else { -8 })
-        + (if geo_match_ok == Some(true) { 4 } else if geo_match_ok == Some(false) { -4 } else { 0 })
-        + (if region_match_ok == Some(true) { 2 } else if region_match_ok == Some(false) { -2 } else { 0 })
-        + (if identity_fields_complete == Some(true) { 1 } else { -1 })
-        + (if exit_ip_public == Some(true) { 1 } else if exit_ip_public == Some(false) { -3 } else { 0 })
-        + match anonymity_level.as_deref() {
-            Some("elite") => 2,
-            Some("anonymous") => -1,
-            Some("transparent") => -3,
-            _ => 0,
-        }
+            + (if geo_match_ok == Some(true) {
+                4
+            } else if geo_match_ok == Some(false) {
+                -4
+            } else {
+                0
+            })
+            + (if region_match_ok == Some(true) {
+                2
+            } else if region_match_ok == Some(false) {
+                -2
+            } else {
+                0
+            })
+            + (if identity_fields_complete == Some(true) {
+                1
+            } else {
+                -1
+            })
+            + (if exit_ip_public == Some(true) {
+                1
+            } else if exit_ip_public == Some(false) {
+                -3
+            } else {
+                0
+            })
+            + match anonymity_level.as_deref() {
+                Some("elite") => 2,
+                Some("anonymous") => -1,
+                Some("transparent") => -3,
+                _ => 0,
+            },
     );
     let (risk_level, risk_reasons) = compute_verify_risk_summary(
         reachable,
@@ -250,11 +470,8 @@ Host: verify.example:443
         probe_error_category.as_deref(),
         &risk_reasons,
     );
-    let verification_class = classify_verification_class(
-        status,
-        risk_level.as_deref(),
-        failure_stage.as_deref(),
-    );
+    let verification_class =
+        classify_verification_class(status, risk_level.as_deref(), failure_stage.as_deref());
     let recommended_action = recommend_verify_action(
         verification_class.as_deref(),
         risk_level.as_deref(),
@@ -263,7 +480,33 @@ Host: verify.example:443
     );
     let verify_source = Some("local_verify".to_string());
     let now = now_ts_string();
-    sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, last_probe_latency_ms = ?, last_probe_error = ?, last_probe_error_category = ?, last_verify_confidence = ?, last_verify_score_delta = ?, last_verify_source = ?, score = MAX(0.0, score + (? / 100.0)), updated_at = ? WHERE id = ?"#)
+    let candidate_cooldown_until = (now.parse::<i64>().unwrap_or(0) + 1800).to_string();
+    let is_candidate_family = is_candidate_proxy_status(prior_proxy_status.as_str());
+    let next_proxy_status = if is_candidate_family {
+        if status == "ok" {
+            "active"
+        } else {
+            "candidate_rejected"
+        }
+    } else {
+        prior_proxy_status.as_str()
+    };
+    let next_promoted_at = if is_candidate_family && status == "ok" {
+        Some(now.clone())
+    } else {
+        None
+    };
+    let next_cooldown_until = if is_candidate_family {
+        if status == "ok" {
+            None
+        } else {
+            Some(candidate_cooldown_until)
+        }
+    } else {
+        None
+    };
+    let should_update_cooldown = if is_candidate_family { 1_i64 } else { 0_i64 };
+    sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, last_probe_latency_ms = ?, last_probe_error = ?, last_probe_error_category = ?, last_verify_confidence = ?, last_verify_score_delta = ?, last_verify_source = ?, status = ?, promoted_at = COALESCE(?, promoted_at), cooldown_until = CASE WHEN ? != 0 THEN ? ELSE cooldown_until END, score = MAX(0.0, score + (? / 100.0)), updated_at = ? WHERE id = ?"#)
         .bind(&now)
         .bind(status)
         .bind(geo_match_ok.map(|v| if v { 1_i64 } else { 0_i64 }))
@@ -278,20 +521,41 @@ Host: verify.example:443
         .bind(verification_confidence)
         .bind(verification_score_delta)
         .bind(&verify_source)
+        .bind(next_proxy_status)
+        .bind(&next_promoted_at)
+        .bind(should_update_cooldown)
+        .bind(&next_cooldown_until)
         .bind(verification_score_delta.unwrap_or(0) as f64)
         .bind(&now)
         .bind(proxy_id)
         .execute(&state.db)
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist proxy verify result: {err}")))?;
-    let provider_region = sqlx::query_as::<_, (Option<String>, Option<String>)>("SELECT provider, region FROM proxies WHERE id = ?")
-        .bind(proxy_id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy provider/region after verify: {err}")))?;
-    refresh_proxy_trust_views_for_scope(&state.db, proxy_id, provider_region.0.as_deref(), provider_region.1.as_deref())
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh scoped trust views after verify: {err}")))?;
+    let provider_region = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT provider, region FROM proxies WHERE id = ?",
+    )
+    .bind(proxy_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load proxy provider/region after verify: {err}"),
+        )
+    })?;
+    refresh_proxy_trust_views_for_scope(
+        &state.db,
+        proxy_id,
+        provider_region.0.as_deref(),
+        provider_region.1.as_deref(),
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to refresh scoped trust views after verify: {err}"),
+        )
+    })?;
 
     Ok(ProxyVerifyResponse {
         id: proxy_id.to_string(),
@@ -322,10 +586,6 @@ Host: verify.example:443
     })
 }
 
-
-
-
-
 fn recommend_verify_action(
     verification_class: Option<&str>,
     risk_level: Option<&str>,
@@ -339,10 +599,17 @@ fn recommend_verify_action(
         return Some("use_with_caution".to_string());
     }
     if verification_class == Some("rejected") {
-        if matches!(failure_stage, Some("connect") | Some("protocol") | Some("identity")) {
+        if matches!(
+            failure_stage,
+            Some("connect") | Some("protocol") | Some("identity")
+        ) {
             return Some("retry_later".to_string());
         }
-        if matches!(failure_stage_detail, Some("transparent_proxy") | Some("exit_ip_not_public")) || risk_level == Some("high") {
+        if matches!(
+            failure_stage_detail,
+            Some("transparent_proxy") | Some("exit_ip_not_public")
+        ) || risk_level == Some("high")
+        {
             return Some("quarantine".to_string());
         }
         return Some("retry_later".to_string());
@@ -376,18 +643,43 @@ fn classify_verify_failure_stage(
     risk_reasons: &[String],
 ) -> (Option<String>, Option<String>) {
     if !reachable {
-        return (Some("connect".to_string()), Some("tcp_connect_failed".to_string()));
+        return (
+            Some("connect".to_string()),
+            Some("tcp_connect_failed".to_string()),
+        );
     }
     if reachable && !protocol_ok {
-        return (Some("protocol".to_string()), Some(probe_error_category.unwrap_or("protocol_invalid").to_string()));
+        return (
+            Some("protocol".to_string()),
+            Some(
+                probe_error_category
+                    .unwrap_or("protocol_invalid")
+                    .to_string(),
+            ),
+        );
     }
     if probe_error_category == Some("exit_ip_not_public") {
-        return (Some("risk".to_string()), Some("exit_ip_not_public".to_string()));
+        return (
+            Some("risk".to_string()),
+            Some("exit_ip_not_public".to_string()),
+        );
     }
     if !upstream_ok {
-        return (Some("identity".to_string()), Some(probe_error_category.unwrap_or("upstream_missing").to_string()));
+        return (
+            Some("identity".to_string()),
+            Some(
+                probe_error_category
+                    .unwrap_or("upstream_missing")
+                    .to_string(),
+            ),
+        );
     }
-    if risk_reasons.iter().any(|r| matches!(r.as_str(), "transparent_proxy" | "anonymous_proxy" | "geo_mismatch" | "region_mismatch")) {
+    if risk_reasons.iter().any(|r| {
+        matches!(
+            r.as_str(),
+            "transparent_proxy" | "anonymous_proxy" | "geo_mismatch" | "region_mismatch"
+        )
+    }) {
         let detail = if risk_reasons.iter().any(|r| r == "transparent_proxy") {
             "transparent_proxy"
         } else if risk_reasons.iter().any(|r| r == "anonymous_proxy") {
@@ -442,9 +734,19 @@ fn compute_verify_risk_summary(
     reasons.sort();
     reasons.dedup();
 
-    let risk_level = if reasons.iter().any(|r| matches!(r.as_str(), "connect_failed" | "protocol_invalid" | "exit_ip_not_public" | "transparent_proxy")) {
+    let risk_level = if reasons.iter().any(|r| {
+        matches!(
+            r.as_str(),
+            "connect_failed" | "protocol_invalid" | "exit_ip_not_public" | "transparent_proxy"
+        )
+    }) {
         Some("high".to_string())
-    } else if reasons.iter().any(|r| matches!(r.as_str(), "identity_incomplete" | "geo_mismatch" | "region_mismatch" | "anonymous_proxy")) {
+    } else if reasons.iter().any(|r| {
+        matches!(
+            r.as_str(),
+            "identity_incomplete" | "geo_mismatch" | "region_mismatch" | "anonymous_proxy"
+        )
+    }) {
         Some("medium".to_string())
     } else if reachable && protocol_ok && upstream_ok {
         Some("low".to_string())
@@ -462,10 +764,18 @@ fn looks_like_ip(value: &str) -> bool {
 fn ip_is_public(value: &str) -> bool {
     match value.parse::<std::net::IpAddr>() {
         Ok(std::net::IpAddr::V4(ip)) => {
-            !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_broadcast() || ip.is_documentation() || ip.is_unspecified())
+            !(ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || ip.is_unspecified())
         }
         Ok(std::net::IpAddr::V6(ip)) => {
-            !(ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local() || ip.is_unicast_link_local())
+            !(ip.is_loopback()
+                || ip.is_unspecified()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local())
         }
         Err(_) => false,
     }
@@ -475,7 +785,11 @@ fn parse_probe_field(text: &str, key: &str) -> Option<String> {
     let needle = format!("{key}=");
     let idx = text.find(&needle)?;
     let value = text[idx + needle.len()..].lines().next()?.trim();
-    if value.is_empty() { None } else { Some(value.to_string()) }
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn map_proxy_row(row: ProxyRow) -> ProxyResponse {
@@ -517,8 +831,193 @@ fn map_proxy_row(row: ProxyRow) -> ProxyResponse {
     }
 }
 
+const PROXY_ROW_SELECT_SQL: &str = r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at FROM proxies"#;
+
+async fn load_proxy_row_by_id(
+    state: &AppState,
+    proxy_id: &str,
+) -> Result<Option<ProxyRow>, (StatusCode, String)> {
+    sqlx::query_as::<_, ProxyRow>(&format!("{PROXY_ROW_SELECT_SQL} WHERE id = ?"))
+        .bind(proxy_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to fetch proxy: {err}"),
+            )
+        })
+}
+
+async fn load_proxy_row_by_endpoint_key(
+    state: &AppState,
+    payload: &CreateProxyRequest,
+) -> Result<Option<ProxyRow>, (StatusCode, String)> {
+    sqlx::query_as::<_, ProxyRow>(&format!(
+        "{PROXY_ROW_SELECT_SQL}
+         WHERE scheme = ?
+           AND host = ?
+           AND port = ?
+           AND ((username IS NULL AND ? IS NULL) OR username = ?)
+           AND ((provider IS NULL AND ? IS NULL) OR provider = ?)
+           AND ((region IS NULL AND ? IS NULL) OR region = ?)
+         ORDER BY
+           CASE status
+             WHEN 'active' THEN 0
+             WHEN 'candidate' THEN 1
+             WHEN 'candidate_rejected' THEN 2
+             ELSE 3
+           END ASC,
+           created_at ASC
+         LIMIT 1"
+    ))
+    .bind(&payload.scheme)
+    .bind(&payload.host)
+    .bind(payload.port)
+    .bind(&payload.username)
+    .bind(&payload.username)
+    .bind(&payload.provider)
+    .bind(&payload.provider)
+    .bind(&payload.region)
+    .bind(&payload.region)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch candidate proxy by endpoint key: {err}"),
+        )
+    })
+}
+
+async fn create_or_refresh_candidate_proxy(
+    state: &AppState,
+    payload: &CreateProxyRequest,
+) -> Result<(StatusCode, Json<ProxyResponse>), (StatusCode, String)> {
+    let now = now_ts_string();
+    if let Some(existing) = load_proxy_row_by_endpoint_key(state, payload).await? {
+        if existing.status == "active" {
+            sqlx::query(
+                r#"UPDATE proxies
+                   SET last_seen_at = ?, source_label = COALESCE(?, source_label), updated_at = ?
+                   WHERE id = ?"#,
+            )
+            .bind(&now)
+            .bind("api_create_proxy")
+            .bind(&now)
+            .bind(&existing.id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to refresh active proxy candidate sighting: {err}"),
+                )
+            })?;
+        } else {
+            sqlx::query(
+                r#"UPDATE proxies
+                   SET last_seen_at = ?,
+                       source_label = ?,
+                       score = MAX(score, ?),
+                       country = COALESCE(country, ?),
+                       password = COALESCE(password, ?),
+                       updated_at = ?
+                   WHERE id = ?"#,
+            )
+            .bind(&now)
+            .bind("api_create_proxy")
+            .bind(payload.score.unwrap_or(1.0))
+            .bind(&payload.country)
+            .bind(&payload.password)
+            .bind(&now)
+            .bind(&existing.id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to refresh candidate proxy: {err}"),
+                )
+            })?;
+        }
+
+        let refreshed = load_proxy_row_by_id(state, &existing.id)
+            .await?
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("proxy disappeared after candidate refresh: {}", existing.id),
+                )
+            })?;
+        return Ok((StatusCode::OK, Json(map_proxy_row(refreshed))));
+    }
+
+    let status = payload
+        .status
+        .clone()
+        .filter(|value| is_candidate_proxy_status(value))
+        .unwrap_or_else(|| "candidate".to_string());
+    let score = payload.score.unwrap_or(1.0);
+    sqlx::query(
+        r#"INSERT INTO proxies (
+               id, scheme, host, port, username, password, region, country, provider,
+               status, score, success_count, failure_count, last_checked_at, last_used_at,
+               cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok,
+               last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status,
+               last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at,
+               last_probe_latency_ms, last_probe_error, last_probe_error_category,
+               last_verify_confidence, last_verify_score_delta, last_verify_source,
+               source_label, last_seen_at, promoted_at, created_at, updated_at
+           ) VALUES (
+               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL,
+               NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+               NULL, ?, ?, NULL, ?, ?
+           )"#,
+    )
+    .bind(&payload.id)
+    .bind(&payload.scheme)
+    .bind(&payload.host)
+    .bind(payload.port)
+    .bind(&payload.username)
+    .bind(&payload.password)
+    .bind(&payload.region)
+    .bind(&payload.country)
+    .bind(&payload.provider)
+    .bind(&status)
+    .bind(score)
+    .bind("api_create_proxy")
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to create candidate proxy: {err}"),
+        )
+    })?;
+
+    let created = load_proxy_row_by_id(state, &payload.id)
+        .await?
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("candidate proxy missing after create: {}", payload.id),
+            )
+        })?;
+    Ok((StatusCode::CREATED, Json(map_proxy_row(created))))
+}
+
 fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {
-    let mut metrics = ProxyMetricsResponse { direct: 0, resolved: 0, resolved_sticky: 0, unresolved: 0, none: 0 };
+    let mut metrics = ProxyMetricsResponse {
+        direct: 0,
+        resolved: 0,
+        resolved_sticky: 0,
+        unresolved: 0,
+        none: 0,
+    };
     for task in tasks {
         match task.proxy_resolution_status.as_deref() {
             Some("direct") => metrics.direct += 1,
@@ -584,9 +1083,16 @@ async fn insert_task_log(
 }
 
 async fn load_counts(state: &AppState) -> Result<TaskStatusCounts, (StatusCode, String)> {
-    let (total, queued, running, succeeded, failed, timed_out, cancelled): (i64, i64, i64, i64, i64, i64, i64) =
-        sqlx::query_as(
-            r#"SELECT
+    let (total, queued, running, succeeded, failed, timed_out, cancelled): (
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+    ) = sqlx::query_as(
+        r#"SELECT
                    COUNT(*) AS total,
                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS queued,
                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS running,
@@ -595,21 +1101,32 @@ async fn load_counts(state: &AppState) -> Result<TaskStatusCounts, (StatusCode, 
                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS timed_out,
                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS cancelled
                FROM tasks"#,
+    )
+    .bind(TASK_STATUS_QUEUED)
+    .bind(TASK_STATUS_RUNNING)
+    .bind(TASK_STATUS_SUCCEEDED)
+    .bind(TASK_STATUS_FAILED)
+    .bind(TASK_STATUS_TIMED_OUT)
+    .bind(TASK_STATUS_CANCELLED)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to aggregate task counts: {err}"),
         )
-        .bind(TASK_STATUS_QUEUED)
-        .bind(TASK_STATUS_RUNNING)
-        .bind(TASK_STATUS_SUCCEEDED)
-        .bind(TASK_STATUS_FAILED)
-        .bind(TASK_STATUS_TIMED_OUT)
-        .bind(TASK_STATUS_CANCELLED)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate task counts: {err}")))?;
+    })?;
 
-    Ok(TaskStatusCounts { total, queued, running, succeeded, failed, timed_out, cancelled })
+    Ok(TaskStatusCounts {
+        total,
+        queued,
+        running,
+        succeeded,
+        failed,
+        timed_out,
+        cancelled,
+    })
 }
-
-
 
 async fn map_verify_batch_row(
     state: &AppState,
@@ -668,7 +1185,9 @@ async fn map_verify_batch_row(
     })
 }
 
-async fn load_verify_metrics(state: &AppState) -> Result<VerifyMetricsResponse, (StatusCode, String)> {
+async fn load_verify_metrics(
+    state: &AppState,
+) -> Result<VerifyMetricsResponse, (StatusCode, String)> {
     let (verified_ok, verified_failed, geo_match_ok, stale_or_missing_verify): (i64, i64, i64, i64) =
         sqlx::query_as(
             r#"SELECT
@@ -682,7 +1201,454 @@ async fn load_verify_metrics(state: &AppState) -> Result<VerifyMetricsResponse, 
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate verify metrics: {err}")))?;
 
-    Ok(VerifyMetricsResponse { verified_ok, verified_failed, geo_match_ok, stale_or_missing_verify })
+    Ok(VerifyMetricsResponse {
+        verified_ok,
+        verified_failed,
+        geo_match_ok,
+        stale_or_missing_verify,
+    })
+}
+
+async fn load_proxy_pool_status_summary(
+    state: &AppState,
+) -> Result<super::dto::ProxyPoolStatusSummary, (StatusCode, String)> {
+    let (total, active, candidate, candidate_rejected): (i64, i64, i64, i64) = sqlx::query_as(
+        r#"SELECT
+               COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) AS active,
+               COALESCE(SUM(CASE WHEN status = 'candidate' THEN 1 ELSE 0 END), 0) AS candidate,
+               COALESCE(SUM(CASE WHEN status = 'candidate_rejected' THEN 1 ELSE 0 END), 0) AS candidate_rejected
+           FROM proxies"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate proxy pool status: {err}")))?;
+    let hot_regions = load_hot_browser_regions(state).await.map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load hot regions: {err}"),
+        )
+    })?;
+    let policy = proxy_pool_growth_policy_from_env();
+    let mut region_shortages = Vec::new();
+    for region in &hot_regions {
+        let available_in_region: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND region = ? AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+        )
+        .bind(region)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count region availability: {err}")))?;
+        if available_in_region < policy.min_available_per_region {
+            region_shortages.push(region.clone());
+        }
+    }
+    Ok(super::dto::ProxyPoolStatusSummary {
+        total,
+        active,
+        candidate,
+        candidate_rejected,
+        active_ratio_percent: if total <= 0 {
+            0
+        } else {
+            (active * 100) / total
+        },
+        hot_regions,
+        region_shortages,
+    })
+}
+
+async fn load_proxy_replenish_metrics(
+    state: &AppState,
+) -> Result<super::dto::ProxyReplenishMetricsSummary, (StatusCode, String)> {
+    let recent_batches: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM verify_batches WHERE json_extract(filters_json, '$.reason') = 'replenish_mvp'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count replenish batches: {err}")))?;
+    let promoted_active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND promoted_at IS NOT NULL",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count promoted proxies: {err}"),
+        )
+    })?;
+    let rejected_total: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM proxies WHERE status = 'candidate_rejected'")
+            .fetch_one(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to count rejected proxies: {err}"),
+                )
+            })?;
+    let fallback_total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.payload.network_policy_json.selection_explain.fallback_reason') = 'region_shortage_fallback_to_any_active'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count fallback tasks: {err}")))?;
+    let decision_total = promoted_active + rejected_total;
+    Ok(super::dto::ProxyReplenishMetricsSummary {
+        recent_batches,
+        promotion_rate: if decision_total == 0 {
+            0.0
+        } else {
+            promoted_active as f64 / decision_total as f64
+        },
+        reject_rate: if decision_total == 0 {
+            0.0
+        } else {
+            rejected_total as f64 / decision_total as f64
+        },
+        fallback_rate: if counts_like_browser_total(state).await? == 0 {
+            0.0
+        } else {
+            fallback_total as f64 / counts_like_browser_total(state).await? as f64
+        },
+    })
+}
+
+async fn counts_like_browser_total(state: &AppState) -> Result<i64, (StatusCode, String)> {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM tasks WHERE kind IN ('open_page', 'get_html', 'get_title', 'get_final_url', 'extract_text')",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count browser tasks: {err}")))
+}
+
+async fn load_identity_session_metrics(
+    state: &AppState,
+) -> Result<super::dto::IdentitySessionMetricsSummary, (StatusCode, String)> {
+    let active_sessions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM proxy_session_bindings")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to count sessions: {err}"),
+            )
+        })?;
+    let reused_sessions: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM tasks WHERE result_json IS NOT NULL AND json_extract(result_json, '$.identity_session_status') = 'auto_reused'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count reused sessions: {err}")))?;
+    let created_sessions: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM tasks WHERE result_json IS NOT NULL AND json_extract(result_json, '$.identity_session_status') = 'auto_created'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count created sessions: {err}")))?;
+    let cookie_restore_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.cookie_restore_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate cookie restore count: {err}")))?;
+    let cookie_persist_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.cookie_persist_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate cookie persist count: {err}")))?;
+    let local_storage_restore_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.local_storage_restore_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate local storage restore count: {err}")))?;
+    let local_storage_persist_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.local_storage_persist_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate local storage persist count: {err}")))?;
+    let session_storage_restore_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.session_storage_restore_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate session storage restore count: {err}")))?;
+    let session_storage_persist_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.session_storage_persist_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate session storage persist count: {err}")))?;
+    Ok(super::dto::IdentitySessionMetricsSummary {
+        active_sessions,
+        reused_sessions,
+        created_sessions,
+        cookie_restore_count,
+        cookie_persist_count,
+        local_storage_restore_count,
+        local_storage_persist_count,
+        session_storage_restore_count,
+        session_storage_persist_count,
+    })
+}
+
+async fn load_behavior_metrics(
+    state: &AppState,
+) -> Result<BehaviorMetricsResponse, (StatusCode, String)> {
+    let runs_with_behavior: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(behavior_policy_json, '$.mode') IN ('shadow', 'active')"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count behavior-enabled tasks: {err}"),
+        )
+    })?;
+    let shadow_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(behavior_policy_json, '$.mode') = 'shadow'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count shadow behavior tasks: {err}"),
+        )
+    })?;
+    let active_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(behavior_policy_json, '$.mode') = 'active'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count active behavior tasks: {err}"),
+        )
+    })?;
+    let aborted_by_budget: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND (
+               json_extract(result_json, '$.behavior_trace_summary.abort_reason') = 'budget_exceeded'
+               OR json_extract(result_json, '$.behavior_trace_summary.abort_reason') = 'soft_budget_abort'
+             )"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count budget-aborted behavior tasks: {err}"),
+        )
+    })?;
+    let avg_added_latency_ms = sqlx::query_scalar::<_, Option<f64>>(
+        r#"SELECT AVG(CAST(json_extract(result_json, '$.behavior_trace_summary.total_added_latency_ms') AS REAL))
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.behavior_trace_summary.total_added_latency_ms') IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to compute average behavior latency: {err}"),
+        )
+    })?
+    .unwrap_or(0.0)
+    .round() as i64;
+    let top_behavior_profiles = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT behavior_profile_id, COUNT(*) AS uses
+           FROM tasks
+           WHERE behavior_profile_id IS NOT NULL
+           GROUP BY behavior_profile_id
+           ORDER BY uses DESC, behavior_profile_id ASC
+           LIMIT 5"#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load top behavior profiles: {err}"),
+        )
+    })?
+    .into_iter()
+    .map(|(profile_id, uses)| format!("{profile_id}:{uses}"))
+    .collect();
+
+    Ok(BehaviorMetricsResponse {
+        runs_with_behavior,
+        shadow_runs,
+        active_runs,
+        aborted_by_budget,
+        avg_added_latency_ms,
+        top_behavior_profiles,
+    })
+}
+
+async fn load_auth_metrics(state: &AppState) -> Result<AuthMetricsResponse, (StatusCode, String)> {
+    let auth_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(form_input_redacted_json, '$.mode') = 'auth'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count auth tasks: {err}"),
+        )
+    })?;
+    let auth_success_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'
+             AND json_extract(result_json, '$.form_action_status') = 'succeeded'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count successful auth tasks: {err}"),
+        )
+    })?;
+    let auth_failed_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'
+             AND json_extract(result_json, '$.form_action_status') = 'failed'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count failed auth tasks: {err}"),
+        )
+    })?;
+    let auth_blocked_missing_contract: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'
+             AND json_extract(result_json, '$.form_action_status') = 'blocked'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count blocked auth tasks: {err}"),
+        )
+    })?;
+    let auth_transient_retries: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.form_action_retry_count') AS INTEGER)), 0)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count auth retries: {err}"),
+        )
+    })?;
+    let auth_inline_secret_unavailable: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(form_input_redacted_json, '$.mode') = 'auth'
+             AND (
+                 COALESCE(error_message, '') LIKE '%inline_secret_unavailable%'
+                 OR COALESCE(json_extract(result_json, '$.message'), '') LIKE '%inline_secret_unavailable%'
+                 OR COALESCE(json_extract(result_json, '$.form_action_summary_json.failure_signal'), '') = 'inline_secret_unavailable'
+             )"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count inline secret failures: {err}"),
+        )
+    })?;
+
+    Ok(AuthMetricsResponse {
+        auth_runs,
+        auth_success_runs,
+        auth_failed_runs,
+        auth_blocked_missing_contract,
+        auth_transient_retries,
+        auth_inline_secret_unavailable,
+    })
+}
+
+async fn load_proxy_site_metrics(
+    state: &AppState,
+) -> Result<super::dto::ProxySiteMetricsSummary, (StatusCode, String)> {
+    let tracked_sites: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT site_key) FROM proxy_site_stats WHERE site_key IS NOT NULL AND site_key != ''",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count tracked proxy sites: {err}")))?;
+    let site_records: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM proxy_site_stats")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to count proxy site records: {err}"),
+            )
+        })?;
+    let top_failing_rows = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT site_key, SUM(failure_count) AS failures
+           FROM proxy_site_stats
+           GROUP BY site_key
+           HAVING failures > 0
+           ORDER BY failures DESC, site_key ASC
+           LIMIT 5"#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load top failing proxy sites: {err}"),
+        )
+    })?;
+    Ok(super::dto::ProxySiteMetricsSummary {
+        tracked_sites,
+        site_records,
+        top_failing_sites: top_failing_rows
+            .into_iter()
+            .map(|(site_key, failures)| format!("{site_key}:{failures}"))
+            .collect(),
+    })
 }
 
 pub async fn health(
@@ -705,8 +1671,29 @@ pub async fn status(
     let counts = load_counts(&state).await?;
     let limit = sanitize_limit(query.limit, 5, 100);
     let offset = sanitize_offset(query.offset);
-    let rows = sqlx::query_as::<_, (String, String, String, i32, Option<String>, Option<i64>, Option<String>, Option<String>, Option<String>)>(
-        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json, started_at, finished_at FROM tasks ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            i32,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
+        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version,
+                  behavior_profile_id, behavior_profile_version, behavior_policy_json, result_json,
+                  started_at, finished_at
+           FROM tasks
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?"#,
     )
     .bind(limit)
     .bind(offset)
@@ -721,56 +1708,104 @@ pub async fn status(
 
     let latest_tasks: Vec<TaskResponse> = rows
         .into_iter()
-        .map(|(id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json, started_at, finished_at)| {
-            let parsed = result_json.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok());
-            let explainability = build_task_explainability(
-                fingerprint_profile_id.as_deref(),
-                fingerprint_profile_version,
-                result_json.as_deref(),
-                Some(&id),
-                Some(&kind),
-                Some(&status),
-                finished_at.as_deref().or(started_at.as_deref()),
-            );
-            TaskResponse {
-                fingerprint_resolution_status: explainability.fingerprint_resolution_status,
-                proxy_id: explainability.proxy_id,
-                proxy_provider: explainability.proxy_provider,
-                proxy_region: explainability.proxy_region,
-                proxy_resolution_status: explainability.proxy_resolution_status,
-                trust_score_total: explainability.trust_score_total,
-                selection_reason_summary: explainability.selection_reason_summary,
-                selection_explain: explainability.selection_explain,
-                fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
-                execution_identity: Some(explainability.execution_identity),
-                identity_network_explain: explainability.identity_network_explain,
-                winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
-                failure_scope: explainability.failure_scope,
-                browser_failure_signal: explainability.browser_failure_signal,
-                summary_artifacts: explainability.summary_artifacts,
-                title: content_string_field(parsed.as_ref(), "title"),
-                final_url: content_string_field(parsed.as_ref(), "final_url"),
-                content_preview: content_string_field(parsed.as_ref(), "content_preview"),
-                content_length: content_i64_field(parsed.as_ref(), "content_length"),
-                content_truncated: content_bool_field(parsed.as_ref(), "content_truncated"),
-                content_kind: content_string_field(parsed.as_ref(), "content_kind"),
-                content_source_action: content_string_field(parsed.as_ref(), "content_source_action"),
-                content_ready: content_bool_field(parsed.as_ref(), "content_ready"),
+        .map(
+            |(
                 id,
                 kind,
                 status,
                 priority,
-                started_at,
-                finished_at,
                 fingerprint_profile_id,
                 fingerprint_profile_version,
-            }
-        })
+                behavior_profile_id,
+                behavior_profile_version,
+                behavior_policy_json,
+                result_json,
+                started_at,
+                finished_at,
+            )| {
+                let parsed = result_json
+                    .as_deref()
+                    .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+                let explainability = build_task_explainability(
+                    fingerprint_profile_id.as_deref(),
+                    fingerprint_profile_version,
+                    behavior_profile_id.as_deref(),
+                    behavior_profile_version,
+                    None,
+                    behavior_policy_json.as_deref(),
+                    result_json.as_deref(),
+                    Some(&id),
+                    Some(&kind),
+                    Some(&status),
+                    finished_at.as_deref().or(started_at.as_deref()),
+                );
+                TaskResponse {
+                    fingerprint_resolution_status: explainability.fingerprint_resolution_status,
+                    behavior_profile_id: explainability.behavior_profile_id,
+                    behavior_profile_version: explainability.behavior_profile_version,
+                    behavior_resolution_status: explainability.behavior_resolution_status,
+                    behavior_execution_mode: explainability.behavior_execution_mode,
+                    page_archetype: explainability.page_archetype,
+                    behavior_seed: explainability.behavior_seed,
+                    behavior_runtime_explain: explainability.behavior_runtime_explain,
+                    behavior_trace_summary: explainability.behavior_trace_summary,
+                    form_action_status: form_action_status_from_parsed(parsed.as_ref()),
+                    form_action_mode: form_action_mode_from_parsed(parsed.as_ref()),
+                    form_action_retry_count: form_action_retry_count_from_parsed(parsed.as_ref()),
+                    form_action_summary_json: form_action_summary_json_from_parsed(parsed.as_ref()),
+                    proxy_id: explainability.proxy_id,
+                    proxy_provider: explainability.proxy_provider,
+                    proxy_region: explainability.proxy_region,
+                    proxy_resolution_status: explainability.proxy_resolution_status,
+                    trust_score_total: explainability.trust_score_total,
+                    selection_reason_summary: explainability.selection_reason_summary,
+                    selection_explain: explainability.selection_explain,
+                    fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
+                    execution_identity: Some(explainability.execution_identity),
+                    identity_network_explain: explainability.identity_network_explain,
+                    winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
+                    failure_scope: explainability.failure_scope,
+                    browser_failure_signal: explainability.browser_failure_signal,
+                    summary_artifacts: explainability.summary_artifacts,
+                    title: content_string_field(parsed.as_ref(), "title"),
+                    final_url: content_string_field(parsed.as_ref(), "final_url"),
+                    content_preview: content_string_field(parsed.as_ref(), "content_preview"),
+                    content_length: content_i64_field(parsed.as_ref(), "content_length"),
+                    content_truncated: content_bool_field(parsed.as_ref(), "content_truncated"),
+                    content_kind: content_string_field(parsed.as_ref(), "content_kind"),
+                    content_source_action: content_string_field(
+                        parsed.as_ref(),
+                        "content_source_action",
+                    ),
+                    content_ready: content_bool_field(parsed.as_ref(), "content_ready"),
+                    id,
+                    kind,
+                    status,
+                    priority,
+                    started_at,
+                    finished_at,
+                    fingerprint_profile_id,
+                    fingerprint_profile_version,
+                }
+            },
+        )
         .collect();
 
     let fingerprint_metrics = build_fingerprint_metrics(&latest_tasks);
     let proxy_metrics = build_proxy_metrics(&latest_tasks);
     let verify_metrics = load_verify_metrics(&state).await?;
+    let proxy_pool_status = load_proxy_pool_status_summary(&state).await?;
+    let proxy_replenish_metrics = load_proxy_replenish_metrics(&state).await?;
+    let proxy_harvest_metrics = load_proxy_harvest_metrics(&state).await.map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load proxy harvest metrics: {err}"),
+        )
+    })?;
+    let proxy_site_metrics = load_proxy_site_metrics(&state).await?;
+    let identity_session_metrics = load_identity_session_metrics(&state).await?;
+    let behavior_metrics = load_behavior_metrics(&state).await?;
+    let auth_metrics = load_auth_metrics(&state).await?;
     let latest_execution_summaries = latest_execution_summaries(&latest_tasks);
     let latest_browser_tasks = latest_browser_ready_tasks(&latest_tasks, 3);
 
@@ -792,13 +1827,27 @@ pub async fn status(
         fingerprint_metrics,
         proxy_metrics,
         verify_metrics,
+        proxy_pool_status,
+        proxy_replenish_metrics,
+        proxy_harvest_metrics,
+        proxy_site_metrics,
+        identity_session_metrics,
+        behavior_metrics,
+        auth_metrics,
         latest_execution_summaries,
         latest_tasks,
         latest_browser_tasks,
     };
     perf_probe_log(
         "api_status",
-        &[("elapsed_ms", started.elapsed().as_millis().to_string()), ("latest_task_count", response.latest_tasks.len().to_string()), ("latest_summary_count", response.latest_execution_summaries.len().to_string())],
+        &[
+            ("elapsed_ms", started.elapsed().as_millis().to_string()),
+            ("latest_task_count", response.latest_tasks.len().to_string()),
+            (
+                "latest_summary_count",
+                response.latest_execution_summaries.len().to_string(),
+            ),
+        ],
     );
     Ok(Json(response))
 }
@@ -808,12 +1857,17 @@ async fn load_cached_trust_score_row(
     proxy_id: &str,
 ) -> Result<Option<(Option<i64>, Option<String>)>, (StatusCode, String)> {
     sqlx::query_as::<_, (Option<i64>, Option<String>)>(
-        "SELECT cached_trust_score, trust_score_cached_at FROM proxies WHERE id = ?"
+        "SELECT cached_trust_score, trust_score_cached_at FROM proxies WHERE id = ?",
     )
     .bind(proxy_id)
     .fetch_optional(&state.db)
     .await
-    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load cached trust score: {err}")))
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load cached trust score: {err}"),
+        )
+    })
 }
 
 pub async fn check_proxy_trust_cache(
@@ -823,12 +1877,17 @@ pub async fn check_proxy_trust_cache(
     let now = now_ts_string();
     let cached_row = load_cached_trust_score_row(&state, &proxy_id).await?;
     let Some((cached_trust_score, cached_at)) = cached_row else {
-        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
     };
 
     let recomputed_trust_score = sqlx::query_scalar::<_, i64>(&format!(
         "SELECT CAST(({}) AS INTEGER) FROM proxies WHERE id = ?",
-        crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
+        crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(
+            &state.proxy_selection_tuning
+        )
     ))
     .bind(&now)
     .bind(&now)
@@ -836,7 +1895,12 @@ pub async fn check_proxy_trust_cache(
     .bind(&proxy_id)
     .fetch_optional(&state.db)
     .await
-    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to recompute trust score: {err}")))?;
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to recompute trust score: {err}"),
+        )
+    })?;
 
     let delta = match (cached_trust_score, recomputed_trust_score) {
         (Some(cached), Some(recomputed)) => Some(recomputed - cached),
@@ -858,7 +1922,9 @@ async fn collect_trust_cache_scan_items(
     state: &AppState,
 ) -> Result<Vec<ProxyTrustCacheScanItem>, (StatusCode, String)> {
     let now = now_ts_string();
-    let trust_sql = crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(&state.proxy_selection_tuning);
+    let trust_sql = crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(
+        &state.proxy_selection_tuning,
+    );
     let rows = sqlx::query_as::<_, (String, Option<String>, Option<i64>, Option<String>, Option<i64>)>(&format!(
         "SELECT id, provider, cached_trust_score, trust_score_cached_at, CAST(({}) AS INTEGER) FROM proxies ORDER BY created_at ASC, id ASC",
         trust_sql
@@ -870,22 +1936,27 @@ async fn collect_trust_cache_scan_items(
     .await
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to scan trust cache: {err}")))?;
 
-    Ok(rows.into_iter().map(|(proxy_id, provider, cached_trust_score, cached_at, recomputed_trust_score)| {
-        let delta = match (cached_trust_score, recomputed_trust_score) {
-            (Some(cached), Some(recomputed)) => Some(recomputed - cached),
-            _ => None,
-        };
-        let in_sync = delta.unwrap_or(0) == 0;
-        ProxyTrustCacheScanItem {
-            proxy_id,
-            provider,
-            cached_trust_score,
-            recomputed_trust_score,
-            delta,
-            in_sync,
-            cached_at,
-        }
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(
+            |(proxy_id, provider, cached_trust_score, cached_at, recomputed_trust_score)| {
+                let delta = match (cached_trust_score, recomputed_trust_score) {
+                    (Some(cached), Some(recomputed)) => Some(recomputed - cached),
+                    _ => None,
+                };
+                let in_sync = delta.unwrap_or(0) == 0;
+                ProxyTrustCacheScanItem {
+                    proxy_id,
+                    provider,
+                    cached_trust_score,
+                    recomputed_trust_score,
+                    delta,
+                    in_sync,
+                    cached_at,
+                }
+            },
+        )
+        .collect())
 }
 
 fn apply_trust_cache_scan_filters(
@@ -908,7 +1979,8 @@ pub async fn scan_proxy_trust_cache(
     State(state): State<AppState>,
     Query(query): Query<ProxyTrustCacheScanQuery>,
 ) -> Result<Json<ProxyTrustCacheScanResponse>, (StatusCode, String)> {
-    let items = apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
+    let items =
+        apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
     let drifted = items.iter().filter(|item| !item.in_sync).count();
     Ok(Json(ProxyTrustCacheScanResponse {
         total: items.len(),
@@ -921,13 +1993,22 @@ pub async fn maintain_proxy_trust_cache(
     State(state): State<AppState>,
     Query(query): Query<ProxyTrustCacheScanQuery>,
 ) -> Result<Json<ProxyTrustCacheMaintenanceResponse>, (StatusCode, String)> {
-    let before = apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
+    let before =
+        apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
     let drifted_before = before.iter().filter(|item| !item.in_sync).count();
     let mut repaired = 0usize;
     for item in before.iter().filter(|item| !item.in_sync) {
         refresh_cached_trust_score_for_proxy(&state.db, &item.proxy_id)
             .await
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to maintain cached trust score for {}: {err}", item.proxy_id)))?;
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!(
+                        "failed to maintain cached trust score for {}: {err}",
+                        item.proxy_id
+                    ),
+                )
+            })?;
         repaired += 1;
     }
     let after = collect_trust_cache_scan_items(&state).await?;
@@ -945,12 +2026,21 @@ pub async fn repair_proxy_trust_cache_batch(
     State(state): State<AppState>,
     Query(query): Query<ProxyTrustCacheScanQuery>,
 ) -> Result<Json<ProxyTrustCacheRepairBatchResponse>, (StatusCode, String)> {
-    let before = apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
+    let before =
+        apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
     let mut repaired = 0usize;
     for item in before.iter().filter(|item| !item.in_sync) {
         refresh_cached_trust_score_for_proxy(&state.db, &item.proxy_id)
             .await
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to repair cached trust score for {}: {err}", item.proxy_id)))?;
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!(
+                        "failed to repair cached trust score for {}: {err}",
+                        item.proxy_id
+                    ),
+                )
+            })?;
         repaired += 1;
     }
     let after = collect_trust_cache_scan_items(&state).await?;
@@ -971,23 +2061,43 @@ pub async fn repair_proxy_trust_cache(
         .bind(&proxy_id)
         .fetch_optional(&state.db)
         .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to check proxy existence: {err}")))?;
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to check proxy existence: {err}"),
+            )
+        })?;
     if exists.is_none() {
-        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
     }
 
     refresh_cached_trust_score_for_proxy(&state.db, &proxy_id)
         .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh cached trust score: {err}")))?;
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to refresh cached trust score: {err}"),
+            )
+        })?;
 
     let now = now_ts_string();
     let cached_row = load_cached_trust_score_row(&state, &proxy_id)
         .await?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("proxy not found after repair: {proxy_id}")))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("proxy not found after repair: {proxy_id}"),
+            )
+        })?;
 
     let recomputed_trust_score = sqlx::query_scalar::<_, i64>(&format!(
         "SELECT CAST(({}) AS INTEGER) FROM proxies WHERE id = ?",
-        crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(&state.proxy_selection_tuning)
+        crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(
+            &state.proxy_selection_tuning
+        )
     ))
     .bind(&now)
     .bind(&now)
@@ -995,7 +2105,12 @@ pub async fn repair_proxy_trust_cache(
     .bind(&proxy_id)
     .fetch_optional(&state.db)
     .await
-    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to recompute trust score after repair: {err}")))?;
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to recompute trust score after repair: {err}"),
+        )
+    })?;
 
     let delta = match (cached_row.0, recomputed_trust_score) {
         (Some(cached), Some(recomputed)) => Some(recomputed - cached),
@@ -1028,25 +2143,120 @@ pub async fn explain_proxy_selection(
     .await
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy explain row: {err}")))?;
     let Some(row) = row else {
-        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
     };
-    let id: String = row.try_get("id").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode id: {err}")))?;
-    let provider: Option<String> = row.try_get("provider").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode provider: {err}")))?;
-    let region: Option<String> = row.try_get("region").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode region: {err}")))?;
-    let score: f64 = row.try_get("score").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode score: {err}")))?;
-    let success_count: i64 = row.try_get("success_count").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode success_count: {err}")))?;
-    let failure_count: i64 = row.try_get("failure_count").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode failure_count: {err}")))?;
-    let last_verify_status: Option<String> = row.try_get("last_verify_status").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_status: {err}")))?;
-    let last_verify_geo_match_ok: Option<i64> = row.try_get("last_verify_geo_match_ok").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_geo_match_ok: {err}")))?;
-    let last_smoke_upstream_ok: Option<i64> = row.try_get("last_smoke_upstream_ok").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_smoke_upstream_ok: {err}")))?;
-    let last_verify_at: Option<String> = row.try_get("last_verify_at").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_at: {err}")))?;
-    let last_verify_confidence: Option<f64> = row.try_get("last_verify_confidence").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_confidence: {err}")))?;
-    let last_verify_score_delta: Option<i64> = row.try_get("last_verify_score_delta").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_score_delta: {err}")))?;
-    let last_verify_source: Option<String> = row.try_get("last_verify_source").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_verify_source: {err}")))?;
-    let last_anonymity_level: Option<String> = row.try_get("last_anonymity_level").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_anonymity_level: {err}")))?;
-    let last_probe_latency_ms: Option<i64> = row.try_get("last_probe_latency_ms").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_probe_latency_ms: {err}")))?;
-    let last_probe_error_category: Option<String> = row.try_get("last_probe_error_category").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_probe_error_category: {err}")))?;
-    let last_exit_region: Option<String> = row.try_get("last_exit_region").map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to decode last_exit_region: {err}")))?;
+    let id: String = row.try_get("id").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode id: {err}"),
+        )
+    })?;
+    let provider: Option<String> = row.try_get("provider").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode provider: {err}"),
+        )
+    })?;
+    let region: Option<String> = row.try_get("region").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode region: {err}"),
+        )
+    })?;
+    let score: f64 = row.try_get("score").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode score: {err}"),
+        )
+    })?;
+    let success_count: i64 = row.try_get("success_count").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode success_count: {err}"),
+        )
+    })?;
+    let failure_count: i64 = row.try_get("failure_count").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode failure_count: {err}"),
+        )
+    })?;
+    let last_verify_status: Option<String> = row.try_get("last_verify_status").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_verify_status: {err}"),
+        )
+    })?;
+    let last_verify_geo_match_ok: Option<i64> =
+        row.try_get("last_verify_geo_match_ok").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_verify_geo_match_ok: {err}"),
+            )
+        })?;
+    let last_smoke_upstream_ok: Option<i64> =
+        row.try_get("last_smoke_upstream_ok").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_smoke_upstream_ok: {err}"),
+            )
+        })?;
+    let last_verify_at: Option<String> = row.try_get("last_verify_at").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_verify_at: {err}"),
+        )
+    })?;
+    let last_verify_confidence: Option<f64> =
+        row.try_get("last_verify_confidence").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_verify_confidence: {err}"),
+            )
+        })?;
+    let last_verify_score_delta: Option<i64> =
+        row.try_get("last_verify_score_delta").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_verify_score_delta: {err}"),
+            )
+        })?;
+    let last_verify_source: Option<String> = row.try_get("last_verify_source").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_verify_source: {err}"),
+        )
+    })?;
+    let last_anonymity_level: Option<String> =
+        row.try_get("last_anonymity_level").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_anonymity_level: {err}"),
+            )
+        })?;
+    let last_probe_latency_ms: Option<i64> =
+        row.try_get("last_probe_latency_ms").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_probe_latency_ms: {err}"),
+            )
+        })?;
+    let last_probe_error_category: Option<String> =
+        row.try_get("last_probe_error_category").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_probe_error_category: {err}"),
+            )
+        })?;
+    let last_exit_region: Option<String> = row.try_get("last_exit_region").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_exit_region: {err}"),
+        )
+    })?;
 
     let provider_risk_hit: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM provider_risk_snapshots s JOIN proxies p ON p.provider = s.provider WHERE p.id = ? AND s.risk_hit != 0)")
         .bind(&proxy_id)
@@ -1062,9 +2272,19 @@ pub async fn explain_proxy_selection(
         (Some(actual), Some(expected)) => Some(actual.eq_ignore_ascii_case(expected)),
         _ => None,
     };
-    refresh_proxy_trust_views_for_scope(&state.db, &proxy_id, provider.as_deref(), region.as_deref())
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to refresh proxy trust views for explain: {err}")))?;
+    refresh_proxy_trust_views_for_scope(
+        &state.db,
+        &proxy_id,
+        provider.as_deref(),
+        region.as_deref(),
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to refresh proxy trust views for explain: {err}"),
+        )
+    })?;
     let now_ts = now.parse::<i64>().unwrap_or_default();
     let components = super::super::runner::engine::computed_trust_score_components(
         &state.proxy_selection_tuning,
@@ -1075,7 +2295,9 @@ pub async fn explain_proxy_selection(
         last_verify_geo_match_ok.unwrap_or(0) != 0,
         region_match_ok,
         last_smoke_upstream_ok.unwrap_or(0) != 0,
-        last_verify_at.as_ref().and_then(|v: &String| v.parse::<i64>().ok()),
+        last_verify_at
+            .as_ref()
+            .and_then(|v: &String| v.parse::<i64>().ok()),
         last_verify_confidence,
         last_verify_score_delta,
         last_verify_source.as_deref(),
@@ -1089,13 +2311,33 @@ pub async fn explain_proxy_selection(
     );
     let cached_row = load_cached_trust_score_row(&state, &proxy_id).await?;
     let trust_score_total = cached_row.as_ref().and_then(|row| row.0);
-    let candidate_rank_preview = crate::runner::engine::compute_candidate_preview_with_reasons(&state, &now, provider.as_deref(), region.as_deref(), 0.0_f64, None)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to build candidate preview with reasons: {err}")))?;
+    let candidate_rank_preview = crate::runner::engine::compute_candidate_preview_with_reasons(
+        &state,
+        &now,
+        provider.as_deref(),
+        region.as_deref(),
+        0.0_f64,
+        None,
+        None,
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to build candidate preview with reasons: {err}"),
+        )
+    })?;
     let candidate_rank_preview = if candidate_rank_preview.is_empty() {
-        crate::runner::engine::compute_candidate_preview_with_reasons(&state, &now, None, None, 0.0_f64, None)
-            .await
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to build fallback candidate preview with reasons: {err}")))?
+        crate::runner::engine::compute_candidate_preview_with_reasons(
+            &state, &now, None, None, 0.0_f64, None, None,
+        )
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to build fallback candidate preview with reasons: {err}"),
+            )
+        })?
     } else {
         candidate_rank_preview
     };
@@ -1113,11 +2355,18 @@ pub async fn explain_proxy_selection(
         provider_region_cluster_hit != 0,
     );
 
-    let winner_vs_runner_up_diff = candidate_rank_preview.first().and_then(|item| item.winner_vs_runner_up_diff.clone());
+    let winner_vs_runner_up_diff = candidate_rank_preview
+        .first()
+        .and_then(|item| item.winner_vs_runner_up_diff.clone());
     let (provider_risk_version_current, provider_risk_version_seen, provider_risk_version_status) =
         provider_risk_version_state_for_proxy(&state.db, &id)
             .await
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load provider risk version state: {err}")))?;
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to load provider risk version state: {err}"),
+                )
+            })?;
     let response = ProxySelectionExplainResponse {
         proxy_id: id,
         trust_score_total,
@@ -1134,34 +2383,269 @@ pub async fn explain_proxy_selection(
     };
     perf_probe_log(
         "api_proxy_explain",
-        &[("proxy_id", response.proxy_id.clone()), ("elapsed_ms", started.elapsed().as_millis().to_string()), ("candidate_count", response.candidate_rank_preview.len().to_string())],
+        &[
+            ("proxy_id", response.proxy_id.clone()),
+            ("elapsed_ms", started.elapsed().as_millis().to_string()),
+            (
+                "candidate_count",
+                response.candidate_rank_preview.len().to_string(),
+            ),
+        ],
     );
     Ok(Json(response))
 }
 
+fn normalize_execution_intent(payload: &CreateTaskRequest) -> RunnerExecutionIntent {
+    let base = RunnerExecutionIntent {
+        identity_profile_id: payload.identity_profile_id.clone(),
+        fingerprint_profile_id: payload.fingerprint_profile_id.clone(),
+        behavior_profile_id: payload.behavior_profile_id.clone(),
+        network_profile_id: payload.network_profile_id.clone(),
+        session_profile_id: payload.session_profile_id.clone(),
+        proxy_id: payload.proxy_id.clone(),
+    };
+
+    match payload.execution_intent.as_ref() {
+        Some(intent) => RunnerExecutionIntent {
+            identity_profile_id: intent
+                .identity_profile_id
+                .clone()
+                .or(base.identity_profile_id),
+            fingerprint_profile_id: intent
+                .fingerprint_profile_id
+                .clone()
+                .or(base.fingerprint_profile_id),
+            behavior_profile_id: intent
+                .behavior_profile_id
+                .clone()
+                .or(base.behavior_profile_id),
+            network_profile_id: intent
+                .network_profile_id
+                .clone()
+                .or(base.network_profile_id),
+            session_profile_id: intent
+                .session_profile_id
+                .clone()
+                .or(base.session_profile_id),
+            proxy_id: intent.proxy_id.clone().or(base.proxy_id),
+        },
+        None => base,
+    }
+}
+
+fn merge_json_object_values(
+    base: Option<Value>,
+    overlay: Option<Value>,
+    field_name: &str,
+) -> Result<Option<Value>, (StatusCode, String)> {
+    let normalize = |value: Option<Value>| -> Result<Option<serde_json::Map<String, Value>>, (StatusCode, String)> {
+        match value {
+            Some(Value::Object(map)) => Ok(Some(map)),
+            Some(Value::Null) | None => Ok(None),
+            Some(_) => Err((
+                StatusCode::BAD_REQUEST,
+                format!("{field_name} must be an object"),
+            )),
+        }
+    };
+
+    let mut merged = normalize(base)?.unwrap_or_default();
+    if let Some(overlay) = normalize(overlay)? {
+        for (key, value) in overlay {
+            merged.insert(key, value);
+        }
+    }
+
+    if merged.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(Value::Object(merged)))
+    }
+}
+
+async fn load_network_profile_policy_value(
+    state: &AppState,
+    network_profile_id: Option<&str>,
+) -> Result<Option<Value>, (StatusCode, String)> {
+    let Some(network_profile_id) = network_profile_id else {
+        return Ok(None);
+    };
+
+    let row = sqlx::query_scalar::<_, String>(
+        r#"SELECT network_policy_json FROM network_profiles WHERE id = ? AND status = 'active'"#,
+    )
+    .bind(network_profile_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to resolve network profile policy: {err}"),
+        )
+    })?;
+
+    let Some(raw_policy_json) = row else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("network profile not found or inactive: {network_profile_id}"),
+        ));
+    };
+
+    serde_json::from_str::<Value>(&raw_policy_json)
+        .map(Some)
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode network profile policy: {err}"),
+            )
+        })
+}
+
+async fn load_active_fingerprint_profile_version(
+    state: &AppState,
+    fingerprint_profile_id: Option<&str>,
+) -> Result<Option<i64>, (StatusCode, String)> {
+    let Some(fingerprint_profile_id) = fingerprint_profile_id else {
+        return Ok(None);
+    };
+
+    let version = sqlx::query_scalar::<_, i64>(
+        r#"SELECT version FROM fingerprint_profiles WHERE id = ? AND status = 'active'"#,
+    )
+    .bind(fingerprint_profile_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to resolve fingerprint profile version: {err}"),
+        )
+    })?;
+
+    if version.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("fingerprint profile not found or inactive: {fingerprint_profile_id}"),
+        ));
+    }
+
+    Ok(version)
+}
+
+fn behavior_compile_error(err: anyhow::Error) -> (StatusCode, String) {
+    let message = err.to_string();
+    let status = if message.contains("not found")
+        || message.contains("inactive")
+        || message.contains("must be")
+        || message.contains("invalid")
+        || message.contains("object")
+    {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (
+        status,
+        format!("failed to compile behavior plan: {message}"),
+    )
+}
+
+fn form_compile_error(err: anyhow::Error) -> (StatusCode, String) {
+    let message = err.to_string();
+    let status = if message.contains("form_input")
+        || message.contains("identity://")
+        || message.contains("missing")
+        || message.contains("must")
+        || message.contains("unsupported")
+        || message.contains("requires")
+        || message.contains("not found")
+        || message.contains("invalid")
+    {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (
+        status,
+        format!("failed to compile form action plan: {message}"),
+    )
+}
+
+fn form_action_status_from_parsed(parsed: Option<&Value>) -> Option<String> {
+    content_string_field(parsed, "form_action_status")
+}
+
+fn form_action_mode_from_parsed(parsed: Option<&Value>) -> Option<String> {
+    content_string_field(parsed, "form_action_mode")
+}
+
+fn form_action_retry_count_from_parsed(parsed: Option<&Value>) -> Option<i64> {
+    content_i64_field(parsed, "form_action_retry_count")
+}
+
+fn form_action_summary_json_from_parsed(parsed: Option<&Value>) -> Option<Value> {
+    parsed.and_then(|value| value.get("form_action_summary_json").cloned())
+}
+
 fn create_task_response_from_payload(
     task_id: String,
-    payload: CreateTaskRequest,
-    profile_version: Option<i64>,
+    payload: &CreateTaskRequest,
+    execution_intent: &RunnerExecutionIntent,
+    fingerprint_profile_version: Option<i64>,
+    behavior_profile_id: Option<String>,
+    behavior_profile_version: Option<i64>,
+    behavior_resolution_status: String,
+    behavior_execution_mode: String,
+    page_archetype: Option<String>,
+    behavior_seed: Option<String>,
+    behavior_runtime_explain: crate::behavior::BehaviorRuntimeExplain,
+    behavior_trace_summary: crate::behavior::BehaviorTraceSummary,
+    form_action_status: String,
+    form_action_mode: Option<String>,
+    form_action_summary_json: Option<Value>,
 ) -> (StatusCode, Json<TaskResponse>) {
     let priority = payload.priority.unwrap_or(0);
     (
         StatusCode::CREATED,
         Json(TaskResponse {
             id: task_id,
-            kind: payload.kind,
+            kind: payload.kind.clone(),
             status: TASK_STATUS_QUEUED.to_string(),
             priority,
             started_at: None,
             finished_at: None,
             summary_artifacts: Vec::new(),
-            fingerprint_profile_id: payload.fingerprint_profile_id,
-            fingerprint_profile_version: profile_version,
-            fingerprint_resolution_status: profile_version.map(|_| "pending".to_string()),
+            fingerprint_profile_id: execution_intent.fingerprint_profile_id.clone(),
+            fingerprint_profile_version,
+            fingerprint_resolution_status: fingerprint_profile_version
+                .map(|_| "pending".to_string()),
+            behavior_profile_id,
+            behavior_profile_version,
+            behavior_resolution_status: Some(behavior_resolution_status),
+            behavior_execution_mode: Some(behavior_execution_mode),
+            page_archetype,
+            behavior_seed,
+            behavior_runtime_explain: Some(behavior_runtime_explain),
+            behavior_trace_summary: Some(behavior_trace_summary),
+            form_action_status: Some(form_action_status),
+            form_action_mode,
+            form_action_retry_count: Some(0),
+            form_action_summary_json,
             proxy_id: None,
             proxy_provider: None,
             proxy_region: None,
-            proxy_resolution_status: payload.network_policy_json.as_ref().and_then(|v| v.get("mode")).and_then(|v| v.as_str()).map(|mode| if mode == "direct" { "direct".to_string() } else { "pending".to_string() }),
+            proxy_resolution_status: payload
+                .network_policy_json
+                .as_ref()
+                .and_then(|v| v.get("mode"))
+                .and_then(|v| v.as_str())
+                .map(|mode| {
+                    if mode == "direct" {
+                        "direct".to_string()
+                    } else {
+                        "pending".to_string()
+                    }
+                }),
             trust_score_total: None,
             selection_reason_summary: None,
             selection_explain: None,
@@ -1190,33 +2674,79 @@ async fn create_task_from_payload(
     if payload.kind.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "kind is required".to_string()));
     }
+    ensure_form_input_allowed_for_task(payload.kind.as_str(), payload.form_input.as_ref())?;
+
+    let mut payload = payload;
+    let initial_execution_intent = normalize_execution_intent(&payload);
+    payload.proxy_id = initial_execution_intent.proxy_id.clone();
+    let network_profile_policy = load_network_profile_policy_value(
+        state,
+        initial_execution_intent.network_profile_id.as_deref(),
+    )
+    .await?;
+    payload.network_policy_json = merge_json_object_values(
+        network_profile_policy,
+        payload.network_policy_json.clone(),
+        "network_policy_json",
+    )?;
+    let payload = normalize_browser_task_request(payload)?;
+
+    let behavior_compile = compile_behavior_plan(
+        &state.db,
+        payload.kind.as_str(),
+        payload.url.as_deref(),
+        payload.timeout_seconds,
+        normalize_execution_intent(&payload),
+        payload.behavior_policy_json.clone(),
+    )
+    .await
+    .map_err(behavior_compile_error)?;
+
+    let fingerprint_profile_version = load_active_fingerprint_profile_version(
+        state,
+        behavior_compile
+            .execution_intent
+            .fingerprint_profile_id
+            .as_deref(),
+    )
+    .await?;
+    let form_compile = compile_form_action_plan(
+        &state.db,
+        payload.kind.as_str(),
+        payload.url.as_deref(),
+        behavior_compile.behavior_execution_mode.as_str(),
+        &behavior_compile.execution_intent,
+        payload.form_input.clone(),
+    )
+    .await
+    .map_err(form_compile_error)?;
 
     let task_id = format!("task-{}", Uuid::new_v4());
     let priority = payload.priority.unwrap_or(0);
-    let profile_version = if let Some(profile_id) = payload.fingerprint_profile_id.as_deref() {
-        let version = sqlx::query_scalar::<_, i64>(r#"SELECT version FROM fingerprint_profiles WHERE id = ? AND status = 'active'"#)
-            .bind(profile_id)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to resolve fingerprint profile version: {err}")))?;
-        if version.is_none() {
-            return Err((StatusCode::BAD_REQUEST, "fingerprint profile not found or inactive".to_string()));
-        }
-        version
-    } else {
-        None
-    };
-
     let network_policy_value = payload.network_policy_json.clone();
-    let network_policy_json = network_policy_value.as_ref().map(|v| v.to_string());
+    let network_policy_json = network_policy_value.as_ref().map(Value::to_string);
+    let behavior_policy_json = Some(behavior_compile.behavior_policy_json.to_string());
+    let execution_intent_json = Some(behavior_compile.execution_intent_json.to_string());
+    let form_input_redacted_json = form_compile
+        .form_input_redacted_json
+        .as_ref()
+        .map(Value::to_string);
     let input_json = serde_json::json!({
-        "url": payload.url,
-        "script": payload.script,
+        "url": payload.url.clone(),
+        "script": payload.script.clone(),
         "timeout_seconds": payload.timeout_seconds,
-        "fingerprint_profile_id": payload.fingerprint_profile_id,
-        "fingerprint_profile_version": profile_version,
-        "proxy_id": payload.proxy_id,
-        "network_policy_json": network_policy_value
+        "identity_profile_id": behavior_compile.execution_intent.identity_profile_id.clone(),
+        "fingerprint_profile_id": behavior_compile.execution_intent.fingerprint_profile_id.clone(),
+        "fingerprint_profile_version": fingerprint_profile_version,
+        "behavior_profile_id": behavior_compile.behavior_profile_id.clone(),
+        "behavior_profile_version": behavior_compile.behavior_profile_version,
+        "network_profile_id": behavior_compile.execution_intent.network_profile_id.clone(),
+        "session_profile_id": behavior_compile.execution_intent.session_profile_id.clone(),
+        "proxy_id": behavior_compile.execution_intent.proxy_id.clone(),
+        "execution_intent": behavior_compile.execution_intent_json.clone(),
+        "behavior_policy_json": behavior_compile.behavior_policy_json.clone(),
+        "network_policy_json": network_policy_value,
+        "form_input": form_compile.form_input_redacted_json.clone(),
     })
     .to_string();
     let created_at = now_ts_string();
@@ -1225,10 +2755,13 @@ async fn create_task_from_payload(
     sqlx::query(
         r#"
         INSERT INTO tasks (
-            id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
-            priority, created_at, queued_at, started_at, finished_at, fingerprint_profile_id,
-            fingerprint_profile_version, result_json, error_message
-        ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL)
+            id, kind, status, input_json, network_policy_json, behavior_policy_json,
+            execution_intent_json, fingerprint_profile_json, fingerprint_profile_id,
+            fingerprint_profile_version, identity_profile_id, behavior_profile_id,
+            behavior_profile_version, network_profile_id, session_profile_id,
+            form_input_redacted_json, priority,
+            created_at, queued_at, started_at, finished_at, result_json, error_message
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
         "#,
     )
     .bind(&task_id)
@@ -1236,11 +2769,19 @@ async fn create_task_from_payload(
     .bind(TASK_STATUS_QUEUED)
     .bind(&input_json)
     .bind(&network_policy_json)
+    .bind(&behavior_policy_json)
+    .bind(&execution_intent_json)
+    .bind(&behavior_compile.execution_intent.fingerprint_profile_id)
+    .bind(fingerprint_profile_version)
+    .bind(&behavior_compile.execution_intent.identity_profile_id)
+    .bind(&behavior_compile.behavior_profile_id)
+    .bind(behavior_compile.behavior_profile_version)
+    .bind(&behavior_compile.execution_intent.network_profile_id)
+    .bind(&behavior_compile.execution_intent.session_profile_id)
+    .bind(&form_input_redacted_json)
     .bind(priority)
     .bind(&created_at)
     .bind(&queued_at)
-    .bind(&payload.fingerprint_profile_id)
-    .bind(profile_version)
     .execute(&state.db)
     .await
     .map_err(|err| {
@@ -1250,7 +2791,71 @@ async fn create_task_from_payload(
         )
     })?;
 
-    Ok(create_task_response_from_payload(task_id, payload, profile_version))
+    if let Some(metadata_json) = behavior_compile.plan_artifact_metadata_json.as_ref() {
+        sqlx::query(
+            r#"INSERT INTO artifacts (id, task_id, run_id, kind, storage_path, metadata_json, created_at)
+               VALUES (?, ?, NULL, ?, ?, ?, ?)"#,
+        )
+        .bind(format!("artifact-{}", Uuid::new_v4()))
+        .bind(&task_id)
+        .bind("behavior_plan")
+        .bind("db://behavior_plan.json")
+        .bind(metadata_json.to_string())
+        .bind(&created_at)
+        .execute(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to persist behavior plan artifact: {err}"),
+            )
+        })?;
+    }
+    if let Some(metadata_json) = form_compile.artifact_metadata_json.as_ref() {
+        sqlx::query(
+            r#"INSERT INTO artifacts (id, task_id, run_id, kind, storage_path, metadata_json, created_at)
+               VALUES (?, ?, NULL, ?, ?, ?, ?)"#,
+        )
+        .bind(format!("artifact-{}", Uuid::new_v4()))
+        .bind(&task_id)
+        .bind("form_action_plan")
+        .bind("db://form_action_plan.redacted.json")
+        .bind(metadata_json.to_string())
+        .bind(&created_at)
+        .execute(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to persist form action plan artifact: {err}"),
+            )
+        })?;
+    }
+    if let Some(inline_secret_payload) = form_compile.inline_secret_payload.as_ref() {
+        let mut guard = state
+            .inline_secret_vault
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.insert(task_id.clone(), inline_secret_payload.clone());
+    }
+
+    Ok(create_task_response_from_payload(
+        task_id,
+        &payload,
+        &behavior_compile.execution_intent,
+        fingerprint_profile_version,
+        behavior_compile.behavior_profile_id,
+        behavior_compile.behavior_profile_version,
+        behavior_compile.behavior_resolution_status,
+        behavior_compile.behavior_execution_mode,
+        behavior_compile.page_archetype,
+        behavior_compile.behavior_seed,
+        behavior_compile.behavior_runtime_explain,
+        behavior_compile.behavior_trace_summary,
+        form_compile.form_action_status,
+        form_compile.form_action_mode,
+        form_compile.form_action_summary_json,
+    ))
 }
 
 pub async fn create_task(
@@ -1273,9 +2878,16 @@ pub async fn browser_open(
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
         proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
 }
@@ -1287,15 +2899,23 @@ pub async fn browser_get_html(
     if payload.url.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
     }
+    ensure_form_input_allowed_for_task("get_html", payload.form_input.as_ref())?;
     let task_payload = CreateTaskRequest {
         kind: "get_html".to_string(),
         url: Some(payload.url),
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
         proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
 }
@@ -1307,15 +2927,23 @@ pub async fn browser_get_title(
     if payload.url.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
     }
+    ensure_form_input_allowed_for_task("get_title", payload.form_input.as_ref())?;
     let task_payload = CreateTaskRequest {
         kind: "get_title".to_string(),
         url: Some(payload.url),
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
         proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
 }
@@ -1327,15 +2955,23 @@ pub async fn browser_get_final_url(
     if payload.url.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
     }
+    ensure_form_input_allowed_for_task("get_final_url", payload.form_input.as_ref())?;
     let task_payload = CreateTaskRequest {
         kind: "get_final_url".to_string(),
         url: Some(payload.url),
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
         proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
 }
@@ -1347,15 +2983,23 @@ pub async fn browser_extract_text(
     if payload.url.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
     }
+    ensure_form_input_allowed_for_task("extract_text", payload.form_input.as_ref())?;
     let task_payload = CreateTaskRequest {
         kind: "extract_text".to_string(),
         url: Some(payload.url),
         script: None,
         timeout_seconds: payload.timeout_seconds,
         priority: payload.priority,
+        identity_profile_id: payload.identity_profile_id,
         fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
         proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
         network_policy_json: payload.network_policy_json,
+        form_input: payload.form_input,
     };
     create_task_from_payload(&state, task_payload).await
 }
@@ -1368,8 +3012,28 @@ pub async fn get_task(
         return Err((StatusCode::BAD_REQUEST, "task id is required".to_string()));
     }
 
-    let row = sqlx::query_as::<_, (String, String, String, i32, Option<String>, Option<i64>, Option<String>, Option<String>, Option<String>)>(
-        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json, started_at, finished_at FROM tasks WHERE id = ?"#,
+    let row = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            i32,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
+        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version,
+                  behavior_profile_id, behavior_profile_version, behavior_policy_json, result_json,
+                  started_at, finished_at
+           FROM tasks
+           WHERE id = ?"#,
     )
     .bind(&task_id)
     .fetch_optional(&state.db)
@@ -1382,11 +3046,30 @@ pub async fn get_task(
     })?;
 
     match row {
-        Some((id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version, result_json, started_at, finished_at)) => {
-            let parsed = result_json.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+        Some((
+            id,
+            kind,
+            status,
+            priority,
+            fingerprint_profile_id,
+            fingerprint_profile_version,
+            behavior_profile_id,
+            behavior_profile_version,
+            behavior_policy_json,
+            result_json,
+            started_at,
+            finished_at,
+        )) => {
+            let parsed = result_json
+                .as_deref()
+                .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
             let explainability = build_task_explainability(
                 fingerprint_profile_id.as_deref(),
                 fingerprint_profile_version,
+                behavior_profile_id.as_deref(),
+                behavior_profile_version,
+                None,
+                behavior_policy_json.as_deref(),
                 result_json.as_deref(),
                 Some(&id),
                 Some(&kind),
@@ -1395,6 +3078,18 @@ pub async fn get_task(
             );
             Ok(Json(TaskResponse {
                 fingerprint_resolution_status: explainability.fingerprint_resolution_status,
+                behavior_profile_id: explainability.behavior_profile_id,
+                behavior_profile_version: explainability.behavior_profile_version,
+                behavior_resolution_status: explainability.behavior_resolution_status,
+                behavior_execution_mode: explainability.behavior_execution_mode,
+                page_archetype: explainability.page_archetype,
+                behavior_seed: explainability.behavior_seed,
+                behavior_runtime_explain: explainability.behavior_runtime_explain,
+                behavior_trace_summary: explainability.behavior_trace_summary,
+                form_action_status: form_action_status_from_parsed(parsed.as_ref()),
+                form_action_mode: form_action_mode_from_parsed(parsed.as_ref()),
+                form_action_retry_count: form_action_retry_count_from_parsed(parsed.as_ref()),
+                form_action_summary_json: form_action_summary_json_from_parsed(parsed.as_ref()),
                 proxy_id: explainability.proxy_id,
                 proxy_provider: explainability.proxy_provider,
                 proxy_region: explainability.proxy_region,
@@ -1415,7 +3110,10 @@ pub async fn get_task(
                 content_length: content_i64_field(parsed.as_ref(), "content_length"),
                 content_truncated: content_bool_field(parsed.as_ref(), "content_truncated"),
                 content_kind: content_string_field(parsed.as_ref(), "content_kind"),
-                content_source_action: content_string_field(parsed.as_ref(), "content_source_action"),
+                content_source_action: content_string_field(
+                    parsed.as_ref(),
+                    "content_source_action",
+                ),
                 content_ready: content_bool_field(parsed.as_ref(), "content_ready"),
                 id,
                 kind,
@@ -1426,7 +3124,7 @@ pub async fn get_task(
                 fingerprint_profile_id,
                 fingerprint_profile_version,
             }))
-        },
+        }
         None => Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}"))),
     }
 }
@@ -1438,8 +3136,36 @@ pub async fn get_task_runs(
 ) -> Result<Json<Vec<RunResponse>>, (StatusCode, String)> {
     let limit = sanitize_limit(query.limit, 20, 200);
     let offset = sanitize_offset(query.offset);
-    let rows = sqlx::query_as::<_, (String, String, String, i32, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(
-        r#"SELECT r.id, r.task_id, r.status, r.attempt, r.runner_kind, r.started_at, r.finished_at, r.error_message, r.result_json, t.kind, t.status FROM runs r LEFT JOIN tasks t ON t.id = r.task_id WHERE r.task_id = ? ORDER BY r.attempt DESC LIMIT ? OFFSET ?"#,
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            i32,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+        ),
+    >(
+        r#"SELECT r.id, r.task_id, r.status, r.attempt, r.runner_kind, r.started_at, r.finished_at,
+                  r.error_message, r.result_json, t.kind, t.status, t.fingerprint_profile_id,
+                  t.fingerprint_profile_version, t.behavior_profile_id, t.behavior_profile_version,
+                  t.behavior_policy_json
+           FROM runs r
+           LEFT JOIN tasks t ON t.id = r.task_id
+           WHERE r.task_id = ?
+           ORDER BY r.attempt DESC
+           LIMIT ? OFFSET ?"#,
     )
     .bind(&task_id)
     .bind(limit)
@@ -1456,18 +3182,44 @@ pub async fn get_task_runs(
     Ok(Json(
         rows.into_iter()
             .map(
-                |(id, task_id, status, attempt, runner_kind, started_at, finished_at, error_message, result_json, task_kind, task_status)| {
-                    let summary_timestamp = finished_at.as_deref().or(started_at.as_deref()).map(|v| v.to_string());
+                |(
+                    id,
+                    task_id,
+                    status,
+                    attempt,
+                    runner_kind,
+                    started_at,
+                    finished_at,
+                    error_message,
+                    result_json,
+                    task_kind,
+                    task_status,
+                    fingerprint_profile_id,
+                    fingerprint_profile_version,
+                    behavior_profile_id,
+                    behavior_profile_version,
+                    behavior_policy_json,
+                )| {
+                    let summary_timestamp = finished_at
+                        .as_deref()
+                        .or(started_at.as_deref())
+                        .map(|v| v.to_string());
                     let explainability = build_task_explainability(
+                        fingerprint_profile_id.as_deref(),
+                        fingerprint_profile_version,
+                        behavior_profile_id.as_deref(),
+                        behavior_profile_version,
                         None,
-                        None,
+                        behavior_policy_json.as_deref(),
                         result_json.as_deref(),
                         Some(&task_id),
                         task_kind.as_deref(),
                         task_status.as_deref(),
                         summary_timestamp.as_deref(),
                     );
-                    let parsed = result_json.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+                    let parsed = result_json
+                        .as_deref()
+                        .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
                     RunResponse {
                         id: id.clone(),
                         task_id: task_id.clone(),
@@ -1485,6 +3237,22 @@ pub async fn get_task_runs(
                             Some(&id),
                             Some(attempt),
                             summary_timestamp.as_deref(),
+                        ),
+                        behavior_profile_id: explainability.behavior_profile_id,
+                        behavior_profile_version: explainability.behavior_profile_version,
+                        behavior_resolution_status: explainability.behavior_resolution_status,
+                        behavior_execution_mode: explainability.behavior_execution_mode,
+                        page_archetype: explainability.page_archetype,
+                        behavior_seed: explainability.behavior_seed,
+                        behavior_runtime_explain: explainability.behavior_runtime_explain,
+                        behavior_trace_summary: explainability.behavior_trace_summary,
+                        form_action_status: form_action_status_from_parsed(parsed.as_ref()),
+                        form_action_mode: form_action_mode_from_parsed(parsed.as_ref()),
+                        form_action_retry_count: form_action_retry_count_from_parsed(
+                            parsed.as_ref(),
+                        ),
+                        form_action_summary_json: form_action_summary_json_from_parsed(
+                            parsed.as_ref(),
                         ),
                         proxy_id: explainability.proxy_id,
                         proxy_provider: explainability.proxy_provider,
@@ -1505,7 +3273,10 @@ pub async fn get_task_runs(
                         content_length: content_i64_field(parsed.as_ref(), "content_length"),
                         content_truncated: content_bool_field(parsed.as_ref(), "content_truncated"),
                         content_kind: content_string_field(parsed.as_ref(), "content_kind"),
-                        content_source_action: content_string_field(parsed.as_ref(), "content_source_action"),
+                        content_source_action: content_string_field(
+                            parsed.as_ref(),
+                            "content_source_action",
+                        ),
                         content_ready: content_bool_field(parsed.as_ref(), "content_ready"),
                     }
                 },
@@ -1538,14 +3309,16 @@ pub async fn get_task_logs(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(id, task_id, run_id, level, message, created_at)| LogResponse {
-                id,
-                task_id,
-                run_id,
-                level,
-                message,
-                created_at,
-            })
+            .map(
+                |(id, task_id, run_id, level, message, created_at)| LogResponse {
+                    id,
+                    task_id,
+                    run_id,
+                    level,
+                    message,
+                    created_at,
+                },
+            )
             .collect(),
     ))
 }
@@ -1554,16 +3327,17 @@ pub async fn retry_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<RetryTaskResponse>, (StatusCode, String)> {
-    let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
-        .bind(&task_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("failed to read task status before retry: {err}"),
-            )
-        })?;
+    let current_status =
+        sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to read task status before retry: {err}"),
+                )
+            })?;
 
     let Some(status) = current_status else {
         return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
@@ -1607,17 +3381,17 @@ pub async fn retry_task(
     };
 
     if result.rows_affected() == 0 {
-
-        let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
-            .bind(&task_id)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|err| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("failed to read task status after retry conflict: {err}"),
-                )
-            })?;
+        let current_status =
+            sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+                .bind(&task_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|err| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to read task status after retry conflict: {err}"),
+                    )
+                })?;
 
         let Some(status) = current_status else {
             return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
@@ -1650,16 +3424,17 @@ pub async fn cancel_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<CancelTaskResponse>, (StatusCode, String)> {
-    let current_status = sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
-        .bind(&task_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("failed to read task status: {err}"),
-            )
-        })?;
+    let current_status =
+        sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to read task status: {err}"),
+                )
+            })?;
 
     let Some(status) = current_status else {
         return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
@@ -1713,7 +3488,8 @@ pub async fn cancel_task(
             "execution_stage": "action",
             "task_id": task_id,
             "message": "task cancelled while running"
-        }).to_string();
+        })
+        .to_string();
 
         sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ?, runner_id = NULL, heartbeat_at = NULL, result_json = ?, error_message = ? WHERE id = ?"#)
             .bind(TASK_STATUS_CANCELLED)
@@ -1730,12 +3506,10 @@ pub async fn cancel_task(
                 )
             })?;
 
-        let running_run_id = sqlx::query_scalar::<_, String>(
-            &format!(
-                "SELECT id FROM runs WHERE task_id = ? AND status = '{}' ORDER BY attempt DESC LIMIT 1",
-                RUN_STATUS_RUNNING,
-            ),
-        )
+        let running_run_id = sqlx::query_scalar::<_, String>(&format!(
+            "SELECT id FROM runs WHERE task_id = ? AND status = '{}' ORDER BY attempt DESC LIMIT 1",
+            RUN_STATUS_RUNNING,
+        ))
         .bind(&task_id)
         .fetch_optional(&state.db)
         .await
@@ -1794,13 +3568,15 @@ pub async fn cancel_task(
     ))
 }
 
-
 pub async fn create_fingerprint_profile(
     State(state): State<AppState>,
     Json(payload): Json<CreateFingerprintProfileRequest>,
 ) -> Result<(StatusCode, Json<FingerprintProfileResponse>), (StatusCode, String)> {
     if payload.id.trim().is_empty() || payload.name.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "fingerprint profile id and name are required".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "fingerprint profile id and name are required".to_string(),
+        ));
     }
 
     let validation = validate_fingerprint_profile(&payload.profile_json);
@@ -1855,11 +3631,28 @@ pub async fn list_fingerprint_profiles(
     .await
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to list fingerprint profiles: {err}")))?;
 
-    let items = rows.into_iter().map(|(id, name, version, status, tags_json, profile_json, created_at, updated_at)| {
-        let profile_json = serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
-        let validation = validate_fingerprint_profile(&profile_json);
-        FingerprintProfileResponse { id, name, version, status, tags_json, profile_json, validation_ok: validation.ok, validation_issues: validation.issues, created_at, updated_at }
-    }).collect();
+    let items = rows
+        .into_iter()
+        .map(
+            |(id, name, version, status, tags_json, profile_json, created_at, updated_at)| {
+                let profile_json =
+                    serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
+                let validation = validate_fingerprint_profile(&profile_json);
+                FingerprintProfileResponse {
+                    id,
+                    name,
+                    version,
+                    status,
+                    tags_json,
+                    profile_json,
+                    validation_ok: validation.ok,
+                    validation_issues: validation.issues,
+                    created_at,
+                    updated_at,
+                }
+            },
+        )
+        .collect();
 
     Ok(Json(items))
 }
@@ -1878,22 +3671,53 @@ pub async fn get_fingerprint_profile(
 
     match row {
         Some((id, name, version, status, tags_json, profile_json, created_at, updated_at)) => {
-            let profile_json = serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
+            let profile_json =
+                serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
             let validation = validate_fingerprint_profile(&profile_json);
-            Ok(Json(FingerprintProfileResponse { id, name, version, status, tags_json, profile_json, validation_ok: validation.ok, validation_issues: validation.issues, created_at, updated_at }))
+            Ok(Json(FingerprintProfileResponse {
+                id,
+                name,
+                version,
+                status,
+                tags_json,
+                profile_json,
+                validation_ok: validation.ok,
+                validation_issues: validation.issues,
+                created_at,
+                updated_at,
+            }))
         }
-        None => Err((StatusCode::NOT_FOUND, format!("fingerprint profile not found: {profile_id}"))),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("fingerprint profile not found: {profile_id}"),
+        )),
     }
 }
-
 
 pub async fn create_proxy(
     State(state): State<AppState>,
     Json(payload): Json<CreateProxyRequest>,
 ) -> Result<(StatusCode, Json<ProxyResponse>), (StatusCode, String)> {
-    if payload.id.trim().is_empty() || payload.scheme.trim().is_empty() || payload.host.trim().is_empty() || payload.port <= 0 {
-        return Err((StatusCode::BAD_REQUEST, "proxy id/scheme/host/port are required".to_string()));
+    if payload.id.trim().is_empty()
+        || payload.scheme.trim().is_empty()
+        || payload.host.trim().is_empty()
+        || payload.port <= 0
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "proxy id/scheme/host/port are required".to_string(),
+        ));
     }
+
+    if payload
+        .status
+        .as_deref()
+        .map(is_candidate_proxy_status)
+        .unwrap_or(false)
+    {
+        return create_or_refresh_candidate_proxy(&state, &payload).await;
+    }
+
     let now = now_ts_string();
     let status = payload.status.unwrap_or_else(|| "active".to_string());
     let score = payload.score.unwrap_or(1.0);
@@ -1903,16 +3727,45 @@ pub async fn create_proxy(
         .bind(&status).bind(score).bind(&now).bind(&now)
         .execute(&state.db).await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to create proxy: {err}")))?;
-    Ok((StatusCode::CREATED, Json(ProxyResponse {
-        id: payload.id, scheme: payload.scheme, host: payload.host, port: payload.port, username: payload.username,
-        region: payload.region, country: payload.country, provider: payload.provider, status, score, success_count: 0, failure_count: 0,
-        last_checked_at: None, last_used_at: None, cooldown_until: None,
-        last_smoke_status: None, last_smoke_protocol_ok: None, last_smoke_upstream_ok: None,
-        last_exit_ip: None, last_anonymity_level: None, last_smoke_at: None,
-        last_verify_status: None, last_verify_geo_match_ok: None, last_exit_country: None, last_exit_region: None, last_verify_at: None,
-        last_probe_latency_ms: None, last_probe_error: None, last_probe_error_category: None, last_verify_confidence: None, last_verify_score_delta: None, last_verify_source: None,
-        created_at: now.clone(), updated_at: now,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(ProxyResponse {
+            id: payload.id,
+            scheme: payload.scheme,
+            host: payload.host,
+            port: payload.port,
+            username: payload.username,
+            region: payload.region,
+            country: payload.country,
+            provider: payload.provider,
+            status,
+            score,
+            success_count: 0,
+            failure_count: 0,
+            last_checked_at: None,
+            last_used_at: None,
+            cooldown_until: None,
+            last_smoke_status: None,
+            last_smoke_protocol_ok: None,
+            last_smoke_upstream_ok: None,
+            last_exit_ip: None,
+            last_anonymity_level: None,
+            last_smoke_at: None,
+            last_verify_status: None,
+            last_verify_geo_match_ok: None,
+            last_exit_country: None,
+            last_exit_region: None,
+            last_verify_at: None,
+            last_probe_latency_ms: None,
+            last_probe_error: None,
+            last_probe_error_category: None,
+            last_verify_confidence: None,
+            last_verify_score_delta: None,
+            last_verify_source: None,
+            created_at: now.clone(),
+            updated_at: now,
+        }),
+    ))
 }
 
 pub async fn list_proxies(
@@ -1941,10 +3794,12 @@ pub async fn get_proxy(
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to fetch proxy: {err}")))?;
     match row {
         Some(row) => Ok(Json(map_proxy_row(row))),
-        None => Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}"))),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        )),
     }
 }
-
 
 pub async fn smoke_test_proxy(
     State(state): State<AppState>,
@@ -1954,21 +3809,35 @@ pub async fn smoke_test_proxy(
         .bind(&proxy_id)
         .fetch_optional(&state.db)
         .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy for smoke test: {err}")))?;
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to load proxy for smoke test: {err}"),
+            )
+        })?;
 
     let Some((host, port)) = row else {
-        return Err((StatusCode::NOT_FOUND, format!("proxy not found: {proxy_id}")));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
     };
 
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .map_err(|err| (StatusCode::BAD_REQUEST, format!("proxy address is invalid for smoke test: {err}")))?;
+    let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("proxy address is invalid for smoke test: {err}"),
+        )
+    })?;
 
     let started = Instant::now();
-    let mut stream = tokio::time::timeout(std::time::Duration::from_secs(3), tokio::net::TcpStream::connect(addr))
-        .await
-        .ok()
-        .and_then(|result| result.ok());
+    let mut stream = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::net::TcpStream::connect(addr),
+    )
+    .await
+    .ok()
+    .and_then(|result| result.ok());
     let reachable = stream.is_some();
     let mut protocol_ok = false;
     let mut upstream_ok = false;
@@ -1985,30 +3854,56 @@ pub async fn smoke_test_proxy(
 Host: example.com:443
 
 ";
-        if tokio::time::timeout(std::time::Duration::from_secs(3), stream_ref.write_all(probe)).await.ok().is_some() {
+        if tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            stream_ref.write_all(probe),
+        )
+        .await
+        .ok()
+        .is_some()
+        {
             let mut buf = [0_u8; 512];
-            if let Ok(Ok(n)) = tokio::time::timeout(std::time::Duration::from_secs(3), stream_ref.read(&mut buf)).await {
+            if let Ok(Ok(n)) =
+                tokio::time::timeout(std::time::Duration::from_secs(3), stream_ref.read(&mut buf))
+                    .await
+            {
                 if n > 0 {
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
                     let text_lower = text.to_ascii_lowercase();
                     if text_lower.contains("http/1.1") || text_lower.contains("http/1.0") {
                         protocol_ok = true;
                         let has_via = text_lower.contains("via:");
-                        let has_forwarded = text_lower.contains("forwarded:") || text_lower.contains("x-forwarded-for:");
-                        anonymity_level = Some(if has_forwarded { "transparent".to_string() } else if has_via { "anonymous".to_string() } else { "elite".to_string() });
+                        let has_forwarded = text_lower.contains("forwarded:")
+                            || text_lower.contains("x-forwarded-for:");
+                        anonymity_level = Some(if has_forwarded {
+                            "transparent".to_string()
+                        } else if has_via {
+                            "anonymous".to_string()
+                        } else {
+                            "elite".to_string()
+                        });
                         if let Some(idx) = text.find("ip=") {
-                            let ip = text[idx + 3..].lines().next().unwrap_or("").trim().to_string();
+                            let ip = text[idx + 3..]
+                                .lines()
+                                .next()
+                                .unwrap_or("")
+                                .trim()
+                                .to_string();
                             if !ip.is_empty() {
                                 upstream_ok = true;
                                 exit_ip = Some(ip.clone());
-                                smoke_message = format!("http proxy smoke test got upstream ip={ip}");
+                                smoke_message =
+                                    format!("http proxy smoke test got upstream ip={ip}");
                             }
                         }
                         if !upstream_ok {
-                            smoke_message = "http connect smoke test received proxy response".to_string();
+                            smoke_message =
+                                "http connect smoke test received proxy response".to_string();
                         }
                     } else {
-                        smoke_message = format!("tcp connect ok but proxy response was not http-like: {text_lower}");
+                        smoke_message = format!(
+                            "tcp connect ok but proxy response was not http-like: {text_lower}"
+                        );
                     }
                 }
             }
@@ -2075,9 +3970,6 @@ Host: example.com:443
     }
 }
 
-
-
-
 pub async fn list_verify_batches(
     State(state): State<AppState>,
     Query(query): Query<VerifyBatchListQuery>,
@@ -2096,7 +3988,13 @@ pub async fn list_verify_batches(
 
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
-        items.push(map_verify_batch_row(&state, row.0,row.1,row.2,row.3,row.4,row.5,row.6,row.7,row.8,row.9,row.10).await?);
+        items.push(
+            map_verify_batch_row(
+                &state, row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9,
+                row.10,
+            )
+            .await?,
+        );
     }
     Ok(Json(items))
 }
@@ -2115,9 +4013,343 @@ pub async fn get_verify_batch(
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to fetch verify batch: {err}")))?;
 
     match row {
-        Some(row) => Ok(Json(map_verify_batch_row(&state, row.0,row.1,row.2,row.3,row.4,row.5,row.6,row.7,row.8,row.9,row.10).await?)),
-        None => Err((StatusCode::NOT_FOUND, format!("verify batch not found: {batch_id}"))),
+        Some(row) => Ok(Json(
+            map_verify_batch_row(
+                &state, row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9,
+                row.10,
+            )
+            .await?,
+        )),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("verify batch not found: {batch_id}"),
+        )),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProxyReplenishBatchSummary {
+    pub batch_id: String,
+    pub reason: String,
+    pub target_region: Option<String>,
+    pub accepted: i64,
+    pub proxy_ids: Vec<String>,
+}
+
+async fn build_proxy_inventory_snapshot(
+    state: &AppState,
+    target_region: Option<&str>,
+) -> anyhow::Result<ProxyPoolInventorySnapshot> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM proxies")
+        .fetch_one(&state.db)
+        .await?;
+    let available: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+    )
+    .fetch_one(&state.db)
+    .await?;
+    let available_in_region: i64 = match target_region {
+        Some(region) => {
+            sqlx::query_scalar(
+                "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND region = ? AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+            )
+            .bind(region)
+            .fetch_one(&state.db)
+            .await?
+        }
+        None => 0,
+    };
+    let inflight_tasks: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status IN ('queued', 'running')")
+            .fetch_one(&state.db)
+            .await?;
+    Ok(ProxyPoolInventorySnapshot {
+        total,
+        available,
+        region: target_region.map(str::to_string),
+        available_in_region,
+        inflight_tasks,
+    })
+}
+
+async fn load_hot_browser_regions(state: &AppState) -> anyhow::Result<Vec<String>> {
+    let rows = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT) AS region, COUNT(*) AS demand
+           FROM tasks
+           WHERE kind IN ('open_page', 'get_html', 'get_title', 'get_final_url', 'extract_text')
+             AND status IN ('queued', 'running')
+             AND json_extract(input_json, '$.network_policy_json.region') IS NOT NULL
+             AND TRIM(CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)) != ''
+           GROUP BY region
+           ORDER BY demand DESC, region ASC
+           LIMIT 3"#,
+    )
+    .fetch_all(&state.db)
+    .await?;
+    Ok(rows.into_iter().map(|(region, _)| region).collect())
+}
+
+async fn recent_replenish_batch_exists(
+    state: &AppState,
+    reason: &str,
+    target_region: Option<&str>,
+    now: &str,
+) -> anyhow::Result<bool> {
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM verify_batches
+           WHERE CAST(created_at AS INTEGER) >= CAST(? AS INTEGER) - 300
+             AND json_extract(filters_json, '$.reason') = ?
+             AND (
+               (? IS NULL AND json_extract(filters_json, '$.target_region') IS NULL)
+               OR json_extract(filters_json, '$.target_region') = ?
+             )"#,
+    )
+    .bind(now)
+    .bind(reason)
+    .bind(target_region)
+    .bind(target_region)
+    .fetch_one(&state.db)
+    .await?;
+    Ok(count > 0)
+}
+
+async fn select_replenish_candidate_rows(
+    state: &AppState,
+    target_region: Option<&str>,
+    limit: i64,
+) -> anyhow::Result<Vec<(String, Option<String>)>> {
+    let sql = if target_region.is_some() {
+        r#"SELECT p.id, p.provider
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status IN ('candidate', 'candidate_rejected')
+             AND p.region = ?
+             AND (p.cooldown_until IS NULL OR CAST(p.cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+           ORDER BY
+             CASE
+               WHEN p.provider IS NULL OR TRIM(p.provider) = '' OR p.region IS NULL OR TRIM(p.region) = '' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(s.health_score, 0.0) DESC,
+             CASE p.status WHEN 'candidate' THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN p.last_probe_error_category = 'connect_failed' THEN 2
+               WHEN p.last_probe_error_category = 'upstream_missing' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(CAST(p.last_seen_at AS INTEGER), CAST(p.created_at AS INTEGER)) DESC,
+             p.created_at DESC,
+             p.id ASC
+           LIMIT ?"#
+    } else {
+        r#"SELECT p.id, p.provider
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status IN ('candidate', 'candidate_rejected')
+             AND (p.cooldown_until IS NULL OR CAST(p.cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+           ORDER BY
+             CASE
+               WHEN p.provider IS NULL OR TRIM(p.provider) = '' OR p.region IS NULL OR TRIM(p.region) = '' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(s.health_score, 0.0) DESC,
+             CASE p.status WHEN 'candidate' THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN p.last_probe_error_category = 'connect_failed' THEN 2
+               WHEN p.last_probe_error_category = 'upstream_missing' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(CAST(p.last_seen_at AS INTEGER), CAST(p.created_at AS INTEGER)) DESC,
+             p.created_at DESC,
+             p.id ASC
+           LIMIT ?"#
+    };
+    let now = now_ts_string();
+    let rows = if let Some(region) = target_region {
+        sqlx::query_as::<_, (String, Option<String>)>(sql)
+            .bind(region)
+            .bind(&now)
+            .bind(limit.max(1) * 4)
+            .fetch_all(&state.db)
+            .await?
+    } else {
+        sqlx::query_as::<_, (String, Option<String>)>(sql)
+            .bind(&now)
+            .bind(limit.max(1) * 4)
+            .fetch_all(&state.db)
+            .await?
+    };
+    Ok(rows)
+}
+
+async fn schedule_replenish_verify_batch(
+    state: &AppState,
+    proxy_rows: &[(String, Option<String>)],
+    reason: &str,
+    target_region: Option<&str>,
+    task_timeout_seconds: i64,
+) -> anyhow::Result<Option<ProxyReplenishBatchSummary>> {
+    if proxy_rows.is_empty() {
+        return Ok(None);
+    }
+
+    let now = now_ts_string();
+    let batch_id = format!("verify-batch-{}", Uuid::new_v4());
+    let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
+    let mut proxy_ids = Vec::with_capacity(proxy_rows.len());
+    for (proxy_id, provider) in proxy_rows {
+        let task_id = format!("task-{}", Uuid::new_v4());
+        let created_at = now_ts_string();
+        let input_json = serde_json::json!({
+            "url": null,
+            "script": null,
+            "timeout_seconds": task_timeout_seconds,
+            "fingerprint_profile_id": null,
+            "fingerprint_profile_version": null,
+            "proxy_id": proxy_id,
+            "verify_batch_id": batch_id,
+            "network_policy_json": null,
+        })
+        .to_string();
+        sqlx::query(
+            r#"INSERT INTO tasks (
+                   id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
+                   priority, created_at, queued_at, started_at, finished_at, fingerprint_profile_id,
+                   fingerprint_profile_version, runner_id, heartbeat_at, result_json, error_message
+               ) VALUES (?, 'verify_proxy', ?, ?, NULL, NULL, 0, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"#,
+        )
+        .bind(&task_id)
+        .bind(TASK_STATUS_QUEUED)
+        .bind(&input_json)
+        .bind(&created_at)
+        .bind(&created_at)
+        .execute(&state.db)
+        .await?;
+        let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
+        *per_provider_counts.entry(provider_key).or_insert(0) += 1;
+        proxy_ids.push(proxy_id.clone());
+    }
+
+    let provider_summary: Vec<ProxyVerifyBatchProviderSummary> = per_provider_counts
+        .into_iter()
+        .map(|(provider, accepted)| ProxyVerifyBatchProviderSummary {
+            provider,
+            accepted,
+            skipped_due_to_cap: 0,
+        })
+        .collect();
+    let provider_summary_json = serde_json::to_string(&provider_summary)?;
+    let filters_json = serde_json::json!({
+        "reason": reason,
+        "candidate_mode": true,
+        "target_region": target_region,
+        "limit": proxy_rows.len(),
+        "task_timeout_seconds": task_timeout_seconds,
+    })
+    .to_string();
+    let accepted = i64::try_from(proxy_rows.len()).unwrap_or(0);
+    sqlx::query(
+        r#"INSERT INTO verify_batches (id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at)
+           VALUES (?, 'scheduled', ?, ?, 0, 0, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&batch_id)
+    .bind(accepted)
+    .bind(accepted)
+    .bind(task_timeout_seconds)
+    .bind(&provider_summary_json)
+    .bind(&filters_json)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Some(ProxyReplenishBatchSummary {
+        batch_id,
+        reason: reason.to_string(),
+        target_region: target_region.map(str::to_string),
+        accepted,
+        proxy_ids,
+    }))
+}
+
+pub async fn run_proxy_replenish_mvp_tick(
+    state: &AppState,
+) -> anyhow::Result<Vec<ProxyReplenishBatchSummary>> {
+    let policy = proxy_pool_growth_policy_from_env();
+    let now = now_ts_string();
+    let mut scheduled_batches = Vec::new();
+    let mut reserved_proxy_ids = std::collections::HashSet::<String>::new();
+    let mut remaining_budget = proxy_replenish_total_batch_limit_from_env();
+    let region_batch_limit = proxy_replenish_region_batch_limit_from_env();
+    let global_batch_limit = proxy_replenish_global_batch_limit_from_env();
+
+    for region in load_hot_browser_regions(state).await? {
+        if remaining_budget <= 0 {
+            break;
+        }
+
+        let snapshot = build_proxy_inventory_snapshot(state, Some(region.as_str())).await?;
+        let health = assess_proxy_pool_health(&snapshot, &policy);
+        if !health.below_min_region {
+            continue;
+        }
+        if recent_replenish_batch_exists(state, "replenish_mvp", Some(region.as_str()), &now)
+            .await?
+        {
+            continue;
+        }
+
+        let selected = select_replenish_candidate_rows(
+            state,
+            Some(region.as_str()),
+            remaining_budget.min(region_batch_limit),
+        )
+        .await?
+        .into_iter()
+        .filter(|(proxy_id, _)| !reserved_proxy_ids.contains(proxy_id))
+        .take(remaining_budget.min(region_batch_limit) as usize)
+        .collect::<Vec<_>>();
+        if let Some(summary) = schedule_replenish_verify_batch(
+            state,
+            &selected,
+            "replenish_mvp",
+            Some(region.as_str()),
+            5,
+        )
+        .await?
+        {
+            remaining_budget -= summary.accepted;
+            reserved_proxy_ids.extend(summary.proxy_ids.iter().cloned());
+            scheduled_batches.push(summary);
+        }
+    }
+
+    if remaining_budget > 0 {
+        let snapshot = build_proxy_inventory_snapshot(state, None).await?;
+        let health = assess_proxy_pool_health(&snapshot, &policy);
+        if (health.below_min_ratio || health.below_min_total)
+            && !recent_replenish_batch_exists(state, "replenish_mvp", None, &now).await?
+        {
+            let selected = select_replenish_candidate_rows(
+                state,
+                None,
+                remaining_budget.min(global_batch_limit),
+            )
+            .await?
+            .into_iter()
+            .filter(|(proxy_id, _)| !reserved_proxy_ids.contains(proxy_id))
+            .take(remaining_budget.min(global_batch_limit) as usize)
+            .collect::<Vec<_>>();
+            if let Some(summary) =
+                schedule_replenish_verify_batch(state, &selected, "replenish_mvp", None, 5).await?
+            {
+                scheduled_batches.push(summary);
+            }
+        }
+    }
+
+    Ok(scheduled_batches)
 }
 
 pub async fn verify_batch_proxies(
@@ -2169,14 +4401,23 @@ pub async fn verify_batch_proxies(
     .bind(if only_stale { 1_i64 } else { 0_i64 })
     .bind(&now)
     .bind(stale_after_seconds)
-    .bind(if recently_used_within_seconds > 0 { 1_i64 } else { 0_i64 })
+    .bind(if recently_used_within_seconds > 0 {
+        1_i64
+    } else {
+        0_i64
+    })
     .bind(&now)
     .bind(recently_used_within_seconds)
     .bind(if failed_only { 1_i64 } else { 0_i64 })
     .bind(requested.saturating_mul(4))
     .fetch_all(&state.db)
     .await
-    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to select proxies for verify batch: {err}")))?;
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to select proxies for verify batch: {err}"),
+        )
+    })?;
 
     let mut accepted = 0_i64;
     let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
@@ -2202,7 +4443,8 @@ pub async fn verify_batch_proxies(
             "proxy_id": proxy_id,
             "verify_batch_id": batch_id,
             "network_policy_json": null,
-        }).to_string();
+        })
+        .to_string();
         sqlx::query(
             r#"INSERT INTO tasks (
                 id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
@@ -2230,8 +4472,12 @@ pub async fn verify_batch_proxies(
             accepted,
         })
         .collect();
-    let provider_summary_json = serde_json::to_string(&provider_summary)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to encode provider summary: {err}")))?;
+    let provider_summary_json = serde_json::to_string(&provider_summary).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to encode provider summary: {err}"),
+        )
+    })?;
     let filters_json = serde_json::json!({
         "provider": payload.provider,
         "region": payload.region,
@@ -2243,7 +4489,8 @@ pub async fn verify_batch_proxies(
         "recently_used_within_seconds": recently_used_within_seconds,
         "failed_only": failed_only,
         "max_per_provider": max_per_provider,
-    }).to_string();
+    })
+    .to_string();
     sqlx::query(r#"INSERT INTO verify_batches (id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at)
                    VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?)"#)
         .bind(&batch_id)
@@ -2282,4 +4529,3 @@ pub async fn verify_proxy(
 ) -> Result<Json<ProxyVerifyResponse>, (StatusCode, String)> {
     Ok(Json(run_proxy_verify_probe(&state, &proxy_id).await?))
 }
-

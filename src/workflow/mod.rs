@@ -59,7 +59,6 @@ pub struct WorkflowExecutionState {
     pub cooldown_seconds: u64,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkflowActionRecord {
     pub title: String,
@@ -165,7 +164,8 @@ impl WorkflowExecutionState {
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create workflow state dir {}", parent.display()))?;
-        let text = serde_json::to_string_pretty(self).context("failed to serialize workflow state")?;
+        let text =
+            serde_json::to_string_pretty(self).context("failed to serialize workflow state")?;
         fs::write(path, text)
             .with_context(|| format!("failed to write workflow state to {}", path.display()))?;
         Ok(())
@@ -177,8 +177,12 @@ impl WorkflowExecutionState {
             match Self::load(path) {
                 Ok(state) => return Ok(state),
                 Err(_) => {
-                    let raw = fs::read_to_string(path)
-                        .with_context(|| format!("failed to read legacy workflow state from {}", path.display()))?;
+                    let raw = fs::read_to_string(path).with_context(|| {
+                        format!(
+                            "failed to read legacy workflow state from {}",
+                            path.display()
+                        )
+                    })?;
                     let migrated = Self::from_json_str(&raw).unwrap_or_else(|_| Self::new(project));
                     migrated.save(path)?;
                     return Ok(migrated);
@@ -193,12 +197,18 @@ impl WorkflowExecutionState {
     fn from_json_str(raw: &str) -> Result<Self> {
         match serde_json::from_str::<Self>(raw) {
             Ok(state) => Ok(state),
-            Err(_) => Self::from_legacy_value(serde_json::from_str(raw).context("failed to parse workflow json value")?),
+            Err(_) => Self::from_legacy_value(
+                serde_json::from_str(raw).context("failed to parse workflow json value")?,
+            ),
         }
     }
 
     fn from_legacy_value(value: Value) -> Result<Self> {
-        let stage = match value.get("nextRoundType").and_then(|v| v.as_str()).unwrap_or("plan") {
+        let stage = match value
+            .get("nextRoundType")
+            .and_then(|v| v.as_str())
+            .unwrap_or("plan")
+        {
             "plan" => WorkflowStage::Plan,
             "build" => WorkflowStage::Execute,
             "verify" => WorkflowStage::Verify,
@@ -212,28 +222,56 @@ impl WorkflowExecutionState {
                 items
                     .iter()
                     .enumerate()
-                    .filter_map(|(idx, item)| item.as_str().map(|title| WorkflowSuggestion {
-                        title: title.to_string(),
-                        priority: (idx + 1) as u8,
-                        rationale: "从旧 RUN_STATE.json 迁移而来".to_string(),
-                        kind: WorkflowSuggestionKind::Feature,
-                    }))
+                    .filter_map(|(idx, item)| {
+                        item.as_str().map(|title| WorkflowSuggestion {
+                            title: title.to_string(),
+                            priority: (idx + 1) as u8,
+                            rationale: "从旧 RUN_STATE.json 迁移而来".to_string(),
+                            kind: WorkflowSuggestionKind::Feature,
+                        })
+                    })
                     .collect::<Vec<_>>()
             })
             .unwrap_or_else(|| default_suggestions_for_stage(stage));
 
         Ok(Self {
-            project: value.get("project").and_then(|v| v.as_str()).unwrap_or("AutoOpenBrowser").to_string(),
+            project: value
+                .get("project")
+                .and_then(|v| v.as_str())
+                .unwrap_or("AutoOpenBrowser")
+                .to_string(),
             loop_enabled: value.get("schedulerStatus").and_then(|v| v.as_str()) == Some("running"),
-            loop_iteration: value.get("currentRound").and_then(|v| v.as_u64()).unwrap_or(0),
+            loop_iteration: value
+                .get("currentRound")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
             stage,
             bug_cycle_interval: 3,
             completed_since_bug_cycle: 0,
-            consecutive_failures: value.get("failureCount").and_then(|v| v.as_u64()).unwrap_or(0),
-            current_focus: value.get("currentFocus").and_then(|v| v.as_str()).unwrap_or("迁移旧执行状态").to_string(),
-            current_objective: value.get("currentObjective").and_then(|v| v.as_str()).unwrap_or("初始化新的工作流状态机").to_string(),
-            last_result_summary: value.get("lastVerificationResult").and_then(|v| v.as_str()).unwrap_or("从旧 RUN_STATE.json 迁移").to_string(),
-            next_action_hint: value.get("lastSchedulerDecision").and_then(|v| v.as_str()).unwrap_or("下一步进入计划阶段").to_string(),
+            consecutive_failures: value
+                .get("failureCount")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            current_focus: value
+                .get("currentFocus")
+                .and_then(|v| v.as_str())
+                .unwrap_or("迁移旧执行状态")
+                .to_string(),
+            current_objective: value
+                .get("currentObjective")
+                .and_then(|v| v.as_str())
+                .unwrap_or("初始化新的工作流状态机")
+                .to_string(),
+            last_result_summary: value
+                .get("lastVerificationResult")
+                .and_then(|v| v.as_str())
+                .unwrap_or("从旧 RUN_STATE.json 迁移")
+                .to_string(),
+            next_action_hint: value
+                .get("lastSchedulerDecision")
+                .and_then(|v| v.as_str())
+                .unwrap_or("下一步进入计划阶段")
+                .to_string(),
             next_suggestions,
             last_executed_actions: Vec::new(),
             blocked_reason: String::new(),
@@ -241,7 +279,6 @@ impl WorkflowExecutionState {
         })
     }
 }
-
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkflowDocumentContext {
@@ -259,15 +296,24 @@ impl WorkflowDocumentContext {
         Ok(Self {
             vision: fs::read_to_string(vision_path.as_ref())
                 .with_context(|| format!("failed to read {}", vision_path.as_ref().display()))?,
-            current_direction: fs::read_to_string(current_direction_path.as_ref())
-                .with_context(|| format!("failed to read {}", current_direction_path.as_ref().display()))?,
+            current_direction: fs::read_to_string(current_direction_path.as_ref()).with_context(
+                || {
+                    format!(
+                        "failed to read {}",
+                        current_direction_path.as_ref().display()
+                    )
+                },
+            )?,
             todo: fs::read_to_string(todo_path.as_ref())
                 .with_context(|| format!("failed to read {}", todo_path.as_ref().display()))?,
         })
     }
 }
 
-pub fn generate_dynamic_suggestions(stage: WorkflowStage, ctx: &WorkflowDocumentContext) -> Vec<WorkflowSuggestion> {
+pub fn generate_dynamic_suggestions(
+    stage: WorkflowStage,
+    ctx: &WorkflowDocumentContext,
+) -> Vec<WorkflowSuggestion> {
     let mut suggestions = Vec::new();
     let todo = ctx.todo.to_lowercase();
     let direction = ctx.current_direction.to_lowercase();
@@ -316,8 +362,18 @@ pub fn generate_dynamic_suggestions(stage: WorkflowStage, ctx: &WorkflowDocument
 
     if stage == WorkflowStage::BugScan {
         return vec![
-            suggestion("查找 bug", 1, "bug 环固定第一项为查找问题", WorkflowSuggestionKind::BugScan),
-            suggestion("修复 bug", 2, "bug 环固定第二项为修复问题", WorkflowSuggestionKind::BugFix),
+            suggestion(
+                "查找 bug",
+                1,
+                "bug 环固定第一项为查找问题",
+                WorkflowSuggestionKind::BugScan,
+            ),
+            suggestion(
+                "修复 bug",
+                2,
+                "bug 环固定第二项为修复问题",
+                WorkflowSuggestionKind::BugFix,
+            ),
         ];
     }
 
@@ -336,42 +392,56 @@ pub fn refresh_dynamic_suggestions(
     current_direction_path: impl AsRef<Path>,
     todo_path: impl AsRef<Path>,
 ) -> Result<()> {
-    let ctx = WorkflowDocumentContext::load_from_files(vision_path, current_direction_path, todo_path)?;
+    let ctx =
+        WorkflowDocumentContext::load_from_files(vision_path, current_direction_path, todo_path)?;
     state.next_suggestions = generate_dynamic_suggestions(state.stage, &ctx);
     Ok(())
 }
-
 
 fn append_execution_log(entries: &[WorkflowActionRecord]) -> Result<()> {
     if entries.is_empty() {
         return Ok(());
     }
     let path = Path::new("EXECUTION_LOG.md");
-    let mut existing = if path.exists() { fs::read_to_string(path)? } else { String::new() };
+    let mut existing = if path.exists() {
+        fs::read_to_string(path)?
+    } else {
+        String::new()
+    };
     if !existing.ends_with('\n') {
         existing.push('\n');
     }
-    existing.push_str("
+    existing.push_str(
+        "
 ## Workflow Action Dispatch
 
-");
+",
+    );
     for entry in entries {
-        existing.push_str(&format!("- {} [{}]: {}
-", entry.title, match entry.kind {
-            WorkflowSuggestionKind::Feature => "feature",
-            WorkflowSuggestionKind::BugScan => "bug_scan",
-            WorkflowSuggestionKind::BugFix => "bug_fix",
-            WorkflowSuggestionKind::DocSync => "doc_sync",
-            WorkflowSuggestionKind::Refactor => "refactor",
-            WorkflowSuggestionKind::Performance => "performance",
-            WorkflowSuggestionKind::Test => "test",
-        }, entry.note));
+        existing.push_str(&format!(
+            "- {} [{}]: {}
+",
+            entry.title,
+            match entry.kind {
+                WorkflowSuggestionKind::Feature => "feature",
+                WorkflowSuggestionKind::BugScan => "bug_scan",
+                WorkflowSuggestionKind::BugFix => "bug_fix",
+                WorkflowSuggestionKind::DocSync => "doc_sync",
+                WorkflowSuggestionKind::Refactor => "refactor",
+                WorkflowSuggestionKind::Performance => "performance",
+                WorkflowSuggestionKind::Test => "test",
+            },
+            entry.note
+        ));
     }
     fs::write(path, existing)?;
     Ok(())
 }
 
-pub fn dispatch_top_suggestions(state: &mut WorkflowExecutionState, max_actions: usize) -> WorkflowDispatchResult {
+pub fn dispatch_top_suggestions(
+    state: &mut WorkflowExecutionState,
+    max_actions: usize,
+) -> WorkflowDispatchResult {
     let mut executed = state
         .next_suggestions
         .iter()
@@ -380,7 +450,10 @@ pub fn dispatch_top_suggestions(state: &mut WorkflowExecutionState, max_actions:
             title: suggestion.title.clone(),
             kind: suggestion.kind,
             status: "logged".to_string(),
-            note: format!("已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：{}", suggestion.rationale),
+            note: format!(
+                "已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：{}",
+                suggestion.rationale
+            ),
         })
         .collect::<Vec<_>>();
     if let Err(err) = append_execution_log(&executed) {
@@ -393,12 +466,12 @@ pub fn dispatch_top_suggestions(state: &mut WorkflowExecutionState, max_actions:
     WorkflowDispatchResult { executed }
 }
 
-
 pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
     match state.stage {
         WorkflowStage::Plan => {
             state.current_focus = "对齐目标文档并生成本轮建议".to_string();
-            state.current_objective = "读取 VISION/CURRENT_DIRECTION/TODO 后确定前两项动作".to_string();
+            state.current_objective =
+                "读取 VISION/CURRENT_DIRECTION/TODO 后确定前两项动作".to_string();
             state.last_result_summary = "已完成 plan 阶段，生成下一阶段建议".to_string();
             state.next_action_hint = "进入 execute，默认执行前两个建议".to_string();
             state.advance_after_success();
@@ -407,7 +480,10 @@ pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
             let dispatch = dispatch_top_suggestions(state, 2);
             state.current_focus = "执行建议前两项".to_string();
             state.current_objective = "完成当前最优先的两个动作并补最小必要验证".to_string();
-            state.last_result_summary = format!("已完成 execute 阶段，已分发 {} 个动作，进入 verify 检查结果稳定性", dispatch.executed.len());
+            state.last_result_summary = format!(
+                "已完成 execute 阶段，已分发 {} 个动作，进入 verify 检查结果稳定性",
+                dispatch.executed.len()
+            );
             state.next_action_hint = "进入 verify，优先跑定向测试和一致性检查".to_string();
             state.advance_after_success();
         }
@@ -448,21 +524,30 @@ pub fn run_minimal_cycle_step(state: &mut WorkflowExecutionState) {
         }
         WorkflowStage::Cooldown => {
             state.current_focus = "冷却并准备下一轮".to_string();
-            state.current_objective = format!("冷却 {} 秒后结束当前小循环，回到 plan", state.cooldown_seconds);
-            state.last_result_summary = format!("已完成 cooldown（{} 秒），下一轮重新进入 plan", state.cooldown_seconds);
+            state.current_objective = format!(
+                "冷却 {} 秒后结束当前小循环，回到 plan",
+                state.cooldown_seconds
+            );
+            state.last_result_summary = format!(
+                "已完成 cooldown（{} 秒），下一轮重新进入 plan",
+                state.cooldown_seconds
+            );
             state.next_action_hint = "重新读取文档并生成新建议".to_string();
             state.advance_after_success();
         }
         WorkflowStage::Blocked => {
             state.current_focus = "解除阻塞".to_string();
-            state.current_objective = if state.blocked_reason.is_empty() { "先识别阻塞，再回到 plan".to_string() } else { format!("先处理阻塞原因：{}", state.blocked_reason) };
+            state.current_objective = if state.blocked_reason.is_empty() {
+                "先识别阻塞，再回到 plan".to_string()
+            } else {
+                format!("先处理阻塞原因：{}", state.blocked_reason)
+            };
             state.last_result_summary = "blocked 已切回 plan，等待恢复推进".to_string();
             state.next_action_hint = "回到 plan 重新评估".to_string();
             state.advance_after_success();
         }
     }
 }
-
 
 pub fn tick_workflow_file(path: impl AsRef<Path>, project: &str) -> Result<WorkflowExecutionState> {
     let path = path.as_ref();
@@ -473,7 +558,11 @@ pub fn tick_workflow_file(path: impl AsRef<Path>, project: &str) -> Result<Workf
     Ok(state)
 }
 
-pub fn run_minimal_cycle_steps(path: impl AsRef<Path>, project: &str, steps: usize) -> Result<WorkflowExecutionState> {
+pub fn run_minimal_cycle_steps(
+    path: impl AsRef<Path>,
+    project: &str,
+    steps: usize,
+) -> Result<WorkflowExecutionState> {
     let path = path.as_ref();
     let mut state = WorkflowExecutionState::ensure_default_state_file(path, project)?;
     for _ in 0..steps {
@@ -487,57 +576,212 @@ pub fn run_minimal_cycle_steps(path: impl AsRef<Path>, project: &str, steps: usi
 pub fn default_suggestions_for_stage(stage: WorkflowStage) -> Vec<WorkflowSuggestion> {
     match stage {
         WorkflowStage::Plan => vec![
-            suggestion("读取目标文档并重新排序下一阶段事项", 1, "先对齐 VISION/CURRENT_DIRECTION/TODO，避免跑偏", WorkflowSuggestionKind::DocSync),
-            suggestion("生成 3–5 个下一阶段建议", 2, "为执行前两个动作提供稳定输入", WorkflowSuggestionKind::Feature),
-            suggestion("同步当前状态与目标口径", 3, "减少 STATUS/TODO/PROGRESS 漂移", WorkflowSuggestionKind::DocSync),
-            suggestion("检查是否需要进入 bug 环", 4, "控制 flaky、warning 和状态漂移", WorkflowSuggestionKind::BugScan),
-            suggestion("准备本轮执行上下文", 5, "为 Execute 阶段降低切换成本", WorkflowSuggestionKind::Refactor),
+            suggestion(
+                "读取目标文档并重新排序下一阶段事项",
+                1,
+                "先对齐 VISION/CURRENT_DIRECTION/TODO，避免跑偏",
+                WorkflowSuggestionKind::DocSync,
+            ),
+            suggestion(
+                "生成 3–5 个下一阶段建议",
+                2,
+                "为执行前两个动作提供稳定输入",
+                WorkflowSuggestionKind::Feature,
+            ),
+            suggestion(
+                "同步当前状态与目标口径",
+                3,
+                "减少 STATUS/TODO/PROGRESS 漂移",
+                WorkflowSuggestionKind::DocSync,
+            ),
+            suggestion(
+                "检查是否需要进入 bug 环",
+                4,
+                "控制 flaky、warning 和状态漂移",
+                WorkflowSuggestionKind::BugScan,
+            ),
+            suggestion(
+                "准备本轮执行上下文",
+                5,
+                "为 Execute 阶段降低切换成本",
+                WorkflowSuggestionKind::Refactor,
+            ),
         ],
         WorkflowStage::Execute => vec![
-            suggestion("执行建议第 1 项", 1, "默认推进当前最优先事项", WorkflowSuggestionKind::Feature),
-            suggestion("执行建议第 2 项", 2, "保持双任务推进节奏", WorkflowSuggestionKind::Feature),
-            suggestion("补最小必要测试", 3, "避免推进后没有验证锁定", WorkflowSuggestionKind::Test),
-            suggestion("补必要文档口径", 4, "防止代码与文档脱节", WorkflowSuggestionKind::DocSync),
-            suggestion("记录本轮产出", 5, "为后续 verify/commit 提供依据", WorkflowSuggestionKind::DocSync),
+            suggestion(
+                "执行建议第 1 项",
+                1,
+                "默认推进当前最优先事项",
+                WorkflowSuggestionKind::Feature,
+            ),
+            suggestion(
+                "执行建议第 2 项",
+                2,
+                "保持双任务推进节奏",
+                WorkflowSuggestionKind::Feature,
+            ),
+            suggestion(
+                "补最小必要测试",
+                3,
+                "避免推进后没有验证锁定",
+                WorkflowSuggestionKind::Test,
+            ),
+            suggestion(
+                "补必要文档口径",
+                4,
+                "防止代码与文档脱节",
+                WorkflowSuggestionKind::DocSync,
+            ),
+            suggestion(
+                "记录本轮产出",
+                5,
+                "为后续 verify/commit 提供依据",
+                WorkflowSuggestionKind::DocSync,
+            ),
         ],
         WorkflowStage::Verify => vec![
-            suggestion("跑定向测试与一致性检查", 1, "验证刚完成的两项动作是否稳定", WorkflowSuggestionKind::Test),
-            suggestion("检查 explain/preview/task/status 口径", 2, "优先发现状态漂移", WorkflowSuggestionKind::BugScan),
-            suggestion("检查 warning / flaky 信号", 3, "提前识别不稳定点", WorkflowSuggestionKind::BugScan),
-            suggestion("记录验证结果", 4, "为 bug 环或 commit 提供结论", WorkflowSuggestionKind::DocSync),
-            suggestion("决定是否进入 bug 环", 5, "控制推进质量", WorkflowSuggestionKind::BugScan),
+            suggestion(
+                "跑定向测试与一致性检查",
+                1,
+                "验证刚完成的两项动作是否稳定",
+                WorkflowSuggestionKind::Test,
+            ),
+            suggestion(
+                "检查 explain/preview/task/status 口径",
+                2,
+                "优先发现状态漂移",
+                WorkflowSuggestionKind::BugScan,
+            ),
+            suggestion(
+                "检查 warning / flaky 信号",
+                3,
+                "提前识别不稳定点",
+                WorkflowSuggestionKind::BugScan,
+            ),
+            suggestion(
+                "记录验证结果",
+                4,
+                "为 bug 环或 commit 提供结论",
+                WorkflowSuggestionKind::DocSync,
+            ),
+            suggestion(
+                "决定是否进入 bug 环",
+                5,
+                "控制推进质量",
+                WorkflowSuggestionKind::BugScan,
+            ),
         ],
         WorkflowStage::BugScan => vec![
-            suggestion("查找 bug", 1, "bug 环第一优先项固定为查找问题", WorkflowSuggestionKind::BugScan),
-            suggestion("锁定最值得修的 bug", 2, "避免同时修多个低价值噪音", WorkflowSuggestionKind::BugFix),
+            suggestion(
+                "查找 bug",
+                1,
+                "bug 环第一优先项固定为查找问题",
+                WorkflowSuggestionKind::BugScan,
+            ),
+            suggestion(
+                "锁定最值得修的 bug",
+                2,
+                "避免同时修多个低价值噪音",
+                WorkflowSuggestionKind::BugFix,
+            ),
         ],
         WorkflowStage::BugFix => vec![
-            suggestion("修复 bug", 1, "bug 环第二步固定为最小修复", WorkflowSuggestionKind::BugFix),
-            suggestion("补测试锁住修复", 2, "防止回归", WorkflowSuggestionKind::Test),
-            suggestion("复查是否还有连带问题", 3, "避免只修表面", WorkflowSuggestionKind::BugScan),
+            suggestion(
+                "修复 bug",
+                1,
+                "bug 环第二步固定为最小修复",
+                WorkflowSuggestionKind::BugFix,
+            ),
+            suggestion(
+                "补测试锁住修复",
+                2,
+                "防止回归",
+                WorkflowSuggestionKind::Test,
+            ),
+            suggestion(
+                "复查是否还有连带问题",
+                3,
+                "避免只修表面",
+                WorkflowSuggestionKind::BugScan,
+            ),
         ],
         WorkflowStage::DocSync => vec![
-            suggestion("同步 TODO.md", 1, "保持真实优先级", WorkflowSuggestionKind::DocSync),
-            suggestion("同步 STATUS.md / PROGRESS.md", 2, "保持阶段状态与能力描述准确", WorkflowSuggestionKind::DocSync),
-            suggestion("记录执行日志", 3, "为下一轮提供上下文", WorkflowSuggestionKind::DocSync),
+            suggestion(
+                "同步 TODO.md",
+                1,
+                "保持真实优先级",
+                WorkflowSuggestionKind::DocSync,
+            ),
+            suggestion(
+                "同步 STATUS.md / PROGRESS.md",
+                2,
+                "保持阶段状态与能力描述准确",
+                WorkflowSuggestionKind::DocSync,
+            ),
+            suggestion(
+                "记录执行日志",
+                3,
+                "为下一轮提供上下文",
+                WorkflowSuggestionKind::DocSync,
+            ),
         ],
         WorkflowStage::CommitPush => vec![
-            suggestion("commit 当前稳定成果", 1, "将本轮稳定成果落盘", WorkflowSuggestionKind::Refactor),
-            suggestion("评估是否 push", 2, "在远程已配置且风险可控时推送", WorkflowSuggestionKind::Refactor),
-            suggestion("准备下一轮 focus", 3, "让循环衔接更顺滑", WorkflowSuggestionKind::DocSync),
+            suggestion(
+                "commit 当前稳定成果",
+                1,
+                "将本轮稳定成果落盘",
+                WorkflowSuggestionKind::Refactor,
+            ),
+            suggestion(
+                "评估是否 push",
+                2,
+                "在远程已配置且风险可控时推送",
+                WorkflowSuggestionKind::Refactor,
+            ),
+            suggestion(
+                "准备下一轮 focus",
+                3,
+                "让循环衔接更顺滑",
+                WorkflowSuggestionKind::DocSync,
+            ),
         ],
         WorkflowStage::Cooldown => vec![
-            suggestion("短暂冷却并等待下一轮", 1, "避免高频抖动与误判", WorkflowSuggestionKind::Performance),
-            suggestion("检查是否要回到 plan", 2, "保持循环节奏", WorkflowSuggestionKind::Refactor),
+            suggestion(
+                "短暂冷却并等待下一轮",
+                1,
+                "避免高频抖动与误判",
+                WorkflowSuggestionKind::Performance,
+            ),
+            suggestion(
+                "检查是否要回到 plan",
+                2,
+                "保持循环节奏",
+                WorkflowSuggestionKind::Refactor,
+            ),
         ],
         WorkflowStage::Blocked => vec![
-            suggestion("识别阻塞原因", 1, "先明确为什么不能继续", WorkflowSuggestionKind::BugScan),
-            suggestion("给出恢复路径", 2, "为人工接管或下一轮恢复做准备", WorkflowSuggestionKind::DocSync),
+            suggestion(
+                "识别阻塞原因",
+                1,
+                "先明确为什么不能继续",
+                WorkflowSuggestionKind::BugScan,
+            ),
+            suggestion(
+                "给出恢复路径",
+                2,
+                "为人工接管或下一轮恢复做准备",
+                WorkflowSuggestionKind::DocSync,
+            ),
         ],
     }
 }
 
-fn suggestion(title: &str, priority: u8, rationale: &str, kind: WorkflowSuggestionKind) -> WorkflowSuggestion {
+fn suggestion(
+    title: &str,
+    priority: u8,
+    rationale: &str,
+    kind: WorkflowSuggestionKind,
+) -> WorkflowSuggestion {
     WorkflowSuggestion {
         title: title.to_string(),
         priority,
@@ -575,7 +819,10 @@ mod tests {
         assert!(state.should_enter_bug_cycle());
         state.advance_after_success();
         assert_eq!(state.stage, WorkflowStage::BugScan);
-        assert_eq!(state.next_suggestions[0].kind, WorkflowSuggestionKind::BugScan);
+        assert_eq!(
+            state.next_suggestions[0].kind,
+            WorkflowSuggestionKind::BugScan
+        );
     }
 
     #[test]
@@ -626,7 +873,8 @@ mod tests {
     fn ensure_default_state_file_creates_new_state() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("RUN_STATE.json");
-        let state = WorkflowExecutionState::ensure_default_state_file(&path, "AutoOpenBrowser").expect("ensure state");
+        let state = WorkflowExecutionState::ensure_default_state_file(&path, "AutoOpenBrowser")
+            .expect("ensure state");
         assert_eq!(state.project, "AutoOpenBrowser");
         assert!(path.exists());
         assert!(!state.next_suggestions.is_empty());
@@ -670,7 +918,10 @@ mod tests {
         let result = dispatch_top_suggestions(&mut state, 2);
         assert_eq!(result.executed.len(), 2);
         assert_eq!(state.last_executed_actions.len(), 2);
-        assert!(state.last_executed_actions.iter().all(|a| a.status == "logged" || a.status == "log_failed"));
+        assert!(state
+            .last_executed_actions
+            .iter()
+            .all(|a| a.status == "logged" || a.status == "log_failed"));
     }
 
     #[test]
@@ -687,7 +938,8 @@ mod tests {
     fn run_minimal_cycle_steps_persists_multiple_stage_advances() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("RUN_STATE.json");
-        let state = run_minimal_cycle_steps(&path, "AutoOpenBrowser", 3).expect("run workflow steps");
+        let state =
+            run_minimal_cycle_steps(&path, "AutoOpenBrowser", 3).expect("run workflow steps");
         assert_eq!(state.stage, WorkflowStage::BugScan);
         let loaded = WorkflowExecutionState::load(&path).expect("load saved workflow state");
         assert_eq!(loaded.stage, WorkflowStage::BugScan);
@@ -703,6 +955,8 @@ mod tests {
         let suggestions = generate_dynamic_suggestions(WorkflowStage::Plan, &ctx);
         assert!(!suggestions.is_empty());
         assert!(suggestions.iter().any(|s| s.title.contains("trust score")));
-        assert!(suggestions.iter().any(|s| s.kind == WorkflowSuggestionKind::DocSync));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.kind == WorkflowSuggestionKind::DocSync));
     }
 }
