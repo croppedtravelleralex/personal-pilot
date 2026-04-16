@@ -8,9 +8,11 @@ interface SynchronizerControlWorkbenchProps {
   capabilities: SynchronizerCommandCapability[];
   plans: SynchronizerBroadcastPlanTemplate[];
   stagedPlanId: string | null;
+  runningPlanId: string | null;
   controllerLabel: string;
   targetCount: number;
   onStagePlan: (plan: SynchronizerBroadcastPlanTemplate) => void;
+  onRunPlan: (planId?: string) => void;
 }
 
 function getCapabilityTone(status: SynchronizerCommandCapability["status"]) {
@@ -29,10 +31,17 @@ export function SynchronizerControlWorkbench({
   capabilities,
   plans,
   stagedPlanId,
+  runningPlanId,
   controllerLabel,
   targetCount,
   onStagePlan,
+  onRunPlan,
 }: SynchronizerControlWorkbenchProps) {
+  const broadcastCapability =
+    capabilities.find((capability) => capability.key === "broadcastPlan") ?? null;
+  const isBroadcastNativeReady = broadcastCapability?.status === "native_live";
+  const isBroadcastRunning = runningPlanId !== null;
+
   return (
     <div className="page-stack">
       <div className="automation-metric-strip">
@@ -45,6 +54,17 @@ export function SynchronizerControlWorkbench({
           <span className="automation-metric-strip__label">Broadcast scope</span>
           <strong>{targetCount} windows</strong>
           <small>Current filtered operator scope</small>
+        </article>
+        <article className="automation-metric-strip__item">
+          <span className="automation-metric-strip__label">Broadcast path</span>
+          <strong>
+            {isBroadcastNativeReady ? "Native execute" : "Prepared with fallback"}
+          </strong>
+          <small>
+            {isBroadcastNativeReady
+              ? "Native contract has executed in this session."
+              : "Execution is capability-gated and falls back to prepared mode when native is not ready."}
+          </small>
         </article>
       </div>
 
@@ -75,7 +95,10 @@ export function SynchronizerControlWorkbench({
               <div className="toolbar-actions">
                 <span className="badge badge--info">{plan.scopeLabel}</span>
                 <span className={`badge badge--${plan.id === stagedPlanId ? "warning" : "info"}`}>
-                  {plan.id === stagedPlanId ? "staged" : "ready"}
+                  {plan.id === stagedPlanId ? "prepared" : "available"}
+                </span>
+                <span className={`badge badge--${plan.id === runningPlanId ? "warning" : "info"}`}>
+                  {plan.id === runningPlanId ? "executing" : "idle"}
                 </span>
               </div>
             </div>
@@ -84,9 +107,23 @@ export function SynchronizerControlWorkbench({
               Requires {plan.requiredFlags.length > 0 ? plan.requiredFlags.join(" / ") : "layout only"} -
               intensity {plan.intensity}
             </p>
-            <button className="button" type="button" onClick={() => onStagePlan(plan)}>
-              {plan.id === stagedPlanId ? "Restage plan" : "Stage plan"}
-            </button>
+            <div className="toolbar-actions">
+              <button className="button button--secondary" type="button" onClick={() => onStagePlan(plan)}>
+                {plan.id === stagedPlanId ? "Refresh prepared plan" : "Prepare plan"}
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={() => onRunPlan(plan.id)}
+                disabled={isBroadcastRunning}
+              >
+                {plan.id === runningPlanId
+                  ? "Executing..."
+                  : isBroadcastNativeReady
+                    ? "Execute (native path)"
+                    : "Execute (fallback if native unavailable)"}
+              </button>
+            </div>
           </article>
         ))}
       </div>

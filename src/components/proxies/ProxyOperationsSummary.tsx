@@ -1,3 +1,7 @@
+import {
+  getProxyProviderWriteLabel,
+  getProxyProviderWriteState,
+} from "../../features/proxies/changeIpFeedback";
 import type { ProxyIpChangeFeedback, ProxyDataSource } from "../../features/proxies/model";
 import { formatCount, formatRelativeTimestamp } from "../../utils/format";
 import { Panel } from "../Panel";
@@ -20,6 +24,8 @@ interface ProxyOperationsSummaryProps {
     localRotationSuccess: number;
     localRotationFailures: number;
     localRotationRunning: number;
+    providerWriteAccepted: number;
+    rollbackSignals: number;
     stickyActive: number;
     stickyExpired: number;
     stickyMode: number;
@@ -30,10 +36,13 @@ interface ProxyOperationsSummaryProps {
 }
 
 function getResultBadge(result: ProxyIpChangeFeedback): string {
-  switch (result.phase) {
-    case "success":
-      return "badge badge--succeeded";
-    case "error":
+  const writeState = getProxyProviderWriteState(result);
+  switch (writeState) {
+    case "accepted":
+      return "badge badge--info";
+    case "rollback_flagged":
+    case "blocked":
+    case "failed":
       return "badge badge--failed";
     default:
       return "badge badge--warning";
@@ -41,14 +50,7 @@ function getResultBadge(result: ProxyIpChangeFeedback): string {
 }
 
 function getResultLabel(result: ProxyIpChangeFeedback): string {
-  switch (result.phase) {
-    case "success":
-      return result.status ?? "Local success";
-    case "error":
-      return result.status ?? "Needs review";
-    default:
-      return "Running";
-  }
+  return getProxyProviderWriteLabel(getProxyProviderWriteState(result));
 }
 
 export function ProxyOperationsSummary({
@@ -92,14 +94,15 @@ export function ProxyOperationsSummary({
           <dd>
             {formatCount(summary.localRotationTracked)} tracked results
             <br />
-            {formatCount(summary.localRotationSuccess)} success, {formatCount(summary.localRotationFailures)} failed, {formatCount(summary.localRotationRunning)} running
+            {formatCount(summary.providerWriteAccepted)} accepted writes, {formatCount(summary.rollbackSignals)} rollback flagged, {formatCount(summary.localRotationRunning)} running
           </dd>
         </div>
       </div>
 
       <div className="banner usage-panel__banner">
-        Change-IP posture here reflects local tracked requests, cooldown heuristics, and latest feedback.
-        It does not claim the provider actually switched exit IP until a later detail refresh exposes a new exit IP.
+        Change-IP posture here reflects desktop write feedback, rollback signal parsing, residency
+        posture, and local cooldown heuristics. Exit-IP change is only considered observed after a
+        later detail refresh shows new network output.
       </div>
 
       <div className="details-grid details-grid--two">
@@ -142,7 +145,7 @@ export function ProxyOperationsSummary({
               </div>
               <div className="record-card__footer">
                 <span>{formatRelativeTimestamp(result.updatedAt)}</span>
-                <span>{result.phase}</span>
+                <span>{result.status ?? "status-pending"}</span>
               </div>
             </article>
           ))}

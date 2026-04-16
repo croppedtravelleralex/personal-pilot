@@ -376,6 +376,12 @@ export type DesktopSyncLayoutMode =
   | "uniform_size"
   | string;
 
+export type DesktopSynchronizerBroadcastChannel =
+  | "scroll"
+  | "navigation"
+  | "input"
+  | string;
+
 export interface DesktopEntityReference {
   id: string;
   name: string | null;
@@ -1108,6 +1114,13 @@ export interface DesktopSyncLayoutUpdate {
   syncScroll?: boolean;
   syncNavigation?: boolean;
   syncInput?: boolean;
+}
+
+export interface DesktopSynchronizerBroadcastRequest {
+  channel: DesktopSynchronizerBroadcastChannel;
+  sourceWindowId?: string | null;
+  targetWindowIds?: string[] | null;
+  intentLabel?: string | null;
 }
 
 export interface DesktopSynchronizerActionResult {

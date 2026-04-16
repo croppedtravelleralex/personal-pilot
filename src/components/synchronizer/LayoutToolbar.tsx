@@ -26,7 +26,7 @@ interface LayoutToolbarProps {
   autoRefreshEnabled: boolean;
   refreshIntervalMs: number;
   isLoading: boolean;
-  activeAction: "layout" | "setMain" | "focus" | null;
+  activeAction: "layout" | "setMain" | "focus" | "broadcastPlan" | null;
   updatedAt: string;
   layoutOptions: SynchronizerLayoutOption[];
   refreshIntervalOptions: SynchronizerRefreshIntervalOption[];
@@ -185,7 +185,7 @@ export function LayoutToolbar({
           </dd>
         </article>
         <article className="details-grid__item">
-          <dt>Staged pacing</dt>
+          <dt>Execution pacing</dt>
           <dd>
             <div className="page-stack">
               <label className="field">
@@ -224,7 +224,7 @@ export function LayoutToolbar({
           </dd>
         </article>
         <article className="details-grid__item">
-          <dt>Local staged safeguards</dt>
+          <dt>Execution safeguards</dt>
           <dd>
             <div className="page-stack">
               <label className="synchronizer-toggle">
@@ -235,7 +235,7 @@ export function LayoutToolbar({
                     onSetOperatorSetting("stopOnHidden", event.target.checked)
                   }
                 />
-                <span>Pause staged plans when windows are hidden</span>
+                <span>Pause broadcast execution when windows are hidden</span>
               </label>
               <label className="synchronizer-toggle">
                 <input
@@ -245,7 +245,7 @@ export function LayoutToolbar({
                     onSetOperatorSetting("respectBusy", event.target.checked)
                   }
                 />
-                <span>Skip busy windows during staged broadcast rehearsal</span>
+                <span>Skip busy windows during broadcast execution</span>
               </label>
               <label className="field">
                 <span className="field__label">Target screen</span>

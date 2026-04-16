@@ -10,10 +10,14 @@ import {
   runProxyChangeIp,
   runProxyBatchCheck,
 } from "./adapters";
+import {
+  getProxyProviderWriteState,
+  isProxyChangeCoolingDown,
+  parseProxyTimestamp,
+} from "./changeIpFeedback";
 import type {
   ProxyChangeIpState,
   ProxyHealthState,
-  ProxyIpChangeFeedback,
   ProxyRowModel,
   ProxySortField,
   ProxyUsageFilter,
@@ -23,46 +27,6 @@ import { getFilteredProxyRows, proxiesStore, proxyActions } from "./store";
 interface FilterOption<T extends string = string> {
   value: T;
   label: string;
-}
-
-function parseTimestamp(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const numericValue = Number(value);
-  if (Number.isFinite(numericValue) && numericValue > 0) {
-    return numericValue;
-  }
-
-  const parsedMs = Date.parse(value);
-  if (Number.isNaN(parsedMs)) {
-    return null;
-  }
-
-  return Math.floor(parsedMs / 1000);
-}
-
-function getCooldownWindowSeconds(result: ProxyIpChangeFeedback): number {
-  switch (result.phase) {
-    case "success":
-      return 5 * 60;
-    case "error":
-      return 15 * 60;
-    default:
-      return 0;
-  }
-}
-
-function isCoolingDown(result: ProxyIpChangeFeedback): boolean {
-  const updatedAt = parseTimestamp(result.updatedAt);
-  const cooldownWindow = getCooldownWindowSeconds(result);
-
-  if (!updatedAt || cooldownWindow === 0) {
-    return false;
-  }
-
-  return Math.floor(Date.now() / 1000) - updatedAt < cooldownWindow;
 }
 
 const HEALTH_OPTIONS: FilterOption<"all" | ProxyHealthState>[] = [
@@ -95,7 +59,7 @@ function toErrorMessage(error: unknown): string {
 
 function toChangeIpErrorMessage(error: unknown): string {
   if (error instanceof DesktopServiceError && error.code === "desktop_command_not_ready") {
-    return "Native changeProxyIp is not ready yet. The proxy rotation panel stays on the local tracked request path until the desktop contract lands.";
+    return "changeProxyIp is unavailable in this runtime. Keep the latest tracked provider-write posture and retry after desktop contract sync.";
   }
 
   return toErrorMessage(error);
@@ -217,16 +181,16 @@ export function useProxiesViewModel() {
 
     for (const [index, proxyId] of targetIds.entries()) {
       const targetRow = snapshot.rows.find((row) => row.id === proxyId) ?? null;
+      const requestInput = targetRow ? buildChangeIpRequestForRow(targetRow) : { proxyId };
       proxyActions.setChangeIpStepRunning(
         requestId,
         proxyId,
         `Changing IP ${index + 1}/${targetIds.length} for ${proxyId}.`,
+        requestInput,
       );
 
       try {
-        const result = await runProxyChangeIp(
-          targetRow ? buildChangeIpRequestForRow(targetRow) : { proxyId },
-        );
+        const result = await runProxyChangeIp(requestInput);
         proxyActions.recordChangeIpSuccess(requestId, proxyId, result);
       } catch (error) {
         proxyActions.recordChangeIpFailure(
@@ -234,6 +198,7 @@ export function useProxiesViewModel() {
           proxyId,
           toChangeIpErrorMessage(error),
           String(Math.floor(Date.now() / 1000)),
+          requestInput,
         );
       }
     }
@@ -284,8 +249,8 @@ export function useProxiesViewModel() {
     () =>
       Object.values(state.changeIp.results)
         .sort((left, right) => {
-          const rightTimestamp = parseTimestamp(right.updatedAt) ?? 0;
-          const leftTimestamp = parseTimestamp(left.updatedAt) ?? 0;
+          const rightTimestamp = parseProxyTimestamp(right.updatedAt) ?? 0;
+          const leftTimestamp = parseProxyTimestamp(left.updatedAt) ?? 0;
           return rightTimestamp - leftTimestamp;
         })
         .slice(0, 6),
@@ -354,6 +319,12 @@ export function useProxiesViewModel() {
     const localRotationRunning = Object.values(state.changeIp.results).filter(
       (result) => result.phase === "running",
     ).length;
+    const providerWriteAccepted = Object.values(state.changeIp.results).filter(
+      (result) => getProxyProviderWriteState(result) === "accepted",
+    ).length;
+    const rollbackSignals = Object.values(state.changeIp.results).filter(
+      (result) => getProxyProviderWriteState(result) === "rollback_flagged",
+    ).length;
     const stickyActive = state.rows.filter(
       (row) => row.rotation.residencyStatus === "sticky_active",
     ).length;
@@ -366,7 +337,7 @@ export function useProxiesViewModel() {
     const providerAwareMode = state.rows.filter((row) =>
       row.rotation.rotationMode.includes("provider"),
     ).length;
-    const coolingDown = Object.values(state.changeIp.results).filter(isCoolingDown).length;
+    const coolingDown = Object.values(state.changeIp.results).filter(isProxyChangeCoolingDown).length;
 
     return {
       total: state.totalCount || state.rows.length,
@@ -384,6 +355,8 @@ export function useProxiesViewModel() {
       localRotationSuccess,
       localRotationFailures,
       localRotationRunning,
+      providerWriteAccepted,
+      rollbackSignals,
       stickyActive,
       stickyExpired,
       stickyMode,

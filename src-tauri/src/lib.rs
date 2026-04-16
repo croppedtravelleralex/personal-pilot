@@ -75,7 +75,8 @@ pub fn run() {
       commands::read_synchronizer_snapshot,
       commands::set_main_sync_window,
       commands::apply_window_layout,
-      commands::focus_sync_window
+      commands::focus_sync_window,
+      commands::broadcast_sync_action
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

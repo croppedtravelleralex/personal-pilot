@@ -7,7 +7,7 @@ interface WindowMatrixProps {
   windows: DesktopSyncWindowState[];
   groups: SynchronizerWindowGroup[];
   selectedWindowId: string | null;
-  activeAction: "layout" | "setMain" | "focus" | null;
+  activeAction: "layout" | "setMain" | "focus" | "broadcastPlan" | null;
   onSelect: (windowId: string) => void;
   onSetMain: (windowId: string) => void;
   onFocus: (windowId: string) => void;

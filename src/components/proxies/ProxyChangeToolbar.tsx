@@ -1,3 +1,7 @@
+import {
+  getProxyProviderWriteLabel,
+  getProxyProviderWriteState,
+} from "../../features/proxies/changeIpFeedback";
 import type { ProxyIpChangeFeedback } from "../../features/proxies/model";
 import { formatCount, formatRelativeTimestamp } from "../../utils/format";
 
@@ -38,7 +42,7 @@ function getPhaseLabel(phase: ProxyChangeToolbarProps["phase"]): string {
     case "running":
       return "Rotating";
     case "completed":
-      return "Completed";
+      return "Submission done";
     case "blocked":
       return "Blocked";
     case "error":
@@ -49,10 +53,13 @@ function getPhaseLabel(phase: ProxyChangeToolbarProps["phase"]): string {
 }
 
 function getResultBadge(result: ProxyIpChangeFeedback): string {
-  switch (result.phase) {
-    case "success":
-      return "badge badge--succeeded";
-    case "error":
+  const writeState = getProxyProviderWriteState(result);
+  switch (writeState) {
+    case "accepted":
+      return "badge badge--info";
+    case "rollback_flagged":
+    case "blocked":
+    case "failed":
       return "badge badge--failed";
     default:
       return "badge badge--warning";
@@ -87,9 +94,8 @@ export function ProxyChangeToolbar({
           <span className="shell__eyebrow">Proxy IP Workbench</span>
           <h2 className="panel__title">Change-IP Queue</h2>
           <p className="panel__subtitle">
-            Run local change-IP requests against the pinned proxy or current selection, with
-            per-target feedback and explicit truth boundaries instead of pretending every success
-            already means a provider-side exit switch.
+            Submit `changeProxyIp` writes for the pinned proxy or current selection and track
+            provider-write acceptance, residency mode, rollback signals, and cooldown windows.
           </p>
         </div>
         <span className={getPhaseBadge(phase)}>{getPhaseLabel(phase)}</span>
@@ -117,7 +123,7 @@ export function ProxyChangeToolbar({
           </div>
           <div className="batch-toolbar__metric">
             <strong>{formatCount(succeededCount)}</strong>
-            <span>Succeeded</span>
+            <span>Accepted writes</span>
           </div>
           <div className="batch-toolbar__metric">
             <strong>{formatCount(failedCount)}</strong>
@@ -141,8 +147,8 @@ export function ProxyChangeToolbar({
       ) : null}
 
       <div className="banner usage-panel__banner">
-        Local queue only: successful feedback means the tracked request completed. Actual exit-IP
-        change still needs a later health/detail refresh to be observed.
+        Execution boundary: accepted feedback means desktop queued a provider-write task. Actual
+        exit-IP drift remains pending until health/detail refresh observes new network output.
       </div>
 
       <div
@@ -176,7 +182,7 @@ export function ProxyChangeToolbar({
               </div>
               <div className="record-card__footer">
                 <span>{formatRelativeTimestamp(result.updatedAt)}</span>
-                <span>{result.phase}</span>
+                <span>{getProxyProviderWriteLabel(getProxyProviderWriteState(result))}</span>
               </div>
             </article>
           ))}

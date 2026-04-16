@@ -2,10 +2,11 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
@@ -435,12 +436,673 @@ fn build_proxy_rotation_mode(
     "pool_rotate".to_string()
 }
 
-fn derive_change_proxy_ip_status(rotation_mode: &str) -> String {
-    if rotation_mode.contains("sticky") {
-        "queued_sticky_rotation".to_string()
-    } else {
-        "queued_provider_rotation".to_string()
+#[derive(Debug, Clone)]
+struct DesktopProxyProviderRefreshSpec {
+    source_label: String,
+    provider_key: String,
+    method: Method,
+    url: String,
+    timeout_seconds: u64,
+    headers: BTreeMap<String, String>,
+    query: Vec<(String, String)>,
+    body: Option<Value>,
+    require_http_2xx: bool,
+    success_path: Option<String>,
+    success_equals: Option<Value>,
+    success_in: Option<Vec<Value>>,
+    success_contains: Option<String>,
+    request_id_path: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct DesktopProxyProviderRefreshSuccess {
+    source_label: String,
+    provider_key: String,
+    status_code: u16,
+    provider_request_id: Option<String>,
+    response_excerpt: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct DesktopProxyProviderRefreshFailure {
+    error_kind: String,
+    message: String,
+    rollback_signal: String,
+    source_label: Option<String>,
+    status_code: Option<u16>,
+    response_excerpt: Option<String>,
+}
+
+fn normalize_lookup_key(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn json_scalar_to_text(value: &Value) -> Option<String> {
+    match value {
+        Value::String(raw) => Some(raw.clone()),
+        Value::Number(raw) => Some(raw.to_string()),
+        Value::Bool(raw) => Some(if *raw { "true" } else { "false" }.to_string()),
+        Value::Null => None,
+        _ => Some(value.to_string()),
     }
+}
+
+fn apply_template_tokens(raw: &str, variables: &BTreeMap<String, String>) -> String {
+    let mut rendered = raw.to_string();
+    for (key, value) in variables {
+        rendered = rendered.replace(&format!("{{{{{key}}}}}"), value);
+        rendered = rendered.replace(&format!("{{{{ {key} }}}}"), value);
+    }
+    rendered
+}
+
+fn apply_template_tokens_to_json(value: &Value, variables: &BTreeMap<String, String>) -> Value {
+    match value {
+        Value::String(raw) => Value::String(apply_template_tokens(raw, variables)),
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| apply_template_tokens_to_json(item, variables))
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, item)| (key.clone(), apply_template_tokens_to_json(item, variables)))
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
+fn extract_provider_refresh_object<'a>(
+    config_json: &'a Value,
+) -> Option<&'a serde_json::Map<String, Value>> {
+    config_json
+        .get("provider_refresh")
+        .or_else(|| config_json.get("change_ip"))
+        .or_else(|| config_json.get("ip_refresh"))
+        .or_else(|| config_json.get("refresh"))
+        .and_then(Value::as_object)
+}
+
+fn value_matches_provider_key(raw: Option<&Value>, provider_key: &str) -> bool {
+    let Some(raw) = raw else {
+        return false;
+    };
+    let Some(candidate) = raw.as_str() else {
+        return false;
+    };
+    normalize_lookup_key(candidate) == provider_key
+}
+
+fn array_matches_provider_key(raw: Option<&Value>, provider_key: &str) -> bool {
+    raw.and_then(Value::as_array).is_some_and(|items| {
+        items.iter().any(|item| {
+            item.as_str()
+                .is_some_and(|value| normalize_lookup_key(value) == provider_key)
+        })
+    })
+}
+
+fn source_matches_provider(provider_key: &str, source_label: &str, config_json: &Value) -> bool {
+    if normalize_lookup_key(source_label) == provider_key {
+        return true;
+    }
+    let Some(config_obj) = config_json.as_object() else {
+        return false;
+    };
+    if value_matches_provider_key(config_obj.get("provider"), provider_key)
+        || array_matches_provider_key(config_obj.get("providers"), provider_key)
+        || array_matches_provider_key(config_obj.get("provider_aliases"), provider_key)
+    {
+        return true;
+    }
+    let Some(refresh_obj) = extract_provider_refresh_object(config_json) else {
+        return false;
+    };
+    value_matches_provider_key(refresh_obj.get("provider"), provider_key)
+        || array_matches_provider_key(refresh_obj.get("providers"), provider_key)
+        || array_matches_provider_key(refresh_obj.get("provider_aliases"), provider_key)
+}
+
+fn truncate_response_excerpt(raw: &str, max_chars: usize) -> Option<String> {
+    let normalized = raw.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+    if normalized.chars().count() <= max_chars {
+        return Some(normalized.to_string());
+    }
+    let mut shortened = normalized.chars().take(max_chars).collect::<String>();
+    shortened.push_str("...");
+    Some(shortened)
+}
+
+fn json_path_lookup<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
+    let mut current = root;
+    for segment in path
+        .split('.')
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+    {
+        if let Ok(index) = segment.parse::<usize>() {
+            current = current.get(index)?;
+        } else {
+            current = current.get(segment)?;
+        }
+    }
+    Some(current)
+}
+
+fn is_truthy_json_value(value: &Value) -> bool {
+    match value {
+        Value::Bool(raw) => *raw,
+        Value::Null => false,
+        Value::Number(raw) => {
+            if let Some(i64_value) = raw.as_i64() {
+                return i64_value != 0;
+            }
+            if let Some(u64_value) = raw.as_u64() {
+                return u64_value != 0;
+            }
+            raw.as_f64().unwrap_or(0.0) != 0.0
+        }
+        Value::String(raw) => {
+            let normalized = raw.trim().to_ascii_lowercase();
+            !(normalized.is_empty() || normalized == "0" || normalized == "false")
+        }
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(map) => !map.is_empty(),
+    }
+}
+
+fn parse_refresh_timeout_seconds(refresh_obj: &serde_json::Map<String, Value>) -> u64 {
+    let timeout = refresh_obj
+        .get("timeout_seconds")
+        .or_else(|| refresh_obj.get("timeoutSeconds"))
+        .and_then(Value::as_u64)
+        .unwrap_or(15);
+    timeout.clamp(1, 120)
+}
+
+fn parse_refresh_method(
+    refresh_obj: &serde_json::Map<String, Value>,
+) -> std::result::Result<Method, DesktopProxyProviderRefreshFailure> {
+    let raw = refresh_obj
+        .get("method")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("POST");
+    Method::from_bytes(raw.as_bytes()).map_err(|_| DesktopProxyProviderRefreshFailure {
+        error_kind: "provider_refresh_config_invalid".to_string(),
+        message: format!("provider refresh method is invalid: {raw}"),
+        rollback_signal: "binding_not_applied".to_string(),
+        source_label: None,
+        status_code: None,
+        response_excerpt: None,
+    })
+}
+
+async fn resolve_provider_refresh_spec(
+    db: &DbPool,
+    provider_key: &str,
+    proxy_source_label: Option<&str>,
+    variables: &BTreeMap<String, String>,
+) -> std::result::Result<DesktopProxyProviderRefreshSpec, DesktopProxyProviderRefreshFailure> {
+    let rows = sqlx::query(
+        r#"SELECT source_label, config_json
+           FROM proxy_harvest_sources
+           WHERE enabled = 1
+           ORDER BY source_label ASC"#,
+    )
+    .fetch_all(db)
+    .await
+    .map_err(|err| DesktopProxyProviderRefreshFailure {
+        error_kind: "provider_refresh_config_query_failed".to_string(),
+        message: format!("failed to load provider refresh config: {err}"),
+        rollback_signal: "binding_not_applied".to_string(),
+        source_label: None,
+        status_code: None,
+        response_excerpt: None,
+    })?;
+
+    let preferred_source = proxy_source_label.map(normalize_lookup_key);
+    let mut preferred_match: Option<(String, Value)> = None;
+    let mut fallback_match: Option<(String, Value)> = None;
+
+    for row in rows {
+        let source_label: String = row.get("source_label");
+        let raw_config: String = row.get("config_json");
+        let parsed_config = match serde_json::from_str::<Value>(&raw_config) {
+            Ok(config) => config,
+            Err(_) => continue,
+        };
+        if !source_matches_provider(provider_key, &source_label, &parsed_config) {
+            continue;
+        }
+        let normalized_source = normalize_lookup_key(&source_label);
+        if preferred_source.as_ref() == Some(&normalized_source) {
+            preferred_match = Some((source_label, parsed_config));
+            break;
+        }
+        if fallback_match.is_none() {
+            fallback_match = Some((source_label, parsed_config));
+        }
+    }
+
+    let (source_label, config_json) = preferred_match.or(fallback_match).ok_or_else(|| {
+        DesktopProxyProviderRefreshFailure {
+            error_kind: "provider_refresh_config_missing".to_string(),
+            message: format!(
+                "provider refresh config is missing for provider '{provider_key}' in proxy_harvest_sources.config_json"
+            ),
+            rollback_signal: "binding_not_applied".to_string(),
+            source_label: None,
+            status_code: None,
+            response_excerpt: None,
+        }
+    })?;
+
+    let refresh_obj = extract_provider_refresh_object(&config_json).ok_or_else(|| {
+        DesktopProxyProviderRefreshFailure {
+            error_kind: "provider_refresh_endpoint_missing".to_string(),
+            message: format!(
+                "source '{}' does not declare provider_refresh/change_ip config in config_json",
+                source_label
+            ),
+            rollback_signal: "binding_not_applied".to_string(),
+            source_label: Some(source_label.clone()),
+            status_code: None,
+            response_excerpt: None,
+        }
+    })?;
+
+    if matches!(
+        refresh_obj.get("enabled").and_then(Value::as_bool),
+        Some(false)
+    ) {
+        return Err(DesktopProxyProviderRefreshFailure {
+            error_kind: "provider_refresh_disabled".to_string(),
+            message: format!("provider refresh is disabled for source '{}'", source_label),
+            rollback_signal: "binding_not_applied".to_string(),
+            source_label: Some(source_label),
+            status_code: None,
+            response_excerpt: None,
+        });
+    }
+
+    let method = parse_refresh_method(refresh_obj)?;
+    let url = refresh_obj
+        .get("url")
+        .and_then(Value::as_str)
+        .map(|raw| apply_template_tokens(raw, variables))
+        .map(|raw| raw.trim().to_string())
+        .filter(|raw| !raw.is_empty())
+        .ok_or_else(|| DesktopProxyProviderRefreshFailure {
+            error_kind: "provider_refresh_endpoint_missing".to_string(),
+            message: format!(
+                "provider refresh url is missing for source '{}'",
+                source_label
+            ),
+            rollback_signal: "binding_not_applied".to_string(),
+            source_label: Some(source_label.clone()),
+            status_code: None,
+            response_excerpt: None,
+        })?;
+
+    let timeout_seconds = parse_refresh_timeout_seconds(refresh_obj);
+
+    let mut headers = BTreeMap::new();
+    if let Some(header_map) = refresh_obj.get("headers").and_then(Value::as_object) {
+        for (key, value) in header_map {
+            if key.trim().is_empty() {
+                continue;
+            }
+            let Some(raw_value) = json_scalar_to_text(value) else {
+                continue;
+            };
+            headers.insert(
+                key.trim().to_string(),
+                apply_template_tokens(&raw_value, variables),
+            );
+        }
+    }
+
+    if let Some(auth_env_key) = refresh_obj
+        .get("auth_env")
+        .or_else(|| refresh_obj.get("authEnv"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let auth_token =
+            env::var(auth_env_key).map_err(|_| DesktopProxyProviderRefreshFailure {
+                error_kind: "provider_refresh_auth_missing".to_string(),
+                message: format!(
+                    "provider refresh requires env '{}' but it is not set",
+                    auth_env_key
+                ),
+                rollback_signal: "binding_not_applied".to_string(),
+                source_label: Some(source_label.clone()),
+                status_code: None,
+                response_excerpt: None,
+            })?;
+        let auth_header = refresh_obj
+            .get("auth_header")
+            .or_else(|| refresh_obj.get("authHeader"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("Authorization");
+        let auth_prefix = refresh_obj
+            .get("auth_prefix")
+            .or_else(|| refresh_obj.get("authPrefix"))
+            .and_then(Value::as_str)
+            .unwrap_or("Bearer ");
+        headers.insert(
+            auth_header.to_string(),
+            format!("{auth_prefix}{auth_token}"),
+        );
+    }
+
+    let mut query = Vec::new();
+    if let Some(query_obj) = refresh_obj.get("query").and_then(Value::as_object) {
+        for (key, value) in query_obj {
+            if key.trim().is_empty() {
+                continue;
+            }
+            let Some(raw_value) = json_scalar_to_text(value) else {
+                continue;
+            };
+            query.push((
+                key.trim().to_string(),
+                apply_template_tokens(&raw_value, variables),
+            ));
+        }
+    }
+
+    let body = refresh_obj
+        .get("body")
+        .map(|body| apply_template_tokens_to_json(body, variables));
+
+    let success_path = refresh_obj
+        .get("success_path")
+        .or_else(|| refresh_obj.get("successPath"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let success_equals = refresh_obj
+        .get("success_equals")
+        .or_else(|| refresh_obj.get("successEquals"))
+        .map(|value| apply_template_tokens_to_json(value, variables));
+    let success_in = refresh_obj
+        .get("success_in")
+        .or_else(|| refresh_obj.get("successIn"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| apply_template_tokens_to_json(item, variables))
+                .collect::<Vec<_>>()
+        });
+    let success_contains = refresh_obj
+        .get("success_contains")
+        .or_else(|| refresh_obj.get("successContains"))
+        .and_then(Value::as_str)
+        .map(|raw| apply_template_tokens(raw, variables))
+        .map(|raw| raw.trim().to_string())
+        .filter(|raw| !raw.is_empty());
+    let request_id_path = refresh_obj
+        .get("request_id_path")
+        .or_else(|| refresh_obj.get("requestIdPath"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    Ok(DesktopProxyProviderRefreshSpec {
+        source_label,
+        provider_key: provider_key.to_string(),
+        method,
+        url,
+        timeout_seconds,
+        headers,
+        query,
+        body,
+        require_http_2xx: refresh_obj
+            .get("require_http_2xx")
+            .or_else(|| refresh_obj.get("requireHttp2xx"))
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        success_path,
+        success_equals,
+        success_in,
+        success_contains,
+        request_id_path,
+    })
+}
+
+async fn execute_provider_refresh(
+    spec: &DesktopProxyProviderRefreshSpec,
+) -> std::result::Result<DesktopProxyProviderRefreshSuccess, DesktopProxyProviderRefreshFailure> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(spec.timeout_seconds))
+        .build()
+        .map_err(|err| DesktopProxyProviderRefreshFailure {
+            error_kind: "provider_refresh_client_init_failed".to_string(),
+            message: format!("failed to initialize provider refresh client: {err}"),
+            rollback_signal: "binding_not_applied".to_string(),
+            source_label: Some(spec.source_label.clone()),
+            status_code: None,
+            response_excerpt: None,
+        })?;
+
+    let mut request_builder = client.request(spec.method.clone(), &spec.url);
+    if !spec.query.is_empty() {
+        request_builder = request_builder.query(&spec.query);
+    }
+    for (key, value) in &spec.headers {
+        request_builder = request_builder.header(key, value);
+    }
+    if let Some(body) = spec.body.as_ref() {
+        request_builder = request_builder.json(body);
+    }
+
+    let response =
+        request_builder
+            .send()
+            .await
+            .map_err(|err| DesktopProxyProviderRefreshFailure {
+                error_kind: if err.is_timeout() {
+                    "provider_refresh_timeout".to_string()
+                } else if err.is_connect() {
+                    "provider_refresh_connect_failed".to_string()
+                } else {
+                    "provider_refresh_request_failed".to_string()
+                },
+                message: format!("provider refresh request failed: {err}"),
+                rollback_signal: "binding_not_applied".to_string(),
+                source_label: Some(spec.source_label.clone()),
+                status_code: None,
+                response_excerpt: None,
+            })?;
+
+    let status_code = response.status().as_u16();
+    let status_success = response.status().is_success();
+    let response_body =
+        response
+            .text()
+            .await
+            .map_err(|err| DesktopProxyProviderRefreshFailure {
+                error_kind: "provider_refresh_response_read_failed".to_string(),
+                message: format!("provider refresh response read failed: {err}"),
+                rollback_signal: "binding_not_applied".to_string(),
+                source_label: Some(spec.source_label.clone()),
+                status_code: Some(status_code),
+                response_excerpt: None,
+            })?;
+    let response_excerpt = truncate_response_excerpt(&response_body, 360);
+
+    if spec.require_http_2xx && !status_success {
+        return Err(DesktopProxyProviderRefreshFailure {
+            error_kind: "provider_refresh_http_status".to_string(),
+            message: format!("provider refresh responded with non-2xx status {status_code}"),
+            rollback_signal: "binding_not_applied".to_string(),
+            source_label: Some(spec.source_label.clone()),
+            status_code: Some(status_code),
+            response_excerpt,
+        });
+    }
+
+    if let Some(expected_fragment) = spec.success_contains.as_deref() {
+        if !response_body.contains(expected_fragment) {
+            return Err(DesktopProxyProviderRefreshFailure {
+                error_kind: "provider_refresh_success_check_failed".to_string(),
+                message: format!(
+                    "provider refresh response does not contain expected fragment '{}'",
+                    expected_fragment
+                ),
+                rollback_signal: "binding_not_applied".to_string(),
+                source_label: Some(spec.source_label.clone()),
+                status_code: Some(status_code),
+                response_excerpt,
+            });
+        }
+    }
+
+    let parsed_json = serde_json::from_str::<Value>(&response_body).ok();
+    if let Some(success_path) = spec.success_path.as_deref() {
+        let Some(json) = parsed_json.as_ref() else {
+            return Err(DesktopProxyProviderRefreshFailure {
+                error_kind: "provider_refresh_response_not_json".to_string(),
+                message: "provider refresh success_path is configured but response is not JSON"
+                    .to_string(),
+                rollback_signal: "binding_not_applied".to_string(),
+                source_label: Some(spec.source_label.clone()),
+                status_code: Some(status_code),
+                response_excerpt,
+            });
+        };
+        let Some(actual_value) = json_path_lookup(json, success_path) else {
+            return Err(DesktopProxyProviderRefreshFailure {
+                error_kind: "provider_refresh_success_path_missing".to_string(),
+                message: format!(
+                    "provider refresh response missing success_path '{}'",
+                    success_path
+                ),
+                rollback_signal: "binding_not_applied".to_string(),
+                source_label: Some(spec.source_label.clone()),
+                status_code: Some(status_code),
+                response_excerpt,
+            });
+        };
+        if let Some(expected_value) = spec.success_equals.as_ref() {
+            if actual_value != expected_value {
+                return Err(DesktopProxyProviderRefreshFailure {
+                    error_kind: "provider_refresh_success_check_failed".to_string(),
+                    message: format!(
+                        "provider refresh success_path '{}' mismatch: expected {}, got {}",
+                        success_path, expected_value, actual_value
+                    ),
+                    rollback_signal: "binding_not_applied".to_string(),
+                    source_label: Some(spec.source_label.clone()),
+                    status_code: Some(status_code),
+                    response_excerpt,
+                });
+            }
+        } else if let Some(allowed_values) = spec.success_in.as_ref() {
+            if !allowed_values.iter().any(|value| value == actual_value) {
+                return Err(DesktopProxyProviderRefreshFailure {
+                    error_kind: "provider_refresh_success_check_failed".to_string(),
+                    message: format!(
+                        "provider refresh success_path '{}' did not match any allowed value",
+                        success_path
+                    ),
+                    rollback_signal: "binding_not_applied".to_string(),
+                    source_label: Some(spec.source_label.clone()),
+                    status_code: Some(status_code),
+                    response_excerpt,
+                });
+            }
+        } else if !is_truthy_json_value(actual_value) {
+            return Err(DesktopProxyProviderRefreshFailure {
+                error_kind: "provider_refresh_success_check_failed".to_string(),
+                message: format!(
+                    "provider refresh success_path '{}' resolved to non-truthy value {}",
+                    success_path, actual_value
+                ),
+                rollback_signal: "binding_not_applied".to_string(),
+                source_label: Some(spec.source_label.clone()),
+                status_code: Some(status_code),
+                response_excerpt,
+            });
+        }
+    }
+
+    let provider_request_id =
+        if let (Some(json), Some(path)) = (parsed_json.as_ref(), spec.request_id_path.as_deref()) {
+            json_path_lookup(json, path).and_then(json_scalar_to_text)
+        } else {
+            None
+        };
+
+    Ok(DesktopProxyProviderRefreshSuccess {
+        source_label: spec.source_label.clone(),
+        provider_key: spec.provider_key.clone(),
+        status_code,
+        provider_request_id,
+        response_excerpt,
+    })
+}
+
+async fn insert_change_proxy_ip_task(
+    db: &DbPool,
+    task_id: &str,
+    status: &str,
+    input_json: &Value,
+    result_json: &Value,
+    error_message: Option<&str>,
+    created_at: &str,
+    queued_at: Option<&str>,
+) -> Result<()> {
+    let proxy_id = input_json
+        .get("proxy_id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let requested_region = input_json
+        .get("requested_region")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let proxy_mode = input_json
+        .get("rotation_mode")
+        .or_else(|| input_json.get("mode"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let finished_at = matches!(status, "succeeded" | "failed" | "timed_out" | "cancelled")
+        .then_some(created_at);
+    sqlx::query(
+        r#"INSERT INTO tasks (
+               id, kind, status, input_json, proxy_id, requested_region, proxy_mode,
+               priority, created_at, queued_at, started_at, finished_at, result_json, error_message
+           ) VALUES (?, 'change_proxy_ip', ?, ?, ?, ?, ?, 5, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(task_id)
+    .bind(status)
+    .bind(input_json.to_string())
+    .bind(proxy_id)
+    .bind(requested_region)
+    .bind(proxy_mode)
+    .bind(created_at)
+    .bind(queued_at)
+    .bind(created_at)
+    .bind(finished_at)
+    .bind(result_json.to_string())
+    .bind(error_message)
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 fn is_browser_task(kind: &str) -> bool {
@@ -2832,6 +3494,15 @@ pub struct DesktopSyncLayoutUpdate {
     pub sync_scroll: Option<bool>,
     pub sync_navigation: Option<bool>,
     pub sync_input: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSynchronizerBroadcastRequest {
+    pub channel: String,
+    pub source_window_id: Option<String>,
+    pub target_window_ids: Option<Vec<String>>,
+    pub intent_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -6407,7 +7078,7 @@ pub async fn change_desktop_proxy_ip(
         return Err(anyhow::anyhow!("proxy_id is required"));
     }
     let proxy_row = sqlx::query(
-        r#"SELECT id, provider, region, status
+        r#"SELECT id, provider, region, status, source_label
            FROM proxies
            WHERE id = ?"#,
     )
@@ -6420,6 +7091,7 @@ pub async fn change_desktop_proxy_ip(
 
     let proxy_provider: Option<String> = proxy_row.get("provider");
     let proxy_region: Option<String> = proxy_row.get("region");
+    let proxy_source_label: Option<String> = proxy_row.get("source_label");
     let proxy_status: String = proxy_row.get("status");
     let requested_mode = normalized_optional_text(request.mode.clone());
     let requested_session_key = normalized_optional_text(request.session_key.clone());
@@ -6524,7 +7196,6 @@ pub async fn change_desktop_proxy_ip(
     );
     let sticky_ttl_seconds = requested_sticky_ttl_seconds
         .or_else(|| sticky_ttl_seconds_from_expires_at(expires_at.as_deref(), now_ts));
-    let status = derive_change_proxy_ip_status(&rotation_mode);
     let task_id = format!("desktop-proxy-change-{}", Uuid::new_v4());
     let note = format!(
         "Prepared {rotation_mode} with residency {residency_status}; session={}, requested provider={}, requested region={}.",
@@ -6532,12 +7203,182 @@ pub async fn change_desktop_proxy_ip(
         requested_provider.as_deref().unwrap_or("inherit"),
         requested_region.as_deref().unwrap_or("inherit"),
     );
-    let message = format!(
-        "Queued provider-aware change-IP task {task_id}. Confirm provider-side exit IP movement via later health/detail refresh."
-    );
+
+    let input_json = serde_json::json!({
+        "proxy_id": proxy_id.clone(),
+        "action": "change_proxy_ip",
+        "source": "desktop_workbench",
+        "mode": rotation_mode.clone(),
+        "session_key": session_key.clone(),
+        "requested_provider": requested_provider.clone(),
+        "requested_region": requested_region.clone(),
+        "sticky_ttl_seconds": sticky_ttl_seconds,
+        "residency_status": residency_status.clone(),
+        "rotation_mode": rotation_mode.clone(),
+        "expires_at": expires_at.clone(),
+        "note": note.clone(),
+        "proxy_source_label": proxy_source_label.clone(),
+    });
+    let build_failed_result_json =
+        |error_kind: &str,
+         rollback_signal: &str,
+         failure_message: &str,
+         source_label: Option<&str>,
+         status_code: Option<u16>,
+         response_excerpt: Option<&String>| {
+            serde_json::json!({
+                "proxyId": proxy_id.clone(),
+                "status": "failed_provider_rotation",
+                "mode": rotation_mode.clone(),
+                "sessionKey": session_key.clone(),
+                "requestedProvider": requested_provider.clone(),
+                "requestedRegion": requested_region.clone(),
+                "stickyTtlSeconds": sticky_ttl_seconds,
+                "note": note.clone(),
+                "residencyStatus": residency_status.clone(),
+                "rotationMode": rotation_mode.clone(),
+                "trackingTaskId": task_id.clone(),
+                "expiresAt": expires_at.clone(),
+                "updatedAt": updated_at.clone(),
+                "executionStatus": "failed",
+                "errorKind": error_kind,
+                "rollbackSignal": rollback_signal,
+                "message": failure_message,
+                "providerRefresh": {
+                    "sourceLabel": source_label,
+                    "statusCode": status_code,
+                    "responseExcerpt": response_excerpt.cloned(),
+                },
+            })
+        };
+
+    let provider_key = requested_provider
+        .clone()
+        .or_else(|| normalized_optional_text(proxy_provider.clone()))
+        .or_else(|| normalized_optional_text(proxy_source_label.clone()));
+    let Some(provider_key) = provider_key else {
+        let failure_message =
+            "provider refresh cannot run because provider/source identity is missing from request and proxy record";
+        let failure_result_json = build_failed_result_json(
+            "provider_missing",
+            "binding_not_applied",
+            failure_message,
+            None,
+            None,
+            None,
+        );
+        insert_change_proxy_ip_task(
+            db,
+            &task_id,
+            "failed",
+            &input_json,
+            &failure_result_json,
+            Some(failure_message),
+            &updated_at,
+            None,
+        )
+        .await?;
+        let _ =
+            insert_desktop_task_log(db, &task_id, None, "WARN", failure_message, &updated_at).await;
+        return Err(anyhow::anyhow!(failure_message));
+    };
+
+    let mut template_variables = BTreeMap::<String, String>::new();
+    template_variables.insert("proxy_id".to_string(), proxy_id.clone());
+    template_variables.insert("provider".to_string(), provider_key.clone());
+    template_variables.insert("mode".to_string(), rotation_mode.clone());
+    template_variables.insert("rotation_mode".to_string(), rotation_mode.clone());
+    template_variables.insert("residency_status".to_string(), residency_status.clone());
+    template_variables.insert("now_ts".to_string(), updated_at.clone());
+    if let Some(value) = session_key.as_deref() {
+        template_variables.insert("session_key".to_string(), value.to_string());
+    }
+    if let Some(value) = requested_provider.as_deref() {
+        template_variables.insert("requested_provider".to_string(), value.to_string());
+    }
+    if let Some(value) = requested_region.as_deref() {
+        template_variables.insert("requested_region".to_string(), value.to_string());
+    }
+    if let Some(value) = proxy_region.as_deref().and_then(|raw| {
+        let trimmed = raw.trim();
+        (!trimmed.is_empty()).then_some(trimmed.to_string())
+    }) {
+        template_variables.insert("proxy_region".to_string(), value);
+    }
+    if let Some(value) = proxy_source_label.as_deref().and_then(|raw| {
+        let trimmed = raw.trim();
+        (!trimmed.is_empty()).then_some(trimmed.to_string())
+    }) {
+        template_variables.insert("proxy_source_label".to_string(), value);
+    }
+
+    let refresh_spec = match resolve_provider_refresh_spec(
+        db,
+        &normalize_lookup_key(&provider_key),
+        proxy_source_label.as_deref(),
+        &template_variables,
+    )
+    .await
+    {
+        Ok(spec) => spec,
+        Err(failure) => {
+            let failure_result_json = build_failed_result_json(
+                &failure.error_kind,
+                &failure.rollback_signal,
+                &failure.message,
+                failure.source_label.as_deref(),
+                failure.status_code,
+                failure.response_excerpt.as_ref(),
+            );
+            insert_change_proxy_ip_task(
+                db,
+                &task_id,
+                "failed",
+                &input_json,
+                &failure_result_json,
+                Some(&failure.message),
+                &updated_at,
+                None,
+            )
+            .await?;
+            let _ =
+                insert_desktop_task_log(db, &task_id, None, "WARN", &failure.message, &updated_at)
+                    .await;
+            return Err(anyhow::anyhow!(failure.message));
+        }
+    };
+
+    let refresh_result = match execute_provider_refresh(&refresh_spec).await {
+        Ok(result) => result,
+        Err(failure) => {
+            let failure_result_json = build_failed_result_json(
+                &failure.error_kind,
+                &failure.rollback_signal,
+                &failure.message,
+                failure.source_label.as_deref(),
+                failure.status_code,
+                failure.response_excerpt.as_ref(),
+            );
+            insert_change_proxy_ip_task(
+                db,
+                &task_id,
+                "failed",
+                &input_json,
+                &failure_result_json,
+                Some(&failure.message),
+                &updated_at,
+                None,
+            )
+            .await?;
+            let _ =
+                insert_desktop_task_log(db, &task_id, None, "WARN", &failure.message, &updated_at)
+                    .await;
+            return Err(anyhow::anyhow!(failure.message));
+        }
+    };
 
     if let Some(session_key_value) = session_key.as_deref() {
-        sqlx::query(
+        if let Err(err) = sqlx::query(
             r#"INSERT INTO proxy_session_bindings (
                    session_key, proxy_id, provider, region, requested_region, requested_provider,
                    last_used_at, expires_at, created_at, updated_at
@@ -6563,24 +7404,93 @@ pub async fn change_desktop_proxy_ip(
         .bind(&updated_at)
         .bind(&updated_at)
         .execute(db)
-        .await?;
+        .await
+        {
+            let failure_message = format!(
+                "provider refresh succeeded, but local session binding update failed: {err}"
+            );
+            let failure_result_json = build_failed_result_json(
+                "local_binding_write_failed",
+                "provider_refreshed_manual_rebind_required",
+                &failure_message,
+                Some(&refresh_result.source_label),
+                Some(refresh_result.status_code),
+                refresh_result.response_excerpt.as_ref(),
+            );
+            insert_change_proxy_ip_task(
+                db,
+                &task_id,
+                "failed",
+                &input_json,
+                &failure_result_json,
+                Some(&failure_message),
+                &updated_at,
+                None,
+            )
+            .await?;
+            let _ = insert_desktop_task_log(
+                db,
+                &task_id,
+                None,
+                "WARN",
+                &failure_message,
+                &updated_at,
+            )
+            .await;
+            return Err(anyhow::anyhow!(failure_message));
+        }
     }
 
-    let input_json = serde_json::json!({
-        "proxy_id": proxy_id.clone(),
-        "action": "change_proxy_ip",
-        "source": "desktop_workbench",
-        "mode": rotation_mode.clone(),
-        "session_key": session_key.clone(),
-        "requested_provider": requested_provider.clone(),
-        "requested_region": requested_region.clone(),
-        "sticky_ttl_seconds": sticky_ttl_seconds,
-        "residency_status": residency_status.clone(),
-        "rotation_mode": rotation_mode.clone(),
-        "expires_at": expires_at.clone(),
-        "note": note.clone(),
-    });
-    let result_json = serde_json::json!({
+    if let Err(err) = sqlx::query(r#"UPDATE proxies SET updated_at = ? WHERE id = ?"#)
+        .bind(&updated_at)
+        .bind(&proxy_id)
+        .execute(db)
+        .await
+    {
+        let failure_message =
+            format!("provider refresh succeeded, but local proxy timestamp update failed: {err}");
+        let failure_result_json = build_failed_result_json(
+            "local_proxy_update_failed",
+            "provider_refreshed_manual_rebind_required",
+            &failure_message,
+            Some(&refresh_result.source_label),
+            Some(refresh_result.status_code),
+            refresh_result.response_excerpt.as_ref(),
+        );
+        insert_change_proxy_ip_task(
+            db,
+            &task_id,
+            "failed",
+            &input_json,
+            &failure_result_json,
+            Some(&failure_message),
+            &updated_at,
+            None,
+        )
+        .await?;
+        let _ = insert_desktop_task_log(db, &task_id, None, "WARN", &failure_message, &updated_at)
+            .await;
+        return Err(anyhow::anyhow!(failure_message));
+    }
+
+    let status = if rotation_mode.contains("sticky") {
+        "accepted_sticky_rotation".to_string()
+    } else {
+        "accepted_provider_rotation".to_string()
+    };
+    let provider_request_suffix = refresh_result
+        .provider_request_id
+        .as_deref()
+        .map(|request_id| format!(" provider_request_id={request_id}."))
+        .unwrap_or_default();
+    let message = format!(
+        "Provider-side write accepted via source '{}' (provider '{}', http_status={}). Exit-IP drift still needs later detail/health refresh observation.{}",
+        refresh_result.source_label,
+        refresh_result.provider_key,
+        refresh_result.status_code,
+        provider_request_suffix
+    );
+    let success_result_json = serde_json::json!({
         "proxyId": proxy_id.clone(),
         "status": status.clone(),
         "mode": rotation_mode.clone(),
@@ -6594,36 +7504,31 @@ pub async fn change_desktop_proxy_ip(
         "trackingTaskId": task_id.clone(),
         "expiresAt": expires_at.clone(),
         "updatedAt": updated_at.clone(),
+        "executionStatus": "accepted",
+        "errorKind": Value::Null,
+        "rollbackSignal": "none",
+        "message": message.clone(),
+        "providerRefresh": {
+            "sourceLabel": refresh_result.source_label.clone(),
+            "providerKey": refresh_result.provider_key.clone(),
+            "statusCode": refresh_result.status_code,
+            "providerRequestId": refresh_result.provider_request_id.clone(),
+            "responseExcerpt": refresh_result.response_excerpt.clone(),
+        },
     });
 
-    sqlx::query(
-        r#"INSERT INTO tasks (
-               id, kind, status, input_json, priority, created_at, queued_at, result_json, error_message
-           ) VALUES (?, 'change_proxy_ip', 'queued', ?, 5, ?, ?, ?, NULL)"#,
-    )
-    .bind(&task_id)
-    .bind(input_json.to_string())
-    .bind(&updated_at)
-    .bind(&updated_at)
-    .bind(result_json.to_string())
-    .execute(db)
-    .await?;
-
-    insert_desktop_task_log(
+    insert_change_proxy_ip_task(
         db,
         &task_id,
+        "succeeded",
+        &input_json,
+        &success_result_json,
         None,
-        "INFO",
-        &format!("change proxy IP request accepted; {note}"),
         &updated_at,
+        Some(&updated_at),
     )
     .await?;
-
-    sqlx::query(r#"UPDATE proxies SET updated_at = ? WHERE id = ?"#)
-        .bind(&updated_at)
-        .bind(&proxy_id)
-        .execute(db)
-        .await?;
+    let _ = insert_desktop_task_log(db, &task_id, None, "INFO", &message, &updated_at).await;
 
     Ok(DesktopProxyChangeIpResult {
         proxy_id,
@@ -6718,6 +7623,87 @@ mod tests {
         .execute(db)
         .await
         .expect("seed persona profile");
+    }
+
+    #[tokio::test]
+    async fn change_proxy_ip_fails_without_provider_refresh_config_and_records_failed_task() {
+        let db_url = format!(
+            "sqlite:///tmp/persona_pilot_desktop_change_ip_failure_{}.db",
+            Uuid::new_v4()
+        );
+        let db = init_db(&db_url).await.expect("init db");
+
+        sqlx::query(
+            r#"INSERT INTO proxies (
+                   id, scheme, host, port, provider, region, status, score, success_count, failure_count, created_at, updated_at
+               ) VALUES (
+                   'proxy-change-ip-test', 'http', '127.0.0.1', 8080, 'pool-missing', 'us-east',
+                   'active', 1.0, 0, 0, '1', '1'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed proxy");
+
+        let result = change_desktop_proxy_ip(
+            &db,
+            DesktopProxyChangeIpRequest {
+                proxy_id: "proxy-change-ip-test".to_string(),
+                mode: None,
+                session_key: None,
+                requested_provider: None,
+                requested_region: None,
+                sticky_ttl_seconds: None,
+            },
+        )
+        .await;
+
+        let error_message = result
+            .err()
+            .map(|err| err.to_string())
+            .unwrap_or_else(|| "missing error".to_string());
+        assert!(
+            error_message.contains("provider refresh config"),
+            "expected provider refresh config error, got: {error_message}"
+        );
+
+        let task_row = sqlx::query(
+            r#"SELECT status, error_message, result_json
+               FROM tasks
+               WHERE kind = 'change_proxy_ip'
+               ORDER BY CAST(created_at AS INTEGER) DESC, id DESC
+               LIMIT 1"#,
+        )
+        .fetch_one(&db)
+        .await
+        .expect("load latest change_proxy_ip task");
+
+        let status: String = task_row.get("status");
+        let stored_error: Option<String> = task_row.get("error_message");
+        let result_json_raw: String = task_row.get("result_json");
+        let result_json = serde_json::from_str::<Value>(&result_json_raw)
+            .expect("decode change_proxy_ip result_json");
+
+        assert_eq!(status, "failed");
+        assert!(
+            stored_error
+                .as_deref()
+                .is_some_and(|message| message.contains("provider refresh config")),
+            "expected stored failure message, got: {:?}",
+            stored_error
+        );
+        assert_eq!(
+            result_json.get("executionStatus").and_then(Value::as_str),
+            Some("failed")
+        );
+        assert_eq!(
+            result_json.get("errorKind").and_then(Value::as_str),
+            Some("provider_refresh_config_missing")
+        );
+        assert_eq!(
+            result_json.get("rollbackSignal").and_then(Value::as_str),
+            Some("binding_not_applied")
+        );
     }
 
     #[tokio::test]

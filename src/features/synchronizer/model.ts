@@ -86,13 +86,15 @@ export interface SynchronizerOperatorSettings {
   targetScreen: SynchronizerTargetScreen;
 }
 
+export type SynchronizerLayoutFlag = "syncNavigation" | "syncInput" | "syncScroll";
+
 export interface SynchronizerBroadcastPlanTemplate {
   id: string;
   title: string;
   detail: string;
   scopeLabel: string;
   intensity: "safe" | "normal" | "strong";
-  requiredFlags: Array<"syncNavigation" | "syncInput" | "syncScroll">;
+  requiredFlags: SynchronizerLayoutFlag[];
 }
 
 export interface SynchronizerCommandCapability {
@@ -191,25 +193,25 @@ export const SYNCHRONIZER_BROADCAST_PLAN_TEMPLATES: SynchronizerBroadcastPlanTem
     id: "nav-mirror",
     title: "Mirror navigation from main",
     detail:
-      "Prepare a controller-to-members navigation pass so the main window leads URL or page transitions.",
+      "Run navigation synchronization from the main window to the current controlled scope when navigation sync is enabled.",
     scopeLabel: "Main -> controlled windows",
     intensity: "safe",
     requiredFlags: ["syncNavigation"],
   },
   {
     id: "input-burst",
-    title: "Stage shared input burst",
+    title: "Shared input burst",
     detail:
-      "Prepare a synchronized input rehearsal with local click and typing pacing, but keep execution staged until native wiring exists.",
+      "Apply synchronized input pacing from the focused or main lane using the current operator click/typing safeguards.",
     scopeLabel: "Focused/main lane -> selected scope",
     intensity: "normal",
     requiredFlags: ["syncInput"],
   },
   {
     id: "scroll-checkpoint",
-    title: "Build scroll alignment checkpoint",
+    title: "Scroll alignment checkpoint",
     detail:
-      "Prepare a scroll-alignment pass for visual compare and manual QA across the visible window set.",
+      "Apply a scroll-alignment pass for visual compare and QA across the visible operator scope.",
     scopeLabel: "Visible windows",
     intensity: "safe",
     requiredFlags: ["syncScroll"],
@@ -218,7 +220,7 @@ export const SYNCHRONIZER_BROADCAST_PLAN_TEMPLATES: SynchronizerBroadcastPlanTem
     id: "layout-regroup",
     title: "Regroup before broadcast",
     detail:
-      "Prepare a layout-first regroup step so the window set is normalized before future vendor-grade broadcast commands are connected.",
+      "Normalize layout and lane state before applying a wider broadcast action across the matrix.",
     scopeLabel: "Whole matrix",
     intensity: "strong",
     requiredFlags: [],
@@ -272,9 +274,10 @@ export function createInitialCommandCapabilities(): Record<
     },
     broadcastPlan: {
       key: "broadcastPlan",
-      label: "Broadcast action bus",
+      label: "Broadcast write",
       status: "local_staged",
-      detail: "Broadcast commands are represented as staged operator plans until native batch support lands.",
+      detail:
+        "Broadcast execution is capability-gated. Native write is used when available, otherwise the plan remains staged with explicit feedback.",
       lastUpdatedAt: null,
     },
   };

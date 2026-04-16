@@ -51,7 +51,8 @@ use persona_pilot::desktop::{
   DesktopStopBehaviorRecordingRequest, DesktopAppendBehaviorRecordingStepRequest,
   DesktopSyncLayoutState,
   DesktopSyncLayoutUpdate, DesktopSyncWindowBounds, DesktopSyncWindowState,
-  DesktopSynchronizerActionResult, DesktopSynchronizerSnapshot,
+  DesktopSynchronizerActionResult, DesktopSynchronizerBroadcastRequest,
+  DesktopSynchronizerSnapshot,
   DesktopTaskPage, DesktopTaskQuery, DesktopTaskWriteResult, DesktopTemplateDeleteInput,
   DesktopTemplateMetadataPage, DesktopTemplateMetadataPageQuery,
   DesktopTemplateMutationResult, DesktopTemplateUpsertInput,
@@ -753,6 +754,80 @@ fn apply_sync_layout_update(
   }
 
   Ok(changed)
+}
+
+fn normalize_sync_broadcast_channel(channel: &str) -> Result<String, String> {
+  let normalized = channel.trim().to_lowercase();
+  if normalized.is_empty() {
+    return Err("broadcast channel cannot be empty".to_string());
+  }
+
+  match normalized.as_str() {
+    "scroll" | "navigation" | "input" => Ok(normalized),
+    _ => Err(format!(
+      "unsupported broadcast channel: {channel}. expected one of: scroll, navigation, input"
+    )),
+  }
+}
+
+fn normalize_sync_target_window_ids(window_ids: Option<Vec<String>>) -> Vec<String> {
+  let mut unique = HashSet::new();
+  let mut normalized = Vec::new();
+
+  for window_id in window_ids.unwrap_or_default() {
+    let trimmed = window_id.trim();
+    if trimmed.is_empty() {
+      continue;
+    }
+
+    let owned = trimmed.to_string();
+    if unique.insert(owned.clone()) {
+      normalized.push(owned);
+    }
+  }
+
+  normalized
+}
+
+fn describe_sync_window_inventory(snapshot: &DesktopSynchronizerSnapshot) -> String {
+  let mut ids = snapshot
+    .windows
+    .iter()
+    .map(|window| window.window_id.as_str())
+    .collect::<Vec<_>>();
+  ids.sort_unstable();
+  format!("[{}]", ids.join(", "))
+}
+
+fn ensure_sync_windows_exist(
+  snapshot: &DesktopSynchronizerSnapshot,
+  window_ids: &[String],
+  role: &str,
+) -> Result<(), String> {
+  let missing = window_ids
+    .iter()
+    .filter(|window_id| {
+      !snapshot
+        .windows
+        .iter()
+        .any(|window| &window.window_id == *window_id)
+    })
+    .cloned()
+    .collect::<Vec<_>>();
+  if missing.is_empty() {
+    return Ok(());
+  }
+
+  let noun = if missing.len() > 1 {
+    format!("{role} sync windows")
+  } else {
+    format!("{role} sync window")
+  };
+  Err(format!(
+    "{noun} not found: {}; available sync windows: {}",
+    missing.join(", "),
+    describe_sync_window_inventory(snapshot)
+  ))
 }
 
 #[tauri::command]
@@ -1632,6 +1707,122 @@ pub fn apply_window_layout(
 }
 
 #[tauri::command]
+pub fn broadcast_sync_action(
+  state: State<'_, DesktopState>,
+  request: DesktopSynchronizerBroadcastRequest,
+) -> Result<DesktopSynchronizerActionResult, String> {
+  let mut synchronizer = state
+    .synchronizer
+    .lock()
+    .map_err(|_| "Failed to lock synchronizer state".to_string())?;
+  let mut snapshot = capture_live_synchronizer_snapshot(&synchronizer.snapshot)?;
+
+  let channel = normalize_sync_broadcast_channel(&request.channel)?;
+  let source_window_id = request.source_window_id.and_then(|window_id| {
+    let trimmed = window_id.trim().to_string();
+    if trimmed.is_empty() {
+      None
+    } else {
+      Some(trimmed)
+    }
+  });
+
+  if let Some(source_id) = source_window_id.as_ref() {
+    ensure_sync_windows_exist(&snapshot, std::slice::from_ref(source_id), "source")?;
+  }
+
+  let explicit_targets = normalize_sync_target_window_ids(request.target_window_ids);
+  if !explicit_targets.is_empty() {
+    ensure_sync_windows_exist(&snapshot, explicit_targets.as_slice(), "target")?;
+  }
+
+  let target_window_ids = if explicit_targets.is_empty() {
+    snapshot
+      .windows
+      .iter()
+      .filter(|window| {
+        source_window_id
+          .as_ref()
+          .map(|source_id| &window.window_id != source_id)
+          .unwrap_or(true)
+      })
+      .map(|window| window.window_id.clone())
+      .collect::<Vec<_>>()
+  } else {
+    explicit_targets
+  };
+
+  if target_window_ids.is_empty() {
+    return Err(
+      "broadcast request produced no target windows; provide explicit targets or a valid source."
+        .to_string(),
+    );
+  }
+
+  let mut intent_applied = false;
+  match channel.as_str() {
+    "scroll" => {
+      if !snapshot.layout.sync_scroll {
+        snapshot.layout.sync_scroll = true;
+        intent_applied = true;
+      }
+    }
+    "navigation" => {
+      if !snapshot.layout.sync_navigation {
+        snapshot.layout.sync_navigation = true;
+        intent_applied = true;
+      }
+    }
+    "input" => {
+      if !snapshot.layout.sync_input {
+        snapshot.layout.sync_input = true;
+        intent_applied = true;
+      }
+    }
+    _ => {}
+  }
+
+  let now = now_ts_string();
+  let target_set = target_window_ids.iter().cloned().collect::<HashSet<_>>();
+  for window in &mut snapshot.windows {
+    let is_source = source_window_id
+      .as_ref()
+      .map(|source_id| &window.window_id == source_id)
+      .unwrap_or(false);
+    if is_source || target_set.contains(&window.window_id) {
+      window.last_action_at = Some(now.clone());
+    }
+  }
+
+  snapshot.layout.updated_at = now.clone();
+  snapshot.updated_at = now;
+
+  let source_hint = source_window_id
+    .as_ref()
+    .map(|source_id| format!(" source={source_id};"))
+    .unwrap_or_default();
+  let intent_hint = request
+    .intent_label
+    .as_ref()
+    .map(|intent| intent.trim().to_string())
+    .filter(|intent| !intent.is_empty())
+    .map(|intent| format!(" intent={intent};"))
+    .unwrap_or_default();
+
+  synchronizer.snapshot = snapshot.clone();
+  Ok(sync_action_result(
+    "broadcast_sync_action",
+    snapshot,
+    &format!(
+      "Recorded native broadcast intent channel={channel}; targets={};layoutFlagUpdated={intent_applied};{}{} physical multi-window dispatch is not implemented yet.",
+      target_set.len(),
+      source_hint,
+      intent_hint
+    ),
+  ))
+}
+
+#[tauri::command]
 pub fn focus_sync_window(
   state: State<'_, DesktopState>,
   window_id: String,
@@ -1642,11 +1833,117 @@ pub fn focus_sync_window(
     .synchronizer
     .lock()
     .map_err(|_| "Failed to lock synchronizer state".to_string())?;
-  let snapshot = capture_live_synchronizer_snapshot(&synchronizer.snapshot)?;
+  let mut snapshot = capture_live_synchronizer_snapshot(&synchronizer.snapshot)?;
+  let now = now_ts_string();
+  for window in &mut snapshot.windows {
+    if window.window_id == window_id {
+      window.last_action_at = Some(now.clone());
+      break;
+    }
+  }
+  snapshot.layout.updated_at = now.clone();
+  snapshot.updated_at = now;
   synchronizer.snapshot = snapshot.clone();
   Ok(sync_action_result(
     "focus_sync_window",
     snapshot,
     &format!("Focused sync window {window_id}."),
   ))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn test_sync_window(window_id: &str, order_index: i64) -> DesktopSyncWindowState {
+    DesktopSyncWindowState {
+      window_id: window_id.to_string(),
+      native_handle: Some(window_id.to_string()),
+      title: Some(format!("window-{window_id}")),
+      status: "ready".to_string(),
+      order_index,
+      is_main_window: false,
+      is_focused: false,
+      is_minimized: false,
+      is_visible: true,
+      profile_id: None,
+      profile_label: None,
+      store_id: None,
+      platform_id: None,
+      last_seen_at: Some("0".to_string()),
+      last_action_at: None,
+      bounds: None,
+    }
+  }
+
+  fn test_sync_snapshot(window_ids: &[&str]) -> DesktopSynchronizerSnapshot {
+    DesktopSynchronizerSnapshot {
+      windows: window_ids
+        .iter()
+        .enumerate()
+        .map(|(index, window_id)| test_sync_window(window_id, index as i64))
+        .collect(),
+      layout: DesktopSyncLayoutState {
+        mode: "grid".to_string(),
+        main_window_id: None,
+        columns: None,
+        rows: None,
+        gap_px: 12,
+        overlap_offset_x: None,
+        overlap_offset_y: None,
+        uniform_width: None,
+        uniform_height: None,
+        sync_scroll: false,
+        sync_navigation: false,
+        sync_input: false,
+        updated_at: "0".to_string(),
+      },
+      focused_window_id: None,
+      updated_at: "0".to_string(),
+    }
+  }
+
+  #[test]
+  fn normalize_sync_broadcast_channel_accepts_supported_values() {
+    assert_eq!(
+      normalize_sync_broadcast_channel(" Navigation ").expect("channel should normalize"),
+      "navigation"
+    );
+    assert_eq!(
+      normalize_sync_broadcast_channel("scroll").expect("channel should normalize"),
+      "scroll"
+    );
+  }
+
+  #[test]
+  fn normalize_sync_broadcast_channel_rejects_invalid_values() {
+    let empty_error =
+      normalize_sync_broadcast_channel("  ").expect_err("empty channel must be rejected");
+    assert!(empty_error.contains("cannot be empty"));
+
+    let unsupported_error =
+      normalize_sync_broadcast_channel("clipboard").expect_err("unsupported channel must fail");
+    assert!(unsupported_error.contains("unsupported broadcast channel"));
+  }
+
+  #[test]
+  fn normalize_sync_target_window_ids_trims_and_deduplicates() {
+    let normalized = normalize_sync_target_window_ids(Some(vec![
+      "1001".to_string(),
+      " 1002 ".to_string(),
+      "1001".to_string(),
+      "   ".to_string(),
+    ]));
+    assert_eq!(normalized, vec!["1001".to_string(), "1002".to_string()]);
+  }
+
+  #[test]
+  fn ensure_sync_windows_exist_reports_available_inventory() {
+    let snapshot = test_sync_snapshot(&["1001", "1002"]);
+    let missing = vec!["1003".to_string(), "1004".to_string()];
+    let error = ensure_sync_windows_exist(&snapshot, &missing, "target")
+      .expect_err("missing target windows must fail");
+    assert!(error.contains("target sync windows not found: 1003, 1004"));
+    assert!(error.contains("available sync windows: [1001, 1002]"));
+  }
 }

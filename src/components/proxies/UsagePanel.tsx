@@ -1,3 +1,9 @@
+import {
+  getProxyChangeCooldownRemainingSeconds,
+  getProxyProviderWriteDetail,
+  getProxyProviderWriteLabel,
+  getProxyProviderWriteState,
+} from "../../features/proxies/changeIpFeedback";
 import type {
   ProxyDetailSnapshot,
   ProxyIpChangeFeedback,
@@ -19,24 +25,6 @@ interface UsagePanelProps {
   changeIpActionLabel: string;
   onChangeIp: () => void;
   onRetry: () => void;
-}
-
-function parseTimestamp(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const numericValue = Number(value);
-  if (Number.isFinite(numericValue) && numericValue > 0) {
-    return numericValue;
-  }
-
-  const parsedMs = Date.parse(value);
-  if (Number.isNaN(parsedMs)) {
-    return null;
-  }
-
-  return Math.floor(parsedMs / 1000);
 }
 
 function getUsageBadge(status: string): string {
@@ -83,7 +71,7 @@ function getRotationPosture(
   if (isChangingIp) {
     return {
       label: "Rotation running",
-      detail: "Local change-IP request is in flight. Provider-side exit movement is still unknown.",
+      detail: "Submitting provider-side write task. Exit-IP movement is still unknown.",
     };
   }
 
@@ -94,17 +82,21 @@ function getRotationPosture(
     };
   }
 
+  const writeState = getProxyProviderWriteState(changeIpFeedback);
+  const writeLabel = getProxyProviderWriteLabel(writeState);
+  const writeDetail = getProxyProviderWriteDetail(changeIpFeedback);
+
   if (changeIpFeedback.phase === "error") {
     return {
-      label: "Local rotation failed",
-      detail: "Request failed locally. Treat exit-IP state as unchanged until a later detail refresh proves otherwise.",
+      label: writeLabel,
+      detail: `${writeDetail} Treat exit-IP state as unchanged until a later detail refresh proves otherwise.`,
     };
   }
 
   if (changeIpFeedback.phase === "success") {
     return {
-      label: "Local rotation succeeded",
-      detail: `Tracked request completed as ${changeIpFeedback.rotationMode ?? rotationMode} (${changeIpFeedback.residencyStatus ?? residencyStatus}). Confirm actual exit-IP drift after detail refresh.`,
+      label: writeLabel,
+      detail: `${writeDetail} ${changeIpFeedback.rotationMode ?? rotationMode} (${changeIpFeedback.residencyStatus ?? residencyStatus}). Confirm exit-IP drift after detail refresh.`,
     };
   }
 
@@ -115,27 +107,19 @@ function getRotationPosture(
 }
 
 function getCooldownLabel(changeIpFeedback: ProxyIpChangeFeedback | null): string {
-  if (!changeIpFeedback?.updatedAt) {
+  if (!changeIpFeedback) {
     return "No cooldown";
   }
 
-  const updatedAt = parseTimestamp(changeIpFeedback.updatedAt);
-  if (!updatedAt) {
+  if (changeIpFeedback.phase === "running") {
+    return "Rotation running";
+  }
+
+  const remainingSeconds = getProxyChangeCooldownRemainingSeconds(changeIpFeedback);
+  if (remainingSeconds === null) {
     return "Cooldown unknown";
   }
 
-  const windowSeconds =
-    changeIpFeedback.phase === "success"
-      ? 5 * 60
-      : changeIpFeedback.phase === "error"
-        ? 15 * 60
-        : 0;
-
-  if (windowSeconds === 0) {
-    return changeIpFeedback.phase === "running" ? "Rotation running" : "No cooldown";
-  }
-
-  const remainingSeconds = windowSeconds - (Math.floor(Date.now() / 1000) - updatedAt);
   if (remainingSeconds <= 0) {
     return "Cooldown cleared";
   }
@@ -211,9 +195,9 @@ export function UsagePanel({
           ) : null}
 
           <div className="banner usage-panel__banner">
-            Truth boundary: this panel tracks local change-IP requests and last known proxy detail. It
-            does not claim the provider actually changed exit IP until a later detail refresh shows a
-            different exit IP or region.
+            Truth boundary: this panel tracks desktop write feedback plus last known proxy detail. It
+            does not claim provider exit-IP drift until a later detail refresh shows changed network
+            output.
           </div>
 
           <div className="usage-panel__hero">
@@ -301,11 +285,15 @@ export function UsagePanel({
               </dd>
             </div>
             <div className="details-grid__item">
-              <dt>Data source</dt>
+              <dt>Provider write / tracking</dt>
               <dd>
-                {detailSource ?? "list-only"}
+                {changeIpFeedback
+                  ? `${getProxyProviderWriteLabel(getProxyProviderWriteState(changeIpFeedback))} (${detailSource ?? "list-only"})`
+                  : `No recent write (${detailSource ?? "list-only"})`}
                 <br />
-                {changeIpFeedback?.trackingTaskId ?? proxy.rotation.trackingTaskId ?? "no-tracking-task"}
+                {changeIpFeedback?.trackingTaskId ??
+                  proxy.rotation.trackingTaskId ??
+                  "no-tracking-task"}
               </dd>
             </div>
           </dl>

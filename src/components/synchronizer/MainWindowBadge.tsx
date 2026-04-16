@@ -91,7 +91,7 @@ export function MainWindowBadge({
         </article>
         <article className="details-grid__item">
           <dt>Broadcast plan</dt>
-          <dd>{stagedBroadcastPlanTitle ?? "No staged plan"}</dd>
+          <dd>{stagedBroadcastPlanTitle ?? "No prepared plan"}</dd>
         </article>
         <article className="details-grid__item">
           <dt>Operator note</dt>

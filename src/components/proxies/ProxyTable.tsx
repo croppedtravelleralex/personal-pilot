@@ -1,3 +1,9 @@
+import {
+  getProxyChangeCooldownRemainingSeconds,
+  getProxyProviderWriteDetail,
+  getProxyProviderWriteLabel,
+  getProxyProviderWriteState,
+} from "../../features/proxies/changeIpFeedback";
 import type {
   ProxyIpChangeFeedback,
   ProxyRowModel,
@@ -26,24 +32,6 @@ interface ProxyTableProps {
   onOpenRow: (proxyId: string) => void;
   onToggleSelection: (proxyId: string) => void;
   onSetVisibleSelection: (proxyIds: string[]) => void;
-}
-
-function parseTimestamp(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const numericValue = Number(value);
-  if (Number.isFinite(numericValue) && numericValue > 0) {
-    return numericValue;
-  }
-
-  const parsedMs = Date.parse(value);
-  if (Number.isNaN(parsedMs)) {
-    return null;
-  }
-
-  return Math.floor(parsedMs / 1000);
 }
 
 function getDisplayHealthState(health: ProxyRowModel["health"]): ProxyRowModel["health"]["state"] {
@@ -91,27 +79,19 @@ function getHealthLabel(state: ProxyRowModel["health"]["state"]): string {
 }
 
 function getCooldownRemainingLabel(changeIpFeedback: ProxyIpChangeFeedback | null): string {
-  if (!changeIpFeedback?.updatedAt) {
+  if (!changeIpFeedback) {
     return "No cooldown";
   }
 
-  const updatedAt = parseTimestamp(changeIpFeedback.updatedAt);
-  if (!updatedAt) {
+  if (changeIpFeedback.phase === "running") {
+    return "Rotation running";
+  }
+
+  const remainingSeconds = getProxyChangeCooldownRemainingSeconds(changeIpFeedback);
+  if (remainingSeconds === null) {
     return "Cooldown unknown";
   }
 
-  const windowSeconds =
-    changeIpFeedback.phase === "success"
-      ? 5 * 60
-      : changeIpFeedback.phase === "error"
-        ? 15 * 60
-        : 0;
-
-  if (windowSeconds === 0) {
-    return changeIpFeedback.phase === "running" ? "Rotation running" : "No cooldown";
-  }
-
-  const remainingSeconds = windowSeconds - (Math.floor(Date.now() / 1000) - updatedAt);
   if (remainingSeconds <= 0) {
     return "Cooldown cleared";
   }
@@ -197,22 +177,46 @@ function getRotationPosture(
     return {
       badge: "badge badge--warning",
       label: "Rotation running",
-      detail: "Local request is still in progress. Exit-IP outcome is not known yet.",
+      detail: "Submitting provider-side write task. Exit-IP outcome is not known yet.",
     };
   }
 
-  if (changeIpFeedback.phase === "error") {
+  const writeState = getProxyProviderWriteState(changeIpFeedback);
+  const writeLabel = getProxyProviderWriteLabel(writeState);
+  const writeDetail = getProxyProviderWriteDetail(changeIpFeedback);
+
+  if (
+    changeIpFeedback.phase === "error" ||
+    writeState === "failed" ||
+    writeState === "blocked"
+  ) {
     return {
       badge: "badge badge--failed",
-      label: "Rotation failed",
-      detail: "Local request failed or was blocked. Provider-side IP movement is unconfirmed.",
+      label: writeLabel,
+      detail: `${writeDetail} Status=${changeIpFeedback.status ?? "unknown"}.`,
+    };
+  }
+
+  if (writeState === "rollback_flagged") {
+    return {
+      badge: "badge badge--warning",
+      label: writeLabel,
+      detail: `${writeDetail} Verify residency=${changeIpFeedback.residencyStatus ?? residencyStatus}.`,
+    };
+  }
+
+  if (writeState === "accepted") {
+    return {
+      badge: "badge badge--info",
+      label: writeLabel,
+      detail: `${writeDetail} Exit-IP drift is not observed yet.`,
     };
   }
 
   return {
-    badge: "badge badge--succeeded",
-    label: "Local success",
-    detail: `Tracked request succeeded locally with ${changeIpFeedback.rotationMode ?? rotationMode} (${changeIpFeedback.residencyStatus ?? residencyStatus}).`,
+    badge: "badge badge--warning",
+    label: writeLabel,
+    detail: `${writeDetail} ${changeIpFeedback.rotationMode ?? rotationMode} / ${changeIpFeedback.residencyStatus ?? residencyStatus}.`,
   };
 }
 
@@ -314,6 +318,11 @@ function ProxyRow({
         <span className="proxy-row__subline">
           {changeIpFeedback?.requestedProvider ?? row.rotation.requestedProvider ?? "inherit-provider"} /{" "}
           {changeIpFeedback?.requestedRegion ?? row.rotation.requestedRegion ?? "inherit-region"}
+        </span>
+        <span className="proxy-row__subline">
+          {changeIpFeedback?.trackingTaskId
+            ? `Tracking ${changeIpFeedback.trackingTaskId}`
+            : "Tracking pending"}
         </span>
       </div>
 

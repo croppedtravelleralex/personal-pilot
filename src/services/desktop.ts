@@ -46,6 +46,7 @@ import type {
   DesktopSyncLayoutUpdate,
   DesktopSyncLayoutState,
   DesktopSyncWindowState,
+  DesktopSynchronizerBroadcastRequest,
   DesktopSynchronizerActionResult,
   DesktopSynchronizerSnapshot,
   DesktopStatusSnapshot,
@@ -628,5 +629,15 @@ export function focusSyncWindow(
     "focus_sync_window",
     "focusSyncWindow",
     { window_id: windowId },
+  );
+}
+
+export function broadcastSyncAction(
+  request: DesktopSynchronizerBroadcastRequest,
+): Promise<DesktopSynchronizerActionResult> {
+  return invokeDesktopContract<DesktopSynchronizerActionResult>(
+    "broadcast_sync_action",
+    "broadcastSyncAction",
+    { request },
   );
 }

@@ -10,6 +10,7 @@ import {
   type ProxyDetailSnapshot,
   type ProxyFilterState,
   type ProxyHealthState,
+  type ProxyRotationSummary,
   type ProxyRowModel,
   type ProxySortField,
   type ProxyTableState,
@@ -18,7 +19,15 @@ import {
 const DEFAULT_BATCH_MESSAGE =
   "Batch check is wired to the native verify-batch command and refreshes the workbench after each run.";
 const DEFAULT_CHANGE_IP_MESSAGE =
-  "Change IP is ready at the feature layer and will execute through the shared desktop contract when the native command is available.";
+  "Change IP writes are submitted through the shared desktop contract with tracking feedback; provider-side exit change still requires later detail verification.";
+
+interface ProxyChangeIpRequestContext {
+  mode?: string | null;
+  sessionKey?: string | null;
+  requestedProvider?: string | null;
+  requestedRegion?: string | null;
+  stickyTtlSeconds?: number | null;
+}
 
 export interface ProxiesState {
   rows: ProxyRowModel[];
@@ -276,6 +285,53 @@ function syncSelectedRowDetail(rows: ProxyRowModel[], detail: ProxyDetailSnapsho
   );
 
   return { rows: nextRows, detail };
+}
+
+function normalizeChangeIpContext(
+  context?: ProxyChangeIpRequestContext,
+): Required<ProxyChangeIpRequestContext> {
+  return {
+    mode: context?.mode ?? null,
+    sessionKey: context?.sessionKey ?? null,
+    requestedProvider: context?.requestedProvider ?? null,
+    requestedRegion: context?.requestedRegion ?? null,
+    stickyTtlSeconds: context?.stickyTtlSeconds ?? null,
+  };
+}
+
+function buildRotationSummaryFromChangeResult(
+  result: DesktopProxyChangeIpResult,
+): ProxyRotationSummary {
+  return {
+    residencyStatus: result.residencyStatus,
+    rotationMode: result.rotationMode,
+    sessionKey: result.sessionKey,
+    requestedProvider: result.requestedProvider,
+    requestedRegion: result.requestedRegion,
+    stickyTtlSeconds: result.stickyTtlSeconds,
+    expiresAt: result.expiresAt,
+    note: result.note,
+    trackingTaskId: result.trackingTaskId,
+  };
+}
+
+function mergeRotationSummaryWithChangeResult(
+  base: ProxyRotationSummary | null | undefined,
+  result: DesktopProxyChangeIpResult,
+): ProxyRotationSummary {
+  const seed = base ?? buildRotationSummaryFromChangeResult(result);
+
+  return {
+    residencyStatus: result.residencyStatus || seed.residencyStatus,
+    rotationMode: result.rotationMode || seed.rotationMode,
+    sessionKey: result.sessionKey ?? seed.sessionKey,
+    requestedProvider: result.requestedProvider ?? seed.requestedProvider,
+    requestedRegion: result.requestedRegion ?? seed.requestedRegion,
+    stickyTtlSeconds: result.stickyTtlSeconds ?? seed.stickyTtlSeconds,
+    expiresAt: result.expiresAt ?? seed.expiresAt,
+    note: result.note || seed.note,
+    trackingTaskId: result.trackingTaskId || seed.trackingTaskId,
+  };
 }
 
 export const proxyActions = {
@@ -591,19 +647,19 @@ export const proxyActions = {
               {
                 proxyId,
                 phase: "running" as const,
-                message: "Queued for IP change.",
-                status: null,
+                message: "Queued for provider-write submission.",
+                status: "submitting",
                 mode: null,
                 sessionKey: null,
                 requestedProvider: null,
                 requestedRegion: null,
                 stickyTtlSeconds: null,
-                note: null,
+                note: "Preparing changeProxyIp payload.",
                 residencyStatus: null,
                 rotationMode: null,
                 trackingTaskId: null,
                 expiresAt: null,
-                updatedAt: null,
+                updatedAt: startedAt,
               },
             ]),
           ),
@@ -613,11 +669,20 @@ export const proxyActions = {
 
     return nextRequestId;
   },
-  setChangeIpStepRunning(requestId: number, proxyId: string, message: string) {
+  setChangeIpStepRunning(
+    requestId: number,
+    proxyId: string,
+    message: string,
+    requestContext?: ProxyChangeIpRequestContext,
+  ) {
     proxiesStore.setState((current) => {
       if (current.changeIp.requestId !== requestId) {
         return current;
       }
+
+      const previous = current.changeIp.results[proxyId];
+      const context = normalizeChangeIpContext(requestContext);
+      const updatedAt = String(Math.floor(Date.now() / 1000));
 
       return {
         ...current,
@@ -632,18 +697,22 @@ export const proxyActions = {
               proxyId,
               phase: "running",
               message,
-              status: null,
-              mode: null,
-              sessionKey: null,
-              requestedProvider: null,
-              requestedRegion: null,
-              stickyTtlSeconds: null,
-              note: null,
-              residencyStatus: null,
-              rotationMode: null,
-              trackingTaskId: null,
-              expiresAt: null,
-              updatedAt: null,
+              status: previous?.status ?? "submitting",
+              mode: context.mode ?? previous?.mode ?? null,
+              sessionKey: context.sessionKey ?? previous?.sessionKey ?? null,
+              requestedProvider:
+                context.requestedProvider ?? previous?.requestedProvider ?? null,
+              requestedRegion: context.requestedRegion ?? previous?.requestedRegion ?? null,
+              stickyTtlSeconds:
+                context.stickyTtlSeconds ?? previous?.stickyTtlSeconds ?? null,
+              note:
+                previous?.note ??
+                "Submitting provider-aware write task through changeProxyIp.",
+              residencyStatus: previous?.residencyStatus ?? null,
+              rotationMode: context.mode ?? previous?.rotationMode ?? null,
+              trackingTaskId: previous?.trackingTaskId ?? null,
+              expiresAt: previous?.expiresAt ?? null,
+              updatedAt,
             },
           },
         },
@@ -660,13 +729,35 @@ export const proxyActions = {
         return current;
       }
 
+      const nextRows = current.rows.map((row) =>
+        row.id === proxyId
+          ? {
+              ...row,
+              rotation: mergeRotationSummaryWithChangeResult(row.rotation, result),
+            }
+          : row,
+      );
+      const rowAfterMerge = nextRows.find((row) => row.id === proxyId) ?? null;
+      const nextDetail =
+        current.detail && current.detail.proxyId === proxyId
+          ? {
+              ...current.detail,
+              rotation: mergeRotationSummaryWithChangeResult(
+                current.detail.rotation ?? rowAfterMerge?.rotation ?? null,
+                result,
+              ),
+            }
+          : current.detail;
+
       return {
         ...current,
+        rows: nextRows,
+        detail: nextDetail,
         changeIp: {
           ...current.changeIp,
           completedCount: current.changeIp.completedCount + 1,
           succeededCount: current.changeIp.succeededCount + 1,
-          feedbackTone: "success",
+          feedbackTone: "warning",
           lastMessage: result.message,
           lastFinishedAt: result.updatedAt,
           results: {
@@ -698,11 +789,15 @@ export const proxyActions = {
     proxyId: string,
     error: string,
     finishedAt: string,
+    requestContext?: ProxyChangeIpRequestContext,
   ) {
     proxiesStore.setState((current) => {
       if (current.changeIp.requestId !== requestId) {
         return current;
       }
+
+      const previous = current.changeIp.results[proxyId];
+      const context = normalizeChangeIpContext(requestContext);
 
       return {
         ...current,
@@ -719,17 +814,21 @@ export const proxyActions = {
               proxyId,
               phase: "error",
               message: error,
-              status: "failed",
-              mode: null,
-              sessionKey: null,
-              requestedProvider: null,
-              requestedRegion: null,
-              stickyTtlSeconds: null,
-              note: null,
-              residencyStatus: null,
-              rotationMode: null,
-              trackingTaskId: null,
-              expiresAt: null,
+              status: previous?.status ?? "local_request_failed",
+              mode: context.mode ?? previous?.mode ?? null,
+              sessionKey: context.sessionKey ?? previous?.sessionKey ?? null,
+              requestedProvider:
+                context.requestedProvider ?? previous?.requestedProvider ?? null,
+              requestedRegion: context.requestedRegion ?? previous?.requestedRegion ?? null,
+              stickyTtlSeconds:
+                context.stickyTtlSeconds ?? previous?.stickyTtlSeconds ?? null,
+              note:
+                previous?.note ??
+                "Provider-side write not confirmed because local request failed.",
+              residencyStatus: previous?.residencyStatus ?? null,
+              rotationMode: context.mode ?? previous?.rotationMode ?? null,
+              trackingTaskId: previous?.trackingTaskId ?? null,
+              expiresAt: previous?.expiresAt ?? null,
               updatedAt: finishedAt,
             },
           },
@@ -746,6 +845,16 @@ export const proxyActions = {
       const hasSuccess = current.changeIp.succeededCount > 0;
       const hasFailure = current.changeIp.failedCount > 0;
       const targetCount = current.changeIp.targetIds.length;
+      const resultItems = Object.values(current.changeIp.results);
+      const acceptedWrites = resultItems.filter((result) => {
+        const status = result.status?.toLowerCase() ?? "";
+        return result.phase === "success" && (status.includes("queued") || Boolean(result.trackingTaskId));
+      }).length;
+      const rollbackSignals = resultItems.filter((result) =>
+        /rollback|revert|compensat/i.test(
+          `${result.status ?? ""} ${result.message ?? ""} ${result.note ?? ""}`,
+        ),
+      ).length;
 
       return {
         ...current,
@@ -756,12 +865,12 @@ export const proxyActions = {
           feedbackTone: hasSuccess && hasFailure
             ? "warning"
             : hasSuccess
-              ? "success"
+              ? "warning"
               : "error",
           lastMessage:
             targetCount === 0
               ? DEFAULT_CHANGE_IP_MESSAGE
-              : `Change IP finished for ${current.changeIp.completedCount}/${targetCount} targets. Success ${current.changeIp.succeededCount}, failed ${current.changeIp.failedCount}.`,
+              : `Change IP submission finished for ${current.changeIp.completedCount}/${targetCount} targets. Accepted writes ${acceptedWrites}, local failures ${current.changeIp.failedCount}, rollback signals ${rollbackSignals}.`,
           lastFinishedAt:
             current.changeIp.lastFinishedAt ?? String(Math.floor(Date.now() / 1000)),
         },

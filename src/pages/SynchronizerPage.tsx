@@ -43,6 +43,8 @@ export function SynchronizerPage() {
   const latestFeedItem = state.actionFeed[0] ?? null;
   const stagedPlan =
     broadcastPlanTemplates.find((plan) => plan.id === state.stagedBroadcastPlanId) ?? null;
+  const isBroadcastNativeReady = state.capabilities.broadcastPlan.status === "native_live";
+  const isBroadcastExecuting = state.runningBroadcastPlanId !== null;
   const capabilityList = [
     state.capabilities.readSnapshot,
     state.capabilities.layout,
@@ -62,8 +64,8 @@ export function SynchronizerPage() {
             <span className="shell__eyebrow">Synchronizer Desk</span>
             <h2>Local Sync Control Console</h2>
             <p>
-              AdsPower-style controller/member expression, grouped matrix review, staged
-              broadcast plans, and layout guardrails now live in one local workbench.
+              AdsPower-style controller/member expression, grouped matrix review, and
+              capability-gated broadcast execution now live in one sync workbench.
             </p>
           </div>
           <div className="automation-center__hero-aside">
@@ -71,7 +73,7 @@ export function SynchronizerPage() {
               {consoleSummary.postureLabel}
             </span>
             <span className={`badge badge--${state.dataSource === "native" ? "info" : "warning"}`}>
-              {state.dataSource === "native" ? "Live desktop snapshot" : "Local staged/fallback"}
+              {state.dataSource === "native" ? "Live desktop snapshot" : "Local prepared/fallback"}
             </span>
             <span className="badge badge--info">{consoleSummary.cadenceLabel}</span>
             <span className="badge badge--info">
@@ -92,12 +94,16 @@ export function SynchronizerPage() {
             <small>{consoleSummary.coverageDetail}</small>
           </article>
           <article className="automation-metric-strip__item">
-            <span className="automation-metric-strip__label">Staged broadcast</span>
-            <strong>{stagedPlan?.title ?? "No staged plan"}</strong>
+            <span className="automation-metric-strip__label">Broadcast plan</span>
+            <strong>{stagedPlan?.title ?? "No prepared plan"}</strong>
             <small>
-              {stagedPlan
-                ? `${stagedPlan.scopeLabel} - local staged only`
-                : "Pick a plan to prepare broadcast intent without pretending native batch execution."}
+              {isBroadcastExecuting
+                ? "Broadcast execution is in progress."
+                : stagedPlan
+                  ? isBroadcastNativeReady
+                    ? `${stagedPlan.scopeLabel} - execute goes through native path when ready`
+                    : `${stagedPlan.scopeLabel} - execute is capability-gated with prepared fallback`
+                  : "Prepare a plan, then execute it through native path or explicit fallback."}
             </small>
           </article>
           <article className="automation-metric-strip__item">
@@ -108,7 +114,7 @@ export function SynchronizerPage() {
                 ? `${latestFeedItem.executionLabel} - ${formatRelativeTimestamp(
                     latestFeedItem.createdAt,
                   )}`
-                : "Sync actions, staged plans, and fallback notes will accumulate here."}
+                : "Sync actions, prepared plans, and fallback notes will accumulate here."}
             </small>
           </article>
         </div>
@@ -160,7 +166,7 @@ export function SynchronizerPage() {
         <StatCard
           label="Write Surface"
           value={state.capabilities.broadcastPlan.status.replaceAll("_", " ")}
-          hint="Broadcast remains local staged until native batch commands exist"
+          hint="Broadcast execution is capability-gated: native when available, prepared fallback otherwise."
           tone={
             state.capabilities.broadcastPlan.status === "native_live"
               ? "success"
@@ -175,21 +181,23 @@ export function SynchronizerPage() {
         <div className="synchronizer-layout__main">
           <Panel
             title="Sync Command Workbench"
-            subtitle="Separate live native capability from local staged or fallback operator plans."
+            subtitle="Prepare and execute sync plans with explicit native capability vs fallback feedback."
           >
             <SynchronizerControlWorkbench
               capabilities={capabilityList}
               plans={broadcastPlanTemplates}
               stagedPlanId={state.stagedBroadcastPlanId}
+              runningPlanId={state.runningBroadcastPlanId}
               controllerLabel={summary.mainWindow?.profileLabel ?? "Controller not pinned"}
               targetCount={summary.filterCount}
               onStagePlan={actions.stageBroadcastPlan}
+              onRunPlan={(planId) => void actions.runBroadcastPlan(planId)}
             />
           </Panel>
 
           <Panel
             title="Window Matrix"
-            subtitle="Grouped matrix with role-aware filtering, then stage focus or controller changes from the same surface."
+            subtitle="Grouped matrix with role-aware filtering, then apply focus or controller changes from the same surface."
             actions={
               <div className="toolbar-actions">
                 <span className={`badge badge--${summary.mainWindow ? "succeeded" : "warning"}`}>
@@ -217,7 +225,7 @@ export function SynchronizerPage() {
         <div className="synchronizer-layout__side">
           <Panel
             title="Filters & Grouping"
-            subtitle="Narrow the operator scope before staging broadcast or controller actions."
+            subtitle="Narrow the operator scope before preparing or executing broadcast/controller actions."
           >
             <SynchronizerFiltersPanel
               searchText={state.filters.searchText}
@@ -245,7 +253,7 @@ export function SynchronizerPage() {
 
           <Panel
             title="Layout & Sync Settings"
-            subtitle="Mix real layout writes with local staged pacing and safeguards."
+            subtitle="Use synchronizer state-write settings and execution safeguards with explicit capability feedback."
           >
             <LayoutToolbar
               layout={state.snapshot.layout}
@@ -274,7 +282,7 @@ export function SynchronizerPage() {
 
           <Panel
             title="Controller State"
-            subtitle="Track controller ownership, focus drift, and the currently staged broadcast plan."
+            subtitle="Track controller ownership, focus drift, and the current prepared/executing broadcast plan."
           >
             <MainWindowBadge
               layout={state.snapshot.layout}
@@ -386,7 +394,7 @@ export function SynchronizerPage() {
 
           <Panel
             title="Action Feed"
-            subtitle="Dense operator feedback with live native vs local staged/fallback labeling."
+            subtitle="Dense operator feedback with live native vs local prepared/fallback labeling."
             actions={<span className="badge badge--info">{state.actionFeed.length} recent items</span>}
           >
             <SynchronizerActionFeed items={state.actionFeed} />
