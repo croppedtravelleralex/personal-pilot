@@ -1,5 +1,5 @@
 # 19 Phase Plan And Scorecard
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Canonical Role
 
@@ -60,15 +60,17 @@ These facts mean:
 
 ### Proxy / IP / Session
 
-- provider-aware / sticky-aware `changeProxyIp` local contract is landed
+- provider refresh-backed `changeProxyIp` contract is landed with accepted-vs-failed write semantics
 - proxy session continuity schema is landed through `proxy_session_bindings`
 - cookie / localStorage / sessionStorage restore on restart is landed
 
 ### Synchronizer
 
 - live desktop snapshot is landed
-- native window focus is landed
-- unsupported writes are honestly kept as staged / not-yet-closed paths
+- native Win32 window focus is landed
+- native `setMain` / `layout` internal-state writes are landed
+- capability-gated native `broadcast` intent/state write is landed
+- physical layout rearrangement and physical multi-window broadcast execution are not landed
 
 ### Research And Integration Planning
 
@@ -79,8 +81,8 @@ These facts mean:
 
 ### Mainline Remaining `7%`
 
-- provider-side proxy rotation write is not fully closed
-- synchronizer native batch / layout / broadcast write path is not fully closed
+- provider-side proxy rotation hardening is not fully closed
+- synchronizer physical layout / broadcast execution is not fully closed
 - recorder / templates deeper native closure is not fully closed
 - final mainline release gate still depends on the three items above
 
@@ -116,20 +118,20 @@ The final target is broader than the current closeout-ready desktop app:
 
 Goal:
 
-- close the gap between current local contract and provider-grade proxy rotation write
+- harden the now-real provider refresh write path into a stable provider-grade rotation contract
 
 Detailed tasks:
 
-1. finish provider API write behind the stable `changeProxyIp` contract
-2. bind residency / sticky semantics to real provider-side actions
-3. close failure rollback, cooldown, and retry paths
-4. keep proxy selection and session continuity data aligned
+1. add success-path proof for provider refresh acceptance and success checks
+2. bind residency / sticky semantics to the real provider-side write path
+3. close rollback/cooldown/retry/operator feedback paths without overstating exit-IP drift
+4. decide long-term config carrier and sync-vs-background execution model
 
 Acceptance:
 
-- provider-side rotation works through the native chain
-- failure rollback path is explicit and typed
-- sticky / residency behavior is not only local-state decoration
+- provider-side write is real, typed, and test-backed
+- rollback/failure/cooldown path is explicit and typed
+- sticky / residency behavior is no longer only local-state decoration
 
 Primary report dimensions:
 
@@ -141,21 +143,21 @@ Primary report dimensions:
 
 Goal:
 
-- move from live read / focus into real native write closure
+- move from typed synchronizer state/intention writes into deeper physical execution closure without overstating current capability
 
 Detailed tasks:
 
-1. land native `set main` write path
-2. land native `layout` write path
-3. land native `broadcast` write path
-4. remove staged-only default paths from the main operator route
+1. keep `setMain` and `layout` explicitly framed as native internal-state writes, not physical window rearrangement
+2. keep `broadcast` explicitly framed as native intent/state write, not physical multi-window dispatch
+3. remove remaining “fallback execute” wording from the main operator route
+4. deepen physical layout / broadcast execution where the native/runtime boundary truly supports it
 
 Acceptance:
 
-- main window control is native
-- layout control is native
-- broadcast control is native
-- staged fallback is no longer the default control path
+- main-window anchor control is native
+- layout and broadcast state/intention writes are native and truthfully described
+- physical layout/broadcast gaps remain explicit rather than hidden by wording
+- prepared fallback is no longer described as default execution
 
 Primary report dimensions:
 
@@ -400,7 +402,7 @@ Planning baseline:
 
 | Wave | Scope | Recommended active agents | Exit gate |
 | --- | --- | ---: | --- |
-| `Wave 1` | `A1 + A2` | `3-4` | provider-side proxy write path and synchronizer native write path are both materially closed |
+| `Wave 1` | `A1 + A2` | `3-4` | proxy provider write path is honest and test-backed, and synchronizer typed writes plus operator wording are aligned with the remaining physical-execution gaps explicit |
 | `Wave 2` | `A3 + A4` | `2-4` | recorder/templates are native-first and the full mainline release gate is green |
 | `Wave 3` | `B1 + B2` | `4-6` | validation board exists and fingerprint maturity is measurable beyond `12` runtime fields |
 | `Wave 4` | `B3 + B4` | `4-6` | session portability and event grammar both move out of concept stage |

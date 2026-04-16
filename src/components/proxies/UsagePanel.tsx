@@ -30,7 +30,7 @@ interface UsagePanelProps {
 function getUsageBadge(status: string): string {
   switch (status) {
     case "running":
-      return "badge badge--succeeded";
+      return "badge badge--info";
     case "ready":
       return "badge badge--warning";
     default:
@@ -86,23 +86,38 @@ function getRotationPosture(
   const writeLabel = getProxyProviderWriteLabel(writeState);
   const writeDetail = getProxyProviderWriteDetail(changeIpFeedback);
 
-  if (changeIpFeedback.phase === "error") {
+  if (
+    changeIpFeedback.phase === "error" ||
+    writeState === "failed" ||
+    writeState === "blocked"
+  ) {
     return {
-      label: writeLabel,
+      label: writeState === "blocked" ? "blocked" : "write-failed",
       detail: `${writeDetail} Treat exit-IP state as unchanged until a later detail refresh proves otherwise.`,
     };
   }
 
-  if (changeIpFeedback.phase === "success") {
+  if (writeState === "rollback_flagged") {
     return {
-      label: writeLabel,
+      label: "rollback-flagged",
+      detail: `${writeDetail} Treat write as unstable and verify residency/exit-IP on next detail refresh.`,
+    };
+  }
+
+  if (
+    writeState === "accepted" ||
+    changeIpFeedback.phase === "accepted" ||
+    changeIpFeedback.phase === "success"
+  ) {
+    return {
+      label: "accepted",
       detail: `${writeDetail} ${changeIpFeedback.rotationMode ?? rotationMode} (${changeIpFeedback.residencyStatus ?? residencyStatus}). Confirm exit-IP drift after detail refresh.`,
     };
   }
 
   return {
-    label: "Rotation queued",
-    detail: "Request has been queued locally and is waiting for a result.",
+    label: "write-pending",
+    detail: `${writeLabel} pending. Request is queued locally and waiting for provider-write feedback.`,
   };
 }
 
@@ -303,7 +318,7 @@ export function UsagePanel({
               {isLoading
                 ? "Loading detail..."
                 : isChangingIp
-                  ? "Submitting local change-IP request..."
+                  ? "Submitting provider-write request..."
                   : verificationStatus ?? "Operator detail ready"}
             </strong>
             <p>{rotationPosture.detail}</p>

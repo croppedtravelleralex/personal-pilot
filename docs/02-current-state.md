@@ -1,5 +1,5 @@
 # 02 Current State
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Current Report
 
@@ -9,7 +9,7 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## Verified Evidence
 
-Passed in this round:
+Full-gate baseline retained from `2026-04-16`:
 
 - `cargo test --quiet`
 - `pnpm typecheck`
@@ -19,12 +19,21 @@ Passed in this round:
 - `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
 - `pnpm desktop:release`
 
+Targeted `2026-04-17` re-verify for A1/A2:
+
+- `pnpm typecheck`
+- `cargo check`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml commands::tests -- --nocapture`
+- `cargo test change_proxy_ip_succeeds_with_provider_refresh_config_and_records_success_task -- --nocapture`
+- `cargo test change_proxy_ip_fails_when_provider_refresh_success_check_does_not_match -- --nocapture`
+
 ## Landed Mainline Closure
 
 - `Tasks -> Automation` surface unification
-- provider-aware / sticky-aware `changeProxyIp` desktop contract
+- provider refresh-backed `changeProxyIp` desktop contract with accepted-vs-failed write semantics
 - recorder desktop step-write
-- synchronizer live desktop snapshot + native focus
+- synchronizer live desktop snapshot + native focus + native `setMain` / `layout` state writes + capability-gated `broadcast` intent write
 - canonical `lightpanda` fingerprint runtime explain contract
 - Win11 `lightpanda` timeout / non-zero-exit stubs and startup cancel race coverage
 - deterministic full-suite stability for proxy-mode override tests and `humanize` retry tests
@@ -43,8 +52,8 @@ Passed in this round:
 
 The unfinished closeout slice is now concentrated in three real product areas:
 
-1. `Proxy / IP`: finish provider-side API write and residency-aware rotation closure.
-2. `Synchronizer`: finish native batch / broadcast writes and shrink staged default paths.
+1. `Proxy / IP`: lock the provider refresh path with success-path proof, carrier cleanup, and a clear sync-vs-background execution decision.
+2. `Synchronizer`: move from typed state/intention writes into physical layout/broadcast execution and remove the remaining prepared-vs-execute wording drift.
 3. `Recorder / Templates`: finish deeper native closure and reduce remaining fallback dependence.
 
 ## What The Overall 70% Still Covers

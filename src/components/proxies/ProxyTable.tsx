@@ -49,7 +49,7 @@ function getDisplayHealthState(health: ProxyRowModel["health"]): ProxyRowModel["
 function getHealthBadge(state: ProxyRowModel["health"]["state"]): string {
   switch (state) {
     case "healthy":
-      return "badge badge--succeeded";
+      return "badge badge--info";
     case "warning":
     case "queued":
     case "checking":
@@ -135,7 +135,7 @@ function getRiskPosture(row: ProxyRowModel): { badge: string; label: string; det
   }
 
   return {
-    badge: "badge badge--succeeded",
+    badge: "badge badge--info",
     label: "Ready pool",
     detail: "Healthy and currently unassigned, ready for the next allocation.",
   };

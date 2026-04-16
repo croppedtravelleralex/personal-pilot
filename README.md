@@ -5,7 +5,7 @@ Canonical maintenance docs live under `/docs`.
 
 ## Dual-Axis Reporting Rule
 
-Use the `2026-04-16` dual-axis split everywhere:
+Use the `2026-04-17` dual-axis split everywhere:
 
 - mainline delivery: `95% / 7% / green`
 - overall end-state: `30% / 70% / yellow`
@@ -38,9 +38,10 @@ Do not treat legacy `77% / 23%`, `82% / 18%`, `90%`, or `99%` as the current tru
 ## Mainline Landed Delta
 
 - `Tasks` is no longer an orphan route; queue control now lives inside `Automation`
-- `changeProxyIp` now carries provider / region / session / sticky residency semantics through the desktop contract
-- recorder now appends steps through the desktop contract, and synchronizer now reads live desktop windows plus real native focus
+- `changeProxyIp` now executes provider refresh through the desktop contract and returns accepted-vs-failed write semantics; exit-IP drift still needs later detail/health observation
+- recorder now appends steps through the desktop contract, and synchronizer now reads live desktop windows, applies native focus, writes `setMain` / `layout` internal state, and records capability-gated broadcast intent
 - `lightpanda` now emits the canonical fingerprint runtime explain contract
 - Win11 `lightpanda` timeout / non-zero-exit test stubs are native-testable, and startup cancel race coverage is in place
 - the full Rust gate is green again, including `integration_api` and `integration_lightpanda_runner`
+- `2026-04-17` targeted re-verify passed for A1/A2: `pnpm typecheck`, `cargo check`, `cargo check --manifest-path src-tauri/Cargo.toml`, `cargo test --manifest-path src-tauri/Cargo.toml commands::tests -- --nocapture`, `cargo test change_proxy_ip_succeeds_with_provider_refresh_config_and_records_success_task -- --nocapture`, and `cargo test change_proxy_ip_fails_when_provider_refresh_success_check_does_not_match -- --nocapture`
 - route-level lazy loading is in place and the previous Vite chunk warning has been cleared

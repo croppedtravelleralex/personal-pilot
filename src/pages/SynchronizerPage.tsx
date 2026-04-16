@@ -65,7 +65,7 @@ export function SynchronizerPage() {
             <h2>Local Sync Control Console</h2>
             <p>
               AdsPower-style controller/member expression, grouped matrix review, and
-              capability-gated broadcast execution now live in one sync workbench.
+              capability-gated broadcast planning/execution now live in one sync workbench.
             </p>
           </div>
           <div className="automation-center__hero-aside">
@@ -102,8 +102,8 @@ export function SynchronizerPage() {
                 : stagedPlan
                   ? isBroadcastNativeReady
                     ? `${stagedPlan.scopeLabel} - execute goes through native path when ready`
-                    : `${stagedPlan.scopeLabel} - execute is capability-gated with prepared fallback`
-                  : "Prepare a plan, then execute it through native path or explicit fallback."}
+                    : `${stagedPlan.scopeLabel} - native execution is not yet confirmed in this session; if unavailable, the plan stays prepared only`
+                  : "Prepare a plan now; actual execution still requires native broadcast availability."}
             </small>
           </article>
           <article className="automation-metric-strip__item">
@@ -114,7 +114,7 @@ export function SynchronizerPage() {
                 ? `${latestFeedItem.executionLabel} - ${formatRelativeTimestamp(
                     latestFeedItem.createdAt,
                   )}`
-                : "Sync actions, prepared plans, and fallback notes will accumulate here."}
+                : "Sync actions, prepared plans, and deferred-execution notes will accumulate here."}
             </small>
           </article>
         </div>
@@ -166,7 +166,7 @@ export function SynchronizerPage() {
         <StatCard
           label="Write Surface"
           value={state.capabilities.broadcastPlan.status.replaceAll("_", " ")}
-          hint="Broadcast execution is capability-gated: native when available, prepared fallback otherwise."
+          hint="Broadcast execution is capability-gated: native when available, otherwise the plan stays prepared until broadcast is ready."
           tone={
             state.capabilities.broadcastPlan.status === "native_live"
               ? "success"
@@ -181,7 +181,7 @@ export function SynchronizerPage() {
         <div className="synchronizer-layout__main">
           <Panel
             title="Sync Command Workbench"
-            subtitle="Prepare and execute sync plans with explicit native capability vs fallback feedback."
+            subtitle="Prepare and execute sync plans with explicit native capability feedback and honest deferred execution states."
           >
             <SynchronizerControlWorkbench
               capabilities={capabilityList}

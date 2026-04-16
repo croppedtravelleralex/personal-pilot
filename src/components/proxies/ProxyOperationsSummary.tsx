@@ -2,7 +2,11 @@ import {
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
 } from "../../features/proxies/changeIpFeedback";
-import type { ProxyIpChangeFeedback, ProxyDataSource } from "../../features/proxies/model";
+import type {
+  ProxyIpChangeFeedback,
+  ProxyDataSource,
+  ProxyWriteOutcomeLabel,
+} from "../../features/proxies/model";
 import { formatCount, formatRelativeTimestamp } from "../../utils/format";
 import { Panel } from "../Panel";
 
@@ -50,7 +54,44 @@ function getResultBadge(result: ProxyIpChangeFeedback): string {
 }
 
 function getResultLabel(result: ProxyIpChangeFeedback): string {
-  return getProxyProviderWriteLabel(getProxyProviderWriteState(result));
+  const writeState = getProxyProviderWriteState(result);
+  if (writeState === "accepted") {
+    return "accepted";
+  }
+  if (writeState === "rollback_flagged") {
+    return "rollback-flagged";
+  }
+  if (writeState === "blocked") {
+    return "blocked";
+  }
+  if (writeState === "failed" || result.phase === "error") {
+    return "write-failed";
+  }
+
+  const rawStatus = result.status?.toLowerCase() ?? "";
+  if (rawStatus.includes("rollback")) {
+    return "rollback-flagged";
+  }
+  if (
+    rawStatus.includes("accept") ||
+    rawStatus.includes("queue") ||
+    rawStatus.includes("success") ||
+    rawStatus.includes("succeed")
+  ) {
+    return "accepted";
+  }
+  if (rawStatus.includes("fail") || rawStatus.includes("error")) {
+    return "write-failed";
+  }
+  return "write-pending";
+}
+
+function getResultHumanLabel(result: ProxyIpChangeFeedback): string {
+  const token = getResultLabel(result) as ProxyWriteOutcomeLabel;
+  if (token === "write-pending") {
+    return getProxyProviderWriteLabel(getProxyProviderWriteState(result));
+  }
+  return token;
 }
 
 export function ProxyOperationsSummary({
@@ -94,7 +135,7 @@ export function ProxyOperationsSummary({
           <dd>
             {formatCount(summary.localRotationTracked)} tracked results
             <br />
-            {formatCount(summary.providerWriteAccepted)} accepted writes, {formatCount(summary.rollbackSignals)} rollback flagged, {formatCount(summary.localRotationRunning)} running
+            {formatCount(summary.providerWriteAccepted)} accepted writes, {formatCount(summary.rollbackSignals)} rollback-flagged, {formatCount(summary.localRotationRunning)} running
           </dd>
         </div>
       </div>
@@ -141,11 +182,11 @@ export function ProxyOperationsSummary({
                   <strong>{result.proxyId}</strong>
                   <p className="record-card__subline">{result.message}</p>
                 </div>
-                <span className={getResultBadge(result)}>{getResultLabel(result)}</span>
+                <span className={getResultBadge(result)}>{getResultHumanLabel(result)}</span>
               </div>
               <div className="record-card__footer">
                 <span>{formatRelativeTimestamp(result.updatedAt)}</span>
-                <span>{result.status ?? "status-pending"}</span>
+                <span>{getResultLabel(result)}</span>
               </div>
             </article>
           ))}

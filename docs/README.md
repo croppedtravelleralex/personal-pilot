@@ -1,5 +1,5 @@
 # PersonaPilot Maintenance Entry
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Unified Progress Truth
 
@@ -24,8 +24,8 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## Mainline Remaining 7%
 
-1. `Proxy / IP`: finish provider-side API write and residency-aware rotation closure.
-2. `Synchronizer`: finish native batch / broadcast writes and shrink staged default paths.
+1. `Proxy / IP`: harden the real provider refresh path with success-path proof, config-carrier cleanup, and an explicit sync-vs-background execution choice.
+2. `Synchronizer`: move from typed native state/intention writes to physical `layout / broadcast` execution and remove the remaining prepared-vs-execute wording drift.
 3. `Recorder / Templates`: finish deeper native closure and reduce fallback dependence.
 
 ## Overall Remaining 70%

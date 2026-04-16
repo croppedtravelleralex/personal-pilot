@@ -26,11 +26,12 @@ Canonical status now lives in `/docs/02-current-state.md`.
 7. `/docs/13-adspower-deep-comparison.md`
 8. `/docs/18-external-browser-integration-plan.md`
 
-## 2026-04-16 Mainline Delta
+## 2026-04-17 Mainline Delta
 
 - `Tasks` surface unification is complete
-- `changeProxyIp` is provider-aware / sticky-aware at the local desktop contract layer
-- synchronizer now has live desktop read + native focus, with unsupported writes explicitly downgraded to staged
+- `changeProxyIp` now executes provider refresh in the desktop contract and returns accepted-vs-failed write semantics
+- synchronizer now has live desktop read, native Win32 focus, native `setMain` / `layout` internal-state writes, and capability-gated native broadcast intent writes
 - recorder now has desktop step-write
+- `2026-04-17` targeted A1/A2 re-verify is green: `pnpm typecheck`, `cargo check`, `cargo check --manifest-path src-tauri/Cargo.toml`, synchronizer command tests, and both `changeProxyIp` success / success-check-mismatch tests
 - the Rust gate is fully green again, including `integration_api` / `integration_lightpanda_runner`
 - route-level code splitting has cleared the old Vite chunk warning

@@ -1,5 +1,5 @@
 # Final Goal Progress Breakdown
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Current Split
 
@@ -13,9 +13,9 @@ Updated: 2026-04-16 (Asia/Shanghai)
 The move from `77% / 23%` to `95% / 7%` came from real closure, not more docs:
 
 - `Tasks` is now on the main operator surface
-- `changeProxyIp` gained provider-aware / sticky-aware semantics
+- `changeProxyIp` now executes provider refresh and returns accepted-vs-failed write semantics
 - recorder step-write now goes through the desktop contract
-- synchronizer now reads live desktop windows and can focus a real window
+- synchronizer now reads live desktop windows, can focus a real window, and exposes typed `setMain / layout / broadcast` write paths
 - `lightpanda` now emits the canonical runtime explain contract
 - the full Rust / integration gate is green again
 - route-level code splitting closed the old bundle warning
@@ -35,8 +35,8 @@ The bigger “complete app” target is much broader than the current native clo
 
 This is not “missing UI”. It is the final native-closeout slice:
 
-1. provider-side proxy rotation write
-2. synchronizer native batch / broadcast writes
+1. provider-side proxy rotation hardening and success-path proof
+2. synchronizer physical layout / broadcast execution and final operator wording cleanup
 3. recorder / templates deeper native closure
 
 ## What The Remaining 70% Actually Is

@@ -167,10 +167,10 @@ function resolveBroadcastInvoker(): {
 function getBroadcastCapabilityHint(): string {
   const resolved = resolveBroadcastInvoker();
   if (resolved) {
-    return `Broadcast contract "${resolved.key}" is exported in this build. Native execution will be used when command readiness checks pass.`;
+    return `Broadcast contract "${resolved.key}" is exported in this build. Native execution will be used when command readiness checks pass; otherwise the plan remains prepared only.`;
   }
 
-  return "No broadcast contract is exported in this build yet. Plans remain staged with explicit native-readiness feedback.";
+  return "No broadcast contract is exported in this build yet. Plans remain prepared only with explicit native-readiness feedback.";
 }
 
 function getBroadcastTargetWindows(
@@ -387,6 +387,7 @@ async function runSynchronizerAction(
   updater: (snapshot: DesktopSynchronizerSnapshot) => DesktopSynchronizerSnapshot,
   options?: {
     preferredSelectedWindowId?: string;
+    successTitle?: string;
     successInfo?: string;
     successCapabilityDetail?: string;
     successFeedDetail?: string;
@@ -425,7 +426,7 @@ async function runSynchronizerAction(
         current.actionFeed,
         createFeedItem(
           kind,
-          fallbackTitle,
+          options?.successTitle ?? fallbackTitle,
           options?.successFeedDetail ?? "Applied through native sync contract.",
           "success",
           "native_live",
@@ -793,7 +794,7 @@ export const synchronizerActions = {
             `${plan.title} prepared`,
             missingFlags.length > 0
               ? `${plan.scopeLabel} - ${targetCount} windows in scope - enable ${missingFlagsLabel} before execution.`
-              : `${plan.scopeLabel} - ${targetCount} windows in scope - native execution will be attempted when available.`,
+              : `${plan.scopeLabel} - ${targetCount} windows in scope - plan stays prepared until native execution is available.`,
             "warning",
             "local_staged",
           ),
@@ -891,8 +892,8 @@ export const synchronizerActions = {
 
     await runSynchronizerAction(
       "broadcastPlan",
-      "Broadcast execution completed",
-      `${plan.title} is prepared for ${request.targetWindowIds.length} target windows while native broadcast write is unavailable.`,
+      "Broadcast execution deferred",
+      `${plan.title} is prepared for ${request.targetWindowIds.length} target windows. Native broadcast is unavailable in this session, so no fallback execution was performed.`,
       async () => {
         if (!resolved) {
           throw new desktop.DesktopServiceError(
@@ -916,6 +917,7 @@ export const synchronizerActions = {
         updatedAt: nowTs(),
       }),
       {
+        successTitle: "Broadcast execution completed",
         successInfo: resolved
           ? `${plan.title} executed through ${resolved.key} for ${request.targetWindowIds.length} target windows.`
           : undefined,
@@ -926,9 +928,9 @@ export const synchronizerActions = {
           ? `${plan.scopeLabel} - ${request.targetWindowIds.length} targets - native broadcast write succeeded.`
           : undefined,
         notReadyInfo:
-          "Native broadcast contract is not exposed in this build yet. The prepared plan remains available for later execution.",
+          "Native broadcast contract is not exposed in this build yet. The prepared plan remains available for later execution; no fallback execution was performed.",
         nativeFailureInfo:
-          "Native broadcast execution failed. The prepared plan and current snapshot were kept for retry.",
+          "Native broadcast execution failed. The prepared plan and current snapshot were kept for retry; no fallback execution was performed.",
       },
     );
 
@@ -1289,7 +1291,7 @@ export function getSynchronizerConsoleSummary(
       detail:
         state.capabilities.broadcastPlan.status === "native_live"
           ? "At least one broadcast execution has already landed through a native contract in this session."
-          : "The selected broadcast plan is prepared. Execution will auto-switch to native once a typed contract is exposed and ready.",
+          : "The selected broadcast plan is prepared. If native broadcast is unavailable in this session, execution is deferred rather than replayed locally.",
     });
   }
 
@@ -1331,10 +1333,19 @@ export function getSynchronizerConsoleSummary(
     postureLabel = "Action Needed";
     postureDetail = "One or more windows need recovery or the latest sync command did not land cleanly.";
     postureTone = "danger";
-  } else if (state.dataSource === "mock" || summary.busyCount > 0 || mainFocusDrift) {
+  } else if (
+    state.dataSource === "mock" ||
+    summary.busyCount > 0 ||
+    mainFocusDrift ||
+    (state.stagedBroadcastPlanId !== null &&
+      state.capabilities.broadcastPlan.status !== "native_live")
+  ) {
     postureLabel = "Watch Closely";
     postureDetail =
-      "The console is usable, but fallback mode, hot sessions, or focus drift still require operator attention.";
+      state.stagedBroadcastPlanId !== null &&
+      state.capabilities.broadcastPlan.status !== "native_live"
+        ? "The console is usable, but broadcast is still prepared-only in this session and should not be mistaken for executed native sync."
+        : "The console is usable, but fallback mode, hot sessions, or focus drift still require operator attention.";
     postureTone = "warning";
   }
 

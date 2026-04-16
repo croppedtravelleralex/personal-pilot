@@ -58,12 +58,12 @@ export function SynchronizerControlWorkbench({
         <article className="automation-metric-strip__item">
           <span className="automation-metric-strip__label">Broadcast path</span>
           <strong>
-            {isBroadcastNativeReady ? "Native execute" : "Prepared with fallback"}
+            {isBroadcastNativeReady ? "Native execute" : "Awaiting native confirmation"}
           </strong>
           <small>
             {isBroadcastNativeReady
-              ? "Native contract has executed in this session."
-              : "Execution is capability-gated and falls back to prepared mode when native is not ready."}
+              ? "Native broadcast has already executed in this session."
+              : "If the native contract is available, execution will use it. Otherwise the plan remains prepared only and is not replayed locally."}
           </small>
         </article>
       </div>
@@ -121,7 +121,7 @@ export function SynchronizerControlWorkbench({
                   ? "Executing..."
                   : isBroadcastNativeReady
                     ? "Execute (native path)"
-                    : "Execute (fallback if native unavailable)"}
+                    : "Attempt execute (native required)"}
               </button>
             </div>
           </article>

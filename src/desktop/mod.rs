@@ -7553,6 +7553,9 @@ mod tests {
     use super::*;
 
     use crate::db::init::init_db;
+    use axum::{routing::post, Json, Router};
+    use std::sync::Arc;
+    use tokio::net::TcpListener;
 
     async fn seed_launch_test_fixtures(db: &DbPool) {
         sqlx::query(
@@ -7699,6 +7702,269 @@ mod tests {
         assert_eq!(
             result_json.get("errorKind").and_then(Value::as_str),
             Some("provider_refresh_config_missing")
+        );
+        assert_eq!(
+            result_json.get("rollbackSignal").and_then(Value::as_str),
+            Some("binding_not_applied")
+        );
+    }
+
+    async fn spawn_provider_refresh_test_server(response_body: Value) -> String {
+        let response_body = Arc::new(response_body);
+        let app = Router::new().route(
+            "/refresh",
+            post({
+                let response_body = Arc::clone(&response_body);
+                move || {
+                    let response_body = Arc::clone(&response_body);
+                    async move { Json((*response_body).clone()) }
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind provider refresh test server");
+        let addr = listener.local_addr().expect("provider refresh test addr");
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("serve provider refresh test server");
+        });
+        format!("http://{addr}/refresh")
+    }
+
+    #[tokio::test]
+    async fn change_proxy_ip_succeeds_with_provider_refresh_config_and_records_success_task() {
+        let db_url = format!(
+            "sqlite:///tmp/persona_pilot_desktop_change_ip_success_{}.db",
+            Uuid::new_v4()
+        );
+        let db = init_db(&db_url).await.expect("init db");
+        let refresh_url = spawn_provider_refresh_test_server(serde_json::json!({
+            "ok": true,
+            "requestId": "req-123",
+        }))
+        .await;
+
+        sqlx::query(
+            r#"INSERT INTO proxies (
+                   id, scheme, host, port, provider, region, source_label, status, score, success_count, failure_count, created_at, updated_at
+               ) VALUES (
+                   'proxy-change-ip-success', 'http', '127.0.0.1', 8080, 'pool-live', 'us-east',
+                   'pool-live', 'active', 1.0, 0, 0, '1', '1'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed success proxy");
+
+        sqlx::query(
+            r#"INSERT INTO proxy_harvest_sources (
+                   source_label, source_kind, enabled, config_json, interval_seconds, base_proxy_score, created_at, updated_at
+               ) VALUES (?, 'json_url', 1, ?, 300, 1.0, '1', '1')"#,
+        )
+        .bind("pool-live")
+        .bind(
+            serde_json::json!({
+                "provider_refresh": {
+                    "enabled": true,
+                    "method": "POST",
+                    "url": refresh_url,
+                    "success_path": "ok",
+                    "success_equals": true,
+                    "request_id_path": "requestId",
+                }
+            })
+            .to_string(),
+        )
+        .execute(&db)
+        .await
+        .expect("seed success provider refresh source");
+
+        let result = change_desktop_proxy_ip(
+            &db,
+            DesktopProxyChangeIpRequest {
+                proxy_id: "proxy-change-ip-success".to_string(),
+                mode: None,
+                session_key: Some("session-success-1".to_string()),
+                requested_provider: None,
+                requested_region: None,
+                sticky_ttl_seconds: Some(600),
+            },
+        )
+        .await
+        .expect("change proxy ip success");
+
+        assert_eq!(result.status, "accepted_sticky_rotation");
+        assert_eq!(result.tracking_task_id.is_empty(), false);
+        assert!(
+            result
+                .message
+                .contains("Exit-IP drift still needs later detail/health refresh observation."),
+            "unexpected result message: {}",
+            result.message
+        );
+
+        let task_row = sqlx::query(
+            r#"SELECT status, error_message, result_json
+               FROM tasks
+               WHERE kind = 'change_proxy_ip'
+               ORDER BY CAST(created_at AS INTEGER) DESC, id DESC
+               LIMIT 1"#,
+        )
+        .fetch_one(&db)
+        .await
+        .expect("load success change_proxy_ip task");
+
+        let task_status: String = task_row.get("status");
+        let task_error: Option<String> = task_row.get("error_message");
+        let result_json_raw: String = task_row.get("result_json");
+        let result_json =
+            serde_json::from_str::<Value>(&result_json_raw).expect("decode success result_json");
+
+        assert_eq!(task_status, "succeeded");
+        assert!(task_error.is_none(), "unexpected task error: {:?}", task_error);
+        assert_eq!(
+            result_json.get("executionStatus").and_then(Value::as_str),
+            Some("accepted")
+        );
+        assert_eq!(
+            result_json.get("status").and_then(Value::as_str),
+            Some("accepted_sticky_rotation")
+        );
+        assert_eq!(
+            result_json
+                .get("providerRefresh")
+                .and_then(|value| value.get("providerRequestId"))
+                .and_then(Value::as_str),
+            Some("req-123")
+        );
+
+        let binding_row = sqlx::query(
+            r#"SELECT proxy_id, requested_provider, requested_region
+               FROM proxy_session_bindings
+               WHERE session_key = 'session-success-1'"#,
+        )
+        .fetch_one(&db)
+        .await
+        .expect("load session binding");
+        let binding_proxy_id: String = binding_row.get("proxy_id");
+        let binding_provider: Option<String> = binding_row.get("requested_provider");
+        let binding_region: Option<String> = binding_row.get("requested_region");
+        assert_eq!(binding_proxy_id, "proxy-change-ip-success");
+        assert_eq!(binding_provider.as_deref(), Some("pool-live"));
+        assert_eq!(binding_region.as_deref(), Some("us-east"));
+
+        let proxy_updated_at: String = sqlx::query_scalar(
+            r#"SELECT updated_at FROM proxies WHERE id = 'proxy-change-ip-success'"#,
+        )
+        .fetch_one(&db)
+        .await
+        .expect("load updated proxy timestamp");
+        assert_ne!(proxy_updated_at, "1");
+    }
+
+    #[tokio::test]
+    async fn change_proxy_ip_fails_when_provider_refresh_success_check_does_not_match() {
+        let db_url = format!(
+            "sqlite:///tmp/persona_pilot_desktop_change_ip_success_check_{}.db",
+            Uuid::new_v4()
+        );
+        let db = init_db(&db_url).await.expect("init db");
+        let refresh_url = spawn_provider_refresh_test_server(serde_json::json!({
+            "ok": false,
+            "requestId": "req-bad",
+        }))
+        .await;
+
+        sqlx::query(
+            r#"INSERT INTO proxies (
+                   id, scheme, host, port, provider, region, source_label, status, score, success_count, failure_count, created_at, updated_at
+               ) VALUES (
+                   'proxy-change-ip-check', 'http', '127.0.0.1', 8080, 'pool-check', 'us-east',
+                   'pool-check', 'active', 1.0, 0, 0, '1', '1'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed failure proxy");
+
+        sqlx::query(
+            r#"INSERT INTO proxy_harvest_sources (
+                   source_label, source_kind, enabled, config_json, interval_seconds, base_proxy_score, created_at, updated_at
+               ) VALUES (?, 'json_url', 1, ?, 300, 1.0, '1', '1')"#,
+        )
+        .bind("pool-check")
+        .bind(
+            serde_json::json!({
+                "provider_refresh": {
+                    "enabled": true,
+                    "method": "POST",
+                    "url": refresh_url,
+                    "success_path": "ok",
+                    "success_equals": true,
+                }
+            })
+            .to_string(),
+        )
+        .execute(&db)
+        .await
+        .expect("seed failure provider refresh source");
+
+        let result = change_desktop_proxy_ip(
+            &db,
+            DesktopProxyChangeIpRequest {
+                proxy_id: "proxy-change-ip-check".to_string(),
+                mode: None,
+                session_key: None,
+                requested_provider: None,
+                requested_region: None,
+                sticky_ttl_seconds: None,
+            },
+        )
+        .await;
+
+        let error_message = result
+            .err()
+            .map(|err| err.to_string())
+            .unwrap_or_else(|| "missing error".to_string());
+        assert!(
+            error_message.contains("success_path"),
+            "expected success_path validation error, got: {error_message}"
+        );
+
+        let task_row = sqlx::query(
+            r#"SELECT status, error_message, result_json
+               FROM tasks
+               WHERE kind = 'change_proxy_ip'
+               ORDER BY CAST(created_at AS INTEGER) DESC, id DESC
+               LIMIT 1"#,
+        )
+        .fetch_one(&db)
+        .await
+        .expect("load failed success-check task");
+
+        let task_status: String = task_row.get("status");
+        let task_error: Option<String> = task_row.get("error_message");
+        let result_json_raw: String = task_row.get("result_json");
+        let result_json =
+            serde_json::from_str::<Value>(&result_json_raw).expect("decode failed result_json");
+
+        assert_eq!(task_status, "failed");
+        assert!(
+            task_error
+                .as_deref()
+                .is_some_and(|message| message.contains("success_path")),
+            "expected stored success_path failure, got: {:?}",
+            task_error
+        );
+        assert_eq!(
+            result_json.get("executionStatus").and_then(Value::as_str),
+            Some("failed")
+        );
+        assert_eq!(
+            result_json.get("errorKind").and_then(Value::as_str),
+            Some("provider_refresh_success_check_failed")
         );
         assert_eq!(
             result_json.get("rollbackSignal").and_then(Value::as_str),

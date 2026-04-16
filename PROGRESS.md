@@ -19,11 +19,12 @@ Progress must be reported with the dual-axis rule:
 - `450+` fingerprint signals, `450+` event taxonomy, and richer AdsPower-grade realism remain future overall-track work
 - detailed phase plan, scorecard, and benchmark summary live in `/docs/19-phase-plan-and-scorecard.md`
 
-## 2026-04-16 Mainline Delta
+## 2026-04-17 Mainline Delta
 
 - landed `Tasks -> Automation` surface unification
-- landed provider-aware / sticky-aware `changeProxyIp` semantics
-- landed recorder desktop step-write and synchronizer live read/focus
+- landed provider refresh-backed `changeProxyIp` with accepted-vs-failed write semantics
+- landed recorder desktop step-write and synchronizer live read / focus / internal-state writes / broadcast intent write
+- re-passed targeted `2026-04-17` A1/A2 verification: `pnpm typecheck`, `cargo check`, `cargo check --manifest-path src-tauri/Cargo.toml`, synchronizer command tests, and both `changeProxyIp` success / success-check-mismatch tests
 - restored the full Rust gate to green, including `integration_api`, `integration_lightpanda_runner`, and deterministic `humanize` retry coverage
 - re-verified `pnpm desktop:release` and `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
 - cleared the previous Vite chunk warning with route-level lazy loading

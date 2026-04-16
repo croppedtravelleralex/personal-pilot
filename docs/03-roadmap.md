@@ -1,5 +1,5 @@
 # 03 Roadmap
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Unified Progress Truth
 
@@ -12,8 +12,8 @@ This phase is the current shipping track. It is not the same thing as the long-t
 
 ### Current blockers
 
-1. `Proxy / IP`: move from provider-aware local closure to true provider API rotation.
-2. `Synchronizer`: move from live read/focus to native `set main / layout / broadcast`.
+1. `Proxy / IP`: harden the real provider refresh path with success-path proof, config-carrier cleanup, and an explicit sync-vs-background execution choice.
+2. `Synchronizer`: move from typed native state/intention writes to physical `layout / broadcast` execution and fully honest operator wording.
 3. `Recorder / Templates`: move from desktop step-write to deeper native capture / template closure.
 
 ### Exit condition
@@ -62,7 +62,7 @@ Use the following wave order by default:
 
 | Wave | Scope | Default active agents | Exit gate |
 | --- | --- | ---: | --- |
-| `Wave 1` | `A1 + A2` | `3-4` | proxy provider write path and synchronizer native write path are both materially closed |
+| `Wave 1` | `A1 + A2` | `3-4` | proxy provider write path is honest and test-backed, and synchronizer typed writes plus operator wording are aligned with the remaining physical-execution gaps explicit |
 | `Wave 2` | `A3 + A4` | `2-4` | recorder/templates are native-first and the mainline release gate is green |
 | `Wave 3` | `B1 + B2` | `4-6` | validation evidence is repeatable and fingerprint runtime depth is measurable beyond `12` projected fields |
 | `Wave 4` | `B3 + B4` | `4-6` | session portability and event grammar both move out of concept stage |

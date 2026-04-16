@@ -1,5 +1,5 @@
 # 04 Improvement Backlog
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Current Truth Reminder
 
@@ -48,7 +48,9 @@ This backlog remains the task ledger beneath that stage board.
 - Dependencies: keep the existing Win11 shell and typed desktop boundary unchanged
 - Acceptance evidence: provider-side write, rollback, residency semantics
 - Report dimension: `proxy/IP`
-- Target: push the stable local `changeProxyIp` contract down to true provider-side rotation and residency semantics
+- Current result: `changeProxyIp` now executes provider refresh in the desktop path and returns accepted-vs-failed write semantics
+- Next: add happy-path proof, decide whether refresh stays synchronous or moves to background execution, and stop overloading `proxy_harvest_sources.config_json` as the long-term carrier
+- Target: harden the now-real provider write path into a stable, test-backed, operator-honest rotation contract
 
 ### B-005 Synchronizer Deep Native Commands
 
@@ -57,8 +59,8 @@ This backlog remains the task ledger beneath that stage board.
 - Dependencies: existing live snapshot + native focus path
 - Acceptance evidence: native `set main / layout / broadcast`
 - Report dimension: `automation/RPA`
-- Current result: live snapshot and native focus are landed
-- Next: push `set main / layout / broadcast` deeper into native batch / broadcast commands
+- Current result: live snapshot, native focus, native `setMain` / `layout` state writes, and capability-gated native broadcast intent write are landed
+- Next: deliver physical layout/broadcast execution depth and eliminate the remaining “prepared vs executed” wording drift
 
 ### B-011 Recorder / Templates De-Fallback
 

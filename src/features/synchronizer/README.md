@@ -1,35 +1,23 @@
 # Synchronizer Feature
 
-负责本地窗口同步控制台，不直接触碰页面外的系统调用。
+负责同步控制台的矩阵视图、操作编排和反馈状态。页面侧不直接调用原生能力，统一通过 `services/desktop.ts`。
 
-建议内部继续拆成：
+## Current capability boundary
 
-- `store.ts`
-  - 当前窗口矩阵
-  - 主窗口
-  - 布局模式
-  - 操作状态
-- `hooks.ts`
-  - refresh windows
-  - set main window
-  - apply layout
-  - focus window
-- `model.ts`
-  - window snapshot
-  - layout mode
-  - action result
-
-二级子模块边界：
-
-- Window Matrix
-- Main Window
-- Layout Controls
-- Focus Actions
-- Action Feedback
-
-预期依赖的桌面契约：
-
-- `listSyncWindows`
+- `listSyncWindows` / `readSynchronizerSnapshot` / `readSyncLayoutState`
+  - 读取 native synchronizer snapshot 和布局状态。
 - `setMainSyncWindow`
+  - 写入 synchronizer 内部主窗口锚点状态，不包含物理窗口重排。
 - `applyWindowLayout`
+  - 写入 synchronizer 内部布局状态，不包含物理桌面窗口重排。
 - `focusSyncWindow`
+  - 走 native Win32 焦点控制。
+- `broadcastSyncAction`
+  - 能力门控执行：有契约时记录 broadcast intent 与布局标志并回写快照；无契约时保留 prepared/fallback。
+  - 当前不包含物理多窗口事件分发。
+
+## Module split
+
+- `store.ts`: snapshot/state orchestration, capability transitions, action feedback
+- `hooks.ts`: page-friendly action wiring
+- `model.ts`: types, defaults, templates, capability copy

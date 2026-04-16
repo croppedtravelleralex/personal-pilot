@@ -233,10 +233,10 @@ export function getExecutionModeLabel(mode: SynchronizerExecutionMode): string {
   }
 
   if (mode === "local_staged") {
-    return "Local staged";
+    return "Prepared";
   }
 
-  return "Local fallback";
+  return "Fallback";
 }
 
 export function createInitialCommandCapabilities(): Record<
@@ -255,21 +255,24 @@ export function createInitialCommandCapabilities(): Record<
       key: "layout",
       label: "Layout write",
       status: "local_staged",
-      detail: "Layout presets can be staged locally before native write confirmation.",
+      detail:
+        "Layout write targets synchronizer internal layout state. Physical desktop window rearrangement is not implemented.",
       lastUpdatedAt: null,
     },
     setMain: {
       key: "setMain",
       label: "Main-window write",
       status: "local_staged",
-      detail: "Primary controller reassignment is staged until native write succeeds.",
+      detail:
+        "Main-window write updates the synchronizer internal anchor state, not physical desktop window arrangement.",
       lastUpdatedAt: null,
     },
     focus: {
       key: "focus",
       label: "Focus write",
       status: "local_staged",
-      detail: "Focus hops can be rehearsed locally when native focus control is unavailable.",
+      detail:
+        "Focus write uses native Win32 focus control when available; otherwise the selected lane remains staged locally.",
       lastUpdatedAt: null,
     },
     broadcastPlan: {
@@ -277,7 +280,7 @@ export function createInitialCommandCapabilities(): Record<
       label: "Broadcast write",
       status: "local_staged",
       detail:
-        "Broadcast execution is capability-gated. Native write is used when available, otherwise the plan remains staged with explicit feedback.",
+        "Broadcast execution is capability-gated. Native path records broadcast intent/layout flags and snapshot state; physical multi-window dispatch is not implemented.",
       lastUpdatedAt: null,
     },
   };

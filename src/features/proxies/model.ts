@@ -18,6 +18,15 @@ export type ProxySortField = "updated" | "health" | "usage" | "name";
 
 export type ProxyDataSource = "desktop" | "fallback" | "mixed";
 
+export type ProxyChangeFeedbackPhase = "running" | "accepted" | "success" | "error";
+
+export type ProxyWriteOutcomeLabel =
+  | "accepted"
+  | "write-failed"
+  | "rollback-flagged"
+  | "write-pending"
+  | "blocked";
+
 export interface ProxyRotationSummary {
   residencyStatus: string;
   rotationMode: string;
@@ -101,7 +110,7 @@ export interface ProxyBatchCheckState {
 
 export interface ProxyIpChangeFeedback {
   proxyId: string;
-  phase: "running" | "success" | "error";
+  phase: ProxyChangeFeedbackPhase;
   message: string;
   status: string | null;
   mode: string | null;
@@ -122,6 +131,7 @@ export interface ProxyChangeIpState {
   requestId: number;
   targetIds: string[];
   completedCount: number;
+  // Legacy field name kept for store compatibility; rendered as "accepted writes" in UI.
   succeededCount: number;
   failedCount: number;
   activeProxyId: string | null;

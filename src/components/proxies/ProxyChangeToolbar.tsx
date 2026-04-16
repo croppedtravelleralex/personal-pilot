@@ -2,7 +2,10 @@ import {
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
 } from "../../features/proxies/changeIpFeedback";
-import type { ProxyIpChangeFeedback } from "../../features/proxies/model";
+import type {
+  ProxyIpChangeFeedback,
+  ProxyWriteOutcomeLabel,
+} from "../../features/proxies/model";
 import { formatCount, formatRelativeTimestamp } from "../../utils/format";
 
 interface ProxyChangeToolbarProps {
@@ -40,26 +43,60 @@ function getPhaseBadge(phase: ProxyChangeToolbarProps["phase"]): string {
 function getPhaseLabel(phase: ProxyChangeToolbarProps["phase"]): string {
   switch (phase) {
     case "running":
-      return "Rotating";
+      return "Submitting writes";
     case "completed":
-      return "Submission done";
+      return "Write submission done";
     case "blocked":
       return "Blocked";
     case "error":
-      return "Failed";
+      return "Write failed";
     default:
       return "Ready";
   }
 }
 
-function getResultBadge(result: ProxyIpChangeFeedback): string {
+function getResultOutcomeLabel(result: ProxyIpChangeFeedback): ProxyWriteOutcomeLabel {
   const writeState = getProxyProviderWriteState(result);
-  switch (writeState) {
+  if (writeState === "accepted") {
+    return "accepted";
+  }
+  if (writeState === "rollback_flagged") {
+    return "rollback-flagged";
+  }
+  if (writeState === "blocked") {
+    return "blocked";
+  }
+  if (writeState === "failed" || result.phase === "error") {
+    return "write-failed";
+  }
+
+  const rawStatus = result.status?.toLowerCase() ?? "";
+  if (rawStatus.includes("rollback")) {
+    return "rollback-flagged";
+  }
+  if (
+    rawStatus.includes("accept") ||
+    rawStatus.includes("queue") ||
+    rawStatus.includes("success") ||
+    rawStatus.includes("succeed")
+  ) {
+    return "accepted";
+  }
+  if (rawStatus.includes("fail") || rawStatus.includes("error")) {
+    return "write-failed";
+  }
+  return "write-pending";
+}
+
+function getResultBadge(result: ProxyIpChangeFeedback): string {
+  const outcome = getResultOutcomeLabel(result);
+  switch (outcome) {
     case "accepted":
       return "badge badge--info";
-    case "rollback_flagged":
+    case "rollback-flagged":
+      return "badge badge--warning";
     case "blocked":
-    case "failed":
+    case "write-failed":
       return "badge badge--failed";
     default:
       return "badge badge--warning";
@@ -72,7 +109,7 @@ export function ProxyChangeToolbar({
   targetLabel,
   selectedCount,
   completedCount,
-  succeededCount,
+  succeededCount: acceptedCount,
   failedCount,
   coolingDownCount,
   message,
@@ -122,12 +159,12 @@ export function ProxyChangeToolbar({
             <span>Processed</span>
           </div>
           <div className="batch-toolbar__metric">
-            <strong>{formatCount(succeededCount)}</strong>
+            <strong>{formatCount(acceptedCount)}</strong>
             <span>Accepted writes</span>
           </div>
           <div className="batch-toolbar__metric">
             <strong>{formatCount(failedCount)}</strong>
-            <span>Failed</span>
+            <span>Write failed</span>
           </div>
           <div className="batch-toolbar__metric">
             <strong>{formatCount(coolingDownCount)}</strong>
@@ -137,7 +174,7 @@ export function ProxyChangeToolbar({
 
         <div className="batch-toolbar__actions">
           <button className="button" type="button" disabled={controlsDisabled} onClick={onStart}>
-            {phase === "running" ? "Changing..." : actionLabel}
+            {phase === "running" ? "Submitting..." : actionLabel}
           </button>
         </div>
       </div>
@@ -177,7 +214,7 @@ export function ProxyChangeToolbar({
                   <p className="record-card__subline">{result.message}</p>
                 </div>
                 <span className={getResultBadge(result)}>
-                  {result.status ?? getPhaseLabel(result.phase === "error" ? "error" : "running")}
+                  {getResultOutcomeLabel(result)}
                 </span>
               </div>
               <div className="record-card__footer">
