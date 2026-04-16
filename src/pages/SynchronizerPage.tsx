@@ -65,7 +65,7 @@ export function SynchronizerPage() {
             <h2>Local Sync Control Console</h2>
             <p>
               AdsPower-style controller/member expression, grouped matrix review, and
-              capability-gated broadcast planning/execution now live in one sync workbench.
+              capability-gated broadcast planning/intent-write control now live in one sync workbench.
             </p>
           </div>
           <div className="automation-center__hero-aside">
@@ -98,12 +98,12 @@ export function SynchronizerPage() {
             <strong>{stagedPlan?.title ?? "No prepared plan"}</strong>
             <small>
               {isBroadcastExecuting
-                ? "Broadcast execution is in progress."
+                ? "Broadcast intent write is in progress."
                 : stagedPlan
                   ? isBroadcastNativeReady
-                    ? `${stagedPlan.scopeLabel} - execute goes through native path when ready`
-                    : `${stagedPlan.scopeLabel} - native execution is not yet confirmed in this session; if unavailable, the plan stays prepared only`
-                  : "Prepare a plan now; actual execution still requires native broadcast availability."}
+                    ? `${stagedPlan.scopeLabel} - native intent write has responded, but physical dispatch remains intention-only`
+                    : `${stagedPlan.scopeLabel} - native intent write is not yet confirmed in this session; if unavailable, the plan stays prepared/intention-only`
+                  : "Prepare a plan now; physical dispatch still depends on future native broadcast implementation."}
             </small>
           </article>
           <article className="automation-metric-strip__item">
@@ -114,7 +114,7 @@ export function SynchronizerPage() {
                 ? `${latestFeedItem.executionLabel} - ${formatRelativeTimestamp(
                     latestFeedItem.createdAt,
                   )}`
-                : "Sync actions, prepared plans, and deferred-execution notes will accumulate here."}
+                : "Sync actions, prepared plans, and deferred-intent notes will accumulate here."}
             </small>
           </article>
         </div>
@@ -166,7 +166,7 @@ export function SynchronizerPage() {
         <StatCard
           label="Write Surface"
           value={state.capabilities.broadcastPlan.status.replaceAll("_", " ")}
-          hint="Broadcast execution is capability-gated: native when available, otherwise the plan stays prepared until broadcast is ready."
+          hint="Broadcast remains prepared/intention-only in this build. Native intent writes may land, but physical multi-window dispatch is not implemented."
           tone={
             state.capabilities.broadcastPlan.status === "native_live"
               ? "success"
@@ -181,7 +181,7 @@ export function SynchronizerPage() {
         <div className="synchronizer-layout__main">
           <Panel
             title="Sync Command Workbench"
-            subtitle="Prepare and execute sync plans with explicit native capability feedback and honest deferred execution states."
+            subtitle="Prepare sync plans and submit intent writes with explicit native capability feedback and honest prepared states."
           >
             <SynchronizerControlWorkbench
               capabilities={capabilityList}
@@ -225,7 +225,7 @@ export function SynchronizerPage() {
         <div className="synchronizer-layout__side">
           <Panel
             title="Filters & Grouping"
-            subtitle="Narrow the operator scope before preparing or executing broadcast/controller actions."
+            subtitle="Narrow the operator scope before preparing broadcast intent writes and controller actions."
           >
             <SynchronizerFiltersPanel
               searchText={state.filters.searchText}
@@ -253,7 +253,7 @@ export function SynchronizerPage() {
 
           <Panel
             title="Layout & Sync Settings"
-            subtitle="Use synchronizer state-write settings and execution safeguards with explicit capability feedback."
+            subtitle="Use synchronizer state-write settings with explicit layout apply surface: applied/partial/failed when physical path exists, otherwise prepared/intention-only."
           >
             <LayoutToolbar
               layout={state.snapshot.layout}
@@ -282,7 +282,7 @@ export function SynchronizerPage() {
 
           <Panel
             title="Controller State"
-            subtitle="Track controller ownership, focus drift, and the current prepared/executing broadcast plan."
+            subtitle="Track controller ownership, focus drift, and the current prepared/intent-write broadcast plan."
           >
             <MainWindowBadge
               layout={state.snapshot.layout}

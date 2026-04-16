@@ -1,4 +1,5 @@
 import {
+  getProxyProviderWriteEvidence,
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
 } from "../../features/proxies/changeIpFeedback";
@@ -56,36 +57,45 @@ function getPhaseLabel(phase: ProxyChangeToolbarProps["phase"]): string {
 }
 
 function getResultOutcomeLabel(result: ProxyIpChangeFeedback): ProxyWriteOutcomeLabel {
+  const evidence = getProxyProviderWriteEvidence(result);
   const writeState = getProxyProviderWriteState(result);
-  if (writeState === "accepted") {
-    return "accepted";
-  }
-  if (writeState === "rollback_flagged") {
+  if (evidence.rollbackSignal) {
     return "rollback-flagged";
+  }
+  if (evidence.acceptedWrite === true || writeState === "accepted") {
+    return "accepted";
   }
   if (writeState === "blocked") {
     return "blocked";
   }
-  if (writeState === "failed" || result.phase === "error") {
+  if (writeState === "failed" || result.phase === "error" || evidence.acceptedWrite === false) {
     return "write-failed";
   }
 
-  const rawStatus = result.status?.toLowerCase() ?? "";
-  if (rawStatus.includes("rollback")) {
-    return "rollback-flagged";
-  }
-  if (
-    rawStatus.includes("accept") ||
-    rawStatus.includes("queue") ||
-    rawStatus.includes("success") ||
-    rawStatus.includes("succeed")
-  ) {
+  return "write-pending";
+}
+
+function getAcceptedWriteLabel(acceptedWrite: boolean | null): string {
+  if (acceptedWrite === true) {
     return "accepted";
   }
-  if (rawStatus.includes("fail") || rawStatus.includes("error")) {
-    return "write-failed";
+  if (acceptedWrite === false) {
+    return "not-accepted";
   }
-  return "write-pending";
+  return "unknown";
+}
+
+function getRollbackSignalLabel(rollbackSignal: boolean): string {
+  return rollbackSignal ? "rollback-flagged" : "no-rollback-signal";
+}
+
+function getExecutionStatusLine(result: ProxyIpChangeFeedback): string {
+  const evidence = getProxyProviderWriteEvidence(result);
+  const refreshStatus = evidence.providerRefreshStatus ?? "refresh-pending";
+  const refreshAt = evidence.providerRefreshAt
+    ? ` @ ${formatRelativeTimestamp(evidence.providerRefreshAt)}`
+    : "";
+  return `execution=${evidence.executionStatus ?? "unknown"} / providerRefresh=${refreshStatus}${refreshAt}`;
 }
 
 function getResultBadge(result: ProxyIpChangeFeedback): string {
@@ -206,23 +216,34 @@ export function ProxyChangeToolbar({
 
       {recentResults.length > 0 ? (
         <div className="record-list">
-          {recentResults.map((result) => (
-            <article className="record-card record-card--compact" key={result.proxyId}>
-              <div className="record-card__top">
-                <div>
-                  <strong>{result.proxyId}</strong>
-                  <p className="record-card__subline">{result.message}</p>
+          {recentResults.map((result) => {
+            const evidence = getProxyProviderWriteEvidence(result);
+
+            return (
+              <article className="record-card record-card--compact" key={result.proxyId}>
+                <div className="record-card__top">
+                  <div>
+                    <strong>{result.proxyId}</strong>
+                    <p className="record-card__subline">{result.message}</p>
+                    <p className="record-card__subline">
+                      accepted={getAcceptedWriteLabel(evidence.acceptedWrite)} / rollback=
+                      {getRollbackSignalLabel(evidence.rollbackSignal)}
+                    </p>
+                    <p className="record-card__subline">
+                      source={evidence.providerSource ?? "unknown-source"} / request-or-tracking=
+                      {evidence.requestId ?? "pending"}
+                    </p>
+                    <p className="record-card__subline">{getExecutionStatusLine(result)}</p>
+                  </div>
+                  <span className={getResultBadge(result)}>{getResultOutcomeLabel(result)}</span>
                 </div>
-                <span className={getResultBadge(result)}>
-                  {getResultOutcomeLabel(result)}
-                </span>
-              </div>
-              <div className="record-card__footer">
-                <span>{formatRelativeTimestamp(result.updatedAt)}</span>
-                <span>{getProxyProviderWriteLabel(getProxyProviderWriteState(result))}</span>
-              </div>
-            </article>
-          ))}
+                <div className="record-card__footer">
+                  <span>{formatRelativeTimestamp(result.updatedAt)}</span>
+                  <span>{getProxyProviderWriteLabel(getProxyProviderWriteState(result))}</span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : null}
     </section>

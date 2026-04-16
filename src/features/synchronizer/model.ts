@@ -22,6 +22,12 @@ export type SynchronizerExecutionMode =
   | "local_staged"
   | "local_fallback";
 
+export type SynchronizerLayoutApplyResult =
+  | "applied"
+  | "partial"
+  | "failed"
+  | "intention_only";
+
 export type SynchronizerCommandKey =
   | "readSnapshot"
   | "layout"
@@ -239,6 +245,22 @@ export function getExecutionModeLabel(mode: SynchronizerExecutionMode): string {
   return "Fallback";
 }
 
+export function getLayoutApplyResultLabel(result: SynchronizerLayoutApplyResult): string {
+  if (result === "applied") {
+    return "applied";
+  }
+
+  if (result === "partial") {
+    return "partial";
+  }
+
+  if (result === "failed") {
+    return "failed";
+  }
+
+  return "intention-only";
+}
+
 export function createInitialCommandCapabilities(): Record<
   SynchronizerCommandKey,
   SynchronizerCommandCapability
@@ -256,7 +278,7 @@ export function createInitialCommandCapabilities(): Record<
       label: "Layout write",
       status: "local_staged",
       detail:
-        "Layout write targets synchronizer internal layout state. Physical desktop window rearrangement is not implemented.",
+        'Layout write currently remains intention-only and targets synchronizer internal layout state. Physical apply outcome will surface as "applied/partial/failed" when native physical layout execution lands.',
       lastUpdatedAt: null,
     },
     setMain: {
@@ -280,7 +302,7 @@ export function createInitialCommandCapabilities(): Record<
       label: "Broadcast write",
       status: "local_staged",
       detail:
-        "Broadcast execution is capability-gated. Native path records broadcast intent/layout flags and snapshot state; physical multi-window dispatch is not implemented.",
+        "Broadcast execution remains prepared/intention-only in this build. Native path records intent/layout flags and snapshot state; physical multi-window dispatch is not implemented.",
       lastUpdatedAt: null,
     },
   };

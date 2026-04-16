@@ -2,6 +2,7 @@ import * as desktop from "../../services/desktop";
 import { createStore } from "../../store/createStore";
 import type {
   DesktopSyncLayoutMode,
+  DesktopSynchronizerActionResult,
   DesktopSyncWindowState,
   DesktopSynchronizerSnapshot,
 } from "../../types/desktop";
@@ -26,6 +27,7 @@ import {
   type SynchronizerExecutionMode,
   type SynchronizerFeedTone,
   type SynchronizerFilterState,
+  type SynchronizerLayoutApplyResult,
   type SynchronizerLayoutFlag,
   type SynchronizerOperatorSettings,
 } from "./model";
@@ -127,6 +129,7 @@ interface SynchronizerBroadcastExecutionRequest {
 
 interface DesktopSynchronizerBroadcastResult {
   snapshot: DesktopSynchronizerSnapshot;
+  action?: string;
   message?: string;
   updatedAt?: string;
 }
@@ -167,7 +170,7 @@ function resolveBroadcastInvoker(): {
 function getBroadcastCapabilityHint(): string {
   const resolved = resolveBroadcastInvoker();
   if (resolved) {
-    return `Broadcast contract "${resolved.key}" is exported in this build. Native execution will be used when command readiness checks pass; otherwise the plan remains prepared only.`;
+    return `Broadcast contract "${resolved.key}" is exported in this build. Native intent recording can run when command readiness checks pass, but physical multi-window dispatch remains intention-only.`;
   }
 
   return "No broadcast contract is exported in this build yet. Plans remain prepared only with explicit native-readiness feedback.";
@@ -235,6 +238,284 @@ function isSynchronizerSnapshot(value: unknown): value is DesktopSynchronizerSna
     typeof candidate.layout === "object" &&
     typeof candidate.updatedAt === "string"
   );
+}
+
+interface SynchronizerNativeActionResponse {
+  snapshot: DesktopSynchronizerSnapshot;
+  action: string | null;
+  message: string | null;
+  raw: Record<string, unknown> | null;
+}
+
+interface SynchronizerActionSuccessResolution {
+  title?: string;
+  info?: string;
+  capabilityDetail?: string;
+  feedDetail?: string;
+  tone?: SynchronizerFeedTone;
+  executionMode?: SynchronizerExecutionMode;
+  capabilityStatus?: SynchronizerExecutionMode;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function isDesktopSynchronizerActionResult(
+  value: unknown,
+): value is DesktopSynchronizerActionResult {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    isSynchronizerSnapshot(value.snapshot) &&
+    typeof value.action === "string" &&
+    typeof value.message === "string"
+  );
+}
+
+function normalizeNativeActionResponse(
+  value: DesktopSynchronizerSnapshot | DesktopSynchronizerActionResult,
+): SynchronizerNativeActionResponse {
+  if (isDesktopSynchronizerActionResult(value)) {
+    return {
+      snapshot: value.snapshot,
+      action: readString(value.action),
+      message: readString(value.message),
+      raw: value as unknown as Record<string, unknown>,
+    };
+  }
+
+  return {
+    snapshot: value,
+    action: null,
+    message: null,
+    raw: null,
+  };
+}
+
+function normalizeLayoutApplyResultToken(
+  token: unknown,
+): SynchronizerLayoutApplyResult | null {
+  const normalized = readString(token)?.toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized.includes("intention") ||
+    normalized.includes("intent_only") ||
+    normalized.includes("intent-only") ||
+    normalized.includes("prepared")
+  ) {
+    return "intention_only";
+  }
+
+  if (normalized.includes("partial")) {
+    return "partial";
+  }
+
+  if (normalized.includes("failed") || normalized.includes("error")) {
+    return "failed";
+  }
+
+  if (normalized.includes("applied")) {
+    return "applied";
+  }
+
+  return null;
+}
+
+function resolveLayoutApplyResult(
+  result: SynchronizerNativeActionResponse,
+): SynchronizerLayoutApplyResult {
+  if (result.raw) {
+    const directCandidates = [
+      result.raw.layoutApplyResult,
+      result.raw.layoutApplyStatus,
+      result.raw.physicalLayoutResult,
+      result.raw.physicalLayoutStatus,
+      result.raw.physicalApplyResult,
+      result.raw.physicalApplyStatus,
+    ];
+
+    for (const candidate of directCandidates) {
+      const normalized = normalizeLayoutApplyResultToken(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const nestedCandidates = [
+      result.raw.layoutApply,
+      result.raw.physicalLayout,
+      result.raw.physicalApply,
+    ];
+    for (const candidate of nestedCandidates) {
+      if (!isRecord(candidate)) {
+        continue;
+      }
+
+      const normalized =
+        normalizeLayoutApplyResultToken(candidate.status) ??
+        normalizeLayoutApplyResultToken(candidate.result) ??
+        normalizeLayoutApplyResultToken(candidate.outcome);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  const actionResult = normalizeLayoutApplyResultToken(result.action);
+  if (actionResult) {
+    return actionResult;
+  }
+
+  const combined = `${result.action ?? ""} ${result.message ?? ""}`.toLowerCase();
+  const intentionMarkers = [
+    "not implemented",
+    "state write only",
+    "state-write only",
+    "internal layout state",
+    "internal-state",
+    "intent only",
+    "intention-only",
+    "prepared only",
+    "prepared",
+    "deferred",
+  ];
+
+  if (intentionMarkers.some((marker) => combined.includes(marker))) {
+    return "intention_only";
+  }
+
+  if (combined.includes("partial")) {
+    return "partial";
+  }
+
+  if (
+    combined.includes("failed") ||
+    combined.includes("error") ||
+    combined.includes("unable")
+  ) {
+    return "failed";
+  }
+
+  if (
+    combined.includes("physically applied") ||
+    combined.includes("physical apply") ||
+    combined.includes("repositioned") ||
+    combined.includes("windows moved") ||
+    combined.includes("applied")
+  ) {
+    return "applied";
+  }
+
+  return "intention_only";
+}
+
+function appendNativeMessage(detail: string, message: string | null): string {
+  return message ? `${detail} Native message: ${message}` : detail;
+}
+
+function resolveLayoutApplySurface(
+  mode: DesktopSyncLayoutMode,
+  result: SynchronizerNativeActionResponse,
+): SynchronizerActionSuccessResolution {
+  const modeLabel = mode.replaceAll("_", " ");
+  const applyResult = resolveLayoutApplyResult(result);
+
+  if (applyResult === "applied") {
+    return {
+      title: "Layout physically applied",
+      info: appendNativeMessage(
+        `Physical layout apply reported "applied" for ${modeLabel}.`,
+        result.message,
+      ),
+      capabilityDetail: appendNativeMessage(
+        'Layout physical apply result: "applied".',
+        result.message,
+      ),
+      feedDetail: appendNativeMessage(
+        `Layout ${modeLabel} physical apply result: applied.`,
+        result.message,
+      ),
+      tone: "success",
+      executionMode: "native_live",
+      capabilityStatus: "native_live",
+    };
+  }
+
+  if (applyResult === "partial") {
+    return {
+      title: "Layout partially applied",
+      info: appendNativeMessage(
+        `Physical layout apply reported "partial" for ${modeLabel}.`,
+        result.message,
+      ),
+      capabilityDetail: appendNativeMessage(
+        'Layout physical apply result: "partial".',
+        result.message,
+      ),
+      feedDetail: appendNativeMessage(
+        `Layout ${modeLabel} physical apply result: partial.`,
+        result.message,
+      ),
+      tone: "warning",
+      executionMode: "native_live",
+      capabilityStatus: "native_live",
+    };
+  }
+
+  if (applyResult === "failed") {
+    return {
+      title: "Layout physical apply failed",
+      info: appendNativeMessage(
+        `Physical layout apply reported "failed" for ${modeLabel}.`,
+        result.message,
+      ),
+      capabilityDetail: appendNativeMessage(
+        'Layout physical apply result: "failed". No prepared fallback was auto-executed.',
+        result.message,
+      ),
+      feedDetail: appendNativeMessage(
+        `Layout ${modeLabel} physical apply result: failed.`,
+        result.message,
+      ),
+      tone: "error",
+      executionMode: "native_live",
+      capabilityStatus: "native_live",
+    };
+  }
+
+  return {
+    title: "Layout prepared (intention-only)",
+    info: appendNativeMessage(
+      `Layout ${modeLabel} is prepared in synchronizer state. Physical layout apply is not available in this session.`,
+      result.message,
+    ),
+    capabilityDetail: appendNativeMessage(
+      "Layout write remains prepared/intention-only in this session.",
+      result.message,
+    ),
+    feedDetail: appendNativeMessage(
+      `Layout ${modeLabel} remained prepared/intention-only; no physical apply was reported.`,
+      result.message,
+    ),
+    tone: "warning",
+    executionMode: "local_staged",
+    capabilityStatus: "local_staged",
+  };
 }
 
 function createFeedItem(
@@ -333,7 +614,7 @@ function getActionLabel(action: SynchronizerActiveAction): string {
   }
 
   if (action === "broadcastPlan") {
-    return "broadcast execution";
+    return "broadcast intent command";
   }
 
   return action ?? "sync action";
@@ -383,7 +664,7 @@ async function runSynchronizerAction(
   kind: Exclude<SynchronizerActiveAction, null>,
   fallbackTitle: string,
   fallbackDetail: string,
-  invokeAction: () => Promise<DesktopSynchronizerSnapshot>,
+  invokeAction: () => Promise<DesktopSynchronizerSnapshot | DesktopSynchronizerActionResult>,
   updater: (snapshot: DesktopSynchronizerSnapshot) => DesktopSynchronizerSnapshot,
   options?: {
     preferredSelectedWindowId?: string;
@@ -391,6 +672,12 @@ async function runSynchronizerAction(
     successInfo?: string;
     successCapabilityDetail?: string;
     successFeedDetail?: string;
+    successTone?: SynchronizerFeedTone;
+    successExecutionMode?: SynchronizerExecutionMode;
+    successCapabilityStatus?: SynchronizerExecutionMode;
+    resolveSuccess?: (
+      result: SynchronizerNativeActionResponse,
+    ) => SynchronizerActionSuccessResolution | null;
     notReadyInfo?: string;
     nativeFailureInfo?: string;
   },
@@ -402,13 +689,39 @@ async function runSynchronizerAction(
   }));
 
   try {
-    const snapshot = await invokeAction();
+    const actionResult = normalizeNativeActionResponse(await invokeAction());
+    const snapshot = actionResult.snapshot;
+    const resolvedSuccess = options?.resolveSuccess?.(actionResult);
+    const successExecutionMode =
+      resolvedSuccess?.executionMode ??
+      options?.successExecutionMode ??
+      "native_live";
+    const successCapabilityStatus =
+      resolvedSuccess?.capabilityStatus ??
+      options?.successCapabilityStatus ??
+      successExecutionMode;
+    const successTone = resolvedSuccess?.tone ?? options?.successTone ?? "success";
+    const successTitle =
+      resolvedSuccess?.title ?? options?.successTitle ?? fallbackTitle;
+    const successInfo =
+      resolvedSuccess?.info ??
+      options?.successInfo ??
+      "Synchronizer command completed against the native desktop service.";
+    const successCapabilityDetail =
+      resolvedSuccess?.capabilityDetail ??
+      options?.successCapabilityDetail ??
+      "Command completed through the desktop synchronizer contract.";
+    const successFeedDetail =
+      resolvedSuccess?.feedDetail ??
+      options?.successFeedDetail ??
+      "Applied through native sync contract.";
+
     synchronizerStore.setState((current) => ({
       ...setSnapshot(
         current,
         snapshot,
         "native",
-        options?.successInfo ?? "Synchronizer command completed against the native desktop service.",
+        successInfo,
         null,
       ),
       selectedWindowId:
@@ -418,18 +731,17 @@ async function runSynchronizerAction(
       capabilities: updateCapability(
         current.capabilities,
         kind,
-        "native_live",
-        options?.successCapabilityDetail ??
-          "Command completed through the desktop synchronizer contract.",
+        successCapabilityStatus,
+        successCapabilityDetail,
       ),
       actionFeed: appendFeed(
         current.actionFeed,
         createFeedItem(
           kind,
-          options?.successTitle ?? fallbackTitle,
-          options?.successFeedDetail ?? "Applied through native sync contract.",
-          "success",
-          "native_live",
+          successTitle,
+          successFeedDetail,
+          successTone,
+          successExecutionMode,
         ),
       ),
     }));
@@ -794,7 +1106,7 @@ export const synchronizerActions = {
             `${plan.title} prepared`,
             missingFlags.length > 0
               ? `${plan.scopeLabel} - ${targetCount} windows in scope - enable ${missingFlagsLabel} before execution.`
-              : `${plan.scopeLabel} - ${targetCount} windows in scope - plan stays prepared until native execution is available.`,
+              : `${plan.scopeLabel} - ${targetCount} windows in scope - plan stays prepared/intention-only until physical dispatch is implemented.`,
             "warning",
             "local_staged",
           ),
@@ -892,7 +1204,7 @@ export const synchronizerActions = {
 
     await runSynchronizerAction(
       "broadcastPlan",
-      "Broadcast execution deferred",
+      "Broadcast remains prepared (intention-only)",
       `${plan.title} is prepared for ${request.targetWindowIds.length} target windows. Native broadcast is unavailable in this session, so no fallback execution was performed.`,
       async () => {
         if (!resolved) {
@@ -910,34 +1222,42 @@ export const synchronizerActions = {
             result,
           );
         }
-        return result.snapshot;
+        return {
+          snapshot: result.snapshot,
+          action: readString(result.action) ?? "broadcast_sync_action",
+          message:
+            readString(result.message) ??
+            "Broadcast intent was recorded through native contract.",
+        };
       },
       (snapshot) => ({
         ...snapshot,
         updatedAt: nowTs(),
       }),
       {
-        successTitle: "Broadcast execution completed",
+        successTitle: "Broadcast intent recorded",
         successInfo: resolved
-          ? `${plan.title} executed through ${resolved.key} for ${request.targetWindowIds.length} target windows.`
+          ? `${plan.title} intent was recorded through ${resolved.key} for ${request.targetWindowIds.length} target windows. Physical multi-window dispatch remains intention-only in this build.`
           : undefined,
         successCapabilityDetail: resolved
-          ? `Native broadcast contract "${resolved.key}" executed for ${request.targetWindowIds.length} targets.`
+          ? `Broadcast intent was recorded through native contract "${resolved.key}" for ${request.targetWindowIds.length} targets. Physical dispatch remains intention-only.`
           : undefined,
         successFeedDetail: resolved
-          ? `${plan.scopeLabel} - ${request.targetWindowIds.length} targets - native broadcast write succeeded.`
+          ? `${plan.scopeLabel} - ${request.targetWindowIds.length} targets - native broadcast intent recorded; physical dispatch not executed.`
           : undefined,
+        successTone: "warning",
+        successExecutionMode: "local_staged",
+        successCapabilityStatus: "local_staged",
         notReadyInfo:
           "Native broadcast contract is not exposed in this build yet. The prepared plan remains available for later execution; no fallback execution was performed.",
         nativeFailureInfo:
-          "Native broadcast execution failed. The prepared plan and current snapshot were kept for retry; no fallback execution was performed.",
+          "Native broadcast intent write failed. The prepared plan and current snapshot were kept for retry; no fallback execution was performed.",
       },
     );
 
     synchronizerStore.setState((current) => ({
       ...current,
       runningBroadcastPlanId: null,
-      capabilities: patchBroadcastCapabilityProbe(current.capabilities),
     }));
   },
   setAutoRefreshEnabled(autoRefreshEnabled: boolean) {
@@ -1030,8 +1350,8 @@ export const synchronizerActions = {
 
     await runSynchronizerAction(
       "layout",
-      "Layout updated",
-      `Layout switched to ${mode.replaceAll("_", " ")} in the local console state.`,
+      "Layout prepared",
+      `Layout switched to ${mode.replaceAll("_", " ")} in prepared local state. No fallback execution was performed.`,
       async () => {
         const result = await desktop.applyWindowLayout({
           mode: previewLayout.mode,
@@ -1043,7 +1363,7 @@ export const synchronizerActions = {
           uniformWidth: previewLayout.uniformWidth,
           uniformHeight: previewLayout.uniformHeight,
         });
-        return result.snapshot;
+        return result;
       },
       (snapshot) => ({
         ...snapshot,
@@ -1051,10 +1371,11 @@ export const synchronizerActions = {
         updatedAt: nowTs(),
       }),
       {
-        successCapabilityDetail:
-          "Layout preset was written through the synchronizer internal-state contract (state write only; not physical window rearrangement).",
-        successFeedDetail:
-          "Synchronizer internal layout state updated (no physical window rearrangement).",
+        resolveSuccess: (result) => resolveLayoutApplySurface(mode, result),
+        notReadyInfo:
+          "This desktop build does not expose native layout apply yet. The layout change remains prepared only; no fallback execution was performed.",
+        nativeFailureInfo:
+          "Native layout apply failed. The layout change remains prepared for retry; no fallback execution was performed.",
       },
     );
   },
@@ -1068,13 +1389,13 @@ export const synchronizerActions = {
 
     await runSynchronizerAction(
       "layout",
-      "Sync guardrail updated",
-      `Updated ${label} to ${value ? "on" : "off"} in the local console state.`,
+      "Sync guardrail prepared",
+      `Updated ${label} to ${value ? "on" : "off"} in prepared local state.`,
       async () => {
         const result = await desktop.applyWindowLayout({
           [flag]: value,
         });
-        return result.snapshot;
+        return result;
       },
       (snapshot) => ({
         ...snapshot,
@@ -1086,10 +1407,16 @@ export const synchronizerActions = {
         updatedAt: nowTs(),
       }),
       {
+        successTitle: "Sync guardrail prepared",
+        successInfo:
+          "Sync guardrail write was accepted for synchronizer state, but this remains a prepared/intention-only operator control.",
         successCapabilityDetail:
-          "Sync guardrails were written through synchronizer internal-state contract (state write only).",
+          "Sync guardrail write remains prepared/intention-only for operator planning in this build.",
         successFeedDetail:
-          "Synchronizer internal layout guardrail updated (state write only).",
+          "Sync guardrail updated as prepared/intention-only state.",
+        successExecutionMode: "local_staged",
+        successCapabilityStatus: "local_staged",
+        successTone: "info",
       },
     );
   },
@@ -1276,9 +1603,9 @@ export function getSynchronizerConsoleSummary(
     attentionItems.push({
       id: "broadcast-running",
       tone: "info",
-      title: "Broadcast execution is in progress",
+      title: "Broadcast intent command is in progress",
       detail:
-        "The synchronizer is waiting for a broadcast execution result from the selected plan.",
+        "The synchronizer is waiting for a broadcast intent-write result from the selected plan.",
     });
   } else if (state.stagedBroadcastPlanId) {
     attentionItems.push({
@@ -1286,12 +1613,12 @@ export function getSynchronizerConsoleSummary(
       tone: "info",
       title:
         state.capabilities.broadcastPlan.status === "native_live"
-          ? "Broadcast path is native-ready in this session"
+          ? "Broadcast native intent path responded in this session"
           : "A broadcast action plan is prepared",
       detail:
         state.capabilities.broadcastPlan.status === "native_live"
-          ? "At least one broadcast execution has already landed through a native contract in this session."
-          : "The selected broadcast plan is prepared. If native broadcast is unavailable in this session, execution is deferred rather than replayed locally.",
+          ? "At least one native broadcast intent write landed in this session, but physical multi-window dispatch is still intention-only."
+          : "The selected broadcast plan is prepared. If native broadcast intent write is unavailable in this session, execution is deferred rather than replayed locally.",
     });
   }
 

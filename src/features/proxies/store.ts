@@ -3,9 +3,13 @@ import type {
   DesktopProxyBatchCheckResponse,
   DesktopProxyChangeIpResult,
 } from "../../types/desktop";
+import { getProxyProviderWriteState, hasProxyRollbackSignal } from "./changeIpFeedback";
 import {
   type ProxyBatchCheckState,
+  type ProxyChangeExecutionMeta,
   type ProxyChangeIpState,
+  type ProxyChangeProviderRefreshMeta,
+  type ProxyChangeRollbackMeta,
   type ProxyDataSource,
   type ProxyDetailSnapshot,
   type ProxyFilterState,
@@ -296,6 +300,424 @@ function normalizeChangeIpContext(
     requestedProvider: context?.requestedProvider ?? null,
     requestedRegion: context?.requestedRegion ?? null,
     stickyTtlSeconds: context?.stickyTtlSeconds ?? null,
+  };
+}
+
+type LooseRecord = Record<string, unknown>;
+
+function toRecord(value: unknown): LooseRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as LooseRecord;
+}
+
+function readNestedRecord(record: LooseRecord | null, keys: string[]): LooseRecord | null {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const nested = toRecord(record[key]);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function readStringValue(
+  records: Array<LooseRecord | null | undefined>,
+  keys: string[],
+): string | null {
+  for (const record of records) {
+    if (!record) {
+      continue;
+    }
+
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "string") {
+        const normalized = value.trim();
+        if (normalized.length > 0) {
+          return normalized;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function readBooleanValue(
+  records: Array<LooseRecord | null | undefined>,
+  keys: string[],
+): boolean | null {
+  for (const record of records) {
+    if (!record) {
+      continue;
+    }
+
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "boolean") {
+        return value;
+      }
+      if (typeof value === "number") {
+        if (value === 1) {
+          return true;
+        }
+        if (value === 0) {
+          return false;
+        }
+      }
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === "true" || normalized === "1" || normalized === "yes") {
+          return true;
+        }
+        if (normalized === "false" || normalized === "0" || normalized === "no") {
+          return false;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function inferAcceptedWrite(status: string | null, trackingTaskId: string | null): boolean | null {
+  const normalized = status?.toLowerCase() ?? "";
+
+  if (
+    normalized.includes("queued") ||
+    normalized.includes("accepted") ||
+    normalized.includes("submitted") ||
+    normalized.includes("scheduled") ||
+    Boolean(trackingTaskId)
+  ) {
+    return true;
+  }
+
+  if (
+    normalized.includes("failed") ||
+    normalized.includes("error") ||
+    normalized.includes("blocked") ||
+    normalized.includes("rejected")
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
+function normalizeExecutionMeta(
+  result: DesktopProxyChangeIpResult,
+): ProxyChangeExecutionMeta | null {
+  const root = toRecord(result);
+  const execution = readNestedRecord(root, [
+    "execution",
+    "executionMeta",
+    "execution_meta",
+    "executionFeedback",
+    "execution_feedback",
+  ]);
+
+  const meta: ProxyChangeExecutionMeta = {
+    acceptedWrite:
+      readBooleanValue([execution, root], [
+        "acceptedWrite",
+        "accepted_write",
+        "accepted",
+        "writeAccepted",
+        "write_accepted",
+        "providerWriteAccepted",
+        "provider_write_accepted",
+        "executionAcceptedWrite",
+        "execution_accepted_write",
+      ]) ?? inferAcceptedWrite(result.status, result.trackingTaskId),
+    requestId:
+      readStringValue([execution, root], [
+        "requestId",
+        "request_id",
+        "providerRequestId",
+        "provider_request_id",
+        "writeRequestId",
+        "write_request_id",
+        "executionRequestId",
+        "execution_request_id",
+      ]) ?? result.trackingTaskId,
+    providerSource: readStringValue([execution, root], [
+      "providerSource",
+      "provider_source",
+      "source",
+      "sourceProvider",
+      "source_provider",
+      "providerRefreshSource",
+      "provider_refresh_source",
+    ]),
+    status:
+      readStringValue([execution, root], [
+        "status",
+        "writeStatus",
+        "write_status",
+        "executionStatus",
+        "execution_status",
+      ]) ?? result.status,
+    stage: readStringValue([execution, root], [
+      "stage",
+      "phase",
+      "executionStage",
+      "execution_stage",
+    ]),
+    detail:
+      readStringValue([execution, root], [
+        "detail",
+        "message",
+        "note",
+        "executionDetail",
+        "execution_detail",
+      ]) ?? result.message,
+  };
+
+  if (
+    meta.acceptedWrite === null &&
+    !meta.requestId &&
+    !meta.providerSource &&
+    !meta.status &&
+    !meta.stage &&
+    !meta.detail
+  ) {
+    return null;
+  }
+
+  return meta;
+}
+
+function normalizeRollbackMeta(
+  result: DesktopProxyChangeIpResult,
+): ProxyChangeRollbackMeta | null {
+  const root = toRecord(result);
+  const rollback = readNestedRecord(root, [
+    "rollback",
+    "rollbackMeta",
+    "rollback_meta",
+    "rollbackFeedback",
+    "rollback_feedback",
+  ]);
+
+  const meta: ProxyChangeRollbackMeta = {
+    signaled:
+      readBooleanValue([rollback], [
+        "signaled",
+        "rollbackSignaled",
+        "rollback_signaled",
+        "flagged",
+        "rollbackFlagged",
+        "rollback_flagged",
+        "shouldRollback",
+        "should_rollback",
+      ]) ??
+      readBooleanValue([root], [
+        "rollbackSignaled",
+        "rollback_signaled",
+        "rollbackFlagged",
+        "rollback_flagged",
+        "shouldRollback",
+        "should_rollback",
+      ]),
+    status:
+      readStringValue([rollback], [
+        "status",
+        "state",
+        "rollbackStatus",
+        "rollback_status",
+      ]) ??
+      readStringValue([root], [
+        "rollbackStatus",
+        "rollback_status",
+        "rollbackState",
+        "rollback_state",
+      ]),
+    reason:
+      readStringValue([rollback], [
+        "reason",
+        "message",
+        "note",
+        "rollbackReason",
+        "rollback_reason",
+      ]) ??
+      readStringValue([root], [
+        "rollbackReason",
+        "rollback_reason",
+        "rollbackMessage",
+        "rollback_message",
+      ]),
+    requestId:
+      readStringValue([rollback], [
+        "requestId",
+        "request_id",
+        "rollbackRequestId",
+        "rollback_request_id",
+      ]) ??
+      readStringValue([root], [
+        "rollbackRequestId",
+        "rollback_request_id",
+      ]),
+  };
+
+  if (meta.signaled === null && !meta.status && !meta.reason && !meta.requestId) {
+    return null;
+  }
+
+  return meta;
+}
+
+function normalizeProviderRefreshMeta(
+  result: DesktopProxyChangeIpResult,
+): ProxyChangeProviderRefreshMeta | null {
+  const root = toRecord(result);
+  const providerRefresh = readNestedRecord(root, [
+    "providerRefresh",
+    "provider_refresh",
+    "providerRefreshMeta",
+    "provider_refresh_meta",
+  ]);
+
+  const meta: ProxyChangeProviderRefreshMeta = {
+    source:
+      readStringValue([providerRefresh], [
+        "source",
+        "providerSource",
+        "provider_source",
+        "refreshSource",
+        "refresh_source",
+      ]) ??
+      readStringValue([root], [
+        "providerRefreshSource",
+        "provider_refresh_source",
+        "refreshSource",
+        "refresh_source",
+      ]),
+    requestId:
+      readStringValue([providerRefresh], [
+        "requestId",
+        "request_id",
+        "providerRequestId",
+        "provider_request_id",
+        "refreshRequestId",
+        "refresh_request_id",
+      ]) ??
+      readStringValue([root], [
+        "providerRefreshRequestId",
+        "provider_refresh_request_id",
+        "refreshRequestId",
+        "refresh_request_id",
+        "providerRequestId",
+        "provider_request_id",
+      ]),
+    status:
+      readStringValue([providerRefresh], [
+        "status",
+        "state",
+        "refreshStatus",
+        "refresh_status",
+        "providerRefreshStatus",
+        "provider_refresh_status",
+      ]) ??
+      readStringValue([root], [
+        "providerRefreshStatus",
+        "provider_refresh_status",
+        "refreshStatus",
+        "refresh_status",
+      ]),
+    refreshedAt:
+      readStringValue([providerRefresh], [
+        "refreshedAt",
+        "refreshed_at",
+        "updatedAt",
+        "updated_at",
+      ]) ??
+      readStringValue([root], [
+        "providerRefreshAt",
+        "provider_refresh_at",
+        "providerRefreshUpdatedAt",
+        "provider_refresh_updated_at",
+      ]),
+    observedExitIp:
+      readStringValue([providerRefresh], [
+        "observedExitIp",
+        "observed_exit_ip",
+        "exitIp",
+        "exit_ip",
+        "currentExitIp",
+        "current_exit_ip",
+      ]) ??
+      readStringValue([root], [
+        "providerRefreshObservedExitIp",
+        "provider_refresh_observed_exit_ip",
+      ]),
+    observedRegion:
+      readStringValue([providerRefresh], [
+        "observedRegion",
+        "observed_region",
+        "region",
+        "currentRegion",
+        "current_region",
+      ]) ??
+      readStringValue([root], [
+        "providerRefreshObservedRegion",
+        "provider_refresh_observed_region",
+      ]),
+  };
+
+  if (
+    !meta.source &&
+    !meta.requestId &&
+    !meta.status &&
+    !meta.refreshedAt &&
+    !meta.observedExitIp &&
+    !meta.observedRegion
+  ) {
+    return null;
+  }
+
+  return meta;
+}
+
+function mergeExecutionMeta(
+  previous: ProxyChangeExecutionMeta | null,
+  next: ProxyChangeExecutionMeta | null,
+): ProxyChangeExecutionMeta | null {
+  if (!previous) {
+    return next;
+  }
+  if (!next) {
+    return previous;
+  }
+
+  return {
+    acceptedWrite: next.acceptedWrite ?? previous.acceptedWrite,
+    requestId: next.requestId ?? previous.requestId,
+    providerSource: next.providerSource ?? previous.providerSource,
+    status: next.status ?? previous.status,
+    stage: next.stage ?? previous.stage,
+    detail: next.detail ?? previous.detail,
+  };
+}
+
+function buildSubmittingExecutionMeta(
+  previous: ProxyChangeExecutionMeta | null,
+): ProxyChangeExecutionMeta {
+  return {
+    acceptedWrite: previous?.acceptedWrite ?? null,
+    requestId: previous?.requestId ?? null,
+    providerSource: previous?.providerSource ?? null,
+    status: previous?.status ?? "submitting",
+    stage: previous?.stage ?? "local_request_submitting",
+    detail:
+      previous?.detail ?? "Local request submitted. Waiting for typed execution metadata.",
   };
 }
 
@@ -649,6 +1071,17 @@ export const proxyActions = {
                 phase: "running" as const,
                 message: "Queued for provider-write submission.",
                 status: "submitting",
+                execution: {
+                  acceptedWrite: null,
+                  requestId: null,
+                  providerSource: null,
+                  status: "submitting",
+                  stage: "local_request_queued",
+                  detail:
+                    "Queued locally. Waiting for execution / rollback / providerRefresh metadata.",
+                },
+                rollback: null,
+                providerRefresh: null,
                 mode: null,
                 sessionKey: null,
                 requestedProvider: null,
@@ -683,6 +1116,7 @@ export const proxyActions = {
       const previous = current.changeIp.results[proxyId];
       const context = normalizeChangeIpContext(requestContext);
       const updatedAt = String(Math.floor(Date.now() / 1000));
+      const nextExecution = buildSubmittingExecutionMeta(previous?.execution ?? null);
 
       return {
         ...current,
@@ -698,6 +1132,13 @@ export const proxyActions = {
               phase: "running",
               message,
               status: previous?.status ?? "submitting",
+              execution: {
+                ...nextExecution,
+                status: "submitting",
+                detail: message,
+              },
+              rollback: previous?.rollback ?? null,
+              providerRefresh: previous?.providerRefresh ?? null,
               mode: context.mode ?? previous?.mode ?? null,
               sessionKey: context.sessionKey ?? previous?.sessionKey ?? null,
               requestedProvider:
@@ -728,6 +1169,11 @@ export const proxyActions = {
       if (current.changeIp.requestId !== requestId) {
         return current;
       }
+
+      const previous = current.changeIp.results[proxyId];
+      const executionMeta = normalizeExecutionMeta(result);
+      const rollbackMeta = normalizeRollbackMeta(result);
+      const providerRefreshMeta = normalizeProviderRefreshMeta(result);
 
       const nextRows = current.rows.map((row) =>
         row.id === proxyId
@@ -767,6 +1213,12 @@ export const proxyActions = {
               phase: "success",
               message: result.message,
               status: result.status,
+              execution: mergeExecutionMeta(
+                previous?.execution ?? null,
+                executionMeta,
+              ),
+              rollback: rollbackMeta ?? previous?.rollback ?? null,
+              providerRefresh: providerRefreshMeta ?? previous?.providerRefresh ?? null,
               mode: result.mode,
               sessionKey: result.sessionKey,
               requestedProvider: result.requestedProvider,
@@ -798,6 +1250,18 @@ export const proxyActions = {
 
       const previous = current.changeIp.results[proxyId];
       const context = normalizeChangeIpContext(requestContext);
+      const nextExecution: ProxyChangeExecutionMeta = {
+        acceptedWrite: false,
+        requestId: previous?.execution?.requestId ?? previous?.trackingTaskId ?? null,
+        providerSource: previous?.execution?.providerSource ?? null,
+        status: previous?.execution?.status ?? "local_request_failed",
+        stage: previous?.execution?.stage ?? "local_request_failed",
+        detail: error,
+      };
+      const nextRollback: ProxyChangeRollbackMeta | null =
+        previous?.rollback ?? null;
+      const nextProviderRefresh: ProxyChangeProviderRefreshMeta | null =
+        previous?.providerRefresh ?? null;
 
       return {
         ...current,
@@ -815,6 +1279,9 @@ export const proxyActions = {
               phase: "error",
               message: error,
               status: previous?.status ?? "local_request_failed",
+              execution: nextExecution,
+              rollback: nextRollback,
+              providerRefresh: nextProviderRefresh,
               mode: context.mode ?? previous?.mode ?? null,
               sessionKey: context.sessionKey ?? previous?.sessionKey ?? null,
               requestedProvider:
@@ -846,14 +1313,11 @@ export const proxyActions = {
       const hasFailure = current.changeIp.failedCount > 0;
       const targetCount = current.changeIp.targetIds.length;
       const resultItems = Object.values(current.changeIp.results);
-      const acceptedWrites = resultItems.filter((result) => {
-        const status = result.status?.toLowerCase() ?? "";
-        return result.phase === "success" && (status.includes("queued") || Boolean(result.trackingTaskId));
-      }).length;
+      const acceptedWrites = resultItems.filter(
+        (result) => getProxyProviderWriteState(result) === "accepted",
+      ).length;
       const rollbackSignals = resultItems.filter((result) =>
-        /rollback|revert|compensat/i.test(
-          `${result.status ?? ""} ${result.message ?? ""} ${result.note ?? ""}`,
-        ),
+        hasProxyRollbackSignal(result),
       ).length;
 
       return {

@@ -1,5 +1,6 @@
 import {
   getProxyChangeCooldownRemainingSeconds,
+  getProxyProviderWriteEvidence,
   getProxyProviderWriteDetail,
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
@@ -184,6 +185,9 @@ function getRotationPosture(
   const writeState = getProxyProviderWriteState(changeIpFeedback);
   const writeLabel = getProxyProviderWriteLabel(writeState);
   const writeDetail = getProxyProviderWriteDetail(changeIpFeedback);
+  const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
+  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
+  const requestId = writeEvidence.requestId ?? "pending";
 
   if (
     changeIpFeedback.phase === "error" ||
@@ -193,7 +197,7 @@ function getRotationPosture(
     return {
       badge: "badge badge--failed",
       label: writeLabel,
-      detail: `${writeDetail} Status=${changeIpFeedback.status ?? "unknown"}.`,
+      detail: `${writeDetail} Status=${changeIpFeedback.status ?? "unknown"}, source=${sourceLabel}, request=${requestId}.`,
     };
   }
 
@@ -201,7 +205,7 @@ function getRotationPosture(
     return {
       badge: "badge badge--warning",
       label: writeLabel,
-      detail: `${writeDetail} Verify residency=${changeIpFeedback.residencyStatus ?? residencyStatus}.`,
+      detail: `${writeDetail} Verify residency=${changeIpFeedback.residencyStatus ?? residencyStatus}, source=${sourceLabel}, request=${requestId}.`,
     };
   }
 
@@ -209,15 +213,26 @@ function getRotationPosture(
     return {
       badge: "badge badge--info",
       label: writeLabel,
-      detail: `${writeDetail} Exit-IP drift is not observed yet.`,
+      detail: `${writeDetail} source=${sourceLabel}, request=${requestId}; exit-IP drift is not observed yet.`,
     };
   }
 
   return {
     badge: "badge badge--warning",
     label: writeLabel,
-    detail: `${writeDetail} ${changeIpFeedback.rotationMode ?? rotationMode} / ${changeIpFeedback.residencyStatus ?? residencyStatus}.`,
+    detail: `${writeDetail} ${changeIpFeedback.rotationMode ?? rotationMode} / ${changeIpFeedback.residencyStatus ?? residencyStatus}; source=${sourceLabel}, request=${requestId}.`,
   };
+}
+
+function getAcceptedWriteLabel(changeIpFeedback: ProxyIpChangeFeedback | null): string {
+  const acceptedWrite = getProxyProviderWriteEvidence(changeIpFeedback).acceptedWrite;
+  if (acceptedWrite === true) {
+    return "accepted";
+  }
+  if (acceptedWrite === false) {
+    return "not-accepted";
+  }
+  return "unknown";
 }
 
 function ProxyRow({
@@ -238,6 +253,12 @@ function ProxyRow({
   const displayHealthState = getDisplayHealthState(row.health);
   const riskPosture = getRiskPosture(row);
   const rotationPosture = getRotationPosture(row, changeIpFeedback);
+  const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
+  const rollbackLabel = writeEvidence.rollbackSignal ? "rollback-flagged" : "no-rollback-signal";
+  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
+  const requestIdLabel = writeEvidence.requestId ?? "pending";
+  const executionLabel = writeEvidence.executionStatus ?? "unknown";
+  const providerRefreshLabel = writeEvidence.providerRefreshStatus ?? "refresh-pending";
 
   return (
     <article
@@ -320,9 +341,11 @@ function ProxyRow({
           {changeIpFeedback?.requestedRegion ?? row.rotation.requestedRegion ?? "inherit-region"}
         </span>
         <span className="proxy-row__subline">
-          {changeIpFeedback?.trackingTaskId
-            ? `Tracking ${changeIpFeedback.trackingTaskId}`
-            : "Tracking pending"}
+          accepted={getAcceptedWriteLabel(changeIpFeedback)} / rollback={rollbackLabel} /
+          execution={executionLabel} / providerRefresh={providerRefreshLabel}
+        </span>
+        <span className="proxy-row__subline">
+          source={sourceLabel} / request-or-tracking={requestIdLabel}
         </span>
       </div>
 
@@ -354,7 +377,8 @@ export function ProxyTable({
   onSetVisibleSelection,
 }: ProxyTableProps) {
   const visibleIds = rows.map((row) => row.id);
-  const tableHeight = Math.max(240, Math.min(680, rows.length * 132));
+  const rowHeight = 156;
+  const tableHeight = Math.max(240, Math.min(680, rows.length * rowHeight));
 
   return (
     <Panel
@@ -419,7 +443,7 @@ export function ProxyTable({
           <VirtualList
             items={rows}
             height={tableHeight}
-            itemHeight={132}
+            itemHeight={rowHeight}
             getKey={(item) => item.id}
             renderItem={(item) => (
               <ProxyRow

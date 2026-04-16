@@ -883,6 +883,23 @@ export interface DesktopProxyChangeIpRequest {
   stickyTtlSeconds?: number | null;
 }
 
+// `accepted` means provider-side write was accepted; exit-IP drift is still unverified.
+export type DesktopProxyChangeIpExecutionStatus = "accepted" | "failed" | string;
+
+export type DesktopProxyChangeIpRollbackSignal =
+  | "none"
+  | "binding_not_applied"
+  | "provider_refreshed_manual_rebind_required"
+  | string;
+
+export interface DesktopProxyChangeIpProviderRefresh {
+  sourceLabel: string;
+  providerKey: string;
+  statusCode: number;
+  providerRequestId: string | null;
+  responseExcerpt: string | null;
+}
+
 export interface DesktopProxyChangeIpResult {
   proxyId: string;
   status: string;
@@ -898,6 +915,10 @@ export interface DesktopProxyChangeIpResult {
   expiresAt: string | null;
   updatedAt: string;
   message: string;
+  executionStatus: DesktopProxyChangeIpExecutionStatus;
+  rollbackSignal: DesktopProxyChangeIpRollbackSignal;
+  errorKind: string | null;
+  providerRefresh: DesktopProxyChangeIpProviderRefresh;
 }
 
 export interface DesktopTemplateUpsertInput {

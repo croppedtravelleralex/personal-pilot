@@ -43,8 +43,9 @@ Updated: 2026-04-17 (Asia/Shanghai)
 3. `/docs/19-phase-plan-and-scorecard.md`
 4. `/docs/03-roadmap.md`
 5. `/docs/04-improvement-backlog.md`
-6. `/docs/05-ai-maintenance-playbook.md`
-7. `/docs/17-full-app-audit-progress-reset.md`
-8. `/docs/13-adspower-deep-comparison.md`
-9. `/docs/root-entrypoint-map.md`
-10. `/docs/18-external-browser-integration-plan.md`
+6. `/docs/20-wave-2a-execution-plan.md`
+7. `/docs/05-ai-maintenance-playbook.md`
+8. `/docs/17-full-app-audit-progress-reset.md`
+9. `/docs/13-adspower-deep-comparison.md`
+10. `/docs/root-entrypoint-map.md`
+11. `/docs/18-external-browser-integration-plan.md`

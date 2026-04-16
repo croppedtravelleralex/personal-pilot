@@ -31,6 +31,13 @@ function normalize(value: string | null | undefined): string {
 function collectFeedbackText(result: ProxyIpChangeFeedback): string {
   return [
     result.status,
+    result.execution?.status,
+    result.execution?.stage,
+    result.execution?.detail,
+    result.rollback?.status,
+    result.rollback?.reason,
+    result.providerRefresh?.status,
+    result.providerRefresh?.source,
     result.mode,
     result.residencyStatus,
     result.rotationMode,
@@ -44,6 +51,31 @@ function collectFeedbackText(result: ProxyIpChangeFeedback): string {
 
 function includesAny(haystack: string, needles: string[]): boolean {
   return needles.some((needle) => haystack.includes(needle));
+}
+
+function pickFirstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    const normalized = value.trim();
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+export interface ProxyProviderWriteEvidence {
+  acceptedWrite: boolean | null;
+  rollbackSignal: boolean;
+  providerSource: string | null;
+  requestId: string | null;
+  executionStatus: string | null;
+  rollbackStatus: string | null;
+  providerRefreshStatus: string | null;
+  providerRefreshAt: string | null;
 }
 
 export function parseProxyTimestamp(value: string | null): number | null {
@@ -69,7 +101,101 @@ export function hasProxyRollbackSignal(result: ProxyIpChangeFeedback | null): bo
     return false;
   }
 
+  if (result.rollback?.signaled === true) {
+    return true;
+  }
+  if (result.rollback?.signaled === false) {
+    return false;
+  }
+
   return includesAny(collectFeedbackText(result), ROLLBACK_TOKENS);
+}
+
+export function getProxyProviderRequestId(result: ProxyIpChangeFeedback | null): string | null {
+  if (!result) {
+    return null;
+  }
+
+  return pickFirstNonEmpty(
+    result.execution?.requestId ?? null,
+    result.providerRefresh?.requestId ?? null,
+    result.rollback?.requestId ?? null,
+    result.trackingTaskId,
+  );
+}
+
+export function getProxyProviderSource(result: ProxyIpChangeFeedback | null): string | null {
+  if (!result) {
+    return null;
+  }
+
+  return pickFirstNonEmpty(
+    result.providerRefresh?.source ?? null,
+    result.execution?.providerSource ?? null,
+  );
+}
+
+export function getProxyAcceptedWriteSignal(
+  result: ProxyIpChangeFeedback | null,
+): boolean | null {
+  if (!result) {
+    return null;
+  }
+
+  if (typeof result.execution?.acceptedWrite === "boolean") {
+    return result.execution.acceptedWrite;
+  }
+
+  const normalized = collectFeedbackText(result);
+  if (result.trackingTaskId || includesAny(normalized, ACCEPTED_TOKENS)) {
+    return true;
+  }
+
+  if (
+    result.phase === "error" ||
+    includesAny(normalized, FAILED_TOKENS) ||
+    includesAny(normalized, BLOCKED_TOKENS)
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
+export function getProxyProviderWriteEvidence(
+  result: ProxyIpChangeFeedback | null,
+): ProxyProviderWriteEvidence {
+  if (!result) {
+    return {
+      acceptedWrite: null,
+      rollbackSignal: false,
+      providerSource: null,
+      requestId: null,
+      executionStatus: null,
+      rollbackStatus: null,
+      providerRefreshStatus: null,
+      providerRefreshAt: null,
+    };
+  }
+
+  return {
+    acceptedWrite: getProxyAcceptedWriteSignal(result),
+    rollbackSignal: hasProxyRollbackSignal(result),
+    providerSource: getProxyProviderSource(result),
+    requestId: getProxyProviderRequestId(result),
+    executionStatus: pickFirstNonEmpty(
+      result.execution?.status ?? null,
+      result.status,
+    ),
+    rollbackStatus: pickFirstNonEmpty(
+      result.rollback?.status ?? null,
+      result.rollback?.reason ?? null,
+    ),
+    providerRefreshStatus: pickFirstNonEmpty(
+      result.providerRefresh?.status ?? null,
+    ),
+    providerRefreshAt: pickFirstNonEmpty(result.providerRefresh?.refreshedAt ?? null),
+  };
 }
 
 export function getProxyProviderWriteState(
@@ -84,6 +210,7 @@ export function getProxyProviderWriteState(
   }
 
   const normalized = collectFeedbackText(result);
+  const acceptedSignal = getProxyAcceptedWriteSignal(result);
 
   if (hasProxyRollbackSignal(result)) {
     return "rollback_flagged";
@@ -97,8 +224,16 @@ export function getProxyProviderWriteState(
     return "blocked";
   }
 
-  if (result.phase === "success") {
-    if (result.trackingTaskId || includesAny(normalized, ACCEPTED_TOKENS)) {
+  if (acceptedSignal === true) {
+    return "accepted";
+  }
+
+  if (acceptedSignal === false && result.phase !== "success" && result.phase !== "accepted") {
+    return "verify_pending";
+  }
+
+  if (result.phase === "success" || result.phase === "accepted") {
+    if (acceptedSignal === true || result.trackingTaskId || includesAny(normalized, ACCEPTED_TOKENS)) {
       return "accepted";
     }
     return "verify_pending";
@@ -134,17 +269,23 @@ export function getProxyProviderWriteDetail(result: ProxyIpChangeFeedback | null
     return "No tracked change-IP request yet.";
   }
 
+  const evidence = getProxyProviderWriteEvidence(result);
+  const requestInfo = evidence.requestId ? ` request ${evidence.requestId}` : "";
+  const sourceInfo = evidence.providerSource ? ` from ${evidence.providerSource}` : "";
+
   switch (state) {
     case "submitting":
-      return "Submitting changeProxyIp request through desktop contract.";
+      return "Submitting changeProxyIp request through desktop contract; waiting for execution metadata.";
     case "accepted":
-      return result.trackingTaskId
-        ? `Provider write queued with tracking task ${result.trackingTaskId}.`
-        : "Provider write was accepted and queued; tracking id is pending.";
+      return evidence.requestId
+        ? `Provider write accepted${sourceInfo}; queued under${requestInfo}.`
+        : `Provider write accepted${sourceInfo}; request id is pending.`;
     case "verify_pending":
-      return "Write completed locally, but exit-IP drift still needs a later health/detail refresh.";
+      return "Write finished locally, but provider acceptance is still unconfirmed; wait for detail refresh.";
     case "rollback_flagged":
-      return "Rollback/revert signal detected in status or note; verify latest detail before reuse.";
+      return evidence.rollbackStatus
+        ? `Rollback signal flagged (${evidence.rollbackStatus}); verify latest detail before reuse.`
+        : "Rollback signal flagged; verify latest detail before reuse.";
     case "blocked":
       return "Provider write was blocked/rejected; keep current assignment until follow-up.";
     case "failed":

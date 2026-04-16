@@ -27,6 +27,31 @@ export type ProxyWriteOutcomeLabel =
   | "write-pending"
   | "blocked";
 
+export interface ProxyChangeExecutionMeta {
+  acceptedWrite: boolean | null;
+  requestId: string | null;
+  providerSource: string | null;
+  status: string | null;
+  stage: string | null;
+  detail: string | null;
+}
+
+export interface ProxyChangeRollbackMeta {
+  signaled: boolean | null;
+  status: string | null;
+  reason: string | null;
+  requestId: string | null;
+}
+
+export interface ProxyChangeProviderRefreshMeta {
+  source: string | null;
+  requestId: string | null;
+  status: string | null;
+  refreshedAt: string | null;
+  observedExitIp: string | null;
+  observedRegion: string | null;
+}
+
 export interface ProxyRotationSummary {
   residencyStatus: string;
   rotationMode: string;
@@ -113,6 +138,9 @@ export interface ProxyIpChangeFeedback {
   phase: ProxyChangeFeedbackPhase;
   message: string;
   status: string | null;
+  execution: ProxyChangeExecutionMeta | null;
+  rollback: ProxyChangeRollbackMeta | null;
+  providerRefresh: ProxyChangeProviderRefreshMeta | null;
   mode: string | null;
   sessionKey: string | null;
   requestedProvider: string | null;

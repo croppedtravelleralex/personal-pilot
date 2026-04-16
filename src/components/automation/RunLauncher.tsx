@@ -223,7 +223,7 @@ export function RunLauncher({
   return (
     <Panel
       title="Launch Console"
-      subtitle="Review preflight, confirm dispatch posture, and move a prepared local manifest into execution when the native write path is available."
+      subtitle="Review preflight, confirm dispatch posture, and move a prepared local manifest into local runtime execution through the connected desktop launch contract."
       actions={
         <span className={`badge ${getPostureTone(canLaunch, isPreparingLaunch, isLaunching)}`}>
           {isPreparingLaunch
@@ -301,8 +301,8 @@ export function RunLauncher({
           <strong>Reality boundary</strong>
           <div>
             This panel stages and dispatches the local compile/launch loop that exists today. It
-            does not claim vendor-grade batch orchestration, multi-branch debugging, or richer
-            task-center control planes beyond the desktop commands currently wired here.
+            is not an AdsPower-grade orchestration plane with vendor-level control towers or
+            multi-branch debugging beyond the desktop commands currently wired here.
           </div>
         </div>
 
@@ -630,8 +630,8 @@ export function RunLauncher({
 
         {!onLaunch && lastPreparedLaunch?.ready ? (
           <div className="banner banner--warning">
-            Launch staging is ready, but the execution write path still depends on the desktop
-            `launchTemplateRun` command being present in this build.
+            Launch is prepared, but this view did not expose a launch action. Keep this package
+            staged and trigger dispatch from the connected launch surface.
           </div>
         ) : null}
 

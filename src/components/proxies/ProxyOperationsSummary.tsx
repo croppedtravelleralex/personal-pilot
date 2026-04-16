@@ -1,4 +1,5 @@
 import {
+  getProxyProviderWriteEvidence,
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
 } from "../../features/proxies/changeIpFeedback";
@@ -54,33 +55,18 @@ function getResultBadge(result: ProxyIpChangeFeedback): string {
 }
 
 function getResultLabel(result: ProxyIpChangeFeedback): string {
+  const evidence = getProxyProviderWriteEvidence(result);
   const writeState = getProxyProviderWriteState(result);
-  if (writeState === "accepted") {
-    return "accepted";
-  }
-  if (writeState === "rollback_flagged") {
+  if (evidence.rollbackSignal || writeState === "rollback_flagged") {
     return "rollback-flagged";
+  }
+  if (evidence.acceptedWrite === true || writeState === "accepted") {
+    return "accepted";
   }
   if (writeState === "blocked") {
     return "blocked";
   }
-  if (writeState === "failed" || result.phase === "error") {
-    return "write-failed";
-  }
-
-  const rawStatus = result.status?.toLowerCase() ?? "";
-  if (rawStatus.includes("rollback")) {
-    return "rollback-flagged";
-  }
-  if (
-    rawStatus.includes("accept") ||
-    rawStatus.includes("queue") ||
-    rawStatus.includes("success") ||
-    rawStatus.includes("succeed")
-  ) {
-    return "accepted";
-  }
-  if (rawStatus.includes("fail") || rawStatus.includes("error")) {
+  if (writeState === "failed" || result.phase === "error" || evidence.acceptedWrite === false) {
     return "write-failed";
   }
   return "write-pending";
@@ -92,6 +78,16 @@ function getResultHumanLabel(result: ProxyIpChangeFeedback): string {
     return getProxyProviderWriteLabel(getProxyProviderWriteState(result));
   }
   return token;
+}
+
+function getAcceptedSignalLabel(acceptedWrite: boolean | null): string {
+  if (acceptedWrite === true) {
+    return "accepted";
+  }
+  if (acceptedWrite === false) {
+    return "not-accepted";
+  }
+  return "unknown";
 }
 
 export function ProxyOperationsSummary({
@@ -175,21 +171,38 @@ export function ProxyOperationsSummary({
 
       {recentResults.length > 0 ? (
         <div className="record-list">
-          {recentResults.map((result) => (
-            <article className="record-card record-card--compact" key={result.proxyId}>
-              <div className="record-card__top">
-                <div>
-                  <strong>{result.proxyId}</strong>
-                  <p className="record-card__subline">{result.message}</p>
+          {recentResults.map((result) => {
+            const evidence = getProxyProviderWriteEvidence(result);
+            const refreshStatus = evidence.providerRefreshStatus ?? "refresh-pending";
+
+            return (
+              <article className="record-card record-card--compact" key={result.proxyId}>
+                <div className="record-card__top">
+                  <div>
+                    <strong>{result.proxyId}</strong>
+                    <p className="record-card__subline">{result.message}</p>
+                    <p className="record-card__subline">
+                      accepted={getAcceptedSignalLabel(evidence.acceptedWrite)} / rollback=
+                      {evidence.rollbackSignal ? "rollback-flagged" : "no-rollback-signal"}
+                    </p>
+                    <p className="record-card__subline">
+                      source={evidence.providerSource ?? "unknown-source"} / request-or-tracking=
+                      {evidence.requestId ?? "pending"}
+                    </p>
+                    <p className="record-card__subline">
+                      execution={evidence.executionStatus ?? "unknown"} / providerRefresh=
+                      {refreshStatus}
+                    </p>
+                  </div>
+                  <span className={getResultBadge(result)}>{getResultHumanLabel(result)}</span>
                 </div>
-                <span className={getResultBadge(result)}>{getResultHumanLabel(result)}</span>
-              </div>
-              <div className="record-card__footer">
-                <span>{formatRelativeTimestamp(result.updatedAt)}</span>
-                <span>{getResultLabel(result)}</span>
-              </div>
-            </article>
-          ))}
+                <div className="record-card__footer">
+                  <span>{formatRelativeTimestamp(result.updatedAt)}</span>
+                  <span>{getResultLabel(result)}</span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : null}
     </Panel>

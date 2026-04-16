@@ -2,7 +2,15 @@ import { useEffect, useMemo } from "react";
 
 import * as desktopServices from "../../services/desktop";
 import { useStore } from "../../store/createStore";
-import type { DesktopJsonValue } from "../../types/desktop";
+import type {
+  DesktopLaunchTemplateRunRequest,
+  DesktopLaunchTemplateRunResult,
+  DesktopManualGateActionRequest,
+  DesktopReadRunDetailQuery,
+  DesktopRunArtifact,
+  DesktopRunDetail,
+  DesktopRunTimelineEntry,
+} from "../../types/desktop";
 import { useRecorderViewModel } from "../recorder/hooks";
 import { buildTemplateCompileRequestDraft } from "../templates/model";
 import { useTemplatesViewModel } from "../templates/hooks";
@@ -23,53 +31,7 @@ import {
 } from "./derived";
 import { automationActions, automationStore } from "./store";
 
-type LaunchTemplateRunRequest = {
-  templateId: string;
-  storeId?: string | null;
-  profileIds: string[];
-  variableBindings: Record<string, DesktopJsonValue>;
-  dryRun?: boolean;
-  mode: string;
-  targetScope: string;
-  note?: string;
-  sourceRunId?: string | null;
-  recorderSessionId?: string | null;
-};
-
-type LaunchTemplateRunResult = {
-  runId?: string;
-  taskId?: string | null;
-  status?: string;
-  message?: string;
-  manualGateRequestId?: string | null;
-  launchedAt?: string | null;
-};
-
-type ReadRunDetailResult = {
-  runId?: string;
-  taskId?: string | null;
-  status?: string;
-  title?: string | null;
-  message?: string | null;
-  failureReason?: string | null;
-  manualGateRequestId?: string | null;
-  manualGateStatus?: string | null;
-  updatedAt?: string | null;
-  createdAt?: string | null;
-  artifacts?: unknown[];
-  timeline?: unknown[];
-};
-
-type AutomationDesktopBridge = typeof desktopServices & {
-  launchTemplateRun: (request: LaunchTemplateRunRequest) => Promise<LaunchTemplateRunResult>;
-  readRunDetail: (runId: string) => Promise<ReadRunDetailResult>;
-  retryTask: (taskId: string) => Promise<unknown>;
-  cancelTask: (taskId: string) => Promise<unknown>;
-  confirmManualGate: (requestId: string) => Promise<unknown>;
-  rejectManualGate: (requestId: string) => Promise<unknown>;
-};
-
-const automationDesktop = desktopServices as AutomationDesktopBridge;
+const automationDesktop = desktopServices;
 
 function isCommandNotReady(error: unknown): boolean {
   return (
@@ -84,7 +46,7 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Failed to prepare launch draft";
 }
 
-function hasDesktopCommand<T extends keyof AutomationDesktopBridge>(
+function hasDesktopCommand<T extends keyof typeof automationDesktop>(
   command: T,
 ): boolean {
   return typeof automationDesktop[command] === "function";
@@ -110,57 +72,35 @@ function formatTimeLabel(value: string | null): string | null {
   }).format(date);
 }
 
-function normalizeArtifact(item: unknown, index: number): AutomationRunArtifact {
-  const value = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-  const id = typeof value.id === "string" ? value.id : `artifact-${index + 1}`;
-  const label =
-    typeof value.label === "string"
-      ? value.label
-      : typeof value.name === "string"
-        ? value.name
-        : `Artifact ${index + 1}`;
-
+function normalizeArtifact(item: DesktopRunArtifact): AutomationRunArtifact {
   return {
-    id,
-    label,
-    path: typeof value.path === "string" ? value.path : null,
-    status: typeof value.status === "string" ? value.status : null,
+    id: item.id,
+    label: item.label,
+    path: item.path,
+    status: item.status,
   };
 }
 
 function normalizeTimelineEntry(
-  item: unknown,
-  index: number,
+  item: DesktopRunTimelineEntry,
 ): AutomationRunTimelineEntry {
-  const value = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-  const id = typeof value.id === "string" ? value.id : `event-${index + 1}`;
-  const label =
-    typeof value.label === "string"
-      ? value.label
-      : typeof value.title === "string"
-        ? value.title
-        : `Event ${index + 1}`;
-
   return {
-    id,
-    label,
-    status: typeof value.status === "string" ? value.status : "unknown",
-    detail:
-      typeof value.detail === "string"
-        ? value.detail
-        : typeof value.message === "string"
-          ? value.message
-          : null,
-    createdAt: typeof value.createdAt === "string" ? value.createdAt : null,
+    id: item.id,
+    label: item.label,
+    status: item.status,
+    detail: item.detail,
+    createdAt: item.createdAt,
   };
 }
 
 function normalizeLaunchOutcome(
-  payload: LaunchTemplateRunResult,
+  payload: DesktopLaunchTemplateRunResult,
   fallbackStatus: string,
 ): AutomationLaunchOutcome {
+  const launchedAt = payload.launchedAt ?? payload.launchSummary.launchedAt;
+
   return {
-    runId: payload.runId ?? payload.taskId ?? "unknown-run",
+    runId: payload.runId || payload.taskId || "unknown-run",
     taskId: payload.taskId ?? null,
     status: payload.status ?? fallbackStatus,
     message:
@@ -169,7 +109,7 @@ function normalizeLaunchOutcome(
         ? "Run dispatched and is waiting on a manual gate."
         : "Run dispatched into the local runtime."),
     manualGateRequestId: payload.manualGateRequestId ?? null,
-    launchedAtLabel: formatTimeLabel(payload.launchedAt ?? null),
+    launchedAtLabel: formatTimeLabel(launchedAt ?? null),
     raw: payload,
   };
 }
@@ -207,22 +147,18 @@ function getManualGateDetail(requestId: string, status: string, runId: string | 
   return `Request ${requestId} is the current operator checkpoint${runId ? ` for run ${runId}` : ""}. Keep review and decision in this local panel.`;
 }
 
-function normalizeRunDetail(payload: ReadRunDetailResult): AutomationRunDetail {
+function normalizeRunDetail(payload: DesktopRunDetail): AutomationRunDetail {
   const status = payload.status ?? "unknown";
-  const timeline = Array.isArray(payload.timeline)
-    ? payload.timeline.map(normalizeTimelineEntry)
-    : [];
-  const artifacts = Array.isArray(payload.artifacts)
-    ? payload.artifacts.map(normalizeArtifact)
-    : [];
+  const timeline = payload.timeline.map(normalizeTimelineEntry);
+  const artifacts = payload.artifacts.map(normalizeArtifact);
   const headline =
-    payload.title ??
+    payload.headline ??
     (payload.manualGateRequestId
       ? "Manual gate is holding this run."
       : `Run ${status}`);
 
   return {
-    runId: payload.runId ?? payload.taskId ?? "unknown-run",
+    runId: payload.runId || payload.taskId || "unknown-run",
     taskId: payload.taskId ?? null,
     status,
     headline,
@@ -230,8 +166,8 @@ function normalizeRunDetail(payload: ReadRunDetailResult): AutomationRunDetail {
     failureReason: payload.failureReason ?? null,
     manualGateRequestId: payload.manualGateRequestId ?? null,
     manualGateStatus: payload.manualGateStatus ?? null,
-    updatedAtLabel: formatTimeLabel(payload.updatedAt ?? null),
-    createdAtLabel: formatTimeLabel(payload.createdAt ?? null),
+    updatedAtLabel: payload.updatedAtLabel ?? null,
+    createdAtLabel: payload.createdAtLabel ?? null,
     artifacts,
     timeline,
     raw: payload,
@@ -500,8 +436,21 @@ export function useAutomationCenterViewModel() {
   };
 
   async function refreshRunDetailInternal() {
-    const runId = automation.launchedRun?.runId ?? automation.runDetail?.runId;
-    if (!runId) {
+    const runId =
+      automation.launchedRun?.runId && automation.launchedRun.runId !== "unknown-run"
+        ? automation.launchedRun.runId
+        : automation.runDetail?.runId ?? null;
+    const taskId =
+      automation.runDetail?.taskId ??
+      automation.launchedRun?.taskId ??
+      selectedRun?.id ??
+      null;
+    const query: DesktopReadRunDetailQuery = {
+      runId,
+      taskId: runId ? undefined : taskId,
+    };
+
+    if (!query.runId && !query.taskId) {
       automationActions.runDetailFailed(
         "No launched run is available yet. Dispatch a run first before reading detail.",
         true,
@@ -519,7 +468,7 @@ export function useAutomationCenterViewModel() {
 
     automationActions.runDetailStarted();
     try {
-      const detail = await automationDesktop.readRunDetail(runId);
+      const detail = await automationDesktop.readRunDetail(query);
       automationActions.runDetailSucceeded(normalizeRunDetail(detail));
     } catch (error) {
       automationActions.runDetailFailed(
@@ -549,7 +498,7 @@ export function useAutomationCenterViewModel() {
     automationActions.launchStarted();
 
     try {
-      const result = await automationDesktop.launchTemplateRun({
+      const request: DesktopLaunchTemplateRunRequest = {
         templateId: compileDraft.templateId,
         storeId: templates.selectedTemplate.storeId,
         profileIds: compileDraft.targetProfileIds,
@@ -559,19 +508,24 @@ export function useAutomationCenterViewModel() {
         dryRun: automation.launcherDraft.mode !== "queue",
         mode: automation.launcherDraft.mode,
         targetScope: automation.launcherDraft.targetScope,
-        note: automation.launcherDraft.launchNote || compileDraft.note,
+        launchNote: automation.launcherDraft.launchNote || compileDraft.note,
         sourceRunId: selectedRun?.id ?? null,
         recorderSessionId: compileDraft.recorderSessionId,
-      });
+      };
+      const result = await automationDesktop.launchTemplateRun(request);
 
       const outcome = normalizeLaunchOutcome(result, "queued");
       automationActions.launchSucceeded(outcome);
 
-      if (outcome.runId !== "unknown-run") {
+      if (outcome.runId !== "unknown-run" || outcome.taskId) {
         if (hasDesktopCommand("readRunDetail")) {
           automationActions.runDetailStarted();
           try {
-            const detail = await automationDesktop.readRunDetail(outcome.runId);
+            const query: DesktopReadRunDetailQuery =
+              outcome.runId !== "unknown-run"
+                ? { runId: outcome.runId }
+                : { taskId: outcome.taskId };
+            const detail = await automationDesktop.readRunDetail(query);
             automationActions.runDetailSucceeded(normalizeRunDetail(detail));
           } catch (error) {
             const message = isCommandNotReady(error)
@@ -659,7 +613,10 @@ export function useAutomationCenterViewModel() {
 
     automationActions.taskWriteStarted("confirm_manual_gate");
     try {
-      await automationDesktop.confirmManualGate(requestId);
+      const request: DesktopManualGateActionRequest = {
+        manualGateRequestId: requestId,
+      };
+      await automationDesktop.confirmManualGate(request);
       automationActions.taskWriteFinished();
       await refreshRunDetailInternal();
     } catch (error) {
@@ -686,7 +643,10 @@ export function useAutomationCenterViewModel() {
 
     automationActions.taskWriteStarted("reject_manual_gate");
     try {
-      await automationDesktop.rejectManualGate(requestId);
+      const request: DesktopManualGateActionRequest = {
+        manualGateRequestId: requestId,
+      };
+      await automationDesktop.rejectManualGate(request);
       automationActions.taskWriteFinished();
       await refreshRunDetailInternal();
     } catch (error) {

@@ -15,12 +15,21 @@ interface SynchronizerControlWorkbenchProps {
   onRunPlan: (planId?: string) => void;
 }
 
-function getCapabilityTone(status: SynchronizerCommandCapability["status"]) {
-  if (status === "native_live") {
+function getCapabilityTone(capability: SynchronizerCommandCapability) {
+  const normalizedDetail = capability.detail.toLowerCase();
+  if (normalizedDetail.includes('result: "failed"') || normalizedDetail.includes("result: failed")) {
+    return "error";
+  }
+
+  if (normalizedDetail.includes('result: "partial"') || normalizedDetail.includes("result: partial")) {
+    return "warning";
+  }
+
+  if (capability.status === "native_live") {
     return "info";
   }
 
-  if (status === "local_staged") {
+  if (capability.status === "local_staged") {
     return "warning";
   }
 
@@ -58,12 +67,12 @@ export function SynchronizerControlWorkbench({
         <article className="automation-metric-strip__item">
           <span className="automation-metric-strip__label">Broadcast path</span>
           <strong>
-            {isBroadcastNativeReady ? "Native execute" : "Awaiting native confirmation"}
+            {isBroadcastNativeReady ? "Native intent write observed" : "Prepared / intention-only"}
           </strong>
           <small>
             {isBroadcastNativeReady
-              ? "Native broadcast has already executed in this session."
-              : "If the native contract is available, execution will use it. Otherwise the plan remains prepared only and is not replayed locally."}
+              ? "A native broadcast intent write responded in this session, but physical multi-window dispatch is still intention-only."
+              : "Plan stays prepared/intention-only. If native intent write is unavailable, nothing is replayed locally."}
           </small>
         </article>
       </div>
@@ -73,7 +82,7 @@ export function SynchronizerControlWorkbench({
           <article className="contract-card" key={capability.key}>
             <div className="contract-card__top">
               <strong>{capability.label}</strong>
-              <span className={`badge badge--${getCapabilityTone(capability.status)}`}>
+              <span className={`badge badge--${getCapabilityTone(capability)}`}>
                 {capability.status.replaceAll("_", " ")}
               </span>
             </div>
@@ -98,7 +107,7 @@ export function SynchronizerControlWorkbench({
                   {plan.id === stagedPlanId ? "prepared" : "available"}
                 </span>
                 <span className={`badge badge--${plan.id === runningPlanId ? "warning" : "info"}`}>
-                  {plan.id === runningPlanId ? "executing" : "idle"}
+                  {plan.id === runningPlanId ? "writing intent" : "idle"}
                 </span>
               </div>
             </div>
@@ -118,10 +127,10 @@ export function SynchronizerControlWorkbench({
                 disabled={isBroadcastRunning}
               >
                 {plan.id === runningPlanId
-                  ? "Executing..."
+                  ? "Writing intent..."
                   : isBroadcastNativeReady
-                    ? "Execute (native path)"
-                    : "Attempt execute (native required)"}
+                    ? "Write intent (native path)"
+                    : "Attempt intent write (native required)"}
               </button>
             </div>
           </article>

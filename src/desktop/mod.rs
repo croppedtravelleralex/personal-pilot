@@ -3225,6 +3225,16 @@ pub struct DesktopProxyChangeIpRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DesktopProxyChangeIpProviderRefresh {
+    pub source_label: String,
+    pub provider_key: String,
+    pub status_code: u16,
+    pub provider_request_id: Option<String>,
+    pub response_excerpt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopProxyChangeIpResult {
     pub proxy_id: String,
     pub status: String,
@@ -3240,6 +3250,10 @@ pub struct DesktopProxyChangeIpResult {
     pub expires_at: Option<String>,
     pub updated_at: String,
     pub message: String,
+    pub execution_status: String,
+    pub rollback_signal: String,
+    pub error_kind: Option<String>,
+    pub provider_refresh: DesktopProxyChangeIpProviderRefresh,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7246,7 +7260,9 @@ pub async fn change_desktop_proxy_ip(
                 "message": failure_message,
                 "providerRefresh": {
                     "sourceLabel": source_label,
+                    "providerKey": Value::Null,
                     "statusCode": status_code,
+                    "providerRequestId": Value::Null,
                     "responseExcerpt": response_excerpt.cloned(),
                 },
             })
@@ -7545,6 +7561,16 @@ pub async fn change_desktop_proxy_ip(
         expires_at,
         updated_at,
         message,
+        execution_status: "accepted".to_string(),
+        rollback_signal: "none".to_string(),
+        error_kind: None,
+        provider_refresh: DesktopProxyChangeIpProviderRefresh {
+            source_label: refresh_result.source_label,
+            provider_key: refresh_result.provider_key,
+            status_code: refresh_result.status_code,
+            provider_request_id: refresh_result.provider_request_id,
+            response_excerpt: refresh_result.response_excerpt,
+        },
     })
 }
 
@@ -7707,6 +7733,20 @@ mod tests {
             result_json.get("rollbackSignal").and_then(Value::as_str),
             Some("binding_not_applied")
         );
+        assert!(
+            result_json
+                .get("providerRefresh")
+                .and_then(|value| value.get("providerKey"))
+                .is_some_and(Value::is_null),
+            "expected providerRefresh.providerKey to be explicit null in failure payload"
+        );
+        assert!(
+            result_json
+                .get("providerRefresh")
+                .and_then(|value| value.get("providerRequestId"))
+                .is_some_and(Value::is_null),
+            "expected providerRefresh.providerRequestId to be explicit null in failure payload"
+        );
     }
 
     async fn spawn_provider_refresh_test_server(response_body: Value) -> String {
@@ -7797,6 +7837,20 @@ mod tests {
 
         assert_eq!(result.status, "accepted_sticky_rotation");
         assert_eq!(result.tracking_task_id.is_empty(), false);
+        assert_eq!(result.execution_status, "accepted");
+        assert_eq!(result.rollback_signal, "none");
+        assert!(result.error_kind.is_none());
+        assert_eq!(result.provider_refresh.source_label, "pool-live");
+        assert_eq!(result.provider_refresh.provider_key, "pool-live");
+        assert_eq!(result.provider_refresh.status_code, 200);
+        assert_eq!(
+            result.provider_refresh.provider_request_id.as_deref(),
+            Some("req-123")
+        );
+        assert!(
+            result.provider_refresh.response_excerpt.is_some(),
+            "expected provider response excerpt for accepted refresh"
+        );
         assert!(
             result
                 .message

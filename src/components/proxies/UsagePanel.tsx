@@ -1,5 +1,6 @@
 import {
   getProxyChangeCooldownRemainingSeconds,
+  getProxyProviderWriteEvidence,
   getProxyProviderWriteDetail,
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
@@ -85,6 +86,9 @@ function getRotationPosture(
   const writeState = getProxyProviderWriteState(changeIpFeedback);
   const writeLabel = getProxyProviderWriteLabel(writeState);
   const writeDetail = getProxyProviderWriteDetail(changeIpFeedback);
+  const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
+  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
+  const requestId = writeEvidence.requestId ?? "pending";
 
   if (
     changeIpFeedback.phase === "error" ||
@@ -93,14 +97,14 @@ function getRotationPosture(
   ) {
     return {
       label: writeState === "blocked" ? "blocked" : "write-failed",
-      detail: `${writeDetail} Treat exit-IP state as unchanged until a later detail refresh proves otherwise.`,
+      detail: `${writeDetail} source=${sourceLabel}, request=${requestId}. Treat exit-IP state as unchanged until a later detail refresh proves otherwise.`,
     };
   }
 
   if (writeState === "rollback_flagged") {
     return {
       label: "rollback-flagged",
-      detail: `${writeDetail} Treat write as unstable and verify residency/exit-IP on next detail refresh.`,
+      detail: `${writeDetail} source=${sourceLabel}, request=${requestId}. Treat write as unstable and verify residency/exit-IP on next detail refresh.`,
     };
   }
 
@@ -111,7 +115,7 @@ function getRotationPosture(
   ) {
     return {
       label: "accepted",
-      detail: `${writeDetail} ${changeIpFeedback.rotationMode ?? rotationMode} (${changeIpFeedback.residencyStatus ?? residencyStatus}). Confirm exit-IP drift after detail refresh.`,
+      detail: `${writeDetail} source=${sourceLabel}, request=${requestId}. ${changeIpFeedback.rotationMode ?? rotationMode} (${changeIpFeedback.residencyStatus ?? residencyStatus}). Confirm exit-IP drift after detail refresh.`,
     };
   }
 
@@ -142,6 +146,17 @@ function getCooldownLabel(changeIpFeedback: ProxyIpChangeFeedback | null): strin
   return `${Math.ceil(remainingSeconds / 60)}m local cooldown`;
 }
 
+function getAcceptedSignalLabel(changeIpFeedback: ProxyIpChangeFeedback | null): string {
+  const acceptedWrite = getProxyProviderWriteEvidence(changeIpFeedback).acceptedWrite;
+  if (acceptedWrite === true) {
+    return "accepted";
+  }
+  if (acceptedWrite === false) {
+    return "not-accepted";
+  }
+  return "unknown";
+}
+
 export function UsagePanel({
   proxy,
   detail,
@@ -156,6 +171,18 @@ export function UsagePanel({
   onRetry,
 }: UsagePanelProps) {
   const effectiveHealth = detail?.health ?? proxy?.health ?? null;
+  const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
+  const rollbackLabel = writeEvidence.rollbackSignal ? "rollback-flagged" : "no-rollback-signal";
+  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
+  const requestIdLabel =
+    writeEvidence.requestId ??
+    changeIpFeedback?.trackingTaskId ??
+    proxy?.rotation.trackingTaskId ??
+    "no-tracking-task";
+  const executionStatusLabel = writeEvidence.executionStatus ?? "unknown";
+  const rollbackStatusLabel = writeEvidence.rollbackStatus ?? rollbackLabel;
+  const providerRefreshLabel = writeEvidence.providerRefreshStatus ?? "refresh-pending";
+  const providerRefreshAt = writeEvidence.providerRefreshAt;
   const verificationStatus =
     effectiveHealth?.batchState === "queued"
       ? "Verification queued"
@@ -300,15 +327,25 @@ export function UsagePanel({
               </dd>
             </div>
             <div className="details-grid__item">
-              <dt>Provider write / tracking</dt>
+              <dt>Provider write / request</dt>
               <dd>
                 {changeIpFeedback
                   ? `${getProxyProviderWriteLabel(getProxyProviderWriteState(changeIpFeedback))} (${detailSource ?? "list-only"})`
                   : `No recent write (${detailSource ?? "list-only"})`}
                 <br />
-                {changeIpFeedback?.trackingTaskId ??
-                  proxy.rotation.trackingTaskId ??
-                  "no-tracking-task"}
+                accepted={getAcceptedSignalLabel(changeIpFeedback)} / rollback={rollbackLabel} /
+                source={sourceLabel} / request-or-tracking={requestIdLabel}
+              </dd>
+            </div>
+            <div className="details-grid__item">
+              <dt>Execution / rollback / refresh</dt>
+              <dd>
+                execution={executionStatusLabel} / rollback={rollbackStatusLabel}
+                <br />
+                providerRefresh={providerRefreshLabel}
+                {providerRefreshAt
+                  ? ` @ ${formatRelativeTimestamp(providerRefreshAt)}`
+                  : ""}
               </dd>
             </div>
           </dl>

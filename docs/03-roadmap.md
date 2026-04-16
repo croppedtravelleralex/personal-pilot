@@ -31,6 +31,10 @@ Use `docs/19-phase-plan-and-scorecard.md` as the canonical detailed execution bo
 3. `A3 Recorder / Templates native closure`
 4. `A4 Mainline release gate`
 
+Current execution pack:
+
+- `docs/20-wave-2a-execution-plan.md` freezes the immediate `A1 + A2 + A3` write packages, task volume, and 6-worker split for the next push from `95% / 7%`.
+
 ## Phase B: Overall End-State Expansion
 
 This phase covers the broader target the user keeps asking about and is the reason the overall end-state is still `30% / 70%`.

@@ -37,7 +37,7 @@ export function TemplatesBoard({
   return (
     <Panel
       title="Templates Board"
-      subtitle="Template metadata now flows through feature state, the desktop read model, variable definitions, and manifest preparation."
+      subtitle="Template metadata now flows through feature state, the desktop read model, variable definitions, and manifest preparation for this local execution workbench."
       actions={
         <div className="panel__actions">
           <span className={`badge ${isLoading ? "badge--warning" : "badge--info"}`}>

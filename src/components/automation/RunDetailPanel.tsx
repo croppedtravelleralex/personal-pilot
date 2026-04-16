@@ -123,7 +123,7 @@ export function RunDetailPanel({
           status: "pending",
           headline: "Manual review is required before the run can continue.",
           detail:
-            "A gate id exists on the selected run row, but richer request detail still depends on the connected desktop run-detail read path.",
+            "A gate id exists on the selected run row. Refresh run detail to load the latest gate payload from local runtime.",
           decisionOptions: ["Approve", "Reject"],
         }
       : null);
@@ -178,7 +178,7 @@ export function RunDetailPanel({
               <article className="automation-metric-strip__item">
                 <span className="automation-metric-strip__label">Runtime status</span>
                 <strong>{formatStatusLabel(detailStatus)}</strong>
-                <small>{runDetail?.headline ?? "Live row fallback"}</small>
+                <small>{runDetail?.headline ?? "Live row snapshot"}</small>
               </article>
               <article className="automation-metric-strip__item">
                 <span className="automation-metric-strip__label">Manual gate</span>

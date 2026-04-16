@@ -46,19 +46,19 @@ const CONTRACT_GAPS: AutomationContractGap[] = [
     contract: "compileTemplateRun",
     status: "Ready",
     detail:
-      "Native compile is live and now writes a local manifest for accepted profiles. The remaining gap is launchTemplateRun, not compileTemplateRun.",
+      "Native compile is connected and writes a local manifest for accepted profiles in this execution workbench.",
   },
   {
     contract: "launchTemplateRun",
-    status: "Missing",
+    status: "Ready",
     detail:
-      "Prepared launch drafts are ready, but no native launch command can enqueue them into the runtime yet.",
+      "Native launch is connected and can dispatch prepared manifests into the local runtime queue.",
   },
   {
     contract: "readRunDetail",
-    status: "Missing",
+    status: "Ready",
     detail:
-      "Run detail still relies on live run rows plus recorder/template adapters because per-run timeline and artifact detail are unavailable.",
+      "Per-run detail read is connected and can return timeline, artifacts, failure reason, and manual-gate state when payload is available.",
   },
   {
     contract: "readRecorderSnapshot / startBehaviorRecording / stopBehaviorRecording",
@@ -227,7 +227,7 @@ export const automationActions = {
       },
       launcherNotice:
         plan.compilePreview.status === "ready"
-          ? `${plan.compilePreview.message} Launch is ready and can now be dispatched into the runtime.`
+          ? `${plan.compilePreview.message} Launch is ready and can now be dispatched into the local runtime.`
           : plan.compilePreview.message,
       launcherNoticeTone:
         plan.compilePreview.status === "ready"
@@ -270,7 +270,7 @@ export const automationActions = {
         current.contractGaps,
         "launchTemplateRun",
         "Ready",
-        "Native launch is now connected and can dispatch prepared manifests into the local runtime.",
+        "Native launch is connected and can dispatch prepared manifests into the local runtime queue.",
       ),
       launcherNotice: outcome.message,
       launcherNoticeTone: "success",
@@ -321,7 +321,7 @@ export const automationActions = {
         current.contractGaps,
         "readRunDetail",
         "Ready",
-        "Per-run detail is now connected and can read timeline, artifacts, failure reason, and manual gate state.",
+        "Per-run detail read is connected and can return timeline, artifacts, failure reason, and manual-gate state.",
       ),
     }));
   },

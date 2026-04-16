@@ -170,9 +170,9 @@ export function AutomationPage() {
           </span>
           <span className={`badge ${dispatchReady ? "badge--info" : "badge--warning"}`}>
             {dispatchReady
-              ? "launch path connected"
+              ? "local dispatch connected"
               : viewModel.automation.lastPreparedLaunch?.ready
-                ? "prepared, awaiting dispatch wiring"
+                ? "prepared; launch action unavailable in current view"
                 : `${formatCount(viewModel.metrics.readyTemplateCount)} ready templates`}
           </span>
           <span
@@ -218,7 +218,7 @@ export function AutomationPage() {
             <small>
               {optionalAutomation.runDetail?.headline ??
                 optionalAutomation.runDetailNotice ??
-                "Detailed timeline will appear once the run detail bridge is connected."}
+                "Refresh run detail after dispatch to load timeline, artifacts, and gate state."}
             </small>
           </article>
         </div>
@@ -238,8 +238,8 @@ export function AutomationPage() {
           <strong>Truth boundary</strong>
           <div>
             This page is a denser local execution workbench around the existing compile,
-            launch, detail, and manual-gate loop. It does not imply vendor-grade orchestration
-            features beyond the desktop commands already connected in this repo.
+            launch, detail, and manual-gate loop. It is not an AdsPower-grade orchestration
+            control plane beyond the desktop commands already connected in this repo.
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@ Updated: 2026-04-17 (Asia/Shanghai)
 
 Use `docs/19-phase-plan-and-scorecard.md` as the canonical phase and scorecard document.
 This backlog remains the task ledger beneath that stage board.
+`docs/20-wave-2a-execution-plan.md` is the immediate execution pack for the current six-worker round.
 
 ## Stage Execution Ledger Rule
 
