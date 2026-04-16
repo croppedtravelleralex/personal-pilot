@@ -11,6 +11,27 @@ Updated: 2026-04-16 (Asia/Shanghai)
 Use `docs/19-phase-plan-and-scorecard.md` as the canonical phase and scorecard document.
 This backlog remains the task ledger beneath that stage board.
 
+## Stage Execution Ledger Rule
+
+- `docs/19-phase-plan-and-scorecard.md` is canonical for stage execution stack, task packages, task volume, and default agent plan
+- every active stage in `A1-A4 / B1-B6` must have at least one ledger entry in this backlog
+- when stage packages, task volume, or agent plan changes in `docs/19`, sync the summary table below in the same round
+
+## Stage Volume Ledger
+
+| Stage | Ledger item | Task packages | Task volume | Default active agents |
+| --- | --- | ---: | --- | ---: |
+| `A1` | `B-004` | `4` | `11-13 worker-days / 4 slices / 3 modules` | `3-4` |
+| `A2` | `B-005` | `4` | `10-12 worker-days / 4 slices / 3 modules` | `3` |
+| `A3` | `B-011` | `4` | `10-12 worker-days / 4 slices / 3 modules` | `3-4` |
+| `A4` | `B-008 + B-009` | `4` | `7-9 worker-days / 4 slices / 2-3 modules` | `1-3` |
+| `B1` | `B-015` | `5` | `14-18 worker-days / 5 slices / 4 modules` | `4-6` |
+| `B2` | `B-016 + B-020` | `5` | `16-20 worker-days / 5 slices / 5 modules` | `4-5` |
+| `B3` | `B-017` | `5` | `14-17 worker-days / 5 slices / 5 modules` | `4-5` |
+| `B4` | `B-018` | `5` | `18-22 worker-days / 5 slices / 5 modules` | `5-6` |
+| `B5` | `B-021` | `4` | `15-19 worker-days / 5 slices / 5 modules` | `4-6` |
+| `B6` | `B-019` | `4` | `7-9 worker-days / 4 slices / 3 modules` | `4-6` |
+
 ## Completed In This Round
 
 - `B-009`: `scripts/windows_local_verify.ps1` re-passed as the primary Win11 acceptance entry
@@ -94,6 +115,15 @@ This backlog remains the task ledger beneath that stage board.
 - Acceptance evidence: evidence-based benchmark refresh
 - Report dimension: `AdsPower benchmark`
 - Target: re-score realism, proxy ecosystem, automation depth, and runtime evidence only after the new validation and runtime-depth work lands
+
+### B-021 Runtime Adapter And External Integration
+
+- Status: pending
+- Stage: `B5`
+- Dependencies: `B1-B4` first-pass baselines plus the external integration plan
+- Acceptance evidence: `RuntimeAdapter` boundary, adapter-aligned explain / observation reports, external asset intake proof, cross-adapter compare report
+- Report dimension: `runtime adapter`
+- Target: absorb high-ROI external browser strengths into stable adapter contracts and shared persona/session/report layers without pulling browser forks into the main repo
 
 ## P2 Backlog: Runtime And Realism
 

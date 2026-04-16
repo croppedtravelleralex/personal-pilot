@@ -19,11 +19,12 @@ Canonical status now lives in `/docs/02-current-state.md`.
 
 1. `/docs/02-current-state.md`
 2. `/docs/final-goal-progress-breakdown.md`
-3. `/docs/03-roadmap.md`
-4. `/docs/04-improvement-backlog.md`
-5. `/docs/17-full-app-audit-progress-reset.md`
-6. `/docs/13-adspower-deep-comparison.md`
-7. `/docs/18-external-browser-integration-plan.md`
+3. `/docs/19-phase-plan-and-scorecard.md`
+4. `/docs/03-roadmap.md`
+5. `/docs/04-improvement-backlog.md`
+6. `/docs/17-full-app-audit-progress-reset.md`
+7. `/docs/13-adspower-deep-comparison.md`
+8. `/docs/18-external-browser-integration-plan.md`
 
 ## 2026-04-16 Mainline Delta
 

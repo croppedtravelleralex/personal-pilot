@@ -1,5 +1,8 @@
 # TODO.md
 
+This root `TODO.md` stays as a thin execution checklist.
+Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-and-scorecard.md`.
+
 ## Closed In This Round
 
 - [x] Merge `Tasks` into `Automation` and close the orphan route gap

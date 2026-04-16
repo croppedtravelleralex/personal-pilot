@@ -56,6 +56,25 @@ Use `docs/19-phase-plan-and-scorecard.md` as the canonical detailed execution bo
 5. `B5 Runtime adapter and external integration`
 6. `B6 AdsPower boundary refresh`
 
+## Execution Waves And Staffing
+
+Use the following wave order by default:
+
+| Wave | Scope | Default active agents | Exit gate |
+| --- | --- | ---: | --- |
+| `Wave 1` | `A1 + A2` | `3-4` | proxy provider write path and synchronizer native write path are both materially closed |
+| `Wave 2` | `A3 + A4` | `2-4` | recorder/templates are native-first and the mainline release gate is green |
+| `Wave 3` | `B1 + B2` | `4-6` | validation evidence is repeatable and fingerprint runtime depth is measurable beyond `12` projected fields |
+| `Wave 4` | `B3 + B4` | `4-6` | session portability and event grammar both move out of concept stage |
+| `Wave 5` | `B5 + B6` | `3-6` | runtime adapter boundary is stable and the AdsPower refresh is evidence-based |
+
+Execution notes:
+
+- `docs/19-phase-plan-and-scorecard.md` remains the canonical source for stage execution stack, task packages, task volume, and suggested agent split
+- `docs/04-improvement-backlog.md` must carry a ledger item for every active stage in this roadmap
+- do not start `Wave 4` before `B1` evidence collection and `B2` runtime-depth baselines exist
+- do not refresh AdsPower parity before `Wave 5`
+
 ## Re-Verify Rule
 
 Before claiming further mainline progress again, re-pass:

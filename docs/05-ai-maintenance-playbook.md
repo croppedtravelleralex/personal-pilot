@@ -39,6 +39,23 @@ That canonical report must cover:
 11. automation / RPA
 12. AdsPower comparison
 
+## Stage Execution Canonical Rule
+
+When the user asks for current -> complete planning, execution slicing, or stage-by-stage delivery staffing, use:
+
+- `docs/19-phase-plan-and-scorecard.md`
+
+That document is the only canonical source for:
+
+1. stage execution stack
+2. workload unit
+3. recommended execution waves
+4. per-stage task packages
+5. per-stage task volume
+6. default agent mix and active-agent range
+
+`docs/03-roadmap.md`, `docs/04-improvement-backlog.md`, and root entrypoints may summarize or route to it, but must not carry a competing stage plan.
+
 ## Score Source Rule
 
 Keep progress and capability score separate:
@@ -54,8 +71,8 @@ Keep progress and capability score separate:
 
 ## Verification Order
 
-1. `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
-2. `cargo test --quiet`
+1. `cargo test --quiet`
+2. `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
 3. `pnpm desktop:release`
 
 ## Handoff Read Order
@@ -81,6 +98,20 @@ When the reporting truth changes, update in the same round:
 - `docs/04-improvement-backlog.md`
 - `docs/05-ai-maintenance-playbook.md`
 - root entrypoints: `README.md`, `CURRENT_TASK.md`, `STATUS.md`, `PROGRESS.md`, `TODO.md`
+
+When the stage plan changes in `docs/19-phase-plan-and-scorecard.md`, sync in the same round:
+
+- `docs/03-roadmap.md`
+- `docs/04-improvement-backlog.md`
+- `docs/05-ai-maintenance-playbook.md`
+- root entrypoints that route users to the detailed stage board
+
+At minimum keep these aligned:
+
+- stage ids: `A1-A4 / B1-B6`
+- verification order for `A4`
+- backlog ledger coverage for every active stage
+- default agent-count guidance and stage-wave order
 
 ## Do Not Reuse
 

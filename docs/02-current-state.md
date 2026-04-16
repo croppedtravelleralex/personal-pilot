@@ -3,12 +3,9 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## Current Report
 
-- mainline delivery progress: `95%`
-- mainline remaining slice: `7%` (`risk-weighted closeout slice`, not a strict arithmetic complement)
-- mainline verification / acceptance: `green`
-- overall end-state progress: `30%`
-- overall strategic gap: `70%`
-- overall end-state color: `yellow`
+- mainline delivery: `95% / 7% / green`
+- overall end-state: `30% / 70% / yellow`
+- note: the `7%` remaining slice is `risk-weighted closeout scope`, not a strict arithmetic complement
 
 ## Verified Evidence
 
