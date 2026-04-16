@@ -28,8 +28,13 @@ use crate::{
             TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
         },
     },
-    network_identity::validator::validate_fingerprint_profile,
     network_identity::{
+        fingerprint_consistency::assess_fingerprint_profile_consistency,
+        fingerprint_consumption::build_lightpanda_runtime_projection,
+        first_family::{
+            detect_fingerprint_schema_kind, first_family_declared_control_fields,
+            first_family_section_summaries, inferred_family_id, inferred_family_variant,
+        },
         proxy_growth::{
             assess_proxy_pool_health, proxy_pool_growth_policy_from_env,
             proxy_replenish_global_batch_limit_from_env,
@@ -37,6 +42,7 @@ use crate::{
             proxy_replenish_total_batch_limit_from_env, ProxyPoolInventorySnapshot,
         },
         proxy_harvest::load_proxy_harvest_metrics,
+        validator::validate_fingerprint_profile,
     },
     runner::RunnerExecutionIntent,
 };
@@ -45,17 +51,18 @@ use super::{
     dto::{
         AuthMetricsResponse, BehaviorMetricsResponse, BrowserExtractTextRequest,
         BrowserGetFinalUrlRequest, BrowserGetHtmlRequest, BrowserGetTitleRequest,
-        BrowserOpenRequest, CancelTaskResponse, ContinuityHeartbeatTickItemResponse,
-        ContinuityHeartbeatTickResponse, CreateFingerprintProfileRequest, CreateProxyRequest,
-        CreateTaskRequest, FingerprintMetricsResponse, FingerprintProfileResponse,
-        FormInputRequest, HealthResponse, LogResponse, PaginationQuery, ProxyMetricsResponse,
-        ProxyResponse, ProxySelectionExplainResponse, ProxySmokeResponse,
-        ProxyTrustCacheCheckResponse, ProxyTrustCacheMaintenanceResponse,
-        ProxyTrustCacheRepairBatchResponse, ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem,
-        ProxyTrustCacheScanQuery, ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary,
-        ProxyVerifyBatchRequest, ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse,
-        RunResponse, StatusResponse, TaskResponse, TaskStatusCounts, VerifyBatchListQuery,
-        VerifyBatchResponse, VerifyMetricsResponse, WorkerStatusResponse,
+        BrowserOpenRequest, CancelTaskResponse, ConsumptionExplain,
+        ContinuityHeartbeatTickItemResponse, ContinuityHeartbeatTickResponse,
+        CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
+        FingerprintMetricsResponse, FingerprintProfileResponse, FormInputRequest, HealthResponse,
+        LogResponse, PaginationQuery, ProxyMetricsResponse, ProxyResponse,
+        ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse,
+        ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse,
+        ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery,
+        ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest,
+        ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, RunResponse,
+        StatusResponse, TaskResponse, TaskStatusCounts, VerifyBatchListQuery, VerifyBatchResponse,
+        VerifyMetricsResponse, WorkerStatusResponse,
     },
     explainability::{
         build_task_explainability, content_bool_field, content_i64_field, content_string_field,
@@ -107,9 +114,90 @@ fn sanitize_offset(offset: Option<i64>) -> i64 {
     }
 }
 
+const HOT_REGION_WINDOW_SECONDS: i64 = 600;
+
+fn round_percent(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
+fn fingerprint_consumption_explain(
+    profile_id: &str,
+    version: i64,
+    profile_json: &Value,
+) -> ConsumptionExplain {
+    let projection = build_lightpanda_runtime_projection(profile_id, version, profile_json);
+    let consumption = projection.consumption;
+    ConsumptionExplain {
+        declared_count: consumption.declared_count(),
+        resolved_count: consumption.resolved_count(),
+        applied_count: consumption.applied_count(),
+        ignored_count: consumption.ignored_count(),
+        declared_fields: consumption.declared_fields,
+        resolved_fields: consumption.resolved_fields,
+        applied_fields: consumption.applied_fields,
+        ignored_fields: consumption.ignored_fields,
+        consumption_status: consumption.consumption_status,
+        consumption_version: Some(consumption.consumption_version),
+        partial_support_warning: consumption.partial_support_warning,
+    }
+}
+
+fn build_fingerprint_profile_response(
+    id: String,
+    name: String,
+    version: i64,
+    status: String,
+    tags_json: Option<String>,
+    profile_json: Value,
+    created_at: String,
+    updated_at: String,
+) -> FingerprintProfileResponse {
+    let validation = validate_fingerprint_profile(&profile_json);
+    let declared_control_fields = first_family_declared_control_fields(&profile_json);
+    let consumption_explain = fingerprint_consumption_explain(&id, version, &profile_json);
+    let supported_runtime_fields = consumption_explain.resolved_fields.clone();
+    let unsupported_control_fields = declared_control_fields
+        .iter()
+        .filter(|field| {
+            !supported_runtime_fields
+                .iter()
+                .any(|resolved| resolved == *field)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    FingerprintProfileResponse {
+        id,
+        name,
+        version,
+        status,
+        tags_json,
+        family_id: inferred_family_id(&profile_json),
+        family_variant: inferred_family_variant(&profile_json),
+        schema_kind: detect_fingerprint_schema_kind(&profile_json).to_string(),
+        declared_control_count: declared_control_fields.len(),
+        declared_control_fields,
+        declared_sections: first_family_section_summaries(&profile_json),
+        supported_runtime_fields,
+        unsupported_control_fields,
+        consistency_assessment: assess_fingerprint_profile_consistency(
+            None,
+            None,
+            None,
+            &profile_json,
+        ),
+        consumption_explain,
+        profile_json,
+        validation_ok: validation.ok,
+        validation_issues: validation.issues,
+        created_at,
+        updated_at,
+    }
+}
+
 const HEARTBEAT_METRICS_WINDOW_SECONDS: i64 = 86_400;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ResolvedNetworkPolicyModel {
     id: String,
     region_anchor: Option<String>,
@@ -162,6 +250,7 @@ struct StorePlatformOverrideLookupRow {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ResolvedPersonaBundle {
     persona_id: String,
     store_id: String,
@@ -2750,14 +2839,22 @@ async fn load_verify_metrics(
 async fn load_proxy_pool_status_summary(
     state: &AppState,
 ) -> Result<super::dto::ProxyPoolStatusSummary, (StatusCode, String)> {
+    let mode = state.proxy_runtime_mode.clone();
     let (total, active, candidate, candidate_rejected): (i64, i64, i64, i64) = sqlx::query_as(
         r#"SELECT
                COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) AS active,
-               COALESCE(SUM(CASE WHEN status = 'candidate' THEN 1 ELSE 0 END), 0) AS candidate,
-               COALESCE(SUM(CASE WHEN status = 'candidate_rejected' THEN 1 ELSE 0 END), 0) AS candidate_rejected
-           FROM proxies"#,
+               COALESCE(SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END), 0) AS active,
+               COALESCE(SUM(CASE WHEN p.status = 'candidate' THEN 1 ELSE 0 END), 0) AS candidate,
+               COALESCE(SUM(CASE WHEN p.status = 'candidate_rejected' THEN 1 ELSE 0 END), 0) AS candidate_rejected
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE (
+             (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+             OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+           )"#,
     )
+    .bind(&mode)
+    .bind(&mode)
     .fetch_one(&state.db)
     .await
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate proxy pool status: {err}")))?;
@@ -2767,13 +2864,32 @@ async fn load_proxy_pool_status_summary(
             format!("failed to load hot regions: {err}"),
         )
     })?;
+    let recent_hot_region_rows = load_recent_hot_browser_regions(state, HOT_REGION_WINDOW_SECONDS)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to load recent hot regions: {err}"),
+            )
+        })?;
     let policy = proxy_pool_growth_policy_from_env();
     let mut region_shortages = Vec::new();
     for region in &hot_regions {
         let available_in_region: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND region = ? AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+            r#"SELECT COUNT(*)
+               FROM proxies p
+               LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+               WHERE p.status = 'active'
+                 AND p.region = ?
+                 AND (p.cooldown_until IS NULL OR CAST(p.cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))
+                 AND (
+                   (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+                   OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+                 )"#,
         )
         .bind(region)
+        .bind(&mode)
+        .bind(&mode)
         .fetch_one(&state.db)
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count region availability: {err}")))?;
@@ -2781,17 +2897,113 @@ async fn load_proxy_pool_status_summary(
             region_shortages.push(region.clone());
         }
     }
+    let source_rows = sqlx::query_as::<_, (Option<String>, i64)>(
+        r#"SELECT p.source_label, COUNT(*) AS active_count
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status = 'active'
+             AND (
+               (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+               OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+             )
+           GROUP BY p.source_label
+           ORDER BY active_count DESC, p.source_label ASC"#,
+    )
+    .bind(&mode)
+    .bind(&mode)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load source inventory concentration: {err}"),
+        )
+    })?;
+    let active_total = source_rows.iter().map(|(_, count)| *count).sum::<i64>();
+    let top1_active = source_rows.first().map(|(_, count)| *count).unwrap_or(0);
+    let top3_active = source_rows
+        .iter()
+        .take(3)
+        .map(|(_, count)| *count)
+        .sum::<i64>();
+    let active_sources_with_min_inventory = i64::try_from(
+        source_rows
+            .iter()
+            .filter(|(_, count)| *count >= policy.min_available_per_region)
+            .count(),
+    )
+    .unwrap_or(0);
+    let region_rows = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT p.region, COUNT(*) AS active_count
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status = 'active'
+             AND p.region IS NOT NULL
+             AND TRIM(p.region) != ''
+             AND (
+               (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+               OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+             )
+           GROUP BY p.region
+           ORDER BY active_count DESC, p.region ASC"#,
+    )
+    .bind(&mode)
+    .bind(&mode)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load region inventory concentration: {err}"),
+        )
+    })?;
+    let active_regions_with_min_inventory = i64::try_from(
+        region_rows
+            .iter()
+            .filter(|(_, count)| *count >= policy.min_available_per_region)
+            .count(),
+    )
+    .unwrap_or(0);
+    let recent_hot_regions = recent_hot_region_rows
+        .iter()
+        .map(|(region, _)| region.clone())
+        .collect::<Vec<_>>();
+    let recent_hot_region_counts = recent_hot_region_rows
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let reported_active_ratio_percent = if total <= 0 {
+        0.0
+    } else {
+        (active as f64 / total as f64) * 100.0
+    };
     Ok(super::dto::ProxyPoolStatusSummary {
+        mode,
         total,
         active,
         candidate,
         candidate_rejected,
-        active_ratio_percent: if total <= 0 {
-            0
-        } else {
-            (active * 100) / total
-        },
+        eligible_pool_total: total,
+        fresh_candidate_total: candidate,
+        recent_rejected_total: candidate_rejected,
+        reported_active_ratio_percent,
+        effective_active_ratio_percent: reported_active_ratio_percent,
+        active_ratio_percent: reported_active_ratio_percent,
         hot_regions,
+        recent_hot_regions,
+        recent_hot_region_counts,
+        hot_region_window_seconds: HOT_REGION_WINDOW_SECONDS,
+        source_concentration_top1_percent: if active_total <= 0 {
+            0.0
+        } else {
+            round_percent((top1_active as f64 / active_total as f64) * 100.0)
+        },
+        source_concentration_top3_percent: if active_total <= 0 {
+            0.0
+        } else {
+            round_percent((top3_active as f64 / active_total as f64) * 100.0)
+        },
+        active_sources_with_min_inventory,
+        active_regions_with_min_inventory,
         region_shortages,
     })
 }
@@ -3353,6 +3565,7 @@ pub async fn status(
 
     let response = StatusResponse {
         service: "PersonaPilot".to_string(),
+        mode: state.proxy_runtime_mode.clone(),
         queue_len: counts.queued as usize,
         counts,
         worker: WorkerStatusResponse {
@@ -4331,6 +4544,24 @@ async fn create_task_from_payload(
     let priority = payload.priority.unwrap_or(0);
     let network_policy_value = payload.network_policy_json.clone();
     let network_policy_json = network_policy_value.as_ref().map(Value::to_string);
+    let requested_region = network_policy_value
+        .as_ref()
+        .and_then(|value| value.get("region"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            network_policy_value
+                .as_ref()
+                .and_then(|value| value.get("region_anchor"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+    let typed_proxy_id = behavior_compile.execution_intent.proxy_id.clone();
+    let proxy_mode = if typed_proxy_id.is_some() || requested_region.is_some() {
+        Some(state.proxy_runtime_mode.clone())
+    } else {
+        None
+    };
     let behavior_policy_json = Some(behavior_compile.behavior_policy_json.to_string());
     let execution_intent_json = Some(behavior_compile.execution_intent_json.to_string());
     let form_input_redacted_json = form_compile
@@ -4425,9 +4656,13 @@ async fn create_task_from_payload(
             execution_intent_json, fingerprint_profile_json, fingerprint_profile_id,
             fingerprint_profile_version, identity_profile_id, behavior_profile_id,
             behavior_profile_version, network_profile_id, session_profile_id,
-            persona_id, platform_id, manual_gate_request_id, form_input_redacted_json, priority,
+            persona_id, platform_id, manual_gate_request_id, proxy_id, requested_region,
+            proxy_mode, form_input_redacted_json, priority,
             created_at, queued_at, started_at, finished_at, result_json, error_message
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, NULL, NULL, NULL, NULL
+        )
         "#,
     )
     .bind(&task_id)
@@ -4447,6 +4682,9 @@ async fn create_task_from_payload(
     .bind(&payload.persona_id)
     .bind(&platform_id)
     .bind(&manual_gate_request_id)
+    .bind(&typed_proxy_id)
+    .bind(&requested_region)
+    .bind(&proxy_mode)
     .bind(&form_input_redacted_json)
     .bind(priority)
     .bind(&created_at)
@@ -5783,7 +6021,6 @@ pub async fn create_fingerprint_profile(
         ));
     }
 
-    let validation = validate_fingerprint_profile(&payload.profile_json);
     let now = now_ts_string();
     let profile_json = payload.profile_json.to_string();
 
@@ -5805,18 +6042,16 @@ pub async fn create_fingerprint_profile(
 
     Ok((
         StatusCode::CREATED,
-        Json(FingerprintProfileResponse {
-            id: payload.id,
-            name: payload.name,
-            version: 1,
-            status: "active".to_string(),
-            tags_json: payload.tags_json,
-            profile_json: payload.profile_json,
-            validation_ok: validation.ok,
-            validation_issues: validation.issues,
-            created_at: now.clone(),
-            updated_at: now,
-        }),
+        Json(build_fingerprint_profile_response(
+            payload.id,
+            payload.name,
+            1,
+            "active".to_string(),
+            payload.tags_json,
+            payload.profile_json,
+            now.clone(),
+            now,
+        )),
     ))
 }
 
@@ -5841,19 +6076,16 @@ pub async fn list_fingerprint_profiles(
             |(id, name, version, status, tags_json, profile_json, created_at, updated_at)| {
                 let profile_json =
                     serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
-                let validation = validate_fingerprint_profile(&profile_json);
-                FingerprintProfileResponse {
+                build_fingerprint_profile_response(
                     id,
                     name,
                     version,
                     status,
                     tags_json,
                     profile_json,
-                    validation_ok: validation.ok,
-                    validation_issues: validation.issues,
                     created_at,
                     updated_at,
-                }
+                )
             },
         )
         .collect();
@@ -5877,19 +6109,16 @@ pub async fn get_fingerprint_profile(
         Some((id, name, version, status, tags_json, profile_json, created_at, updated_at)) => {
             let profile_json =
                 serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
-            let validation = validate_fingerprint_profile(&profile_json);
-            Ok(Json(FingerprintProfileResponse {
+            Ok(Json(build_fingerprint_profile_response(
                 id,
                 name,
                 version,
                 status,
                 tags_json,
                 profile_json,
-                validation_ok: validation.ok,
-                validation_issues: validation.issues,
                 created_at,
                 updated_at,
-            }))
+            )))
         }
         None => Err((
             StatusCode::NOT_FOUND,
@@ -6278,12 +6507,25 @@ async fn build_proxy_inventory_snapshot(
 
 async fn load_hot_browser_regions(state: &AppState) -> anyhow::Result<Vec<String>> {
     let rows = sqlx::query_as::<_, (String, i64)>(
-        r#"SELECT CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT) AS region, COUNT(*) AS demand
+        r#"SELECT COALESCE(
+                 requested_region,
+                 CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+                 CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+               ) AS region,
+               COUNT(*) AS demand
            FROM tasks
            WHERE kind IN ('open_page', 'get_html', 'get_title', 'get_final_url', 'extract_text')
              AND status IN ('queued', 'running')
-             AND json_extract(input_json, '$.network_policy_json.region') IS NOT NULL
-             AND TRIM(CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)) != ''
+             AND COALESCE(
+               requested_region,
+               CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+               CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+             ) IS NOT NULL
+             AND TRIM(COALESCE(
+               requested_region,
+               CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+               CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+             )) != ''
            GROUP BY region
            ORDER BY demand DESC, region ASC
            LIMIT 3"#,
@@ -6291,6 +6533,39 @@ async fn load_hot_browser_regions(state: &AppState) -> anyhow::Result<Vec<String
     .fetch_all(&state.db)
     .await?;
     Ok(rows.into_iter().map(|(region, _)| region).collect())
+}
+
+async fn load_recent_hot_browser_regions(
+    state: &AppState,
+    window_seconds: i64,
+) -> anyhow::Result<Vec<(String, i64)>> {
+    let now = now_ts_string();
+    sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT region, COUNT(*) AS demand
+           FROM (
+             SELECT
+               COALESCE(
+                 requested_region,
+                 CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+                 CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+               ) AS region,
+               COALESCE(finished_at, started_at, queued_at, created_at, '0') AS event_ts
+             FROM tasks
+             WHERE kind IN ('open_page', 'get_html', 'get_title', 'get_final_url', 'extract_text')
+               AND status IN ('queued', 'running', 'succeeded')
+           )
+           WHERE region IS NOT NULL
+             AND TRIM(region) != ''
+             AND CAST(event_ts AS INTEGER) >= CAST(? AS INTEGER) - ?
+           GROUP BY region
+           ORDER BY demand DESC, region ASC
+           LIMIT 5"#,
+    )
+    .bind(&now)
+    .bind(window_seconds.max(60))
+    .fetch_all(&state.db)
+    .await
+    .map_err(Into::into)
 }
 
 async fn recent_replenish_batch_exists(
@@ -6399,6 +6674,7 @@ async fn schedule_replenish_verify_batch(
     }
 
     let now = now_ts_string();
+    let runtime_mode = state.proxy_runtime_mode.clone();
     let batch_id = format!("verify-batch-{}", Uuid::new_v4());
     let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
     let mut proxy_ids = Vec::with_capacity(proxy_rows.len());
@@ -6420,14 +6696,18 @@ async fn schedule_replenish_verify_batch(
             r#"INSERT INTO tasks (
                    id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
                    priority, created_at, queued_at, started_at, finished_at, fingerprint_profile_id,
-                   fingerprint_profile_version, runner_id, heartbeat_at, result_json, error_message
-               ) VALUES (?, 'verify_proxy', ?, ?, NULL, NULL, 0, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"#,
+                   fingerprint_profile_version, proxy_id, requested_region, proxy_mode,
+                   runner_id, heartbeat_at, result_json, error_message
+               ) VALUES (?, 'verify_proxy', ?, ?, NULL, NULL, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, NULL)"#,
         )
         .bind(&task_id)
         .bind(TASK_STATUS_QUEUED)
         .bind(&input_json)
         .bind(&created_at)
         .bind(&created_at)
+        .bind(proxy_id)
+        .bind(target_region)
+        .bind(&runtime_mode)
         .execute(&state.db)
         .await?;
         let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
@@ -6556,6 +6836,464 @@ pub async fn run_proxy_replenish_mvp_tick(
     Ok(scheduled_batches)
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct PlatformTemplateCrudRow {
+    id: String,
+    platform_id: String,
+    name: String,
+    warm_paths_json: String,
+    revisit_paths_json: String,
+    stateful_paths_json: String,
+    write_operation_paths_json: String,
+    high_risk_paths_json: String,
+    allowed_regions_json: Option<String>,
+    preferred_locale: Option<String>,
+    preferred_timezone: Option<String>,
+    continuity_checks_json: Option<String>,
+    identity_markers_json: Option<String>,
+    login_loss_signals_json: Option<String>,
+    recovery_steps_json: Option<String>,
+    behavior_defaults_json: Option<String>,
+    event_chain_templates_json: Option<String>,
+    page_semantics_json: Option<String>,
+    readiness_level: String,
+    status: String,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct StorePlatformOverrideCrudRow {
+    id: String,
+    store_id: String,
+    platform_id: String,
+    admin_origin: Option<String>,
+    entry_origin: Option<String>,
+    entry_paths_json: Option<String>,
+    warm_paths_json: Option<String>,
+    revisit_paths_json: Option<String>,
+    stateful_paths_json: Option<String>,
+    high_risk_paths_json: Option<String>,
+    recovery_steps_json: Option<String>,
+    login_loss_signals_json: Option<String>,
+    identity_markers_json: Option<String>,
+    behavior_defaults_json: Option<String>,
+    event_chain_templates_json: Option<String>,
+    page_semantics_json: Option<String>,
+    status: String,
+    created_at: String,
+    updated_at: String,
+}
+
+fn normalize_non_empty_string_field(payload: &Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+}
+
+fn normalize_status_text(value: Option<&Value>, fallback: &str) -> String {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn map_platform_template_crud_row(row: PlatformTemplateCrudRow) -> Value {
+    json!({
+        "id": row.id,
+        "platform_id": row.platform_id,
+        "name": row.name,
+        "warm_paths_json": parse_json_text(Some(row.warm_paths_json), json!([])),
+        "revisit_paths_json": parse_json_text(Some(row.revisit_paths_json), json!([])),
+        "stateful_paths_json": parse_json_text(Some(row.stateful_paths_json), json!([])),
+        "write_operation_paths_json": parse_json_text(Some(row.write_operation_paths_json), json!([])),
+        "high_risk_paths_json": parse_json_text(Some(row.high_risk_paths_json), json!([])),
+        "allowed_regions_json": parse_json_text(row.allowed_regions_json, json!([])),
+        "preferred_locale": row.preferred_locale,
+        "preferred_timezone": row.preferred_timezone,
+        "continuity_checks_json": parse_optional_json_text(row.continuity_checks_json),
+        "identity_markers_json": parse_optional_json_text(row.identity_markers_json),
+        "login_loss_signals_json": parse_optional_json_text(row.login_loss_signals_json),
+        "recovery_steps_json": parse_optional_json_text(row.recovery_steps_json),
+        "behavior_defaults_json": parse_optional_json_text(row.behavior_defaults_json),
+        "event_chain_templates_json": parse_optional_json_text(row.event_chain_templates_json),
+        "page_semantics_json": parse_optional_json_text(row.page_semantics_json),
+        "readiness_level": row.readiness_level,
+        "status": row.status,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at
+    })
+}
+
+fn map_store_platform_override_crud_row(row: StorePlatformOverrideCrudRow) -> Value {
+    json!({
+        "id": row.id,
+        "store_id": row.store_id,
+        "platform_id": row.platform_id,
+        "admin_origin": row.admin_origin,
+        "entry_origin": row.entry_origin,
+        "entry_paths_json": parse_optional_json_text(row.entry_paths_json),
+        "warm_paths_json": parse_optional_json_text(row.warm_paths_json),
+        "revisit_paths_json": parse_optional_json_text(row.revisit_paths_json),
+        "stateful_paths_json": parse_optional_json_text(row.stateful_paths_json),
+        "high_risk_paths_json": parse_optional_json_text(row.high_risk_paths_json),
+        "recovery_steps_json": parse_optional_json_text(row.recovery_steps_json),
+        "login_loss_signals_json": parse_optional_json_text(row.login_loss_signals_json),
+        "identity_markers_json": parse_optional_json_text(row.identity_markers_json),
+        "behavior_defaults_json": parse_optional_json_text(row.behavior_defaults_json),
+        "event_chain_templates_json": parse_optional_json_text(row.event_chain_templates_json),
+        "page_semantics_json": parse_optional_json_text(row.page_semantics_json),
+        "status": row.status,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at
+    })
+}
+
+pub async fn create_platform_template(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, String)> {
+    let id = normalize_non_empty_string_field(&payload, "id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "platform template id is required".to_string(),
+    ))?;
+    let platform_id = normalize_non_empty_string_field(&payload, "platform_id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "platform template platform_id is required".to_string(),
+    ))?;
+    let name = normalize_non_empty_string_field(&payload, "name").ok_or((
+        StatusCode::BAD_REQUEST,
+        "platform template name is required".to_string(),
+    ))?;
+    let warm_paths_json = payload
+        .get("warm_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let revisit_paths_json = payload
+        .get("revisit_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let stateful_paths_json = payload
+        .get("stateful_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let write_operation_paths_json = payload
+        .get("write_operation_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let high_risk_paths_json = payload
+        .get("high_risk_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let allowed_regions_json = payload
+        .get("allowed_regions_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let preferred_locale = normalize_non_empty_string_field(&payload, "preferred_locale");
+    let preferred_timezone = normalize_non_empty_string_field(&payload, "preferred_timezone");
+    let continuity_checks_json = payload.get("continuity_checks_json").cloned();
+    let identity_markers_json = payload.get("identity_markers_json").cloned();
+    let login_loss_signals_json = payload.get("login_loss_signals_json").cloned();
+    let recovery_steps_json = payload.get("recovery_steps_json").cloned();
+    let behavior_defaults_json = payload.get("behavior_defaults_json").cloned();
+    let event_chain_templates_json = payload.get("event_chain_templates_json").cloned();
+    let page_semantics_json = payload.get("page_semantics_json").cloned();
+    let readiness_level = normalize_status_text(payload.get("readiness_level"), "baseline");
+    let status = normalize_status_text(payload.get("status"), "active");
+    let now = now_ts_string();
+
+    sqlx::query(
+        r#"INSERT INTO platform_templates (
+               id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+               write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+               preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+               login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+               readiness_level, status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&id)
+    .bind(&platform_id)
+    .bind(&name)
+    .bind(warm_paths_json.to_string())
+    .bind(revisit_paths_json.to_string())
+    .bind(stateful_paths_json.to_string())
+    .bind(write_operation_paths_json.to_string())
+    .bind(high_risk_paths_json.to_string())
+    .bind(allowed_regions_json.to_string())
+    .bind(&preferred_locale)
+    .bind(&preferred_timezone)
+    .bind(continuity_checks_json.as_ref().map(Value::to_string))
+    .bind(identity_markers_json.as_ref().map(Value::to_string))
+    .bind(login_loss_signals_json.as_ref().map(Value::to_string))
+    .bind(recovery_steps_json.as_ref().map(Value::to_string))
+    .bind(behavior_defaults_json.as_ref().map(Value::to_string))
+    .bind(event_chain_templates_json.as_ref().map(Value::to_string))
+    .bind(page_semantics_json.as_ref().map(Value::to_string))
+    .bind(&readiness_level)
+    .bind(&status)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to create platform template: {err}"),
+        )
+    })?;
+
+    let row = sqlx::query_as::<_, PlatformTemplateCrudRow>(
+        r#"SELECT id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+                  preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+                  login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  readiness_level, status, created_at, updated_at
+           FROM platform_templates
+           WHERE id = ?"#,
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch created platform template: {err}"),
+        )
+    })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(map_platform_template_crud_row(row)),
+    ))
+}
+
+pub async fn list_platform_templates(
+    State(state): State<AppState>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<Value>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, PlatformTemplateCrudRow>(
+        r#"SELECT id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+                  preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+                  login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  readiness_level, status, created_at, updated_at
+           FROM platform_templates
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to list platform templates: {err}"),
+        )
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(map_platform_template_crud_row)
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub async fn get_platform_template(
+    State(state): State<AppState>,
+    Path(template_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, PlatformTemplateCrudRow>(
+        r#"SELECT id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+                  preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+                  login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  readiness_level, status, created_at, updated_at
+           FROM platform_templates
+           WHERE id = ?"#,
+    )
+    .bind(&template_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch platform template: {err}"),
+        )
+    })?;
+
+    match row {
+        Some(row) => Ok(Json(map_platform_template_crud_row(row))),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("platform template not found: {template_id}"),
+        )),
+    }
+}
+
+pub async fn create_store_platform_override(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, String)> {
+    let id = normalize_non_empty_string_field(&payload, "id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "store platform override id is required".to_string(),
+    ))?;
+    let store_id = normalize_non_empty_string_field(&payload, "store_id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "store platform override store_id is required".to_string(),
+    ))?;
+    let platform_id = normalize_non_empty_string_field(&payload, "platform_id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "store platform override platform_id is required".to_string(),
+    ))?;
+    let admin_origin = normalize_non_empty_string_field(&payload, "admin_origin");
+    let entry_origin = normalize_non_empty_string_field(&payload, "entry_origin");
+    let entry_paths_json = payload.get("entry_paths_json").cloned();
+    let warm_paths_json = payload.get("warm_paths_json").cloned();
+    let revisit_paths_json = payload.get("revisit_paths_json").cloned();
+    let stateful_paths_json = payload.get("stateful_paths_json").cloned();
+    let high_risk_paths_json = payload.get("high_risk_paths_json").cloned();
+    let recovery_steps_json = payload.get("recovery_steps_json").cloned();
+    let login_loss_signals_json = payload.get("login_loss_signals_json").cloned();
+    let identity_markers_json = payload.get("identity_markers_json").cloned();
+    let behavior_defaults_json = payload.get("behavior_defaults_json").cloned();
+    let event_chain_templates_json = payload.get("event_chain_templates_json").cloned();
+    let page_semantics_json = payload.get("page_semantics_json").cloned();
+    let status = normalize_status_text(payload.get("status"), "active");
+    let now = now_ts_string();
+
+    sqlx::query(
+        r#"INSERT INTO store_platform_overrides (
+               id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+               high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+               behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+               status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&id)
+    .bind(&store_id)
+    .bind(&platform_id)
+    .bind(&admin_origin)
+    .bind(&entry_origin)
+    .bind(entry_paths_json.as_ref().map(Value::to_string))
+    .bind(warm_paths_json.as_ref().map(Value::to_string))
+    .bind(revisit_paths_json.as_ref().map(Value::to_string))
+    .bind(stateful_paths_json.as_ref().map(Value::to_string))
+    .bind(high_risk_paths_json.as_ref().map(Value::to_string))
+    .bind(recovery_steps_json.as_ref().map(Value::to_string))
+    .bind(login_loss_signals_json.as_ref().map(Value::to_string))
+    .bind(identity_markers_json.as_ref().map(Value::to_string))
+    .bind(behavior_defaults_json.as_ref().map(Value::to_string))
+    .bind(event_chain_templates_json.as_ref().map(Value::to_string))
+    .bind(page_semantics_json.as_ref().map(Value::to_string))
+    .bind(&status)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to create store platform override: {err}"),
+        )
+    })?;
+
+    let row = sqlx::query_as::<_, StorePlatformOverrideCrudRow>(
+        r#"SELECT id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+                  behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  status, created_at, updated_at
+           FROM store_platform_overrides
+           WHERE id = ?"#,
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch created store platform override: {err}"),
+        )
+    })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(map_store_platform_override_crud_row(row)),
+    ))
+}
+
+pub async fn list_store_platform_overrides(
+    State(state): State<AppState>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<Value>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, StorePlatformOverrideCrudRow>(
+        r#"SELECT id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+                  behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  status, created_at, updated_at
+           FROM store_platform_overrides
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to list store platform overrides: {err}"),
+        )
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(map_store_platform_override_crud_row)
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub async fn get_store_platform_override(
+    State(state): State<AppState>,
+    Path(override_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, StorePlatformOverrideCrudRow>(
+        r#"SELECT id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+                  behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  status, created_at, updated_at
+           FROM store_platform_overrides
+           WHERE id = ?"#,
+    )
+    .bind(&override_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch store platform override: {err}"),
+        )
+    })?;
+
+    match row {
+        Some(row) => Ok(Json(map_store_platform_override_crud_row(row))),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("store platform override not found: {override_id}"),
+        )),
+    }
+}
+
 pub async fn verify_batch_proxies(
     State(state): State<AppState>,
     Json(payload): Json<ProxyVerifyBatchRequest>,
@@ -6568,65 +7306,133 @@ pub async fn verify_batch_proxies(
     let recently_used_within_seconds = payload.recently_used_within_seconds.unwrap_or(0).max(0);
     let failed_only = payload.failed_only.unwrap_or(false);
     let max_per_provider = payload.max_per_provider.unwrap_or(requested).max(1);
+    let runtime_mode = state.proxy_runtime_mode.clone();
     let now = now_ts_string();
     let batch_id = format!("verify-batch-{}", Uuid::new_v4());
-    let rows = sqlx::query_as::<_, (String, Option<String>)>(
-        r#"SELECT id, provider FROM proxies
-           WHERE status = 'active'
-             AND (? IS NULL OR provider = ?)
-             AND (? IS NULL OR region = ?)
-             AND score >= ?
+    let fetch_verify_batch_rows = |mode_filter: String| {
+        let mode_filter_other = mode_filter.clone();
+        sqlx::query_as::<
+            _,
+            (
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                String,
+            ),
+        >(
+            r#"SELECT p.id, p.provider, p.source_label, p.last_verify_status, p.last_verify_at, p.created_at
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status = 'active'
+             AND (? IS NULL OR p.provider = ?)
+             AND (? IS NULL OR p.region = ?)
+             AND p.score >= ?
              AND (
                ? = 0
-               OR last_verify_at IS NULL
-               OR last_verify_status IS NULL
-               OR last_verify_status != 'ok'
-               OR CAST(last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - ?
+               OR p.last_verify_at IS NULL
+               OR p.last_verify_status IS NULL
+               OR p.last_verify_status != 'ok'
+               OR CAST(p.last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - ?
              )
              AND (
                ? = 0
-               OR CAST(COALESCE(last_used_at, '0') AS INTEGER) >= CAST(? AS INTEGER) - ?
+               OR CAST(COALESCE(p.last_used_at, '0') AS INTEGER) >= CAST(? AS INTEGER) - ?
              )
              AND (
                ? = 0
-               OR last_verify_status = 'failed'
+               OR p.last_verify_status = 'failed'
+             )
+             AND (
+               (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+               OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
              )
            ORDER BY
-             CASE WHEN last_verify_status = 'ok' THEN 1 ELSE 0 END ASC,
-             COALESCE(last_verify_at, '0') ASC,
-             created_at ASC
+             CASE WHEN p.last_verify_status = 'ok' THEN 1 ELSE 0 END ASC,
+             COALESCE(p.last_verify_at, '0') ASC,
+               p.created_at ASC,
+               p.id ASC
            LIMIT ?"#,
-    )
-    .bind(&payload.provider)
-    .bind(&payload.provider)
-    .bind(&payload.region)
-    .bind(&payload.region)
-    .bind(min_score)
-    .bind(if only_stale { 1_i64 } else { 0_i64 })
-    .bind(&now)
-    .bind(stale_after_seconds)
-    .bind(if recently_used_within_seconds > 0 {
-        1_i64
-    } else {
-        0_i64
-    })
-    .bind(&now)
-    .bind(recently_used_within_seconds)
-    .bind(if failed_only { 1_i64 } else { 0_i64 })
-    .bind(requested.saturating_mul(4))
-    .fetch_all(&state.db)
-    .await
-    .map_err(|err| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("failed to select proxies for verify batch: {err}"),
         )
-    })?;
+        .bind(&payload.provider)
+        .bind(&payload.provider)
+        .bind(&payload.region)
+        .bind(&payload.region)
+        .bind(min_score)
+        .bind(if only_stale { 1_i64 } else { 0_i64 })
+        .bind(&now)
+        .bind(stale_after_seconds)
+        .bind(if recently_used_within_seconds > 0 {
+            1_i64
+        } else {
+            0_i64
+        })
+        .bind(&now)
+        .bind(recently_used_within_seconds)
+        .bind(if failed_only { 1_i64 } else { 0_i64 })
+        .bind(mode_filter)
+        .bind(mode_filter_other)
+        .bind(requested.saturating_mul(50).max(50).min(1000))
+        .fetch_all(&state.db)
+    };
+    let mut rows = fetch_verify_batch_rows(runtime_mode.clone())
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to select proxies for verify batch: {err}"),
+            )
+        })?;
+    if rows.is_empty() && runtime_mode != "prod_live" {
+        rows = fetch_verify_batch_rows("prod_live".to_string())
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to select fallback prod-live proxies for verify batch: {err}"),
+                )
+            })?;
+    }
+    let mut source_inventory = std::collections::BTreeMap::<String, i64>::new();
+    let mut provider_inventory = std::collections::BTreeMap::<String, i64>::new();
+    for (_, provider, source_label, _, _, _) in &rows {
+        let source_key = source_label
+            .clone()
+            .unwrap_or_else(|| "__none__".to_string());
+        let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
+        *source_inventory.entry(source_key).or_insert(0) += 1;
+        *provider_inventory.entry(provider_key).or_insert(0) += 1;
+    }
+    let parse_ts = |value: Option<&String>| {
+        value
+            .and_then(|raw| raw.parse::<i64>().ok())
+            .unwrap_or_default()
+    };
+    rows.sort_by(|left, right| {
+        let left_source_key = left.2.clone().unwrap_or_else(|| "__none__".to_string());
+        let right_source_key = right.2.clone().unwrap_or_else(|| "__none__".to_string());
+        let left_provider_key = left.1.clone().unwrap_or_else(|| "__none__".to_string());
+        let right_provider_key = right.1.clone().unwrap_or_else(|| "__none__".to_string());
+        source_inventory[&left_source_key]
+            .cmp(&source_inventory[&right_source_key])
+            .then_with(|| {
+                provider_inventory[&left_provider_key].cmp(&provider_inventory[&right_provider_key])
+            })
+            .then_with(|| {
+                let left_verified_ok = i32::from(left.3.as_deref() == Some("ok"));
+                let right_verified_ok = i32::from(right.3.as_deref() == Some("ok"));
+                left_verified_ok.cmp(&right_verified_ok)
+            })
+            .then_with(|| parse_ts(left.4.as_ref()).cmp(&parse_ts(right.4.as_ref())))
+            .then_with(|| left.5.cmp(&right.5))
+            .then_with(|| left.0.cmp(&right.0))
+    });
 
     let mut accepted = 0_i64;
     let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
     let mut per_provider_skipped = std::collections::BTreeMap::<String, i64>::new();
-    for (proxy_id, provider) in &rows {
+    for (proxy_id, provider, _, _, _, _) in &rows {
         if accepted >= requested {
             break;
         }
@@ -6653,14 +7459,18 @@ pub async fn verify_batch_proxies(
             r#"INSERT INTO tasks (
                 id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
                 priority, created_at, queued_at, started_at, finished_at, fingerprint_profile_id,
-                fingerprint_profile_version, runner_id, heartbeat_at, result_json, error_message
-            ) VALUES (?, 'verify_proxy', ?, ?, NULL, NULL, 0, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"#,
+                fingerprint_profile_version, proxy_id, requested_region, proxy_mode,
+                runner_id, heartbeat_at, result_json, error_message
+            ) VALUES (?, 'verify_proxy', ?, ?, NULL, NULL, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, NULL)"#,
         )
         .bind(&task_id)
         .bind(TASK_STATUS_QUEUED)
         .bind(&input_json)
         .bind(&created_at)
         .bind(&created_at)
+        .bind(proxy_id)
+        .bind(&payload.region)
+        .bind(&runtime_mode)
         .execute(&state.db)
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to enqueue verify task: {err}")))?;
@@ -6693,6 +7503,7 @@ pub async fn verify_batch_proxies(
         "recently_used_within_seconds": recently_used_within_seconds,
         "failed_only": failed_only,
         "max_per_provider": max_per_provider,
+        "mode": runtime_mode,
     })
     .to_string();
     sqlx::query(r#"INSERT INTO verify_batches (id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at)

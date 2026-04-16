@@ -924,7 +924,7 @@ def parse_args() -> argparse.Namespace:
         help="Print recent harvest sources and runs as JSON",
     )
     parser.add_argument("--file", help="Legacy single-source local text file input")
-    parser.add_argument("--url", help="Legacy single-source remote text URL input")
+    parser.add_argument("--url", help="Legacy single-source text URL input")
     parser.add_argument(
         "--source-kind",
         help="Legacy single-source kind override: text_file/text_url/json_file/json_url",

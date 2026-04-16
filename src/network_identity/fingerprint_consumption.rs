@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::fingerprint_policy::FingerprintPerfBudgetTag;
+use super::first_family::{fingerprint_profile_field_value, first_family_declared_control_fields};
 
 pub const FINGERPRINT_CONSUMPTION_VERSION: &str = "fingerprint_consumption_schema_v1";
 pub const FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME: &str = "runner_runtime";
@@ -60,19 +61,14 @@ fn insert_unique(target: &mut Vec<String>, value: &str) {
     }
 }
 
-fn canonical_field_value(profile: &Map<String, Value>, field: &str) -> Option<Value> {
+fn canonical_field_value(profile: &Value, field: &str) -> Option<Value> {
     match field {
-        DEVICE_MEMORY_CANONICAL_FIELD => profile
-            .get(DEVICE_MEMORY_CANONICAL_FIELD)
-            .cloned()
-            .or_else(|| profile.get(DEVICE_MEMORY_ALIAS_FIELD).cloned()),
-        "accept_language" => profile.get("accept_language").cloned().or_else(|| {
-            profile
-                .get("headers")
-                .and_then(Value::as_object)
-                .and_then(|headers| headers.get("accept_language").cloned())
-        }),
-        other => profile.get(other).cloned(),
+        DEVICE_MEMORY_CANONICAL_FIELD => {
+            fingerprint_profile_field_value(profile, "device_memory_gb")
+        }
+        "accept_language" => fingerprint_profile_field_value(profile, "accept_language"),
+        "platform" => fingerprint_profile_field_value(profile, "platform"),
+        other => fingerprint_profile_field_value(profile, other),
     }
 }
 
@@ -117,18 +113,16 @@ pub fn canonicalize_fingerprint_profile(profile: &Value) -> Value {
         return profile.clone();
     };
     let mut canonical = profile_obj.clone();
-    if !canonical.contains_key(DEVICE_MEMORY_CANONICAL_FIELD) {
-        if let Some(alias) = canonical.get(DEVICE_MEMORY_ALIAS_FIELD).cloned() {
-            canonical.insert(DEVICE_MEMORY_CANONICAL_FIELD.to_string(), alias);
+    for field in LIGHTPANDA_SUPPORTED_FIELDS.map(|(field, _)| field) {
+        if !canonical.contains_key(field) {
+            if let Some(value) = canonical_field_value(profile, field) {
+                canonical.insert(field.to_string(), value);
+            }
         }
     }
-    if !canonical.contains_key("accept_language") {
-        if let Some(value) = canonical
-            .get("headers")
-            .and_then(Value::as_object)
-            .and_then(|headers| headers.get("accept_language").cloned())
-        {
-            canonical.insert("accept_language".to_string(), value);
+    if !canonical.contains_key("platform") {
+        if let Some(value) = canonical_field_value(profile, "platform") {
+            canonical.insert("platform".to_string(), value);
         }
     }
     Value::Object(canonical)
@@ -139,28 +133,33 @@ pub fn fingerprint_declared_fields(profile: &Value) -> Vec<String> {
         return Vec::new();
     };
     let mut fields = BTreeSet::new();
-    for (key, value) in profile_obj {
+    for (key, _value) in profile_obj {
         if is_metadata_field(key) {
             continue;
         }
         if key == "headers" {
-            if value
-                .as_object()
-                .and_then(|headers| headers.get("accept_language"))
-                .is_some()
-            {
+            if canonical_field_value(profile, "accept_language").is_some() {
                 fields.insert("accept_language".to_string());
             }
             continue;
         }
+        // Treat unknown object-shaped fields as declared input so consumption explainability
+        // does not silently drift from partially_consumed to fully_consumed.
         fields.insert(canonical_field_name(key).to_string());
+    }
+    for field in first_family_declared_control_fields(profile) {
+        fields.insert(field);
+    }
+    for field in LIGHTPANDA_SUPPORTED_FIELDS.map(|(field, _)| field) {
+        if canonical_field_value(profile, field).is_some() {
+            fields.insert(field.to_string());
+        }
     }
     fields.into_iter().collect()
 }
 
 pub fn fingerprint_value_as_string(profile: &Value, field: &str) -> Option<String> {
-    let profile_obj = profile.as_object()?;
-    canonical_field_value(profile_obj, field)
+    canonical_field_value(profile, field)
         .as_ref()
         .and_then(profile_value_as_env_string)
 }
@@ -171,7 +170,6 @@ pub fn build_lightpanda_runtime_projection(
     profile: &Value,
 ) -> FingerprintRuntimeProjection {
     let canonical_profile = canonicalize_fingerprint_profile(profile);
-    let profile_obj = canonical_profile.as_object().cloned().unwrap_or_default();
     let declared_fields = fingerprint_declared_fields(&canonical_profile);
     let mut resolved_fields = Vec::new();
     let mut applied_fields = Vec::new();
@@ -190,7 +188,7 @@ pub fn build_lightpanda_runtime_projection(
     env_keys.push("LIGHTPANDA_FP_PROFILE_VERSION".to_string());
 
     for (field, env_key) in LIGHTPANDA_SUPPORTED_FIELDS {
-        if let Some(value) = canonical_field_value(&profile_obj, field) {
+        if let Some(value) = canonical_field_value(&canonical_profile, field) {
             insert_unique(&mut resolved_fields, field);
             if let Some(value) = profile_value_as_env_string(&value) {
                 envs.push((env_key.to_string(), value));
@@ -245,7 +243,16 @@ pub fn fingerprint_consumption_status_from_counts(
 pub fn fingerprint_perf_budget_tag_for_value(profile: &Value) -> FingerprintPerfBudgetTag {
     let declared_fields = fingerprint_declared_fields(profile);
     let has = |field: &str| declared_fields.iter().any(|item| item == field);
-    if has("canvas") || has("webgl") || has("audio") || has("fonts") || has("anti_detection_flags")
+    if has("canvas")
+        || has("canvas_profile")
+        || has("webgl")
+        || has("webgl_vendor")
+        || has("webgl_renderer")
+        || has("audio")
+        || has("audio_profile")
+        || has("fonts")
+        || has("font_fingerprint_profile")
+        || has("anti_detection_flags")
     {
         FingerprintPerfBudgetTag::Heavy
     } else if has("client_hints")
@@ -324,5 +331,35 @@ mod tests {
             fingerprint_perf_budget_tag_for_value(&profile),
             FingerprintPerfBudgetTag::Medium
         );
+    }
+
+    #[test]
+    fn unknown_object_fields_stay_visible_in_consumption_explainability() {
+        let profile = serde_json::json!({
+            "timezone": "Asia/Shanghai",
+            "unsupported_blob": {"k": "v"}
+        });
+        let projection = build_lightpanda_runtime_projection("fp-unknown-object", 1, &profile);
+        assert_eq!(
+            projection.consumption.consumption_status,
+            "partially_consumed"
+        );
+        assert!(projection
+            .consumption
+            .ignored_fields
+            .iter()
+            .any(|field| field == "unsupported_blob"));
+        assert_eq!(projection.consumption.ignored_count(), 1);
+    }
+
+    #[test]
+    fn supported_fields_only_remain_fully_consumed() {
+        let profile = serde_json::json!({
+            "timezone": "Asia/Shanghai",
+            "locale": "zh-CN"
+        });
+        let projection = build_lightpanda_runtime_projection("fp-supported-only", 1, &profile);
+        assert_eq!(projection.consumption.consumption_status, "fully_consumed");
+        assert_eq!(projection.consumption.ignored_count(), 0);
     }
 }

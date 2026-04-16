@@ -8,6 +8,8 @@ pub mod proxy_harvest;
 
 pub mod proxy_health;
 
+pub mod first_family;
+
 pub mod fingerprint_policy;
 
 pub mod fingerprint_consistency;

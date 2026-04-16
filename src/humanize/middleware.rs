@@ -366,7 +366,13 @@ mod tests {
 
     #[test]
     fn test_retry_decision_on_failure() {
-        let mw = BehavioralMutationMiddleware::new(medium_config());
+        let mut config = medium_config();
+        if let super::super::config::FailureStyle::Human { give_up_chance, .. } =
+            &mut config.failure
+        {
+            *give_up_chance = 0.0;
+        }
+        let mw = BehavioralMutationMiddleware::new(config);
         let result = ActionResult::failure(ActionErrorCode::ElementNotFound, "element gone");
         let decision = mw.decide_retry(&result, 0);
         assert!(matches!(

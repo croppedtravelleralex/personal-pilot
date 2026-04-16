@@ -228,6 +228,27 @@ pub async fn init_db(database_url: &str) -> Result<DbPool> {
     .await?;
     ensure_column_exists(
         &pool,
+        "tasks",
+        "proxy_id",
+        "ALTER TABLE tasks ADD COLUMN proxy_id TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "tasks",
+        "requested_region",
+        "ALTER TABLE tasks ADD COLUMN requested_region TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "tasks",
+        "proxy_mode",
+        "ALTER TABLE tasks ADD COLUMN proxy_mode TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
         "identity_profiles",
         "secret_aliases_json",
         "ALTER TABLE identity_profiles ADD COLUMN secret_aliases_json TEXT",
@@ -448,6 +469,55 @@ pub async fn init_db(database_url: &str) -> Result<DbPool> {
         "provider_risk_snapshots",
         "version",
         "ALTER TABLE provider_risk_snapshots ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_harvest_sources",
+        "source_tier",
+        "ALTER TABLE proxy_harvest_sources ADD COLUMN source_tier TEXT NOT NULL DEFAULT 'public'",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_harvest_sources",
+        "for_demo",
+        "ALTER TABLE proxy_harvest_sources ADD COLUMN for_demo INTEGER NOT NULL DEFAULT 1",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_harvest_sources",
+        "for_prod",
+        "ALTER TABLE proxy_harvest_sources ADD COLUMN for_prod INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_harvest_sources",
+        "validation_mode",
+        "ALTER TABLE proxy_harvest_sources ADD COLUMN validation_mode TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_harvest_sources",
+        "expected_geo_quality",
+        "ALTER TABLE proxy_harvest_sources ADD COLUMN expected_geo_quality TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_harvest_sources",
+        "cost_class",
+        "ALTER TABLE proxy_harvest_sources ADD COLUMN cost_class TEXT",
+    )
+    .await?;
+    ensure_column_exists(
+        &pool,
+        "proxy_harvest_sources",
+        "quarantine_until",
+        "ALTER TABLE proxy_harvest_sources ADD COLUMN quarantine_until TEXT",
     )
     .await?;
     bootstrap_continuity_seed_data(&pool).await?;

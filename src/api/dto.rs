@@ -69,12 +69,25 @@ pub struct BrowserSummaryResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyPoolStatusSummary {
+    pub mode: String,
     pub total: i64,
     pub active: i64,
     pub candidate: i64,
     pub candidate_rejected: i64,
-    pub active_ratio_percent: i64,
+    pub eligible_pool_total: i64,
+    pub fresh_candidate_total: i64,
+    pub recent_rejected_total: i64,
+    pub reported_active_ratio_percent: f64,
+    pub effective_active_ratio_percent: f64,
+    pub active_ratio_percent: f64,
     pub hot_regions: Vec<String>,
+    pub recent_hot_regions: Vec<String>,
+    pub recent_hot_region_counts: std::collections::BTreeMap<String, i64>,
+    pub hot_region_window_seconds: i64,
+    pub source_concentration_top1_percent: f64,
+    pub source_concentration_top3_percent: f64,
+    pub active_sources_with_min_inventory: i64,
+    pub active_regions_with_min_inventory: i64,
     pub region_shortages: Vec<String>,
 }
 
@@ -129,6 +142,7 @@ pub struct AuthMetricsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub service: String,
+    pub mode: String,
     pub queue_len: usize,
     pub counts: TaskStatusCounts,
     pub worker: WorkerStatusResponse,
@@ -486,6 +500,7 @@ pub struct ConsumptionExplain {
     pub applied_count: usize,
     pub ignored_count: usize,
     pub consumption_status: String,
+    pub consumption_version: Option<String>,
     pub partial_support_warning: Option<String>,
 }
 
@@ -494,6 +509,10 @@ pub struct FingerprintRuntimeExplain {
     pub fingerprint_budget_tag: Option<String>,
     pub fingerprint_consistency:
         Option<crate::network_identity::fingerprint_consistency::FingerprintConsistencyAssessment>,
+    pub consumption_source_of_truth: Option<String>,
+    pub consumption_version: Option<String>,
+    pub consumption_status: Option<String>,
+    pub warning: Option<String>,
     pub consumption_explain: Option<ConsumptionExplain>,
 }
 
@@ -686,6 +705,17 @@ pub struct FingerprintProfileResponse {
     pub status: String,
     pub tags_json: Option<String>,
     pub profile_json: serde_json::Value,
+    pub family_id: Option<String>,
+    pub family_variant: Option<String>,
+    pub schema_kind: String,
+    pub declared_control_fields: Vec<String>,
+    pub declared_control_count: usize,
+    pub declared_sections: Vec<crate::network_identity::first_family::FirstFamilySectionSummary>,
+    pub supported_runtime_fields: Vec<String>,
+    pub unsupported_control_fields: Vec<String>,
+    pub consistency_assessment:
+        crate::network_identity::fingerprint_consistency::FingerprintConsistencyAssessment,
+    pub consumption_explain: ConsumptionExplain,
     pub validation_ok: bool,
     pub validation_issues: Vec<crate::network_identity::validator::FingerprintValidationIssue>,
     pub created_at: String,

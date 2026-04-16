@@ -13,6 +13,10 @@ Cargo.lock
 __pycache__/
 *.pyc
 
+# Frontend build artifacts
+node_modules/
+dist/
+
 # OS / editor
 .DS_Store
 Thumbs.db

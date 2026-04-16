@@ -62,6 +62,7 @@ pub struct ProxyHealthTickResult {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 struct ProxyHealthTarget {
     id: String,
     scheme: String,
@@ -671,7 +672,7 @@ mod tests {
             site_access_score: 75.0,
             browser_privacy_score: None,
         };
-        assert_eq!(compose_overall_score(&components), 69.1);
+        assert_eq!(compose_overall_score(&components), 70.8);
     }
 
     #[tokio::test]

@@ -729,14 +729,14 @@ pub fn default_suggestions_for_stage(stage: WorkflowStage) -> Vec<WorkflowSugges
             suggestion(
                 "commit 当前稳定成果",
                 1,
-                "将本轮稳定成果落盘",
+                "把本轮成果落盘，便于继续迭代",
                 WorkflowSuggestionKind::Refactor,
             ),
             suggestion(
-                "评估是否 push",
+                "整理本地验证记录",
                 2,
-                "在远程已配置且风险可控时推送",
-                WorkflowSuggestionKind::Refactor,
+                "确保下一轮仍以本地结果为准",
+                WorkflowSuggestionKind::DocSync,
             ),
             suggestion(
                 "准备下一轮 focus",
@@ -938,8 +938,7 @@ mod tests {
     fn run_minimal_cycle_steps_persists_multiple_stage_advances() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("RUN_STATE.json");
-        let state =
-            run_minimal_cycle_steps(&path, "PersonaPilot", 3).expect("run workflow steps");
+        let state = run_minimal_cycle_steps(&path, "PersonaPilot", 3).expect("run workflow steps");
         assert_eq!(state.stage, WorkflowStage::BugScan);
         let loaded = WorkflowExecutionState::load(&path).expect("load saved workflow state");
         assert_eq!(loaded.stage, WorkflowStage::BugScan);

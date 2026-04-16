@@ -1,59 +1,31 @@
-# agent.alexstudio.top gateway runbook
+# Agent AlexStudio Gateway Runbook
+Updated: 2026-04-16 (Asia/Shanghai)
 
-Updated: 2026-04-15
+## Purpose
 
-## Current Truth Source
+This file is the gateway-specific operational entrypoint.
+It is intentionally thin: the canonical product state still lives in `docs/02-current-state.md` and `docs/final-goal-progress-breakdown.md`.
 
-- Repo path: `/home/ubuntu/SelfMadeprojects/PersonaPilot`
-- Repo-owned control plane: `127.0.0.1:3000`
-- Repo-owned gateway: `127.0.0.1:8787`
-- Noise process: `/root` ??? `openclaw-gateway` ??????????????
-## Runtime Reality
+## Read First
 
-?????????
+1. `docs/02-current-state.md`
+2. `docs/final-goal-progress-breakdown.md`
+3. `docs/agent-alexstudio-gateway-v0.md`
 
-- `GET http://127.0.0.1:8787/health` ??? `status=ok`
-- `GET http://127.0.0.1:3000/health` ??? `status=ok`
-- gateway ??? `upstream_configured=false`
+## Truth Markers
 
-????????
-- gateway **??????**
-- gateway **????????*
+- Gateway shell health is not the same as upstream readiness.
+- `upstream_configured=false` means the shell is online, not that the gateway is productized.
+- `verify_proxy` traffic volume does not count as browser mainline acceptance.
+- real-upstream acceptance blocked by current runtime state until the upstream path is explicitly configured and verified.
 
-??? `upstream_configured=false`????????gateway ?????eal-upstream ?????????????????????
-## Minimal Check Chain
+## Minimal Operating Rule
 
-1. `curl http://127.0.0.1:8787/health`
-2. `curl http://127.0.0.1:3000/health`
-3. `curl http://127.0.0.1:3000/status`
-4. ?????`/health` ??`upstream_configured=true` ????????????
-   - `GET /v1/models`
-   - `POST /v1/chat/completions`
+1. Keep the gateway private and local-first.
+2. Keep auth headers and upstream secrets out of downstream logs.
+3. Treat the gateway as an entry surface, not as a replacement for the canonical desktop app state.
 
-## Script Usage
+## Acceptance
 
-???????????
-```bash
-bash scripts/release_fast_verify.sh
-bash scripts/gateway_verify.sh no-token
-```
-
-?????????????????????????????
-```bash
-bash scripts/gateway_verify.sh real-upstream
-bash scripts/release_baseline_verify.sh --with-upstream
-```
-
-?????`upstream_configured=true` ?????????????????????????????
-## Safe Reporting Language
-
-????????
-- gateway shell online
-- upstream not configured
-- no-token shell checks available
-- real-upstream acceptance blocked by current runtime state
-
-????????
-- gateway fully productized
-- real-upstream already closed
-- no-token and real-upstream both green
+- The gateway should only be considered ready when the upstream path is explicitly configured and verified.
+- If the upstream path is not configured, report shell-online status honestly and stop there.

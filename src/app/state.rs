@@ -17,6 +17,7 @@ pub struct AppState {
     pub api_key: Option<String>,
     pub runner: Arc<dyn TaskRunner>,
     pub worker_count: usize,
+    pub proxy_runtime_mode: String,
     pub proxy_selection_tuning: ProxySelectionTuning,
     pub inline_secret_vault: InlineSecretVault,
 }

@@ -1,207 +1,33 @@
-## 2026-04-15 reality reset
-
-- [x] ??? `Cargo.toml` manifest ?????rand = "0.8` -> `rand = "0.8"`??- [x] ?????ownership ?????`ubuntu:ubuntu`????????? root ???????????- [x] ?????? `CARGO_TARGET_DIR=.codex-target-check` ??? `cargo check`
-- [x] ?????? `scripts/lightpanda_verify.sh title`??????????????? `2026-04-15 03:30:01`
-- [x] ?????? gateway ?????? shell online??upstream_configured=false`
-- [x] ?????? `integration_lightpanda_runner` ???????? `8 passed / 1 failed`
-- [ ] ??? `integration_lightpanda_runner` ??canonical fingerprint consumption ????????`Some("runner_runtime")`?????? `None`
-- [ ] ??? `integration_api` ????????`set_proxy_runtime_mode_override` ???????????????????????- [ ] ??? `RunnerProxySelection` ??`tests/integration_api.rs` ????????- [ ] ??? build artifact / disk budget ?????????????????? target ???
-- [ ] ?????`upstream_configured=true` ???????? gateway real-upstream ???????????
-## 2026-04-09 ????????84% -> 88%?
-
-- [x] `src/runner/lightpanda.rs` ??? `lightpanda serve + CDP`
-- [x] `/browser/open` `/browser/html` `/browser/title` `/browser/final-url` `/browser/text` Ubuntu ??????
-- [x] `missing-binary / timeout / non-zero` ??????
-- [x] `cargo test -q` ??
-- [x] ?? `src/runner/fake.rs` residual???? `fake/stub/test only`?
-- [x] ?? runner / gateway runbook
-- [x] ?? gateway ???????????real-upstream 200?
-
-## 2026-04-09 ???? / P0
-
-- [x] ???? 12 ?????? `cargo test -q` ??
-- [x] ? Ubuntu ??????????? gateway?`127.0.0.1:8787`?
-- [x] ???? `127.0.0.1:3000` ???? `/usr/local/bin/lightpanda`
-- [x] ?? `/browser/open` ????? `/v1/chat/completions` ?? `502 upstream_unavailable`
-- [x] ????????????????????????????
-- [x] ?? `src/runner/fake.rs` residual ??????????????
-- [x] ???????? `lightpanda serve + CDP`??????????????????
-
 # TODO.md
 
-## P0
+## Closed In This Round
 
-- [x] 文档化执行引擎边界与 artifact 策略第一版
-- [ ] 按 `AUTONOMY_PLAN.md` 持续执行：每轮 3–5 建议、默认执行前两项、周期性进入查 bug / 修 bug 环
-- [ ] 推进 gateway `/v1/chat/completions` 上游透传最小真实验收
-- [ ] 验收 `/admin/usage` / `/admin/stats` / `/admin/dashboard` / `/dashboard/` 联动一致性
-- [x] ?? `src/runner/fake.rs` residual ??????????????
-- [x] 建立项目核心文档（VISION / ROADMAP / STATUS / TODO / EXECUTION_LOG / RUN_STATE）
-- [x] 建立周期执行协议（EXECUTION_PROTOCOL）
-- [x] 建立自动执行内核基础文件（STATE_MACHINE / CHECKLIST / ROUND_RESULT template）
-- [x] 建立轮次调度器设计（ROUND_SCHEDULER）
-- [x] 初始化 Rust 工程（Cargo）
-- [x] 设计任务数据模型（Task / Run / Artifact / Log）
-- [x] 设计 SQLite schema
-- [x] 定义 REST API 最小接口
-- [x] 实现内存任务队列
-- [x] 实现 fake runner
-- [x] 打通创建任务 -> 入队 -> 执行 -> 状态更新 -> 查询结果
-- [x] 打通创建任务 -> 查询任务 的最小闭环
-- [x] 增加数据库初始化入口
-- [x] 增加数据库目录自动创建
-- [x] 设计下一步 queue claim / durable queue 方案（DB-first claim 第一版）
-- [x] 落地 runner_id / stale-running reclaim 最小实现
-- [x] 落地 heartbeat_at / lease-style reclaim 判定最小实现
-- [x] 修复 DB-first claim 后 queue_len / queued cancel 的内存队列漂移问题
-- [x] 将内存队列降级为兼容层，不再参与真实调度语义
-- [x] 增加并发运行态可观测性第一版（status 暴露 worker / queue mode / reclaim）
-- [x] 增加 API 鉴权
-- [x] 增加运行历史与日志查询接口
-- [x] 增加基础监控指标
-- [x] 增加集成测试
-- [x] 增加集成测试骨架第一版（fake runner + retry）
-- [x] 增加最小 smoke test 脚本
-- [x] 增加 lightpanda 专项验证脚本入口
-- [x] 增加并发控制第一版骨架（多 worker + 并发度配置）
-- [x] 增加最小一致性保护第一轮（retry 防重 + cancel 保护 run）
-- [x] 加真实代理连通性/烟雾测试能力
-- [x] 收口环境变量与状态暴露文档
-- [x] 设计浏览器指纹能力边界
-- [x] 设计指纹 profile schema 与任务绑定字段第一版
-- [x] 设计指纹 profile 一致性校验器第一版
-- [x] 增加 fingerprint profile 最小管理接口第一版
-- [x] 为 runner 增加 fingerprint profile 注入入口第一版
-- [x] 增加代理池基础能力（创建 / 查询 / 筛选 / 任务绑定）
-- [x] 增加代理健康状态回写功能
-- [x] 增加 sticky session 正式绑定表与复用链路
-- [x] 增加 HTTP 代理协议层 smoke test
-- [x] 增加 verify_proxy task kind
-- [x] 增加 `POST /proxies/verify-batch`
-- [x] 增加 verify batch 查询接口
-- [x] 增加代理选择策略层第一版
-- [x] 增加 provider / region / 历史成功失败 / 近期失败衰减 / provider×region 风险等选择信号
-- [x] 增加 `ProxySelectionTuning` 默认结构与环境变量注入入口
-- [x] 增加 trust score 起点与主链接入
-- [x] 增加 explainability traceability 元数据（`run_id / attempt / timestamp / explain_source / explain_generated_at`）
-- [x] 修复 `get_task_runs` 误复用 task 结果的问题，改为读取 run 自身结果
-- [x] 标准化 `summary_artifacts` schema（source / category / severity / trace metadata）
-- [x] 强类型化 `candidate_rank_preview`
-- [x] 抽离 explainability assembler 到独立模块
-- [x] 强类型化 `trust_score_components`
-- [x] 给 `src/api/explainability.rs` 补独立 unit tests
-- [x] 给 `src/runner/engine.rs` 的 explainability 辅助逻辑补独立 unit tests
-- [x] 做一轮 explainability 主链剩余 loose JSON 普查与收口计划
-- [x] 为 explicit / sticky / no-match 增加结构化 explain 字段
-- [x] 固化 eligibility gate vs ranking score 的正式边界
-- [x] 将 `soft_min_score` 作为 soft ranking penalty 并入 trust score
-- [x] 将 verify 慢路径底层风险信号并入 trust score（anonymity / latency / exit-ip / probe-error / geo-mismatch / region-mismatch）
-- [x] 评估 provider/provider×region 风险汇总是否吸收 verify 慢路径新信号
-- [x] 为 selection / trust refresh / snapshot flip 增加最小 perf probe 埋点
-- [x] 跑一轮 selection / trust cache / verify 回写 profiling 样本记录
-- [x] 给 `/status` 与 `/proxies/:id/explain` 增加最小读取侧观测
-- [x] 推进 provider 级 refresh 范围收窄方案设计（优先研究 `provider risk version / dirty 标记 + 懒刷新`，且第一阶段只落 provider risk，不与 provider_region 一起上）
-- [x] 继续验证 provider risk version / seen 第一版在真实链路中的收益
-- [x] 当前阶段决定继续延后 provider_region 扩面
-- [x] 评估 selection 是否需要继续消费 provider-risk version 语义
-- [x] 评估 explain 是否需要继续消费 provider-risk version 语义
-- [x] 若需要新增 version 语义消费者，优先设计 explain 可见性字段
-- [x] 决定 explain 可见性字段进入下一轮最小实现
-- [x] 补 explain 可见性字段的最小文案与使用边界
-- [x] 做 explain 接口可读性验证
-- [x] 定义 provider_region 进入实现阶段的条件
-- [x] 规划第二阶段主线边界（哪些继续延后，哪些可以进入实现）
-- [x] 围绕 providerRegion 进入条件补最小验证样本
-- [x] 再补极少量 providerRegion 进入条件验证样本后收口当前判断
-- [x] 结束 providerRegion 本阶段验证并切换到新的主线
-- [x] 规划控制面与可见性质量收口主线
-- [x] 明确哪些 deferred 项继续冻结，哪些允许后续重开
-- [x] 围绕当前控制面补最小可见性整理
-- [x] 将当前阶段控制摘要接入更显眼的项目入口文档
-- [x] 继续维护入口摘要与 deferred freeze 边界一致
-- [x] 保持入口摘要精简稳定，避免重新膨胀成长规划文档
-- [x] 后续若入口摘要新增内容，先做一致性检查再更新
-- [x] 若未来重开入口摘要更新，先按 checklist 逐项核对
-- [x] 若后续阶段切换，再按 example + checklist 联动更新入口摘要
-- [x] 后续若入口摘要更新，先运行 `python3 scripts/check_stage_entry_consistency.py`
-- [x] 后续若入口摘要更新，按 usage 文档的 flow 执行
-- [x] 后续若阶段切换，优先使用 `bash scripts/stage_entry_maintenance_flow.sh` 做维护前检查
-- [x] 后续若入口状态变更，同步维护 README 与 AI.md 两处 Current Stage Snapshot
-- [x] 后续若双入口快照更新，先运行覆盖 README + AI.md 的一致性检查
-- [x] 后续若阶段切换，按 dual-entry example + consistency script 联动更新双入口快照
-- [x] 后续若要快速维护双入口快照，优先按 cheat sheet 执行
-- [x] 后续若只需要命令入口，优先看 entry maintenance command index
-- [x] 重置进度口径，分开子主线进度与最终目标总进度
-- [x] 将最终目标模块化进度口径接入后续默认汇报
-- [x] 回到更大的未完成主线：真实 Lightpanda / 指纹真实消费 / 高级代理体系
-- [x] 按模块拆分 real Lightpanda execution deepening 主线
-- [x] 优先推进 execution-path hardening
-- [x] 继续推进 runner 可观测性 / artifact 质量
-- [x] 推进指纹真实消费边界
-- [x] 在稳定基础上评估真实能力扩展 beyond minimal fetch
-- [x] 继续以 bounded expansion 方式定义最小新动作
-- [x] 在清晰 action contract 基础上选择一个最小新动作落地候选
-- [x] 验证 `get_html` 是否能安全复用当前 fetch-style 路径
-- [x] 继续补 `get_html` 结果边界与摘要质量
-- [x] 开始高级代理体系第一轮最小闭环
-- [x] 将 `proxy_growth` 规则接入选择链路或 explain 输出
-- [x] 设计高并发下的性能优化与写放大控制策略
-- [x] 收口 verify / runner 后的 scoped trust refresh，减少重复 refresh 写放大
-- [x] 抽取 trust cache `UPDATE proxies SET cached_trust_score = ...` 公共 SQL 模板
-- [x] 将 fingerprint-first 开发规则写入项目规则文档
-- [x] 按规则实现指纹字段优先级分层
-- [x] 按规则实现指纹-代理-地区一致性检查
-- [x] 按规则实现指纹性能预算与并发预算
-- [x] 同步 `CURRENT_DIRECTION.md` / `CURRENT_TASK.md` / `STATUS.md` / `TODO.md` 到真实 browser 执行主线口径
-- [x] 稳定真实 browser 执行链第一轮（创建 / 调度 / 执行 / 回写 / 失败定位）
-- [x] 设计并落地统一执行身份模型（proxy + fingerprint + session identity）
-- [ ] 把 verify / trust score 从选前判断扩展到执行前 / 执行中 / 执行后闭环
-- [x] 升级 status / explain / result 为长期运营级控制面第一轮
-- [ ] 继续清 explainability summary / artifact 文案质量
-- [ ] 继续补真实浏览器任务流样本与失败分类（降级为次主线，避免压过 gateway/productization 当前优先级）
-- [ ] 继续补 selection / verify / runtime / result 的统一 explainability
-- [ ] 继续治理高并发下的写放大、状态竞争、聚合成本
-- [ ] 设计高级指纹下的性能预算与性能开销控制策略
-- [ ] 设计磁盘使用监控与落盘上限策略
-- [ ] 记录 selection / status / trust cache / verify 回写链的 explain-level profiling 结果
-- [ ] 设计 artifact / log 的保留、清理与归档策略
+- [x] Merge `Tasks` into `Automation` and close the orphan route gap
+- [x] Restore the full Rust gate to green
+- [x] Promote `scripts/windows_local_verify.ps1` into the primary Win11 acceptance entry
+- [x] Push `changeProxyIp` to a provider-aware / sticky-aware local closure
+- [x] Push `Synchronizer` to live snapshot / native focus with honest staged-only unsupported writes
+- [x] Push `Recorder` to desktop step-write
+- [x] Fix the remaining `cargo test --quiet` integration failures and stabilize the full Rust gate
+- [x] Clear the Vite chunk warning with route-level code splitting
 
-## P1
+## Mainline Remaining 7%
 
-- [ ] 设计身份画像系统（Identity Profile）
-- [x] 设计 SessionIdentity / ExecutionIdentity，把 proxy + fingerprint + session identity 收到统一表达
-- [ ] 设计站点维度代理适配机制
-- [ ] 设计行为层模拟机制
-- [ ] 设计会话连续性机制
-- [ ] 设计策略引擎正式形态
-- [ ] 设计实验记录系统
-- [ ] 增加 selection / verify / batch verify 的 metrics 与 explainability 深化输出
-- [ ] 压测 proxy selection 查询、status 聚合 SQL 与 verify 批次链路
-- [ ] 继续清理 panic 风险点、锁竞争风险点与 flaky 测试
-- [ ] 继续完善 API / 运维 / 能力说明文档
-- [x] 收口 Task Contract / Control-Plane Visibility V1 文档
-- [x] 为 /status / task detail / runs 增加三面一致性测试
-- [x] 为 running cancel 增加 cancelled contract API 测试
-- [x] 完成 contract 主线远程验收
-- [ ] 设计持续抓取代理的工具（优先基于开源项目改造）
-- [ ] 设计代理抓取后的清洗、去重、候选入池流程
-- [ ] 设计代理池自生长机制
-- [ ] 设计地区感知的代理匹配策略
-- [ ] 设计“所有访问强制走代理池”的网络约束
-- [ ] 设计可用代理比例 40%-60% 的动态控制策略
+- [ ] Finish provider-grade proxy API write behind the now-stable local `changeProxyIp` contract
+- [ ] Finish `Synchronizer` native batch / broadcast writes and move more staged paths out of the default route
+- [ ] Finish `Recorder / Templates` native-first de-fallback closure
+- [ ] Tighten final Win11 packaging / operator acceptance polish without reopening scope
 
-## P2
+## Overall End-State 70%
 
-- [ ] 增加更正式的并发控制与资源限制
-- [ ] 评估 LightpandaRunner 对更真实 fingerprint 消费的落地边界
-- [ ] 设计多租户/多用户隔离是否需要前置
-- [ ] 设计 webhook / callback 通知是否纳入近期目标
-- [ ] 评估 `GOLDEN_FEATURES.md` 中哪些能力应前置到中期优先级
+- [ ] Build the validation board for detector, leak, DNS, WebRTC, canvas, audio, worker, and transport evidence
+- [ ] Deepen fingerprint runtime from `80` declared controls and `12` projected fields toward broader applied / observed coverage
+- [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
+- [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy
+- [ ] Deepen headed realism, kernel strategy, and AdsPower-boundary catch-up without breaking the Win11 / Tauri baseline
+- [ ] Land the highest-ROI parts of the external browser integration plan into maintainable main-repo assets
 
-## 待讨论
+## Notes
 
-- [ ] 任务结果与 artifact 的落盘策略
-- [ ] 截图 / HTML / console log 的存储方式
-- [ ] 真实浏览器执行结果与 proxy quality 信号如何更紧耦合
-- [ ] verify / trust score 在执行闭环里的边界
-- [ ] Identity Profile 与 fingerprint profile 的职责切分
+- [ ] Cookie / localStorage / sessionStorage persistence across app restart is already landed; future work is validation, operatorization, and broader session-bundle tooling
+- [ ] `50+` should be read as the minimum control-plane threshold; the current first-family schema already declares `80` core controls

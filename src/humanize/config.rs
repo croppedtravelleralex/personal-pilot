@@ -43,15 +43,9 @@ impl Default for HumanizationLevel {
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum TimeDistribution {
     /// Uniform random between min and max
-    Uniform {
-        min_ms: u32,
-        max_ms: u32,
-    },
+    Uniform { min_ms: u32, max_ms: u32 },
     /// Normal/Gaussian distribution with mean and stddev
-    Normal {
-        mean_ms: u32,
-        stddev_ms: u32,
-    },
+    Normal { mean_ms: u32, stddev_ms: u32 },
     /// Right-skewed: mostly short waits, occasionally long pauses (like real humans)
     RightSkewed {
         min_ms: u32,
@@ -227,10 +221,16 @@ impl HumanizationConfig {
             HumanizationLevel::None => Self {
                 level,
                 timing: TimingConfig {
-                    distribution: TimeDistribution::Uniform { min_ms: 0, max_ms: 0 },
+                    distribution: TimeDistribution::Uniform {
+                        min_ms: 0,
+                        max_ms: 0,
+                    },
                     pre_action_delay_ms: 0,
                 },
-                click: ClickOffset { radius: 0, bias_direction: None },
+                click: ClickOffset {
+                    radius: 0,
+                    bias_direction: None,
+                },
                 typing: TypingPattern {
                     base_wpm: 9999,
                     speed_variance_percent: 0,

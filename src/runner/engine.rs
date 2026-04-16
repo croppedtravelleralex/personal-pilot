@@ -8,7 +8,8 @@ use tokio::{sync::oneshot, task::JoinHandle, time::Duration};
 use uuid::Uuid;
 
 use crate::network_identity::fingerprint_consumption::{
-    build_lightpanda_runtime_projection, FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
+    build_lightpanda_runtime_projection, fingerprint_perf_budget_tag_from_json,
+    FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
 };
 use crate::network_identity::proxy_growth::{
     assess_proxy_pool_health, evaluate_region_match, proxy_pool_growth_policy_from_env,
@@ -45,7 +46,7 @@ use crate::{
             TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
         },
     },
-    network_identity::fingerprint_consistency::assess_fingerprint_proxy_region_consistency,
+    network_identity::fingerprint_consistency::assess_fingerprint_profile_consistency,
     network_identity::fingerprint_policy::FingerprintPerfBudgetTag,
     runner::{
         runner_claim_retry_limit_from_env, runner_heartbeat_interval_seconds_from_env,
@@ -66,29 +67,7 @@ fn now_ts_string() -> String {
 fn fingerprint_perf_budget_tag_from_profile_json(
     profile_json: Option<&str>,
 ) -> FingerprintPerfBudgetTag {
-    let Some(profile_json) = profile_json else {
-        return FingerprintPerfBudgetTag::Light;
-    };
-    let Ok(value) = serde_json::from_str::<Value>(profile_json) else {
-        return FingerprintPerfBudgetTag::Light;
-    };
-    let Some(obj) = value.as_object() else {
-        return FingerprintPerfBudgetTag::Light;
-    };
-
-    let has = |key: &str| obj.contains_key(key);
-    if has("canvas") || has("webgl") || has("audio") || has("fonts") || has("anti_detection_flags")
-    {
-        FingerprintPerfBudgetTag::Heavy
-    } else if has("client_hints")
-        || has("hardware_concurrency")
-        || has("device_memory")
-        || has("color_scheme")
-    {
-        FingerprintPerfBudgetTag::Medium
-    } else {
-        FingerprintPerfBudgetTag::Light
-    }
+    fingerprint_perf_budget_tag_from_json(profile_json)
 }
 
 fn medium_budget_limit(worker_count: usize) -> usize {
@@ -225,29 +204,11 @@ fn build_fingerprint_runtime_explain_json(
                 FingerprintPerfBudgetTag::Medium => "medium",
                 FingerprintPerfBudgetTag::Heavy => "heavy",
             };
-            let timezone = profile
-                .profile_json
-                .get("timezone")
-                .and_then(|v| v.as_str());
-            let locale = profile.profile_json.get("locale").and_then(|v| v.as_str());
-            let accept_language = profile
-                .profile_json
-                .get("accept_language")
-                .and_then(|v| v.as_str())
-                .or_else(|| {
-                    profile
-                        .profile_json
-                        .get("headers")
-                        .and_then(|v| v.get("accept_language"))
-                        .and_then(|v| v.as_str())
-                });
-            let consistency = assess_fingerprint_proxy_region_consistency(
+            let consistency = assess_fingerprint_profile_consistency(
                 target_region,
                 selected_proxy.and_then(|p| p.region.as_deref()),
                 None,
-                timezone,
-                locale,
-                accept_language,
+                &profile.profile_json,
             );
             (Some(budget_tag), Some(consistency))
         }

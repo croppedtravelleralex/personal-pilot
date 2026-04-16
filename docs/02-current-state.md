@@ -1,117 +1,88 @@
 # 02 Current State
+Updated: 2026-04-16 (Asia/Shanghai)
 
-Updated: 2026-04-15 (Asia/Shanghai)
+## Current Report
 
-## 1. Runtime Alive
+- mainline delivery progress: `95%`
+- mainline remaining slice: `7%` (`risk-weighted closeout slice`, not a strict arithmetic complement)
+- mainline verification / acceptance: `green`
+- overall end-state progress: `30%`
+- overall strategic gap: `70%`
+- overall end-state color: `yellow`
 
-????????????????????????????????
-- control plane??127.0.0.1:3000/health` ??? `status=ok`
-- gateway??127.0.0.1:8787/health` ??? `status=ok`
-- gateway ????????upstream_configured=false`
-- `/status` ?????026-04-15???
-  - `counts.total = 9007`
-  - `counts.queued = 0`
-  - `counts.running = 2`
-  - `counts.succeeded = 1475`
-  - `counts.failed = 7504`
-  - `counts.timed_out = 21`
-  - `counts.cancelled = 5`
-  - `proxy_pool_status.total = 11808`
-  - `proxy_pool_status.active = 478`
-  - `proxy_pool_status.candidate = 10084`
-  - `proxy_pool_status.candidate_rejected = 1246`
-  - `proxy_pool_status.active_ratio_percent = 4`
-  - `behavior_metrics.runs_with_behavior = 41`
-  - `behavior_metrics.shadow_runs = 41`
-  - `behavior_metrics.active_runs = 0`
+## Verified Evidence
 
-????????????????gateway ????????????behavior ?????? shadow???????????????????????????????
-## 2. Build Status
+Passed in this round:
 
-???????????????????????
-- `Cargo.toml` ??21 ???????????????`rand = "0.8`
-- ??????????????root ?????ubuntu` ????????????
+- `cargo test --quiet`
+- `pnpm typecheck`
+- `pnpm build`
+- Win11 baseline enforcement
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
+- `pnpm desktop:release`
 
-?????????
+## Landed Mainline Closure
 
-- ??? `Cargo.toml` manifest ??????
-- ??`/home/ubuntu/SelfMadeprojects/PersonaPilot` ownership ?????`ubuntu:ubuntu`
-- ?????? `CARGO_TARGET_DIR=.codex-target-check` ?????? `cargo check`
+- `Tasks -> Automation` surface unification
+- provider-aware / sticky-aware `changeProxyIp` desktop contract
+- recorder desktop step-write
+- synchronizer live desktop snapshot + native focus
+- canonical `lightpanda` fingerprint runtime explain contract
+- Win11 `lightpanda` timeout / non-zero-exit stubs and startup cancel race coverage
+- deterministic full-suite stability for proxy-mode override tests and `humanize` retry tests
+- route-level lazy loading that clears the old Vite chunk warning
 
-???????????
-- ??? `target/` ?????target ??????????????????????? `100%`
-- ???????????????????????? `.codex-target-test-api` ??`.codex-target-test-runner`
-- ?????????????????? `3.1G`?????????
+## Reality Boundaries For Fingerprint / Events / Continuity
 
-?????uild status ??? `broken` ?????`cargo check passes`????????????????????????????
+- the earlier `50+` fingerprint goal should now be read as a minimum schema threshold; the current first-family canonical control plane already declares `80` core control fields
+- current runtime materialization is still narrow: `Lightpanda` only projects `12` env-backed fingerprint fields including derived `platform`
+- `450+` fingerprint signals and `450+` event types are strategic target layers, not current shipped runtime coverage
+- current behavior runtime ships `13` real primitives, not a 450-type event system
+- cookie / localStorage / sessionStorage continuity is already persisted and restored across app restarts via `proxy_session_bindings`
+- headed Chromium / Firefox deep runtime and AdsPower-grade realism are not landed in the current mainline
 
-### 2.1 2026-04-15 local execution update
+## Remaining 7%
 
-This turn closed the local continuity control-plane gap instead of only narrowing it:
+The unfinished closeout slice is now concentrated in three real product areas:
 
-- restored the minimum mainline continuity surface for persona/store/platform flows
-- task terminal write path now injects `continuity_check_result` before final persistence
-- added compatibility parsing for legacy slash-escaped JSON template fields, so older seed data no longer silently drops `continuity_checks`
-- `cargo check -q` passes
-- `cargo test --no-run -q --lib` passes
-- `cargo test --no-run -q` passes
-- `cargo build --release -q` passes
-- `cargo test --test integration_continuity_control_plane -- --nocapture` passes (`8/8`)
+1. `Proxy / IP`: finish provider-side API write and residency-aware rotation closure.
+2. `Synchronizer`: finish native batch / broadcast writes and shrink staged default paths.
+3. `Recorder / Templates`: finish deeper native closure and reduce remaining fallback dependence.
 
-Local build/test status should now be reported as `build recovered`, not `continuity compile blocked`.
+## What The Overall 70% Still Covers
 
-The remaining local follow-up is now:
+The overall end-state track includes the broader target that users keep asking about:
 
-- warning / compatibility debt cleanup
-- runtime expansion beyond RED `sample_ready`
-- remote acceptance and gateway-upstream readiness, not local continuity unblock
-## 3. Browser Mainline vs Verify Proxy Noise
+1. richer fingerprint runtime materialization beyond the current `12` projected fields
+2. `450+` fingerprint total-signal observation and audit coverage
+3. `450+` event taxonomy instead of the current `13` behavior primitives
+4. stronger headed runtime / kernel realism and validation evidence
+5. a real validation board for detector, leak, and transport checks
+6. a more honest AdsPower-boundary catch-up in realism, proxy ecosystem, and automation depth
 
-?????????????????????????`verify_proxy` ????????
-????????
-- ?????????????? `verify_proxy`
-- `verify_proxy` ??????????????? `2026-04-15 03:09:43`
-- ????? `verify_proxy` ???????????????`2026-04-15 03:30:01 get_title`
-- `scripts/lightpanda_verify.sh title` ????????????????????????
-  - `title = Example Domain`
-  - `final_url = https://example.com`
+## Reporting Rule From Now On
 
-?????????????????????????????????????????????????????? `verify_proxy` ??????????????????????????????????
-## 4. Test Surface Reality
+Use one unified dual-axis rule everywhere:
 
-### 4.1 `integration_lightpanda_runner`
+1. `mainline delivery`: `95% / 7% / green`
+2. `overall end-state`: `30% / 70% / yellow`
 
-??????????????`9` ??????`8` ???????1` ???????
-?????????
+When the user asks about:
 
-- `lightpanda_runner_reports_canonical_fingerprint_consumption_fields`
-- ????????left: None` vs `right: Some("runner_runtime")`
+- current shipped app / current closeout / native mainline
+  - lead with `95% / 7%`
+- complete app / final target / AdsPower catch-up / 50+ / 450+
+  - lead with `30% / 70%`
 
-??????
+Do not reuse `77% / 23%`, `82% / 18%`, `90%`, or `99%` as the current truth source.
 
-- lightpanda runner ??????????????- canonical fingerprint consumption ??source-of-truth ?????????
+## Read Order
 
-### 4.2 `integration_api`
-
-This is no longer the active local compile blocker on the current branch state.
-
-- `cargo test --no-run -q` now passes, so the `integration_api` compile surface is no longer blocking local progress
-- this turn did not rerun the full `integration_api` runtime suite
-
-Meaning:
-
-- local priority should not swing back to generic DTO drift cleanup
-- the next blocking work is remote acceptance, gateway-upstream closure, and residual warning debt
-## 5. Reporting Rule From Now On
-
-?????????????????????
-
-- `runtime alive`
-- `build recovered / build broken`
-- `verification shape`??rowser mainline / proxy verify noise / gateway upstream readiness??
-????????????????????????
-
-- `97% ?????
-- `cargo test -q ?????
-- `gateway real-upstream ?????
-- `???????????????`
+1. `03-roadmap.md`
+2. `04-improvement-backlog.md`
+3. `19-phase-plan-and-scorecard.md`
+4. `final-goal-progress-breakdown.md`
+5. `17-full-app-audit-progress-reset.md`
+6. `src/services/desktop.ts`
+7. `src-tauri/src/commands.rs`

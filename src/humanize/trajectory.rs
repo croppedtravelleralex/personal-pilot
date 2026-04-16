@@ -72,26 +72,42 @@ fn compute_offset_vector(offset: &ClickOffset, rng: &mut impl Rng) -> (i32, i32)
     match offset.bias_direction {
         Some(BiasDirection::TopLeft) => {
             let angle = rng.gen_range(135.0..=225.0_f32).to_radians();
-            (radius as i32 * angle.cos() as i32, radius as i32 * angle.sin() as i32)
+            (
+                radius as i32 * angle.cos() as i32,
+                radius as i32 * angle.sin() as i32,
+            )
         }
         Some(BiasDirection::TopRight) => {
             let angle = rng.gen_range(225.0..=315.0_f32).to_radians();
-            (radius as i32 * angle.cos() as i32, radius as i32 * angle.sin() as i32)
+            (
+                radius as i32 * angle.cos() as i32,
+                radius as i32 * angle.sin() as i32,
+            )
         }
         Some(BiasDirection::BottomLeft) => {
             let angle = rng.gen_range(45.0..=135.0_f32).to_radians();
-            (radius as i32 * angle.cos() as i32, radius as i32 * angle.sin() as i32)
+            (
+                radius as i32 * angle.cos() as i32,
+                radius as i32 * angle.sin() as i32,
+            )
         }
         Some(BiasDirection::BottomRight) => {
-            let angle = rng.gen_range(315.0..=360.0_f32)
+            let angle = rng
+                .gen_range(315.0..=360.0_f32)
                 .max(rng.gen_range(0.0..=45.0_f32))
                 .to_radians();
-            (radius as i32 * angle.cos() as i32, radius as i32 * angle.sin() as i32)
+            (
+                radius as i32 * angle.cos() as i32,
+                radius as i32 * angle.sin() as i32,
+            )
         }
         Some(BiasDirection::Center) | None => {
             // Random angle, uniform distribution within circle
             let angle = rng.gen_range(0.0..360.0_f32).to_radians();
-            (radius as i32 * angle.cos() as i32, radius as i32 * angle.sin() as i32)
+            (
+                radius as i32 * angle.cos() as i32,
+                radius as i32 * angle.sin() as i32,
+            )
         }
     }
 }
@@ -102,7 +118,8 @@ mod tests {
 
     #[test]
     fn test_click_offset_within_radius() {
-        let config = HumanizationConfig::from_level(super::super::config::HumanizationLevel::Medium);
+        let config =
+            HumanizationConfig::from_level(super::super::config::HumanizationLevel::Medium);
         let center_x = 500;
         let center_y = 300;
 

@@ -1086,18 +1086,24 @@ pub fn system_default_behavior_profile() -> RunnerBehaviorProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     use serde_json::json;
 
     use crate::db::init::{init_db, DbPool};
 
     fn unique_db_url() -> String {
+        static UNIQUE_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        format!("sqlite:///tmp/persona_pilot_behavior_test_{nanos}.db")
+        let sequence = UNIQUE_DB_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        format!("sqlite:///tmp/persona_pilot_behavior_test_{pid}_{nanos}_{sequence}.db")
     }
 
     async fn seed_behavior_profile(db: &DbPool, profile_id: &str, allowed_primitives: &[&str]) {

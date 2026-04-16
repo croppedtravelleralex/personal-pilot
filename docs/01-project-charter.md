@@ -1,33 +1,37 @@
-# 01 项目章程
+# 01 Project Charter
+
+Updated: 2026-04-15 (Asia/Shanghai)
 
 ## 项目目标
 
-`PersonaPilot` 是一个围绕 Browser API、代理池、指纹配置、任务编排与 explainability 的自动化控制面项目。
+把 `PersonaPilot` 收敛成一个只在本地 `Windows 11` 运行的桌面自动化工具。
+最终形态：
 
-当前外部合同以现有 Browser API 和控制面主入口为准，本轮整改不改外部主入口名称。
+- `Tauri 2 + Vite + React + TypeScript` 桌面壳
+- 单窗口、单实例
+- 现有 Rust 核心继续承担本地任务、状态、SQLite、浏览器编排等底层能力
+- 所有本地原生能力通过统一桌面服务层暴露给前端
 
-## 本轮边界
+## 本阶段边界
 
-本轮明确做：
+本阶段明确要做：
 
-- 双模代理口径：`demo_public` 与 `prod_live`
-- 指纹 canonical schema 与 runtime 真值落地
-- `/status` / task detail / runs / longrun / release 报告统一 mode 与 continuity 口径
-- `prod_live` 的真实源、连续性、release profile 验收
+- 固化本地产品边界
+- 定稿 Windows 本地方案
+- 明确未来 Tauri 桌面结构与迁移顺序
+- 建立本地验证与本地维护入口
 
-本轮明确不做：
+本阶段明确不做：
 
-- Browser API 对外重命名
-- L3 反检测拟真全面补齐
-- 为了“文档看起来完整”而进行大范围无关重构
+- 额外 Node 后端服务
+- Electron
+- 多窗口桌面架构
+- 多实例协同运行
+- 超出本地交付范围的运维链路扩展
 
 ## 成功标准
 
-- 公开源只作为 `public-smoke` / `demo_public` 验证链，不再为 production-live 背书
-- `prod_live` 验收必须以私有/受控 source、active pool、browser success、continuity 观测为准
-- explainability 与 release/profile 报告能直接说明：
-  - 当前 mode
-  - 来源层级
-  - 验证路径
-  - continuity level
-  - 指纹消费真源
+- 主维护文档全部使用本地产品口径
+- 本地验证链可重复执行
+- Windows 方案有明确结构、阶段和迁移边界
+- 后续实现遵守 Win11 本地项目规则

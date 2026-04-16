@@ -237,9 +237,7 @@ fn print_help() {
     println!("  PersonaPilot                 Start API server");
     println!("  PersonaPilot gateway         Start private gateway server");
     println!("  PersonaPilot workflow show   Show workflow state");
-    println!(
-        "  PersonaPilot workflow tick   Execute one workflow tick and persist RUN_STATE.json"
-    );
+    println!("  PersonaPilot workflow tick   Execute one workflow tick and persist RUN_STATE.json");
     println!("  PersonaPilot workflow run-steps <n>   Execute n workflow steps and persist RUN_STATE.json");
     println!("  PersonaPilot workflow daemon [--interval-seconds N] [--ticks M] [--allow-push]   Run periodic workflow ticks");
     println!("  PersonaPilot workflow commit-push [--allow-push]   Commit current changes and optionally push when allowed");

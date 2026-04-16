@@ -24,7 +24,9 @@ pub fn set_proxy_runtime_mode_override(value: Option<&str>) -> Option<String> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous = guard.clone();
-    *guard = value.map(|raw| raw.trim().to_string()).filter(|raw| !raw.is_empty());
+    *guard = value
+        .map(|raw| raw.trim().to_string())
+        .filter(|raw| !raw.is_empty());
     previous
 }
 
@@ -86,6 +88,16 @@ pub struct ProxyHarvestRunSummary {
 pub struct ProxyHarvestSourceSummary {
     pub source_label: String,
     pub source_kind: String,
+    pub source_tier: Option<String>,
+    pub for_demo: bool,
+    pub for_prod: bool,
+    pub validation_mode: Option<String>,
+    pub declared_geo_quality: Option<String>,
+    pub effective_geo_quality: Option<String>,
+    pub geo_coverage_percent: f64,
+    pub active_region_count: i64,
+    pub active_country_count: i64,
+    pub active_share_percent: f64,
     pub enabled: bool,
     pub health_score: f64,
     pub candidate_count: i64,
@@ -110,6 +122,18 @@ pub struct ProxyHarvestMetrics {
 struct ProxyHarvestSourceConfig {
     source_label: String,
     source_kind: String,
+    #[serde(default = "default_source_tier")]
+    source_tier: String,
+    #[serde(default = "default_for_demo")]
+    for_demo: bool,
+    #[serde(default = "default_for_prod")]
+    for_prod: bool,
+    #[serde(default)]
+    validation_mode: Option<String>,
+    #[serde(default)]
+    expected_geo_quality: Option<String>,
+    #[serde(default)]
+    cost_class: Option<String>,
     #[serde(default = "default_enabled")]
     enabled: bool,
     #[serde(default)]
@@ -122,6 +146,18 @@ struct ProxyHarvestSourceConfig {
 
 fn default_enabled() -> bool {
     true
+}
+
+fn default_source_tier() -> String {
+    "public".to_string()
+}
+
+fn default_for_demo() -> bool {
+    true
+}
+
+fn default_for_prod() -> bool {
+    false
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +260,27 @@ fn source_null_metadata_ratio(snapshot: &HarvestSourceSnapshot) -> f64 {
     blank_total as f64 / snapshot.total_count as f64
 }
 
+fn round_percentage(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
+fn effective_geo_quality_label(
+    declared_geo_quality: Option<&str>,
+    externally_verified_active_count: i64,
+    host_geo_inferred_active_count: i64,
+) -> Option<String> {
+    if externally_verified_active_count > 0 {
+        Some("externally_verified".to_string())
+    } else if host_geo_inferred_active_count > 0 {
+        Some("host_geo_inferred".to_string())
+    } else {
+        declared_geo_quality
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    }
+}
+
 fn parse_host_port(proxy_ref: &str) -> Result<(String, i64)> {
     let (host_raw, port_raw) = proxy_ref
         .rsplit_once(':')
@@ -271,15 +328,46 @@ async fn sync_sources_from_config(state: &AppState) -> Result<()> {
     let configs = parse_source_config(&raw)?;
     let now = now_ts_string();
     for config in configs {
+        let source_tier = config.source_tier.trim();
+        let source_tier = if source_tier.is_empty() {
+            "public".to_string()
+        } else {
+            source_tier.to_string()
+        };
+        let validation_mode = config
+            .validation_mode
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        let expected_geo_quality = config
+            .expected_geo_quality
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        let cost_class = config
+            .cost_class
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
         sqlx::query(
             r#"INSERT INTO proxy_harvest_sources (
-                   source_label, source_kind, enabled, config_json, interval_seconds, base_proxy_score,
+                   source_label, source_kind, source_tier, for_demo, for_prod, validation_mode, expected_geo_quality, cost_class,
+                   enabled, config_json, interval_seconds, base_proxy_score,
                    consecutive_failures, backoff_until, last_run_started_at, last_run_finished_at,
                    last_run_status, last_error, health_score, created_at, updated_at
                )
-               VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, NULL, NULL, 100.0, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, NULL, NULL, 100.0, ?, ?)
                ON CONFLICT(source_label) DO UPDATE SET
                    source_kind = excluded.source_kind,
+                   source_tier = excluded.source_tier,
+                   for_demo = excluded.for_demo,
+                   for_prod = excluded.for_prod,
+                   validation_mode = excluded.validation_mode,
+                   expected_geo_quality = excluded.expected_geo_quality,
+                   cost_class = excluded.cost_class,
                    enabled = excluded.enabled,
                    config_json = excluded.config_json,
                    interval_seconds = excluded.interval_seconds,
@@ -288,6 +376,12 @@ async fn sync_sources_from_config(state: &AppState) -> Result<()> {
         )
         .bind(&config.source_label)
         .bind(&config.source_kind)
+        .bind(&source_tier)
+        .bind(if config.for_demo { 1_i64 } else { 0_i64 })
+        .bind(if config.for_prod { 1_i64 } else { 0_i64 })
+        .bind(validation_mode)
+        .bind(expected_geo_quality)
+        .bind(cost_class)
         .bind(if config.enabled { 1_i64 } else { 0_i64 })
         .bind(config.config_json.to_string())
         .bind(config.interval_seconds.unwrap_or(300).max(30))
@@ -920,28 +1014,94 @@ pub async fn load_proxy_harvest_metrics(state: &AppState) -> Result<ProxyHarvest
     .fetch_one(&state.db)
     .await?;
     let source_rows = sqlx::query(
-        r#"SELECT s.source_label, s.source_kind, s.enabled, s.health_score,
+        r#"SELECT s.source_label, s.source_kind, s.source_tier, s.for_demo, s.for_prod,
+                  s.validation_mode, s.expected_geo_quality, s.enabled, s.health_score,
                   COALESCE(SUM(CASE WHEN p.status = 'candidate' THEN 1 ELSE 0 END), 0) AS candidate_count,
                   COALESCE(SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END), 0) AS active_count,
                   COALESCE(SUM(CASE WHEN p.status = 'candidate_rejected' THEN 1 ELSE 0 END), 0) AS candidate_rejected_count,
                   COALESCE(SUM(CASE WHEN p.provider IS NULL OR TRIM(p.provider) = '' THEN 1 ELSE 0 END), 0) AS null_provider_count,
-                  COALESCE(SUM(CASE WHEN p.region IS NULL OR TRIM(p.region) = '' THEN 1 ELSE 0 END), 0) AS null_region_count
+                  COALESCE(SUM(CASE WHEN p.region IS NULL OR TRIM(p.region) = '' THEN 1 ELSE 0 END), 0) AS null_region_count,
+                  COUNT(DISTINCT CASE WHEN p.status = 'active' AND p.region IS NOT NULL AND TRIM(p.region) != '' THEN LOWER(TRIM(p.region)) END) AS active_region_count,
+                  COUNT(DISTINCT CASE WHEN p.status = 'active' AND p.country IS NOT NULL AND TRIM(p.country) != '' THEN UPPER(TRIM(p.country)) END) AS active_country_count,
+                  COALESCE(SUM(CASE
+                    WHEN p.status = 'active'
+                     AND p.last_verify_status = 'ok'
+                     AND COALESCE(p.last_verify_source, '') IN ('local_verify', 'runner_verify', 'external_probe_v2')
+                    THEN 1 ELSE 0 END), 0) AS externally_verified_active_count,
+                  COALESCE(SUM(CASE
+                    WHEN p.status = 'active'
+                     AND p.last_verify_status = 'ok'
+                     AND COALESCE(p.last_verify_source, '') LIKE '%geoip_host_enrich%'
+                    THEN 1 ELSE 0 END), 0) AS host_geo_inferred_active_count
            FROM proxy_harvest_sources s
            LEFT JOIN proxies p ON p.source_label = s.source_label
-           GROUP BY s.source_label, s.source_kind, s.enabled, s.health_score
+           GROUP BY s.source_label, s.source_kind, s.source_tier, s.for_demo, s.for_prod,
+                    s.validation_mode, s.expected_geo_quality, s.enabled, s.health_score
            ORDER BY s.health_score DESC, active_count DESC, candidate_count DESC, s.source_label ASC"#,
     )
     .fetch_all(&state.db)
     .await?;
+    let total_active = source_rows
+        .iter()
+        .map(|row| row.try_get::<i64, _>("active_count").unwrap_or(0))
+        .sum::<i64>();
     let source_summaries = source_rows
         .into_iter()
         .map(|row| {
             let active_count = row.try_get("active_count").unwrap_or(0);
             let candidate_rejected_count = row.try_get("candidate_rejected_count").unwrap_or(0);
             let decision_total = active_count + candidate_rejected_count;
+            let declared_geo_quality = row
+                .try_get::<Option<String>, _>("expected_geo_quality")
+                .ok()
+                .flatten()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+            let externally_verified_active_count = row
+                .try_get::<i64, _>("externally_verified_active_count")
+                .unwrap_or(0);
+            let host_geo_inferred_active_count = row
+                .try_get::<i64, _>("host_geo_inferred_active_count")
+                .unwrap_or(0);
+            let geo_coverage_percent = if active_count <= 0 {
+                0.0
+            } else {
+                round_percentage(
+                    (externally_verified_active_count as f64 / active_count as f64) * 100.0,
+                )
+            };
+            let active_share_percent = if total_active <= 0 {
+                0.0
+            } else {
+                round_percentage((active_count as f64 / total_active as f64) * 100.0)
+            };
             ProxyHarvestSourceSummary {
                 source_label: row.try_get("source_label").unwrap_or_default(),
                 source_kind: row.try_get("source_kind").unwrap_or_default(),
+                source_tier: row
+                    .try_get::<Option<String>, _>("source_tier")
+                    .ok()
+                    .flatten()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+                for_demo: row.try_get::<i64, _>("for_demo").unwrap_or(1) != 0,
+                for_prod: row.try_get::<i64, _>("for_prod").unwrap_or(0) != 0,
+                validation_mode: row
+                    .try_get::<Option<String>, _>("validation_mode")
+                    .ok()
+                    .flatten()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+                declared_geo_quality: declared_geo_quality.clone(),
+                effective_geo_quality: effective_geo_quality_label(
+                    declared_geo_quality.as_deref(),
+                    externally_verified_active_count,
+                    host_geo_inferred_active_count,
+                ),
+                geo_coverage_percent,
+                active_region_count: row.try_get("active_region_count").unwrap_or(0),
+                active_country_count: row.try_get("active_country_count").unwrap_or(0),
+                active_share_percent,
                 enabled: row.try_get::<i64, _>("enabled").unwrap_or(0) != 0,
                 health_score: row.try_get("health_score").unwrap_or(0.0),
                 candidate_count: row.try_get("candidate_count").unwrap_or(0),

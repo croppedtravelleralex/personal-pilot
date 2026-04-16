@@ -1,13 +1,12 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    sync::{Mutex, MutexGuard, OnceLock},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use serde_json::Value;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tower::ServiceExt;
-use uuid::Uuid;
 use persona_pilot::{
     api::{handlers::run_proxy_replenish_mvp_tick, routes::build_router},
     app::build_app_state,
@@ -24,21 +23,37 @@ use persona_pilot::{
     runner::engine::{reclaim_stale_running_tasks, update_proxy_health_after_execution},
     runner::{fake::FakeRunner, types::RunnerProxySelection, RunnerOutcomeStatus},
 };
+use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tower::ServiceExt;
+use uuid::Uuid;
 
 struct ScopedEnvVar {
     key: String,
     previous: Option<String>,
     used_proxy_mode_override: bool,
+    _proxy_mode_guard: Option<MutexGuard<'static, ()>>,
+}
+
+fn proxy_mode_override_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 impl ScopedEnvVar {
     fn set(key: &str, value: &str) -> Self {
         if key == "PERSONA_PILOT_PROXY_MODE" {
+            let proxy_mode_guard = Some(
+                proxy_mode_override_lock()
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            );
             let previous = set_proxy_runtime_mode_override(Some(value));
             return Self {
                 key: key.to_string(),
                 previous,
                 used_proxy_mode_override: true,
+                _proxy_mode_guard: proxy_mode_guard,
             };
         }
         let previous = std::env::var(key).ok();
@@ -47,6 +62,7 @@ impl ScopedEnvVar {
             key: key.to_string(),
             previous,
             used_proxy_mode_override: false,
+            _proxy_mode_guard: None,
         }
     }
 }
@@ -190,6 +206,95 @@ async fn wait_for_terminal_status(app: &axum::Router, task_id: &str) -> Value {
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     panic!("task did not reach terminal status in time");
+}
+
+#[tokio::test]
+async fn fingerprint_profile_response_includes_canonical_summary_and_runtime_projection() {
+    let db_url = unique_db_url();
+    let (_state, app) = build_test_app(&db_url).await.expect("build app");
+
+    let profile_payload = serde_json::json!({
+        "id": "fp-canonical-summary",
+        "name": "Canonical Summary",
+        "profile_json": {
+            "family_id": "win11_business_laptop",
+            "family_variant": "mainstream_ultrabook",
+            "control": {
+                "browser": {
+                    "user_agent": "Mozilla/5.0",
+                    "ua_platform": "Win32"
+                },
+                "os": {
+                    "timezone": "Asia/Shanghai"
+                },
+                "locale": {
+                    "locale": "zh-CN",
+                    "accept_language": "zh-CN,zh;q=0.9"
+                },
+                "display": {
+                    "screen_width": 1920,
+                    "screen_height": 1080,
+                    "viewport_width": 1536,
+                    "viewport_height": 864,
+                    "device_pixel_ratio": 1
+                },
+                "hardware": {
+                    "hardware_concurrency": 8,
+                    "device_memory_gb": 16,
+                    "touch_support": false,
+                    "max_touch_points": 0
+                },
+                "network": {
+                    "sticky_session_ttl": 1800,
+                    "rotation_policy": "sticky"
+                }
+            }
+        }
+    });
+
+    let (status, json) = json_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/fingerprint-profiles")
+            .header("content-type", "application/json")
+            .body(Body::from(profile_payload.to_string()))
+            .expect("request"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        json.get("family_id").and_then(|value| value.as_str()),
+        Some("win11_business_laptop")
+    );
+    assert_eq!(
+        json.get("schema_kind").and_then(|value| value.as_str()),
+        Some("canonical_grouped")
+    );
+    assert!(
+        json.get("declared_control_count")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0)
+            >= 10
+    );
+    assert!(json
+        .get("supported_runtime_fields")
+        .and_then(|value| value.as_array())
+        .is_some_and(|items| items.iter().any(|item| item.as_str() == Some("timezone"))));
+    assert!(json
+        .get("consumption_explain")
+        .and_then(|value| value.get("resolved_fields"))
+        .and_then(|value| value.as_array())
+        .is_some_and(|items| items
+            .iter()
+            .any(|item| item.as_str() == Some("device_memory_gb"))));
+    assert_eq!(
+        json.get("consistency_assessment")
+            .and_then(|value| value.get("schema_kind"))
+            .and_then(|value| value.as_str()),
+        Some("canonical_grouped")
+    );
 }
 
 #[tokio::test]
@@ -2775,7 +2880,7 @@ async fn browser_task_auto_identity_session_reuses_bound_proxy() {
         "name": "Auto Session",
         "profile_json": {
             "browser": {"name": "chrome", "version": "123"},
-            "os": {"name": "linux", "version": "ubuntu"}
+            "os": {"name": "windows", "version": "11"}
         }
     });
     let (profile_status, _) = json_response(
@@ -9841,6 +9946,116 @@ async fn cancelled_contract_is_visible_across_status_detail_and_runs() {
                 })
                 .unwrap_or(false)
     }));
+}
+
+#[tokio::test]
+async fn launch_result_contract_is_preserved_in_task_and_run_detail() {
+    let db_url = unique_db_url();
+    let (state, app) = build_test_app(&db_url).await.expect("build app");
+
+    sqlx::query(
+        r#"INSERT INTO fingerprint_profiles (id, name, version, status, tags_json, profile_json, created_at, updated_at)
+           VALUES ('fp-launch-result', 'Launch Result', 1, 'active', NULL, '{"browser":{"name":"chrome","version":"124"}}', '1', '1')"#,
+    )
+    .execute(&state.db)
+    .await
+    .expect("insert active fingerprint profile");
+    seed_active_proxy(
+        &state.db,
+        "proxy-launch-result",
+        "launch-contract",
+        "us-east",
+    )
+    .await;
+
+    let payload = serde_json::json!({
+        "kind": "get_title",
+        "url": "https://example.com/launch-result",
+        "timeout_seconds": 5,
+        "fingerprint_profile_id": "fp-launch-result",
+        "network_policy_json": {"mode": "required_proxy", "proxy_id": "proxy-launch-result"}
+    });
+    let (create_status, create_body) = text_response(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/tasks")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(create_status, StatusCode::CREATED);
+    let create_json: Value = serde_json::from_str(&create_body).expect("create task json body");
+    let task_id = create_json
+        .get("id")
+        .and_then(|v| v.as_str())
+        .expect("task id")
+        .to_string();
+    let task_json = wait_for_terminal_status(&app, &task_id).await;
+
+    let result_json_text: Option<String> =
+        sqlx::query_scalar(r#"SELECT result_json FROM tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("load task result json");
+    let result_json: Value =
+        serde_json::from_str(result_json_text.as_deref().expect("result json"))
+            .expect("parse result json");
+    assert_eq!(result_json.get("title"), task_json.get("title"));
+    assert_eq!(result_json.get("final_url"), task_json.get("final_url"));
+    assert_eq!(
+        result_json.get("content_kind"),
+        task_json.get("content_kind")
+    );
+    assert_eq!(
+        result_json.get("content_source_action"),
+        task_json.get("content_source_action")
+    );
+    assert_eq!(
+        result_json.get("content_ready"),
+        task_json.get("content_ready")
+    );
+
+    let (status, runs_json) = json_response(
+        &app,
+        Request::builder()
+            .uri(format!("/tasks/{task_id}/runs"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let runs = runs_json.as_array().expect("runs array");
+    assert_eq!(runs.len(), 1);
+    let run = &runs[0];
+    assert_eq!(run.get("status"), task_json.get("status"));
+    assert_eq!(run.get("title"), task_json.get("title"));
+    assert_eq!(run.get("final_url"), task_json.get("final_url"));
+    assert_eq!(run.get("content_kind"), task_json.get("content_kind"));
+    assert_eq!(
+        run.get("content_source_action"),
+        task_json.get("content_source_action")
+    );
+    assert_eq!(run.get("content_ready"), task_json.get("content_ready"));
+    let run_summary_artifacts = run
+        .get("summary_artifacts")
+        .and_then(|v| v.as_array())
+        .expect("run summary artifacts");
+    let task_summary_artifacts = task_json
+        .get("summary_artifacts")
+        .and_then(|v| v.as_array())
+        .expect("task summary artifacts");
+    assert_eq!(run_summary_artifacts.len(), task_summary_artifacts.len());
+    for (run_artifact, task_artifact) in run_summary_artifacts
+        .iter()
+        .zip(task_summary_artifacts.iter())
+    {
+        assert_eq!(run_artifact.get("key"), task_artifact.get("key"));
+        assert_eq!(run_artifact.get("title"), task_artifact.get("title"));
+        assert_eq!(run_artifact.get("summary"), task_artifact.get("summary"));
+    }
 }
 
 #[tokio::test]

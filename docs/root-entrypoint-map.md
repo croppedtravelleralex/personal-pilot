@@ -1,6 +1,6 @@
 # Root Entrypoint Map
 
-Updated: 2026-04-15
+Updated: 2026-04-16
 
 ## Purpose
 
@@ -10,17 +10,27 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
 ## Canonical Docs
 
 - `/docs/README.md`
-  - project-level reading order and current reporting frame
+  - project-level reading order and dual-axis reporting frame
 - `/docs/02-current-state.md`
-  - runtime, build, and verification reality
+  - runtime, build, verification reality, and the current `95 / 7 / green` vs `30 / 70 / yellow` truth
+- `/docs/17-full-app-audit-progress-reset.md`
+  - historical `77 / 23` audit-reset context; not the live source
 - `/docs/03-roadmap.md`
-  - active roadmap and current mainline direction
+  - current mainline closeout plus overall end-state expansion tracks
 - `/docs/04-improvement-backlog.md`
-  - open blockers, risks, and deferred follow-up
+  - open blockers, risks, and deferred follow-up across both axes
 - `/docs/05-ai-maintenance-playbook.md`
-  - handoff and maintenance workflow
+  - handoff workflow and reporting guardrails
 - `/docs/final-goal-progress-breakdown.md`
-  - final-goal progress framing and reporting rule
+  - canonical split for `80 / 12 / 13 / persistence / 450+` and overall end-state framing
+- `/docs/19-phase-plan-and-scorecard.md`
+  - canonical detailed phase plan, scorecard, and AdsPower benchmark report
+- `/docs/12-final-18-percent-delivery-plan.md`
+  - current closure board kept under the historical path
+- `/docs/13-adspower-deep-comparison.md`
+  - AdsPower boundary comparison on the overall end-state track
+- `/docs/18-external-browser-integration-plan.md`
+  - external browser research and overall-track integration plan
 - `/docs/agent-alexstudio-gateway-runbook.md`
   - gateway-specific runtime and acceptance guidance
 
@@ -33,6 +43,16 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
 - `/ROADMAP.md` -> `/docs/03-roadmap.md`
 - `/PROGRESS.md` -> `/docs/02-current-state.md` + `/docs/final-goal-progress-breakdown.md`
 - `/TODO.md` -> short live execution queue
+
+## Reporting Route
+
+Use one dual-axis rule everywhere:
+
+1. current shipped app / closeout / native mainline -> `95% / 7% / green`
+2. complete app / AdsPower catch-up / `50+` control / `450+` fingerprint or event target -> `30% / 70% / yellow`
+
+Use `/docs/13-adspower-deep-comparison.md` and `/docs/18-external-browser-integration-plan.md` only for the second route.
+Use `/docs/19-phase-plan-and-scorecard.md` when the user asks for detailed phase planning, scoring, or a full benchmark summary.
 
 ## Secondary Root Files
 

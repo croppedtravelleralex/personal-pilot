@@ -21,9 +21,11 @@ use super::{
     handlers::{
         browser_extract_text, browser_get_final_url, browser_get_html, browser_get_title,
         browser_open, cancel_task, check_proxy_trust_cache, create_fingerprint_profile,
-        create_proxy, create_task, explain_proxy_selection, get_fingerprint_profile, get_proxy,
-        get_task, get_task_logs, get_task_runs, get_verify_batch, health,
-        list_fingerprint_profiles, list_proxies, list_verify_batches, maintain_proxy_trust_cache,
+        create_platform_template, create_proxy, create_store_platform_override, create_task,
+        explain_proxy_selection, get_fingerprint_profile, get_platform_template, get_proxy,
+        get_store_platform_override, get_task, get_task_logs, get_task_runs, get_verify_batch,
+        health, list_fingerprint_profiles, list_platform_templates, list_proxies,
+        list_store_platform_overrides, list_verify_batches, maintain_proxy_trust_cache,
         repair_proxy_trust_cache, repair_proxy_trust_cache_batch, retry_task,
         scan_proxy_trust_cache, smoke_test_proxy, status, verify_batch_proxies, verify_proxy,
     },
@@ -92,6 +94,19 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/fingerprint-profiles",
             post(create_fingerprint_profile).get(list_fingerprint_profiles),
+        )
+        .route(
+            "/platform-templates",
+            post(create_platform_template).get(list_platform_templates),
+        )
+        .route("/platform-templates/:id", get(get_platform_template))
+        .route(
+            "/store-platform-overrides",
+            post(create_store_platform_override).get(list_store_platform_overrides),
+        )
+        .route(
+            "/store-platform-overrides/:id",
+            get(get_store_platform_override),
         )
         .route("/proxies", post(create_proxy).get(list_proxies))
         .route(

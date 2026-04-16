@@ -30,9 +30,7 @@ pub fn pre_action_delay(config: &HumanizationConfig) -> u32 {
 fn sample_gap(distribution: &TimeDistribution) -> u32 {
     let mut rng = rand::thread_rng();
     match distribution {
-        TimeDistribution::Uniform { min_ms, max_ms } => {
-            rng.gen_range(*min_ms..=*max_ms)
-        }
+        TimeDistribution::Uniform { min_ms, max_ms } => rng.gen_range(*min_ms..=*max_ms),
         TimeDistribution::Normal { mean_ms, stddev_ms } => {
             // Box-Muller transform for normal distribution
             let u1: f64 = rng.gen_range(0.0..1.0);
@@ -41,7 +39,11 @@ fn sample_gap(distribution: &TimeDistribution) -> u32 {
             let sample = *mean_ms as f64 + z * (*stddev_ms as f64);
             sample.clamp(0.0, (*mean_ms as f64) * 3.0) as u32
         }
-        TimeDistribution::RightSkewed { min_ms, mode_ms, max_ms } => {
+        TimeDistribution::RightSkewed {
+            min_ms,
+            mode_ms,
+            max_ms,
+        } => {
             // Gamma distribution approximation using transformed exponential
             // Right-skewed: most waits are short, some are very long
             let lambda = 1.0 / (*mode_ms as f64 - *min_ms as f64 + 1.0).max(1.0);
@@ -72,7 +74,8 @@ pub fn compute_typing_interval(config: &HumanizationConfig, char: char) -> u32 {
     let mut rng = rand::thread_rng();
 
     // Speed variance
-    let variance_factor = 1.0 + (rng.gen::<f32>() * 2.0 - 1.0) * (pattern.speed_variance_percent as f32 / 100.0);
+    let variance_factor =
+        1.0 + (rng.gen::<f32>() * 2.0 - 1.0) * (pattern.speed_variance_percent as f32 / 100.0);
     let interval = (base_interval as f32 * variance_factor) as u32;
 
     // Special keys (shift, backspace) take longer
@@ -95,9 +98,7 @@ mod tests {
             max_ms: 2000,
         };
 
-        let samples: Vec<u32> = (0..1000)
-            .map(|_| sample_gap(&dist))
-            .collect();
+        let samples: Vec<u32> = (0..1000).map(|_| sample_gap(&dist)).collect();
 
         let mean = samples.iter().sum::<u32>() as f64 / samples.len() as f64;
         // Should be biased toward shorter values
@@ -105,7 +106,11 @@ mod tests {
 
         // Most samples should be small
         let short_count = samples.iter().filter(|&&v| v < 500).count();
-        assert!(short_count > 600, "most samples should be short, got {}", short_count);
+        assert!(
+            short_count > 600,
+            "most samples should be short, got {}",
+            short_count
+        );
     }
 
     #[test]
@@ -115,22 +120,25 @@ mod tests {
             stddev_ms: 150,
         };
 
-        let samples: Vec<u32> = (0..1000)
-            .map(|_| sample_gap(&dist))
-            .collect();
+        let samples: Vec<u32> = (0..1000).map(|_| sample_gap(&dist)).collect();
 
         let mean = samples.iter().sum::<u32>() as f64 / samples.len() as f64;
         // Should cluster around mean
-        assert!((mean - 500.0).abs() < 50.0, "mean {} should be close to 500", mean);
+        assert!(
+            (mean - 500.0).abs() < 50.0,
+            "mean {} should be close to 500",
+            mean
+        );
     }
 
     #[test]
     fn test_uniform_distribution() {
-        let dist = TimeDistribution::Uniform { min_ms: 100, max_ms: 200 };
+        let dist = TimeDistribution::Uniform {
+            min_ms: 100,
+            max_ms: 200,
+        };
 
-        let samples: Vec<u32> = (0..1000)
-            .map(|_| sample_gap(&dist))
-            .collect();
+        let samples: Vec<u32> = (0..1000).map(|_| sample_gap(&dist)).collect();
 
         let min = *samples.iter().min().unwrap();
         let max = *samples.iter().max().unwrap();

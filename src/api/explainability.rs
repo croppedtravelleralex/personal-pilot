@@ -154,40 +154,87 @@ fn fingerprint_runtime_explain_from_parsed(
     parsed: Option<&Value>,
 ) -> Option<FingerprintRuntimeExplain> {
     let parsed = parsed?;
-    if let Some(value) = parsed.get("fingerprint_runtime_explain").cloned() {
+    let runtime_explain = parsed.get("fingerprint_runtime_explain");
+    let runtime = parsed.get("fingerprint_runtime");
+
+    if let Some(value) = runtime_explain.cloned() {
         if let Ok(explain) = serde_json::from_value::<FingerprintRuntimeExplain>(value) {
             return Some(explain);
         }
     }
 
-    let budget_tag = parsed
-        .get("fingerprint_runtime_explain")
+    let budget_tag = runtime_explain
         .and_then(|v| v.get("fingerprint_budget_tag"))
         .and_then(|v| v.as_str())
         .map(str::to_string);
-    let fingerprint_consistency = parsed
-        .get("fingerprint_runtime_explain")
+    let fingerprint_consistency = runtime_explain
         .and_then(|v| v.get("fingerprint_consistency"))
         .cloned()
         .and_then(|v| serde_json::from_value(v).ok());
-
-    let consumption_explain = parsed
-        .get("fingerprint_runtime_explain")
-        .and_then(|v| v.get("consumption_explain").cloned())
+    let consumption_source_of_truth = runtime_explain
+        .and_then(|v| v.get("consumption_source_of_truth"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
         .or_else(|| {
-            parsed
-                .get("fingerprint_runtime")
-                .and_then(|v| v.get("consumption_explain").cloned())
-        })
+            runtime
+                .and_then(|v| v.get("consumption_source_of_truth"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
+    let consumption_version = runtime_explain
+        .and_then(|v| v.get("consumption_version"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            runtime
+                .and_then(|v| v.get("consumption_version"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
+    let consumption_status = runtime_explain
+        .and_then(|v| v.get("consumption_status"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            runtime
+                .and_then(|v| v.get("consumption_status"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
+    let warning = runtime_explain
+        .and_then(|v| v.get("warning"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            runtime
+                .and_then(|v| v.get("warning"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
+
+    let consumption_explain = runtime_explain
+        .and_then(|v| v.get("consumption_explain").cloned())
+        .or_else(|| runtime.and_then(|v| v.get("consumption_explain").cloned()))
         .and_then(|v| serde_json::from_value::<ConsumptionExplain>(v).ok());
 
-    if budget_tag.is_none() && fingerprint_consistency.is_none() && consumption_explain.is_none() {
+    if budget_tag.is_none()
+        && fingerprint_consistency.is_none()
+        && consumption_source_of_truth.is_none()
+        && consumption_version.is_none()
+        && consumption_status.is_none()
+        && warning.is_none()
+        && consumption_explain.is_none()
+    {
         return None;
     }
 
     Some(FingerprintRuntimeExplain {
         fingerprint_budget_tag: budget_tag,
         fingerprint_consistency,
+        consumption_source_of_truth,
+        consumption_version,
+        consumption_status,
+        warning,
         consumption_explain,
     })
 }

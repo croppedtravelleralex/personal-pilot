@@ -1,4 +1,4 @@
-﻿use std::{
+use std::{
     collections::BTreeMap,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -400,7 +400,6 @@ pub(crate) async fn build_public_dashboard_bootstrap_json(
 async fn build_dashboard_bootstrap_response(
     state: &GatewayState,
 ) -> Result<DashboardBootstrapResponse, Response> {
-    
     let status_result = control_request_value(&state, Method::GET, "/status", None).await;
     let behavior_profiles = match load_active_named_resources(&state.db, "behavior_profiles").await
     {
@@ -1522,7 +1521,12 @@ fn build_dashboard_ui_model(
 
     let alert_rows = overview_tasks
         .iter()
-        .filter(|task| matches!(task.display_status.as_str(), "failed" | "timed_out" | "blocked"))
+        .filter(|task| {
+            matches!(
+                task.display_status.as_str(),
+                "failed" | "timed_out" | "blocked"
+            )
+        })
         .take(8)
         .cloned()
         .collect::<Vec<_>>();
@@ -1679,8 +1683,9 @@ fn build_dashboard_ui_model(
     let site_rollup_rows =
         serde_json::to_value(site_validation_rollups).unwrap_or_else(|_| Value::Array(Vec::new()));
     let proxy_source_rows_json = Value::Array(proxy_sources);
-    let task_status_distribution = serde_json::to_value(build_task_status_distribution(overview_tasks))
-        .unwrap_or_else(|_| Value::Array(Vec::new()));
+    let task_status_distribution =
+        serde_json::to_value(build_task_status_distribution(overview_tasks))
+            .unwrap_or_else(|_| Value::Array(Vec::new()));
     let failure_reason_distribution =
         serde_json::to_value(build_failure_reason_distribution(overview_tasks))
             .unwrap_or_else(|_| Value::Array(Vec::new()));
@@ -1908,14 +1913,17 @@ fn unique_site_filter_values(
 }
 
 fn pick_initial_selected_task_id(tasks: &[DashboardTaskListItem]) -> Option<String> {
-    tasks.iter()
+    tasks
+        .iter()
         .find(|task| task.display_status == "failed")
         .or_else(|| tasks.iter().find(|task| task.display_status == "running"))
         .or_else(|| tasks.first())
         .map(|task| task.id.clone())
 }
 
-fn build_task_status_distribution(tasks: &[DashboardTaskListItem]) -> Vec<DashboardDistributionBucket> {
+fn build_task_status_distribution(
+    tasks: &[DashboardTaskListItem],
+) -> Vec<DashboardDistributionBucket> {
     let mut counts = BTreeMap::<String, i64>::new();
     for task in tasks {
         *counts.entry(task.display_status.clone()).or_insert(0) += 1;
@@ -2000,7 +2008,9 @@ fn failure_bucket_tone(signal: &str) -> &'static str {
     }
 }
 
-fn build_task_kind_distribution(tasks: &[DashboardTaskListItem]) -> Vec<DashboardDistributionBucket> {
+fn build_task_kind_distribution(
+    tasks: &[DashboardTaskListItem],
+) -> Vec<DashboardDistributionBucket> {
     let mut buckets = BTreeMap::<String, DashboardDistributionBucket>::new();
 
     for task in tasks {
@@ -2105,7 +2115,9 @@ fn build_dashboard_continuity_events(
                 .get("summary_compact_zh")
                 .and_then(Value::as_str)
                 .map(str::to_string)
-                .unwrap_or_else(|| "Session persisted successfully from onboarding evidence".to_string()),
+                .unwrap_or_else(|| {
+                    "Session persisted successfully from onboarding evidence".to_string()
+                }),
         });
         if events.len() >= 5 {
             break;
@@ -2667,17 +2679,32 @@ fn translate_browser_task_summary(task: &Value, kind: &str) -> (String, String) 
         .or_else(|| site_key_from_task(task))
         .unwrap_or_else(|| "target page".to_string());
     match status.as_str() {
-        "succeeded" => (format!("{action} succeeded: {target}"), format!("{action} succeeded")),
-        "timed_out" => (format!("{action} timed out: {target}"), format!("{action} timed out")),
-        "cancelled" => (format!("{action} cancelled: {target}"), format!("{action} cancelled")),
+        "succeeded" => (
+            format!("{action} succeeded: {target}"),
+            format!("{action} succeeded"),
+        ),
+        "timed_out" => (
+            format!("{action} timed out: {target}"),
+            format!("{action} timed out"),
+        ),
+        "cancelled" => (
+            format!("{action} cancelled: {target}"),
+            format!("{action} cancelled"),
+        ),
         "failed" => {
             let reason = json_string_field(task, "browser_failure_signal")
                 .as_deref()
                 .map(humanize_failure_signal)
                 .unwrap_or("execution failed");
-            (format!("{action} failed: {reason}"), format!("{action} failed"))
+            (
+                format!("{action} failed: {reason}"),
+                format!("{action} failed"),
+            )
         }
-        "running" => (format!("{action} running: {target}"), format!("{action} running")),
+        "running" => (
+            format!("{action} running: {target}"),
+            format!("{action} running"),
+        ),
         _ => (
             format!("{action} status: {}", humanize_status(status.as_str())),
             format!("{action} {}", humanize_status(status.as_str())),
@@ -2710,7 +2737,10 @@ fn translate_account_task_summary(task: &Value, kind: &str) -> (String, String) 
                 .as_deref()
                 .map(humanize_failure_signal)
                 .unwrap_or("unknown failure");
-            (format!("{action} failed: {reason}"), format!("{action} failed"))
+            (
+                format!("{action} failed: {reason}"),
+                format!("{action} failed"),
+            )
         }
         _ => (
             format!("{action} status: {}", humanize_status(status.as_str())),
@@ -3401,8 +3431,7 @@ async fn load_proxy_health_overview(db: &DbPool) -> Result<ProxyHealthOverview, 
         if proxy_health_checked_at.is_some() {
             source_stats.checked_count += 1;
         }
-        let is_stale =
-            proxy_health_checked_stale(proxy_health_checked_at.as_deref(), stale_before);
+        let is_stale = proxy_health_checked_stale(proxy_health_checked_at.as_deref(), stale_before);
         if is_stale {
             source_stats.stale_count += 1;
         }
@@ -3469,15 +3498,12 @@ async fn load_proxy_health_overview(db: &DbPool) -> Result<ProxyHealthOverview, 
         })
         .collect::<Vec<_>>();
     source_comparison_rows.sort_by(|left, right| {
-        right
-            .active_count
-            .cmp(&left.active_count)
-            .then_with(|| {
-                left.avg_score
-                    .unwrap_or(-1.0)
-                    .partial_cmp(&right.avg_score.unwrap_or(-1.0))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        right.active_count.cmp(&left.active_count).then_with(|| {
+            left.avg_score
+                .unwrap_or(-1.0)
+                .partial_cmp(&right.avg_score.unwrap_or(-1.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
 
     let mut low_quality_reason_buckets = reason_buckets.into_values().collect::<Vec<_>>();
@@ -4217,13 +4243,12 @@ mod tests {
                 "summary": "pool needs replenishment for this request"
             }]
         });
-        let (detail, compact) =
-            translate_task_summary(&task, "verify_proxy", "pool needs replenishment for this request");
+        let (detail, compact) = translate_task_summary(
+            &task,
+            "verify_proxy",
+            "pool needs replenishment for this request",
+        );
         assert!(detail.contains("Proxy verification failed"));
         assert!(compact.contains("Proxy failed"));
     }
 }
-
-
-
-

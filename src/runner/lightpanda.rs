@@ -765,19 +765,6 @@ impl CdpClient {
     }
 }
 
-fn profile_value_as_env_string(value: &Value) -> Option<String> {
-    match value {
-        Value::Null => None,
-        Value::String(v) => {
-            let trimmed = v.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        }
-        Value::Bool(v) => Some(v.to_string()),
-        Value::Number(v) => Some(v.to_string()),
-        _ => None,
-    }
-}
-
 fn build_lightpanda_fingerprint_runtime(task: &RunnerTask) -> Option<LightpandaFingerprintRuntime> {
     let profile = task.fingerprint_profile.as_ref()?;
     let projection =
@@ -923,6 +910,30 @@ fn result_payload(
             }
         })
     });
+    let fingerprint_runtime_explain_json = fingerprint_runtime.as_ref().map(|runtime| {
+        let consumption_status = fingerprint_consumption_status(runtime);
+        json!({
+            "fingerprint_budget_tag": Value::Null,
+            "fingerprint_consistency": Value::Null,
+            "consumption_source_of_truth": FINGERPRINT_CONSUMPTION_SOURCE_RUNTIME,
+            "consumption_version": runtime.consumption.consumption_version.clone(),
+            "consumption_status": consumption_status,
+            "warning": runtime.consumption.partial_support_warning.clone(),
+            "consumption_explain": {
+                "declared_fields": runtime.consumption.declared_fields,
+                "resolved_fields": runtime.consumption.resolved_fields,
+                "applied_fields": runtime.consumption.applied_fields,
+                "ignored_fields": runtime.consumption.ignored_fields,
+                "declared_count": runtime.consumption.declared_count(),
+                "resolved_count": runtime.consumption.resolved_count(),
+                "applied_count": runtime.consumption.applied_count(),
+                "ignored_count": runtime.consumption.ignored_count(),
+                "consumption_status": consumption_status,
+                "consumption_version": runtime.consumption.consumption_version.clone(),
+                "partial_support_warning": runtime.consumption.partial_support_warning.clone()
+            }
+        })
+    });
 
     let mut payload = json!({
         "runner": "lightpanda",
@@ -944,6 +955,7 @@ fn result_payload(
         "timeout_seconds": timeout_seconds,
         "fingerprint_profile": fingerprint_profile,
         "proxy": proxy_json,
+        "fingerprint_runtime_explain": fingerprint_runtime_explain_json,
         "fingerprint_runtime": fingerprint_runtime_json,
         "bin": bin,
         "exit_code": exit_code,
@@ -1420,22 +1432,8 @@ fn classify_execution_stage(
     }
 }
 
-fn fingerprint_consumption_status(runtime: &LightpandaFingerprintRuntime) -> &'static str {
-    let supported_field_count = runtime
-        .applied_fields
-        .iter()
-        .filter(|field| *field != "profile_id" && *field != "profile_version")
-        .count();
-    let unsupported_field_count = runtime.ignored_fields.len();
-    if supported_field_count == 0 && unsupported_field_count == 0 {
-        "metadata_only"
-    } else if supported_field_count == 0 {
-        "ignored_only"
-    } else if unsupported_field_count == 0 {
-        "fully_consumed"
-    } else {
-        "partially_consumed"
-    }
+fn fingerprint_consumption_status(runtime: &LightpandaFingerprintRuntime) -> &str {
+    runtime.consumption.consumption_status.as_str()
 }
 
 fn readiness_expression() -> &'static str {
@@ -4044,8 +4042,23 @@ fn signal_process_group(pid: u32, signal: i32) -> Result<(), String> {
 }
 
 #[cfg(not(unix))]
-fn signal_process_group(_pid: u32, _signal: i32) -> Result<(), String> {
-    Ok(())
+fn signal_process_group(pid: u32, _signal: i32) -> Result<(), String> {
+    let pid_text = pid.to_string();
+    let output = std::process::Command::new("taskkill")
+        .args(["/PID", &pid_text, "/T", "/F"])
+        .output()
+        .map_err(|err| err.to_string())?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.to_lowercase().contains("not found") {
+        Ok(())
+    } else {
+        Err(format!("taskkill failed: {}", stderr.trim()))
+    }
 }
 
 async fn shutdown_spawned_process(spawned: &mut SpawnedLightpanda) -> Result<Option<i32>, String> {
@@ -4133,6 +4146,27 @@ where
 }
 
 impl LightpandaRunner {
+    fn registered_pid(&self, task_id: &str) -> Option<u32> {
+        let guard = self
+            .running_tasks
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.get(task_id).copied()
+    }
+
+    async fn wait_for_registered_pid(&self, task_id: &str, max_wait: Duration) -> Option<u32> {
+        let deadline = Instant::now() + max_wait;
+        loop {
+            if let Some(pid) = self.registered_pid(task_id) {
+                return Some(pid);
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    }
+
     fn register_pid(&self, task_id: &str, pid: u32) {
         let mut guard = self
             .running_tasks
@@ -4165,13 +4199,9 @@ impl TaskRunner for LightpandaRunner {
     }
 
     async fn cancel_running(&self, task_id: &str) -> RunnerCancelResult {
-        let pid = {
-            let guard = self
-                .running_tasks
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            guard.get(task_id).copied()
-        };
+        let pid = self
+            .wait_for_registered_pid(task_id, Duration::from_millis(1500))
+            .await;
 
         match pid {
             Some(pid) => match signal_process_group(pid, libc::SIGTERM) {

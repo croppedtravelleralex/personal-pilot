@@ -3,6 +3,7 @@ pub mod api;
 pub mod app;
 pub mod behavior;
 pub mod db;
+pub mod desktop;
 pub mod domain;
 pub mod gateway;
 pub mod humanize;

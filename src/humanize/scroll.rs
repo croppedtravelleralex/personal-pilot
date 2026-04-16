@@ -26,10 +26,7 @@ pub struct ScrollPlan {
 }
 
 /// Build a humanized scroll plan toward a target distance/position
-pub fn build_scroll_plan(
-    target_distance_px: u32,
-    config: &HumanizationConfig,
-) -> ScrollPlan {
+pub fn build_scroll_plan(target_distance_px: u32, config: &HumanizationConfig) -> ScrollPlan {
     let scroll = &config.scroll;
 
     // No humanization — instant scroll
@@ -58,7 +55,9 @@ pub fn build_scroll_plan(
     // Hover before scrolling (like human positioning mouse first)
     if let Some(hover_ms) = scroll.hover_before_scroll_ms {
         let jitter = rng.gen_range(0..=30);
-        steps.push(ScrollStep::Pause { duration_ms: hover_ms + jitter });
+        steps.push(ScrollStep::Pause {
+            duration_ms: hover_ms + jitter,
+        });
         total_ms += hover_ms + jitter;
     }
 
@@ -72,7 +71,9 @@ pub fn build_scroll_plan(
 
     // Phase 2: pause at overshoot (reading / orienting)
     let pause1 = rng.gen_range(200..=450);
-    steps.push(ScrollStep::Pause { duration_ms: pause1 });
+    steps.push(ScrollStep::Pause {
+        duration_ms: pause1,
+    });
     total_ms += pause1;
 
     // Phase 3: scroll back to real target
@@ -135,8 +136,15 @@ mod tests {
         let plan = build_scroll_plan(500, &config);
 
         // Should have overshoot + return, not just single scroll
-        assert!(plan.steps.len() >= 3, "should have multiple steps, got {}", plan.steps.len());
-        assert!(plan.total_distance_px > 500, "total distance should exceed target due to overshoot");
+        assert!(
+            plan.steps.len() >= 3,
+            "should have multiple steps, got {}",
+            plan.steps.len()
+        );
+        assert!(
+            plan.total_distance_px > 500,
+            "total distance should exceed target due to overshoot"
+        );
     }
 
     #[test]

@@ -6,7 +6,6 @@ use super::config::{FailureStyle, HumanizationConfig};
 
 /// Error codes that can occur during browser action execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ActionErrorCode {
     /// Target element not found on the page
     ElementNotFound,
@@ -200,7 +199,10 @@ mod tests {
 
     #[test]
     fn test_non_fatal_error_retries() {
-        let config = medium_config();
+        let mut config = medium_config();
+        if let FailureStyle::Human { give_up_chance, .. } = &mut config.failure {
+            *give_up_chance = 0.0;
+        }
         let decision = humanized_retry_decision(ActionErrorCode::ElementNotFound, 0, &config);
         assert!(matches!(
             decision.action,

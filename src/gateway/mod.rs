@@ -10,7 +10,10 @@ use std::{
 use anyhow::Result as AnyhowResult;
 use axum::{
     extract::State,
-    http::{header::{AUTHORIZATION, HOST}, HeaderMap, StatusCode, Uri},
+    http::{
+        header::{AUTHORIZATION, HOST},
+        HeaderMap, StatusCode, Uri,
+    },
     response::{IntoResponse, Response},
     routing::{get, get_service, post},
     Json, Router,
@@ -235,7 +238,8 @@ async fn serve_dashboard_index(
                     "bootstrapPath": "/public/dashboard/bootstrap"
                 }))
             } else {
-                state.admin_token
+                state
+                    .admin_token
                     .as_deref()
                     .map(|token| json!({ "adminToken": token }))
             };
@@ -321,7 +325,10 @@ async fn admin_stats(State(state): State<GatewayState>, headers: HeaderMap) -> R
     Json(build_gateway_stats_snapshot(&state)).into_response()
 }
 
-async fn dashboard_session_info(State(state): State<GatewayState>, headers: HeaderMap) -> impl IntoResponse {
+async fn dashboard_session_info(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let public_preview = is_public_preview_request(&state, &headers);
     Json(json!({
         "admin_token": if public_preview { Value::Null } else { serde_json::to_value(state.admin_token.clone()).unwrap_or(Value::Null) },

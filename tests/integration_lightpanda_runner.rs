@@ -8,10 +8,6 @@ use axum::{
     http::{Request, StatusCode},
 };
 use futures_util::{SinkExt, StreamExt};
-use serde_json::{json, Value};
-use tokio::{net::TcpListener, sync::Mutex};
-use tokio_tungstenite::{accept_async, tungstenite::Message};
-use tower::ServiceExt;
 use persona_pilot::{
     api::routes::build_router,
     app::build_app_state,
@@ -26,6 +22,10 @@ use persona_pilot::{
     },
     runner::{lightpanda::LightpandaRunner, spawn_runner_workers},
 };
+use serde_json::{json, Value};
+use tokio::{net::TcpListener, sync::Mutex};
+use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tower::ServiceExt;
 
 const DEFAULT_LIGHTPANDA_TEST_PROXY_ID: &str = "proxy-lightpanda-default";
 
@@ -47,7 +47,12 @@ async fn json_response(app: &axum::Router, request: Request<Body>) -> (StatusCod
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("body bytes");
-    let json = serde_json::from_slice::<Value>(&body).expect("json body");
+    let json = serde_json::from_slice::<Value>(&body).unwrap_or_else(|error| {
+        panic!(
+            "json body: {error}; raw_body={}",
+            String::from_utf8_lossy(&body)
+        )
+    });
     (status, json)
 }
 
@@ -70,13 +75,119 @@ async fn wait_for_terminal_status(app: &axum::Router, task_id: &str) -> Value {
     panic!("task did not reach terminal status in time");
 }
 
+async fn wait_for_running_status(app: &axum::Router, task_id: &str) -> Value {
+    for _ in 0..40 {
+        let (_, json) = json_response(
+            app,
+            Request::builder()
+                .uri(format!("/tasks/{task_id}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        if json.get("status").and_then(Value::as_str) == Some("running") {
+            return json;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    panic!("task did not reach running status in time");
+}
+
+async fn wait_for_running_registration(state: &persona_pilot::app::state::AppState, task_id: &str) {
+    for _ in 0..40 {
+        let row: Option<(
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = sqlx::query_as(
+            r#"SELECT t.status, r.status, t.result_json, t.error_message, t.runner_id, t.heartbeat_at
+               FROM tasks t JOIN runs r ON r.task_id = t.id
+               WHERE t.id = ? ORDER BY r.attempt DESC LIMIT 1"#,
+        )
+        .bind(task_id)
+        .fetch_optional(&state.db)
+        .await
+        .expect("load task row");
+
+        let Some((task_status, run_status, _, _, runner_id, heartbeat_at)) = row else {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            continue;
+        };
+        if task_status == "running"
+            && run_status == "running"
+            && runner_id.is_some()
+            && heartbeat_at.is_some()
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    panic!("task did not register a running runner in time");
+}
+
+async fn wait_for_terminal_result_row(
+    state: &persona_pilot::app::state::AppState,
+    task_id: &str,
+) -> (
+    String,
+    String,
+    Value,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
+    for _ in 0..40 {
+        let row: Option<(
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = sqlx::query_as(
+            r#"SELECT t.status, r.status, t.result_json, t.error_message, t.runner_id, t.heartbeat_at
+               FROM tasks t JOIN runs r ON r.task_id = t.id
+               WHERE t.id = ? ORDER BY r.attempt DESC LIMIT 1"#,
+        )
+        .bind(task_id)
+        .fetch_optional(&state.db)
+        .await
+        .expect("load task row");
+
+        if let Some((
+            task_status,
+            run_status,
+            result_json_text,
+            error_message,
+            runner_id,
+            heartbeat_at,
+        )) = row
+        {
+            if let Some(result_json_text) = result_json_text {
+                return (
+                    task_status,
+                    run_status,
+                    serde_json::from_str(&result_json_text).expect("parse result"),
+                    error_message,
+                    runner_id,
+                    heartbeat_at,
+                );
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    panic!("task result row did not become ready in time");
+}
+
 async fn build_lightpanda_test_app(
     database_url: &str,
 ) -> anyhow::Result<(persona_pilot::app::state::AppState, axum::Router)> {
     let db = init_db(database_url).await?;
     seed_active_proxy(&db, DEFAULT_LIGHTPANDA_TEST_PROXY_ID, "lp-test", "us-east").await;
-    let runner: Arc<dyn persona_pilot::runner::TaskRunner> =
-        Arc::new(LightpandaRunner::default());
+    let runner: Arc<dyn persona_pilot::runner::TaskRunner> = Arc::new(LightpandaRunner::default());
     let state = build_app_state(db, runner.clone(), None, 1);
     spawn_runner_workers(state.clone(), runner, 1).await;
     let app = build_router(state.clone());
@@ -201,26 +312,188 @@ fn lightpanda_env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-fn make_stub_script(name: &str, body: &str) -> std::path::PathBuf {
+fn make_stub_script(name: &str, _unix_body: &str, windows_body: &str) -> std::path::PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let path = std::env::temp_dir().join(format!("{name}_{nanos}.sh"));
-    let normalized_body = if cfg!(unix) {
-        body.replacen("#!/usr/bin/env bash", "#!/bin/bash", 1)
-    } else {
-        body.to_string()
-    };
-    std::fs::write(&path, normalized_body).expect("write stub script");
-    #[cfg(unix)]
+
+    #[cfg(windows)]
     {
+        let path = std::env::temp_dir().join(format!("{name}_{nanos}.cmd"));
+        std::fs::write(&path, windows_body).expect("write stub script");
+        return path;
+    }
+
+    #[cfg(not(windows))]
+    {
+        let path = std::env::temp_dir().join(format!("{name}_{nanos}.sh"));
+        let normalized_body = _unix_body.replacen("#!/usr/bin/env bash", "#!/bin/bash", 1);
+        std::fs::write(&path, normalized_body).expect("write stub script");
         use std::os::unix::fs::PermissionsExt;
         let mut perms = std::fs::metadata(&path).expect("metadata").permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(&path, perms).expect("chmod");
+        path
     }
-    path
+}
+
+fn make_lightpanda_launcher_stub(name: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+
+    #[cfg(windows)]
+    {
+        let dir = std::env::temp_dir().join(format!("{name}_{nanos}"));
+        std::fs::create_dir_all(&dir).expect("create launcher dir");
+
+        let ps1_path = dir.join(format!("{name}.ps1"));
+        let cmd_path = dir.join(format!("{name}.cmd"));
+
+        std::fs::write(
+            &ps1_path,
+            r#"$port = $null
+for ($i = 0; $i -lt $args.Count; $i++) {
+    if ($args[$i] -eq '--port' -and $i + 1 -lt $args.Count) {
+        $port = [int]$args[$i + 1]
+        break
+    }
+}
+
+if ($null -eq $port) {
+    Write-Error "missing --port"
+    exit 64
+}
+
+$endpoint = $env:LIGHTPANDA_FAKE_WS_ENDPOINT
+if ([string]::IsNullOrWhiteSpace($endpoint)) {
+    Write-Error "missing LIGHTPANDA_FAKE_WS_ENDPOINT"
+    exit 65
+}
+
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), $port)
+$listener.Start()
+try {
+    while ($true) {
+        $client = $listener.AcceptTcpClient()
+        try {
+            $stream = $client.GetStream()
+            $buffer = New-Object byte[] 4096
+            $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
+            $request = [System.Text.Encoding]::ASCII.GetString($buffer, 0, $bytesRead)
+            if ($request.StartsWith("GET /json/version ")) {
+                $bodyText = @{ webSocketDebuggerUrl = $endpoint } | ConvertTo-Json -Compress
+                $body = [System.Text.Encoding]::UTF8.GetBytes($bodyText)
+                $headerText = "HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n"
+            } else {
+                $bodyText = "{}"
+                $body = [System.Text.Encoding]::UTF8.GetBytes($bodyText)
+                $headerText = "HTTP/1.1 404 Not Found`r`nContent-Type: application/json`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n"
+            }
+
+            $header = [System.Text.Encoding]::ASCII.GetBytes($headerText)
+            $stream.Write($header, 0, $header.Length)
+            $stream.Write($body, 0, $body.Length)
+            $stream.Flush()
+        } finally {
+            $client.Close()
+        }
+    }
+} finally {
+    $listener.Stop()
+}
+"#,
+        )
+        .expect("write launcher ps1");
+        std::fs::write(
+            &cmd_path,
+            format!(
+                "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File \"%~dp0{name}.ps1\" %*\r\n"
+            ),
+        )
+        .expect("write launcher cmd");
+        return cmd_path;
+    }
+
+    #[cfg(not(windows))]
+    {
+        return make_stub_script(
+            name,
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+
+port=""
+while (($#)); do
+    case "$1" in
+        --port)
+            port="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "${port:-}" ]]; then
+    echo "missing --port" >&2
+    exit 64
+fi
+
+python_bin="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+if [[ -z "$python_bin" ]]; then
+    echo "python interpreter not found" >&2
+    exit 127
+fi
+
+"$python_bin" - "$port" "${LIGHTPANDA_FAKE_WS_ENDPOINT:-}" <<'PY' &
+import http.server
+import json
+import signal
+import sys
+
+port = int(sys.argv[1])
+ws_endpoint = sys.argv[2]
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        return
+
+    def do_GET(self):
+        if self.path == "/json/version":
+            body = json.dumps({"webSocketDebuggerUrl": ws_endpoint}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        self.send_error(404)
+
+
+server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+server.daemon_threads = True
+
+
+def shutdown(*_args):
+    server.shutdown()
+
+
+signal.signal(signal.SIGTERM, shutdown)
+signal.signal(signal.SIGINT, shutdown)
+server.serve_forever()
+PY
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT INT TERM
+wait "$server_pid"
+"#,
+            "",
+        );
+    }
 }
 
 #[derive(Clone)]
@@ -237,6 +510,7 @@ enum FakeCdpScenario {
     NavigateError {
         error_text: &'static str,
     },
+    HangOnNavigate,
 }
 
 struct FakeCdpServer {
@@ -283,6 +557,7 @@ impl FakeCdpServer {
                     "Network.getCookies" => match &scenario {
                         FakeCdpScenario::Success { cookies, .. } => json!({ "cookies": cookies }),
                         FakeCdpScenario::NavigateError { .. } => json!({ "cookies": [] }),
+                        FakeCdpScenario::HangOnNavigate => json!({ "cookies": [] }),
                     },
                     "Page.navigate" => match &scenario {
                         FakeCdpScenario::Success { .. } => {
@@ -293,6 +568,9 @@ impl FakeCdpServer {
                             "loaderId": "loader-1",
                             "errorText": error_text
                         }),
+                        FakeCdpScenario::HangOnNavigate => {
+                            continue;
+                        }
                     },
                     "Runtime.evaluate" => {
                         let expression = payload
@@ -597,7 +875,7 @@ async fn lightpanda_runner_auto_session_restores_and_persists_cookies() {
                     "name": "Cookie Session",
                     "profile_json": {
                         "browser": {"name": "chrome", "version": "123"},
-                        "os": {"name": "linux", "version": "ubuntu"}
+                        "os": {"name": "windows", "version": "11"}
                     }
                 })
                 .to_string(),
@@ -1014,6 +1292,7 @@ async fn lightpanda_runner_timeout_marks_timed_out_and_cleans_state() {
     let script = make_stub_script(
         "lightpanda_timeout",
         "#!/usr/bin/env bash\nset -euo pipefail\nsleep 5\n",
+        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"Start-Sleep -Seconds 5\"\r\n",
     );
     std::env::set_var("LIGHTPANDA_BIN", &script);
     std::env::remove_var("LIGHTPANDA_TEST_WS_ENDPOINT");
@@ -1050,6 +1329,7 @@ async fn lightpanda_runner_non_zero_exit_marks_failed_before_endpoint_ready() {
     let script = make_stub_script(
         "lightpanda_non_zero",
         "#!/usr/bin/env bash\nset -euo pipefail\necho runner crashed >&2\nexit 42\n",
+        "@echo off\r\necho runner crashed 1>&2\r\nexit /b 42\r\n",
     );
     std::env::set_var("LIGHTPANDA_BIN", &script);
     std::env::remove_var("LIGHTPANDA_TEST_WS_ENDPOINT");
@@ -1094,32 +1374,18 @@ async fn lightpanda_runner_non_zero_exit_marks_failed_before_endpoint_ready() {
 #[tokio::test]
 async fn lightpanda_running_cancel_marks_cancelled() {
     let _env_guard = lightpanda_env_lock().lock().await;
-    let script = make_stub_script(
-        "lightpanda_cancel",
-        "#!/usr/bin/env bash\nset -euo pipefail\ntrap 'exit 143' TERM\nwhile true; do sleep 1; done\n",
-    );
-    std::env::set_var("LIGHTPANDA_BIN", &script);
+    let server = FakeCdpServer::start(FakeCdpScenario::HangOnNavigate).await;
+    let launcher = make_lightpanda_launcher_stub("lightpanda_cancel");
+    std::env::set_var("LIGHTPANDA_BIN", &launcher);
+    std::env::set_var("LIGHTPANDA_FAKE_WS_ENDPOINT", &server.endpoint);
     std::env::remove_var("LIGHTPANDA_TEST_WS_ENDPOINT");
 
     let db_url = unique_db_url();
     let (state, app) = build_lightpanda_test_app(&db_url).await.expect("build app");
     let task_id =
         create_browser_task(&app, "/browser/open", "https://example.com/cancel", 10).await;
-
-    for _ in 0..20 {
-        let (_, task_json) = json_response(
-            &app,
-            Request::builder()
-                .uri(format!("/tasks/{task_id}"))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await;
-        if task_json.get("status").and_then(Value::as_str) == Some("running") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(150)).await;
-    }
+    let _running_task = wait_for_running_status(&app, &task_id).await;
+    wait_for_running_registration(&state, &task_id).await;
 
     let (cancel_status, cancel_json) = json_response(
         &app,
@@ -1142,7 +1408,7 @@ async fn lightpanda_running_cancel_marks_cancelled() {
         Some(TASK_STATUS_CANCELLED)
     );
     let (task_status, run_status, result_json, task_error, runner_id, heartbeat_at) =
-        load_result_row(&state, &task_id).await;
+        wait_for_terminal_result_row(&state, &task_id).await;
     assert_eq!(task_status, TASK_STATUS_CANCELLED);
     assert_eq!(run_status, RUN_STATUS_CANCELLED);
     assert_eq!(task_error.as_deref(), Some("task cancelled while running"));
@@ -1161,6 +1427,36 @@ async fn lightpanda_running_cancel_marks_cancelled() {
         Some("runner_cancelled")
     );
 
+    let cancel_logs: Vec<(String, String, Option<String>)> = sqlx::query_as(
+        r#"SELECT level, message, run_id
+           FROM logs
+           WHERE task_id = ?
+           ORDER BY created_at ASC, id ASC"#,
+    )
+    .bind(&task_id)
+    .fetch_all(&state.db)
+    .await
+    .expect("load cancel logs");
+    assert!(
+        cancel_logs
+            .iter()
+            .any(|(level, message, _)| level.eq_ignore_ascii_case("warn")
+                && message.contains("cancel")),
+        "cancel logs: {cancel_logs:?}"
+    );
+
+    std::env::remove_var("LIGHTPANDA_FAKE_WS_ENDPOINT");
     std::env::remove_var("LIGHTPANDA_BIN");
-    let _ = std::fs::remove_file(script);
+    #[cfg(windows)]
+    {
+        if let Some(parent) = launcher.parent() {
+            let _ = std::fs::remove_dir_all(parent);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::fs::remove_file(&launcher);
+    }
+    std::env::remove_var("LIGHTPANDA_TEST_WS_ENDPOINT");
+    server.stop().await;
 }

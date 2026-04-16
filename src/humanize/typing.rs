@@ -32,7 +32,10 @@ pub fn build_typing_plan(text: &str, config: &HumanizationConfig) -> TypingPlan 
 
     // Edge case
     if text.is_empty() {
-        return TypingPlan { events, total_ms: 0 };
+        return TypingPlan {
+            events,
+            total_ms: 0,
+        };
     }
 
     for (i, ch) in text.chars().enumerate() {
@@ -41,7 +44,9 @@ pub fn build_typing_plan(text: &str, config: &HumanizationConfig) -> TypingPlan 
         let pre_ms = rng.gen_range(0..=pre_delay);
         if pre_ms > 0 {
             total_ms += pre_ms;
-            events.push(TypingEvent::Pause { duration_ms: pre_ms });
+            events.push(TypingEvent::Pause {
+                duration_ms: pre_ms,
+            });
         }
 
         // Occasional mid-text "thinking" pause
@@ -53,7 +58,8 @@ pub fn build_typing_plan(text: &str, config: &HumanizationConfig) -> TypingPlan 
 
         // Determine base interval for this character
         let base_interval = 60000 / pattern.base_wpm.max(1);
-        let variance = (base_interval as f32 * pattern.speed_variance_percent as f32 / 100.0) as u32;
+        let variance =
+            (base_interval as f32 * pattern.speed_variance_percent as f32 / 100.0) as u32;
         let interval = if variance > 0 {
             rng.gen_range(base_interval.saturating_sub(variance)..=base_interval + variance)
         } else {
@@ -70,23 +76,34 @@ pub fn build_typing_plan(text: &str, config: &HumanizationConfig) -> TypingPlan 
         // Simulate typo + correction
         if pattern.error_retry_chance > 0.0 && rng.gen::<f32>() < pattern.error_retry_chance {
             // Type wrong character first
-            events.push(TypingEvent::Key { ch, interval_ms: adjusted_interval / 2 });
+            events.push(TypingEvent::Key {
+                ch,
+                interval_ms: adjusted_interval / 2,
+            });
             total_ms += adjusted_interval / 2;
 
             // Brief pause to "notice" the mistake
             let notice_pause: u32 = rng.gen_range(150..=350);
             total_ms += notice_pause;
-            events.push(TypingEvent::Pause { duration_ms: notice_pause });
+            events.push(TypingEvent::Pause {
+                duration_ms: notice_pause,
+            });
 
             // Backspace
             events.push(TypingEvent::Backspace { interval_ms: 80 });
             total_ms += 80;
 
             // Retype correctly
-            events.push(TypingEvent::Key { ch, interval_ms: adjusted_interval });
+            events.push(TypingEvent::Key {
+                ch,
+                interval_ms: adjusted_interval,
+            });
             total_ms += adjusted_interval;
         } else {
-            events.push(TypingEvent::Key { ch, interval_ms: adjusted_interval });
+            events.push(TypingEvent::Key {
+                ch,
+                interval_ms: adjusted_interval,
+            });
             total_ms += adjusted_interval;
         }
 
@@ -94,7 +111,9 @@ pub fn build_typing_plan(text: &str, config: &HumanizationConfig) -> TypingPlan 
         if ch.is_whitespace() && i < text.len() - 1 {
             let word_pause: u32 = rng.gen_range(30..=80);
             total_ms += word_pause;
-            events.push(TypingEvent::Pause { duration_ms: word_pause });
+            events.push(TypingEvent::Pause {
+                duration_ms: word_pause,
+            });
         }
     }
 
@@ -138,12 +157,18 @@ mod tests {
 
     #[test]
     fn test_hello_plan() {
-        let config = medium_config();
+        let mut config = medium_config();
+        // This assertion targets the character-to-key mapping, so disable typo retries.
+        config.typing.error_retry_chance = 0.0;
         let plan = build_typing_plan("hello", &config);
         assert!(!plan.events.is_empty());
         assert!(plan.total_ms > 0);
         // Should contain at least 5 key events (one per char)
-        let key_count = plan.events.iter().filter(|e| matches!(e, TypingEvent::Key { .. })).count();
+        let key_count = plan
+            .events
+            .iter()
+            .filter(|e| matches!(e, TypingEvent::Key { .. }))
+            .count();
         assert_eq!(key_count, 5, "should have 5 key events for 'hello'");
     }
 
@@ -152,7 +177,11 @@ mod tests {
         let config = HumanizationConfig::from_level(super::super::config::HumanizationLevel::None);
         let plan = build_typing_plan("test", &config);
         // With None level, there should be no pauses or corrections
-        let pauses: usize = plan.events.iter().filter(|e| matches!(e, TypingEvent::Pause { .. })).count();
+        let pauses: usize = plan
+            .events
+            .iter()
+            .filter(|e| matches!(e, TypingEvent::Pause { .. }))
+            .count();
         assert_eq!(pauses, 0, "no pauses when humanization is None");
     }
 }

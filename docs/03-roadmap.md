@@ -1,96 +1,65 @@
-# 03 路线图
+# 03 Roadmap
+Updated: 2026-04-16 (Asia/Shanghai)
 
-## 主线说明
+## Unified Progress Truth
 
-当前路线图以“长期身份连续性控制面”为主线，不再把工作重心放在单纯的 visibility 或临时跑通能力上。
+- mainline delivery: `95% / 7% / green`
+- overall end-state: `30% / 70% / yellow`
 
-冻结目标：
+## Phase A: Mainline Closeout
 
-- `persona`：店铺级、平台独立
-- 终端：桌面优先
-- 运行模型：低频心跳 + 任务驱动
-- 恢复边界：仅温和恢复
-- 地区一致性：国家和地区都严格
-- 人工接管：Telegram + API
-- 冻结范围：仅冻结当前 `persona`
+This phase is the current shipping track. It is not the same thing as the long-term “complete app” target.
 
-## 已完成：Phase 1 基线
+### Current blockers
 
-已完成并通过远端 targeted 验证：
+1. `Proxy / IP`: move from provider-aware local closure to true provider API rotation.
+2. `Synchronizer`: move from live read/focus to native `set main / layout / broadcast`.
+3. `Recorder / Templates`: move from desktop step-write to deeper native capture / template closure.
 
-- 控制面 schema / API / 路由接通
-- `persona_id` 进入 task/browser 契约
-- `/status` 可按 persona 展示健康摘要与 continuity 指标
-- manual gate 与 continuity event 时间线基线
-- runner 的状态 restore / persist 基础闭环
+### Exit condition
 
-## P0：收口 Phase 2 状态闭环
+- keep the current Win11 desktop shell stable
+- finish the remaining native-closeout slice without reopening architecture scope
+- preserve `src/services/desktop.ts` as the only invoke boundary
 
-目标：
+### Detailed stage board
 
-- 把当前 restore / persist 基础能力升级为可长期运行的正式闭环
-- 补齐 heartbeat、snapshot 生命周期和断裂保护
+Use `docs/19-phase-plan-and-scorecard.md` as the canonical detailed execution board for:
 
-当前重点：
+1. `A1 Proxy / IP closeout`
+2. `A2 Synchronizer native closure`
+3. `A3 Recorder / Templates native closure`
+4. `A4 Mainline release gate`
 
-1. 已完成最小 heartbeat tick / 入队 / 去重 / 主进程 loop
-2. 补 heartbeat 失败治理、证据与观测
-3. 快照版本治理、校验、清理、归档
-4. login loss / region drift / snapshot restore fail 的统一断裂判定
-5. `/status` 与 health snapshot 聚合口径稳定
+## Phase B: Overall End-State Expansion
 
-## P1：小红书先打透
+This phase covers the broader target the user keeps asking about and is the reason the overall end-state is still `30% / 70%`.
 
-目标：
+### Capability tracks
 
-- 在统一 schema 下，把小红书做成首个完整样板平台
+1. `Validation board`: detector, leak, transport, and coherence evidence across fingerprint / proxy / runtime layers.
+2. `Fingerprint runtime depth`: move beyond the current `12` projected fields and establish applied vs observed coverage.
+3. `Session bundle`: stabilize profile groups, import/export, cookie-storage continuity metadata, and long-session portability.
+4. `450+ fingerprint signals`: grow total observation coverage without turning the product into `450` random knobs.
+5. `450+ event taxonomy`: grow from the current `13` shipped primitives into a composable replayable event grammar.
+6. `AdsPower boundary refresh`: re-evaluate realism, headed runtime depth, proxy ecosystem, and automation breadth after each major expansion.
+7. `External integration plan`: land high-ROI assets from the external research set without breaking the Win11 / Tauri baseline.
 
-当前重点：
+### Detailed stage board
 
-1. 完整小红书平台模板
-2. 完整 continuity checks / login loss signals / recovery steps
-3. manual gate 分类细化
-4. Telegram + API 接管链路收口
-5. 形成 30 天 persona 连续性验收口径
+Use `docs/19-phase-plan-and-scorecard.md` as the canonical detailed execution board for:
 
-## P1：其余 6 平台补齐 baseline readiness
+1. `B1 Validation foundation`
+2. `B2 Fingerprint model and runtime depth`
+3. `B3 Session / Proxy orchestration`
+4. `B4 Event grammar and automation expansion`
+5. `B5 Runtime adapter and external integration`
+6. `B6 AdsPower boundary refresh`
 
-覆盖平台：
+## Re-Verify Rule
 
-- Amazon
-- eBay
-- Shopify
-- Walmart
-- TikTok Shop
-- 独立站后台
-- 小红书
+Before claiming further mainline progress again, re-pass:
 
-除小红书外，其余平台当前目标不是一次性打透，而是先达到 baseline：
-
-1. persona 绑定
-2. 模板可挂载
-3. warm / revisit / stateful 路径可定义
-4. login loss / region drift 可判定
-5. 高风险路径可进入 manual gate
-
-## P2：长稳运营化
-
-目标：
-
-- 从“能跑”升级到“可长期运营”
-
-当前规划：
-
-1. persona 健康度快照与 30/90 天趋势
-2. 批量店铺级调度与容量治理
-3. 事件时间线分页查询与归档策略
-4. `10-50` 店铺级身份的长期并行运行
-
-## 配套子线
-
-以下工作继续保留，但降级为主线配套子任务：
-
-- proxy / fingerprint explainability
-- `/status` 观测口径细化
-- release / preflight / longrun 验证脚本
-- targeted integration tests 与回归门禁
+1. `cargo test --quiet`
+2. `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
+3. `pnpm desktop:release`
