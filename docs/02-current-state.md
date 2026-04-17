@@ -9,6 +9,14 @@ Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Verified Evidence
 
+## Runtime Alive
+
+- a live runtime, started shell, or green snapshot read does not by itself mean delivery closure
+- native-live, staged, and fallback paths must stay distinguished in reporting
+- current synchronizer broadcast can record native intent, but physical multi-window dispatch is still not landed
+
+## Build Status
+
 Full-gate baseline retained from `2026-04-16`:
 
 - `cargo test --quiet`

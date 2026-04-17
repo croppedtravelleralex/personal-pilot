@@ -3,6 +3,8 @@
 This root `STATUS.md` is a compatibility entrypoint.
 Canonical status now lives in `/docs/02-current-state.md`.
 
+Gateway guardrail anchor: `upstream_configured=false`
+
 ## Current Truth Markers
 
 - mainline reporting baseline is `95% / 7% / green`

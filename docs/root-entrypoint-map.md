@@ -1,6 +1,6 @@
 # Root Entrypoint Map
 
-Updated: 2026-04-16
+Updated: 2026-04-17
 
 ## Purpose
 
@@ -25,8 +25,10 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
   - canonical split for `80 / 12 / 13 / persistence / 450+` and overall end-state framing
 - `/docs/19-phase-plan-and-scorecard.md`
   - canonical detailed phase plan, scorecard, and AdsPower benchmark report
+- `/docs/20-wave-2a-execution-plan.md`
+  - current bounded execution pack for the mainline closeout wave; not the canonical wave board or release gate
 - `/docs/12-final-18-percent-delivery-plan.md`
-  - current closure board kept under the historical path
+  - historical closure board kept for legacy path/context only
 - `/docs/13-adspower-deep-comparison.md`
   - AdsPower boundary comparison on the overall end-state track
 - `/docs/18-external-browser-integration-plan.md`
@@ -37,6 +39,7 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
 ## Root Compatibility Entrypoints
 
 - `/README.md` -> `/docs/README.md`
+- `/CURRENT_TASK.md` -> current root snapshot aligned to `/docs/02-current-state.md` + `/docs/19-phase-plan-and-scorecard.md`
 - `/STATUS.md` -> `/docs/02-current-state.md`
 - `/AI.md` -> `/docs/05-ai-maintenance-playbook.md`
 - `/PLAN.md` -> `/docs/03-roadmap.md` + `/docs/04-improvement-backlog.md`

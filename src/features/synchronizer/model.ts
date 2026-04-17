@@ -2,6 +2,7 @@ import type {
   DesktopSyncLayoutMode,
   DesktopSyncLayoutState,
   DesktopSyncWindowState,
+  DesktopSynchronizerBroadcastChannel,
   DesktopSynchronizerSnapshot,
 } from "../../types/desktop";
 
@@ -96,6 +97,7 @@ export type SynchronizerLayoutFlag = "syncNavigation" | "syncInput" | "syncScrol
 
 export interface SynchronizerBroadcastPlanTemplate {
   id: string;
+  channel: DesktopSynchronizerBroadcastChannel;
   title: string;
   detail: string;
   scopeLabel: string;
@@ -197,6 +199,7 @@ export const SYNCHRONIZER_TARGET_SCREEN_OPTIONS: Array<{
 export const SYNCHRONIZER_BROADCAST_PLAN_TEMPLATES: SynchronizerBroadcastPlanTemplate[] = [
   {
     id: "nav-mirror",
+    channel: "navigation",
     title: "Mirror navigation from main",
     detail:
       "Run navigation synchronization from the main window to the current controlled scope when navigation sync is enabled.",
@@ -206,6 +209,7 @@ export const SYNCHRONIZER_BROADCAST_PLAN_TEMPLATES: SynchronizerBroadcastPlanTem
   },
   {
     id: "input-burst",
+    channel: "input",
     title: "Shared input burst",
     detail:
       "Apply synchronized input pacing from the focused or main lane using the current operator click/typing safeguards.",
@@ -215,6 +219,7 @@ export const SYNCHRONIZER_BROADCAST_PLAN_TEMPLATES: SynchronizerBroadcastPlanTem
   },
   {
     id: "scroll-checkpoint",
+    channel: "scroll",
     title: "Scroll alignment checkpoint",
     detail:
       "Apply a scroll-alignment pass for visual compare and QA across the visible operator scope.",
@@ -224,9 +229,10 @@ export const SYNCHRONIZER_BROADCAST_PLAN_TEMPLATES: SynchronizerBroadcastPlanTem
   },
   {
     id: "layout-regroup",
-    title: "Regroup before broadcast",
+    channel: "navigation",
+    title: "Regrouped navigation checkpoint",
     detail:
-      "Normalize layout and lane state before applying a wider broadcast action across the matrix.",
+      "Use a wider navigation checkpoint after regrouping the matrix so the native synchronizer records refreshed scope and intent.",
     scopeLabel: "Whole matrix",
     intensity: "strong",
     requiredFlags: [],
@@ -278,7 +284,7 @@ export function createInitialCommandCapabilities(): Record<
       label: "Layout write",
       status: "local_staged",
       detail:
-        'Layout write currently remains intention-only and targets synchronizer internal layout state. Physical apply outcome will surface as "applied/partial/failed" when native physical layout execution lands.',
+        'Layout write is wired to native physical window placement. Until the first successful command in this session, the console keeps the capability staged; live outcomes surface as "applied/partial/failed" after execution.',
       lastUpdatedAt: null,
     },
     setMain: {
@@ -302,7 +308,7 @@ export function createInitialCommandCapabilities(): Record<
       label: "Broadcast write",
       status: "local_staged",
       detail:
-        "Broadcast execution remains prepared/intention-only in this build. Native path records intent/layout flags and snapshot state; physical multi-window dispatch is not implemented.",
+        "Broadcast write is wired to the native intent-recording contract. Successful runs update native synchronizer state and target scope, while physical multi-window dispatch remains unimplemented.",
       lastUpdatedAt: null,
     },
   };

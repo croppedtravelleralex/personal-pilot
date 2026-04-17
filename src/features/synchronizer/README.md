@@ -1,20 +1,22 @@
 # Synchronizer Feature
 
-负责同步控制台的矩阵视图、操作编排和反馈状态。页面侧不直接调用原生能力，统一通过 `services/desktop.ts`。
+Owns the synchronizer matrix view, operator controls, and native capability feedback.
+UI code does not invoke Tauri directly; all native access stays behind `src/services/desktop.ts`.
 
 ## Current capability boundary
 
 - `listSyncWindows` / `readSynchronizerSnapshot` / `readSyncLayoutState`
-  - 读取 native synchronizer snapshot 和布局状态。
+  - Read native synchronizer snapshot and layout state.
 - `setMainSyncWindow`
-  - 写入 synchronizer 内部主窗口锚点状态，不包含物理窗口重排。
+  - Update the synchronizer main-window anchor in native state.
 - `applyWindowLayout`
-  - 写入 synchronizer 内部布局状态，不包含物理桌面窗口重排。
+  - Apply native window layout planning and surface physical placement outcome through the returned snapshot and message.
 - `focusSyncWindow`
-  - 走 native Win32 焦点控制。
+  - Use native Win32 focus control.
 - `broadcastSyncAction`
-  - 能力门控执行：有契约时记录 broadcast intent 与布局标志并回写快照；无契约时保留 prepared/fallback。
-  - 当前不包含物理多窗口事件分发。
+  - Execute the typed native broadcast-intent contract.
+  - Successful runs record native intent, source/target scope, and layout-flag state.
+  - Physical multi-window event dispatch is still not implemented.
 
 ## Module split
 

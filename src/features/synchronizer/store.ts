@@ -3,6 +3,7 @@ import { createStore } from "../../store/createStore";
 import type {
   DesktopSyncLayoutMode,
   DesktopSynchronizerActionResult,
+  DesktopSynchronizerBroadcastRequest,
   DesktopSyncWindowState,
   DesktopSynchronizerSnapshot,
 } from "../../types/desktop";
@@ -117,63 +118,8 @@ function nowTs(): string {
   return String(Math.floor(Date.now() / 1000));
 }
 
-interface SynchronizerBroadcastExecutionRequest {
-  planId: string;
-  sourceWindowId: string | null;
-  targetWindowIds: string[];
-  requiredFlags: SynchronizerLayoutFlag[];
-  layout: DesktopSynchronizerSnapshot["layout"];
-  operatorSettings: SynchronizerOperatorSettings;
-  requestedAt: string;
-}
-
-interface DesktopSynchronizerBroadcastResult {
-  snapshot: DesktopSynchronizerSnapshot;
-  action?: string;
-  message?: string;
-  updatedAt?: string;
-}
-
-type DesktopSynchronizerBroadcastInvoker = (
-  request: SynchronizerBroadcastExecutionRequest,
-) => Promise<DesktopSynchronizerBroadcastResult>;
-
-const BROADCAST_CONTRACT_CANDIDATES = [
-  "runSyncBroadcast",
-  "runSynchronizerBroadcast",
-  "applySyncBroadcast",
-  "applySynchronizerBroadcast",
-  "executeSyncBroadcast",
-  "executeSynchronizerBroadcast",
-  "broadcastSyncAction",
-  "broadcastSyncActions",
-] as const;
-
-function resolveBroadcastInvoker(): {
-  key: string;
-  invoke: DesktopSynchronizerBroadcastInvoker;
-} | null {
-  const namespace = desktop as unknown as Record<string, unknown>;
-  for (const key of BROADCAST_CONTRACT_CANDIDATES) {
-    const candidate = namespace[key];
-    if (typeof candidate === "function") {
-      return {
-        key,
-        invoke: candidate as DesktopSynchronizerBroadcastInvoker,
-      };
-    }
-  }
-
-  return null;
-}
-
 function getBroadcastCapabilityHint(): string {
-  const resolved = resolveBroadcastInvoker();
-  if (resolved) {
-    return `Broadcast contract "${resolved.key}" is exported in this build. Native intent recording can run when command readiness checks pass, but physical multi-window dispatch remains intention-only.`;
-  }
-
-  return "No broadcast contract is exported in this build yet. Plans remain prepared only with explicit native-readiness feedback.";
+  return 'Broadcast execution uses the typed desktop contract "broadcastSyncAction". Successful native runs record intent and target scope in the desktop snapshot, while physical multi-window dispatch remains intention-only.';
 }
 
 function getBroadcastTargetWindows(
@@ -204,7 +150,7 @@ function buildBroadcastRequest(
   state: SynchronizerState,
   summary: ReturnType<typeof getSynchronizerSummary>,
   plan: SynchronizerBroadcastPlanTemplate,
-): SynchronizerBroadcastExecutionRequest {
+): DesktopSynchronizerBroadcastRequest {
   const sourceWindowId =
     summary.mainWindow?.windowId ?? summary.focusedWindow?.windowId ?? state.selectedWindowId;
   const targetWindowIds = getBroadcastTargetWindows(state, summary).map(
@@ -212,13 +158,10 @@ function buildBroadcastRequest(
   );
 
   return {
-    planId: plan.id,
+    channel: plan.channel,
     sourceWindowId: sourceWindowId ?? null,
     targetWindowIds,
-    requiredFlags: [...plan.requiredFlags],
-    layout: cloneSynchronizerSnapshot(state.snapshot).layout,
-    operatorSettings: { ...state.operatorSettings },
-    requestedAt: nowTs(),
+    intentLabel: `${plan.id}:${plan.title}`,
   };
 }
 
@@ -1195,7 +1138,6 @@ export const synchronizerActions = {
       return;
     }
 
-    const resolved = resolveBroadcastInvoker();
     synchronizerStore.setState((current) => ({
       ...current,
       stagedBroadcastPlanId: plan.id,
@@ -1206,50 +1148,23 @@ export const synchronizerActions = {
       "broadcastPlan",
       "Broadcast remains prepared (intention-only)",
       `${plan.title} is prepared for ${request.targetWindowIds.length} target windows. Native broadcast is unavailable in this session, so no fallback execution was performed.`,
-      async () => {
-        if (!resolved) {
-          throw new desktop.DesktopServiceError(
-            "TODO: runBroadcastPlan native contract is not implemented yet.",
-            "desktop_command_not_ready",
-          );
-        }
-
-        const result = await resolved.invoke(request);
-        if (!isSynchronizerSnapshot(result?.snapshot)) {
-          throw new desktop.DesktopServiceError(
-            "Native broadcast contract returned an invalid synchronizer snapshot payload.",
-            "desktop_error",
-            result,
-          );
-        }
-        return {
-          snapshot: result.snapshot,
-          action: readString(result.action) ?? "broadcast_sync_action",
-          message:
-            readString(result.message) ??
-            "Broadcast intent was recorded through native contract.",
-        };
-      },
+      async () => desktop.broadcastSyncAction(request),
       (snapshot) => ({
         ...snapshot,
         updatedAt: nowTs(),
       }),
       {
-        successTitle: "Broadcast intent recorded",
-        successInfo: resolved
-          ? `${plan.title} intent was recorded through ${resolved.key} for ${request.targetWindowIds.length} target windows. Physical multi-window dispatch remains intention-only in this build.`
-          : undefined,
-        successCapabilityDetail: resolved
-          ? `Broadcast intent was recorded through native contract "${resolved.key}" for ${request.targetWindowIds.length} targets. Physical dispatch remains intention-only.`
-          : undefined,
-        successFeedDetail: resolved
-          ? `${plan.scopeLabel} - ${request.targetWindowIds.length} targets - native broadcast intent recorded; physical dispatch not executed.`
-          : undefined,
+        successTitle: "Broadcast intent recorded natively",
+        successInfo: `${plan.title} intent was recorded through broadcastSyncAction for ${request.targetWindowIds.length} target windows. Physical multi-window dispatch remains intention-only in this build.`,
+        successCapabilityDetail:
+          `Broadcast intent was recorded through native contract "broadcastSyncAction" for ${request.targetWindowIds.length} targets on channel "${plan.channel}". Physical dispatch remains intention-only.`,
+        successFeedDetail:
+          `${plan.scopeLabel} - ${request.targetWindowIds.length} targets - native broadcast intent recorded on channel "${plan.channel}"; physical dispatch not executed.`,
         successTone: "warning",
-        successExecutionMode: "local_staged",
-        successCapabilityStatus: "local_staged",
+        successExecutionMode: "native_live",
+        successCapabilityStatus: "native_live",
         notReadyInfo:
-          "Native broadcast contract is not exposed in this build yet. The prepared plan remains available for later execution; no fallback execution was performed.",
+          'Native broadcast command "broadcastSyncAction" is not ready in this build yet. The prepared plan remains available for later execution; no fallback execution was performed.',
         nativeFailureInfo:
           "Native broadcast intent write failed. The prepared plan and current snapshot were kept for retry; no fallback execution was performed.",
       },

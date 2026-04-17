@@ -1,9 +1,10 @@
-# 20 Wave 2A Execution Plan
+# 20 Wave 2A Bounded Execution Pack
 Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Purpose
 
-This document is the immediate execution pack after the `2026-04-17` cleanup push.
+This document is the immediate bounded execution pack after the `2026-04-17` cleanup push.
+It is not the canonical wave board and it does not replace the canonical mainline release gate in `docs/19-phase-plan-and-scorecard.md`.
 
 Current truth stays unchanged until this wave lands:
 
@@ -16,6 +17,12 @@ Wave 2A exit target:
 - overall target after landing and re-verify: `35% / 65% / yellow`
 
 These are wave targets, not current truth.
+
+## Status Refresh
+
+- `W2A-P3` physical layout execution is already landed; the remaining `A2` priority slice is typed broadcast-contract alignment plus truthful operator wording.
+- `W2A-P5/P6` and the `A3` bridge/surface packages remain open.
+- This pack still freezes ownership and volume for the round, but live stage authority stays in `docs/19-phase-plan-and-scorecard.md`.
 
 ## Scope Freeze
 
@@ -31,7 +38,7 @@ This wave only works inside the already-approved desktop boundary:
 1. `A1` stays on the real synchronous provider refresh path for this wave.
    The goal is to make the current path more typed and operator-honest, not to redesign it into a background executor in the same round.
 2. `A2` prioritizes physical `layout` execution first.
-   Physical `broadcast` execution stays deferred unless a bounded native path appears during implementation.
+   Physical `layout` is already landed in this round; the remaining synchronizer slice is typed `broadcast` contract alignment and truthful native-intent reporting.
 3. `A3` prioritizes automation bridge correctness first.
    The next step is to make the existing compile/launch/detail/manual-gate chain truthful and typed before expanding recorder depth again.
 
@@ -65,6 +72,8 @@ Use `6` active workers for this wave because it contains real write work across 
 4. re-run typecheck, Rust check/test, web build, and Win11 baseline after all six packages integrate
 
 ## Acceptance Gate For This Wave
+
+This wave gate is local to the pack above. It does not replace the canonical mainline re-verify rule.
 
 1. `pnpm typecheck`
 2. `pnpm build`

@@ -1,4 +1,4 @@
-## 2026-04-16 Current Snapshot
+## 2026-04-17 Current Snapshot
 
 - Mainline delivery: **95% / 7% / green**
 - Overall end-state: **30% / 70% / yellow**
@@ -7,6 +7,7 @@
 - AdsPower catch-up and external integration belong to the overall `70%` track, not the current `7%` closeout
 - Detailed phase plan and scorecard: `docs/19-phase-plan-and-scorecard.md`
 - Current mainline: `Proxy/IP -> Synchronizer -> Recorder/Templates -> final native closeout`
+- Current immediate execution pack: `docs/20-wave-2a-execution-plan.md`
 - `src/runner/fake.rs` remains fake/stub/test only and is not part of the real runtime mainline.
 
 ## This Round
@@ -16,4 +17,5 @@
 - Closed the remaining `lightpanda` contract and Win11 test-stub gaps.
 - Serialized `PERSONA_PILOT_PROXY_MODE` test overrides to remove full-suite drift.
 - Made `humanize` retry assertions deterministic.
+- Aligned `A2` synchronizer broadcast execution to the typed `broadcastSyncAction` contract and refreshed capability wording around native intent vs physical dispatch.
 - Re-passed the full Rust gate and Win11 local verification entry.

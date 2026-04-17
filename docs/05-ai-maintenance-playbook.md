@@ -56,6 +56,8 @@ That document is the only canonical source for:
 
 `docs/03-roadmap.md`, `docs/04-improvement-backlog.md`, and root entrypoints may summarize or route to it, but must not carry a competing stage plan.
 
+`docs/20-wave-2a-execution-plan.md` may freeze one bounded execution round, but it must not replace the canonical wave board or the canonical mainline release gate.
+
 ## Score Source Rule
 
 Keep progress and capability score separate:
