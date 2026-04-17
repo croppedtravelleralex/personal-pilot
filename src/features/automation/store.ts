@@ -46,25 +46,25 @@ const CONTRACT_GAPS: AutomationContractGap[] = [
     contract: "compileTemplateRun",
     status: "Ready",
     detail:
-      "Native compile is connected and writes a local manifest for accepted profiles in this execution workbench.",
+      "Native compile is wired and writes launch manifests for accepted profiles.",
   },
   {
     contract: "launchTemplateRun",
     status: "Ready",
     detail:
-      "Native launch is connected and can dispatch prepared manifests into the local runtime queue.",
+      "Native launch is wired and dispatches prepared manifests into local runtime.",
   },
   {
     contract: "readRunDetail",
     status: "Ready",
     detail:
-      "Per-run detail read is connected and can return timeline, artifacts, failure reason, and manual-gate state when payload is available.",
+      "Per-run detail read is wired and returns timeline, artifacts, failure reason, and manual-gate state.",
   },
   {
     contract: "readRecorderSnapshot / startBehaviorRecording / stopBehaviorRecording",
     status: "Ready",
     detail:
-      "Recorder main path now uses native read/start/stop contracts first, while local draft capture remains a bounded fallback for missing write depth.",
+      "Recorder uses native read/start/stop on main path, with local draft fallback only when needed.",
   },
 ];
 
@@ -160,7 +160,7 @@ export const automationActions = {
       isPreparingLaunch: true,
       launchStatus: current.launchStatus === "launched" ? "launched" : "idle",
       launchFailureReason: null,
-      launcherNotice: "Preparing launch context and running the desktop compile manifest step...",
+      launcherNotice: "Preparing launch context and writing compile manifest preview...",
       launcherNoticeTone: "info",
     }));
   },
@@ -227,7 +227,7 @@ export const automationActions = {
       },
       launcherNotice:
         plan.compilePreview.status === "ready"
-          ? `${plan.compilePreview.message} Launch is ready and can now be dispatched into the local runtime.`
+          ? `${plan.compilePreview.message} Launch is ready for dispatch in this page.`
           : plan.compilePreview.message,
       launcherNoticeTone:
         plan.compilePreview.status === "ready"
@@ -253,7 +253,7 @@ export const automationActions = {
       launchStatus: "launching",
       launchFailureReason: null,
       activeTaskWriteAction: "launch",
-      launcherNotice: "Dispatching the prepared launch into the local runtime...",
+      launcherNotice: "Dispatching prepared launch to local runtime...",
       launcherNoticeTone: "info",
     }));
   },
@@ -270,7 +270,7 @@ export const automationActions = {
         current.contractGaps,
         "launchTemplateRun",
         "Ready",
-        "Native launch is connected and can dispatch prepared manifests into the local runtime queue.",
+        "Native launch is wired and dispatches prepared manifests into local runtime.",
       ),
       launcherNotice: outcome.message,
       launcherNoticeTone: "success",
@@ -321,7 +321,7 @@ export const automationActions = {
         current.contractGaps,
         "readRunDetail",
         "Ready",
-        "Per-run detail read is connected and can return timeline, artifacts, failure reason, and manual-gate state.",
+        "Per-run detail read is wired and returns timeline, artifacts, failure reason, and manual-gate state.",
       ),
     }));
   },

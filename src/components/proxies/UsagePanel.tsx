@@ -1,5 +1,9 @@
 import {
   getProxyChangeCooldownRemainingSeconds,
+  getProxyProviderRefreshStatusLabel,
+  getProxyProviderRequestLabel,
+  getProxyProviderSourceLabel,
+  getProxyProviderStatusCodeLabel,
   getProxyProviderWriteEvidence,
   getProxyProviderWriteDetail,
   getProxyProviderWriteLabel,
@@ -87,9 +91,14 @@ function getRotationPosture(
   const writeState = getProxyProviderWriteState(changeIpFeedback);
   const writeLabel = getProxyProviderWriteLabel(writeState);
   const writeDetail = getProxyProviderWriteDetail(changeIpFeedback);
-  const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
-  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
-  const requestId = writeEvidence.requestId ?? "pending";
+  const sourceLabel = getProxyProviderSourceLabel(
+    changeIpFeedback,
+    changeIpFeedback?.requestedProvider ?? proxy.rotation.requestedProvider ?? null,
+  );
+  const requestId = getProxyProviderRequestLabel(
+    changeIpFeedback,
+    proxy.rotation.trackingTaskId,
+  );
 
   if (
     changeIpFeedback.phase === "error" ||
@@ -174,15 +183,18 @@ export function UsagePanel({
   const effectiveHealth = detail?.health ?? proxy?.health ?? null;
   const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
   const rollbackLabel = writeEvidence.rollbackSignal ? "rollback-flagged" : "no-rollback-signal";
-  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
-  const requestIdLabel =
-    writeEvidence.requestId ??
-    changeIpFeedback?.trackingTaskId ??
-    proxy?.rotation.trackingTaskId ??
-    "no-tracking-task";
-  const executionStatusLabel = writeEvidence.executionStatus ?? "unknown";
+  const sourceLabel = getProxyProviderSourceLabel(
+    changeIpFeedback,
+    changeIpFeedback?.requestedProvider ?? proxy?.rotation.requestedProvider ?? null,
+  );
+  const requestIdLabel = getProxyProviderRequestLabel(
+    changeIpFeedback,
+    proxy?.rotation.trackingTaskId ?? null,
+  );
+  const executionStatusLabel = writeEvidence.executionStatus ?? "status-unreported";
   const rollbackStatusLabel = writeEvidence.rollbackStatus ?? rollbackLabel;
-  const providerRefreshLabel = writeEvidence.providerRefreshStatus ?? "refresh-pending";
+  const providerRefreshLabel = getProxyProviderRefreshStatusLabel(changeIpFeedback);
+  const providerStatusCodeLabel = getProxyProviderStatusCodeLabel(changeIpFeedback);
   const providerRefreshAt = writeEvidence.providerRefreshAt;
   const verificationStatus =
     effectiveHealth?.batchState === "queued"
@@ -343,7 +355,7 @@ export function UsagePanel({
                   : `No recent write (${detailSource ?? "list-only"})`}
                 <br />
                 accepted={getAcceptedSignalLabel(changeIpFeedback)} / rollback={rollbackLabel} /
-                source={sourceLabel} / request-or-tracking={requestIdLabel}
+                source={sourceLabel} / request={requestIdLabel}
               </dd>
             </div>
             <div className="details-grid__item">
@@ -351,7 +363,7 @@ export function UsagePanel({
               <dd>
                 execution={executionStatusLabel} / rollback={rollbackStatusLabel}
                 <br />
-                providerRefresh={providerRefreshLabel}
+                providerRefresh={providerRefreshLabel} / statusCode={providerStatusCodeLabel}
                 {providerRefreshAt
                   ? ` @ ${formatRelativeTimestamp(providerRefreshAt)}`
                   : ""}

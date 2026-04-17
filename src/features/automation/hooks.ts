@@ -10,6 +10,7 @@ import type {
   DesktopRunArtifact,
   DesktopRunDetail,
   DesktopRunTimelineEntry,
+  DesktopTaskWriteResult,
 } from "../../types/desktop";
 import { useRecorderViewModel } from "../recorder/hooks";
 import { buildTemplateCompileRequestDraft } from "../templates/model";
@@ -33,23 +34,56 @@ import { automationActions, automationStore } from "./store";
 
 const automationDesktop = desktopServices;
 
-function isCommandNotReady(error: unknown): boolean {
+function isCommandNotReady(
+  error: unknown,
+): error is desktopServices.DesktopServiceError {
   return (
-    Boolean(error) &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: string }).code === "desktop_command_not_ready"
+    error instanceof desktopServices.DesktopServiceError &&
+    error.code === "desktop_command_not_ready"
   );
 }
 
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Failed to prepare launch draft";
+function toErrorMessage(error: unknown, fallback = "Desktop command failed"): string {
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
-function hasDesktopCommand<T extends keyof typeof automationDesktop>(
-  command: T,
-): boolean {
-  return typeof automationDesktop[command] === "function";
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function buildRunDetailQuery(
+  runId: string | null | undefined,
+  taskId: string | null | undefined,
+): DesktopReadRunDetailQuery | null {
+  const normalizedRunId = normalizeOptionalText(runId);
+  const normalizedTaskId = normalizeOptionalText(taskId);
+  if (!normalizedRunId && !normalizedTaskId) {
+    return null;
+  }
+
+  return {
+    runId: normalizedRunId,
+    taskId: normalizedTaskId,
+  };
+}
+
+function buildRunDetailQueryFromTaskWrite(
+  payload: DesktopTaskWriteResult,
+): DesktopReadRunDetailQuery | null {
+  return buildRunDetailQuery(payload.runId, payload.taskId);
 }
 
 function formatTimeLabel(value: string | null): string | null {
@@ -93,23 +127,23 @@ function normalizeTimelineEntry(
   };
 }
 
-function normalizeLaunchOutcome(
-  payload: DesktopLaunchTemplateRunResult,
-  fallbackStatus: string,
-): AutomationLaunchOutcome {
-  const launchedAt = payload.launchedAt ?? payload.launchSummary.launchedAt;
+function normalizeLaunchOutcome(payload: DesktopLaunchTemplateRunResult): AutomationLaunchOutcome {
+  const runId = normalizeOptionalText(payload.runId);
+  const taskId = normalizeOptionalText(payload.taskId);
+  const status = normalizeOptionalText(payload.status) ?? "queued";
+  const message = normalizeOptionalText(payload.message);
 
   return {
-    runId: payload.runId || payload.taskId || "unknown-run",
-    taskId: payload.taskId ?? null,
-    status: payload.status ?? fallbackStatus,
+    runId: runId ?? taskId ?? "unknown-run",
+    taskId,
+    status,
     message:
-      payload.message ??
+      message ??
       (payload.manualGateRequestId
         ? "Run dispatched and is waiting on a manual gate."
         : "Run dispatched into the local runtime."),
-    manualGateRequestId: payload.manualGateRequestId ?? null,
-    launchedAtLabel: formatTimeLabel(launchedAt ?? null),
+    manualGateRequestId: normalizeOptionalText(payload.manualGateRequestId),
+    launchedAtLabel: formatTimeLabel(payload.launchedAt),
     raw: payload,
   };
 }
@@ -435,22 +469,33 @@ export function useAutomationCenterViewModel() {
     isRejectingGate: automation.activeTaskWriteAction === "reject_manual_gate",
   };
 
-  async function refreshRunDetailInternal() {
-    const runId =
-      automation.launchedRun?.runId && automation.launchedRun.runId !== "unknown-run"
-        ? automation.launchedRun.runId
-        : automation.runDetail?.runId ?? null;
-    const taskId =
-      automation.runDetail?.taskId ??
-      automation.launchedRun?.taskId ??
-      selectedRun?.id ??
-      null;
-    const query: DesktopReadRunDetailQuery = {
-      runId,
-      taskId: runId ? undefined : taskId,
-    };
+  async function readRunDetailByQueryInternal(
+    query: DesktopReadRunDetailQuery,
+    fallbackMessage: string,
+    blockedMessage: string,
+  ) {
+    automationActions.runDetailStarted();
+    try {
+      const detail = await automationDesktop.readRunDetail(query);
+      automationActions.runDetailSucceeded(normalizeRunDetail(detail));
+    } catch (error) {
+      const blocked = isCommandNotReady(error);
+      automationActions.runDetailFailed(
+        blocked ? blockedMessage : toErrorMessage(error, fallbackMessage),
+        blocked,
+      );
+    }
+  }
 
-    if (!query.runId && !query.taskId) {
+  async function refreshRunDetailInternal() {
+    const query = buildRunDetailQuery(
+      automation.launchedRun?.runId !== "unknown-run"
+        ? automation.launchedRun?.runId
+        : automation.runDetail?.runId,
+      automation.runDetail?.taskId ?? automation.launchedRun?.taskId ?? selectedRun?.id,
+    );
+
+    if (!query) {
       automationActions.runDetailFailed(
         "No launched run is available yet. Dispatch a run first before reading detail.",
         true,
@@ -458,38 +503,17 @@ export function useAutomationCenterViewModel() {
       return;
     }
 
-    if (!hasDesktopCommand("readRunDetail")) {
-      automationActions.runDetailFailed(
-        "This desktop build does not expose readRunDetail yet.",
-        true,
-      );
-      return;
-    }
-
-    automationActions.runDetailStarted();
-    try {
-      const detail = await automationDesktop.readRunDetail(query);
-      automationActions.runDetailSucceeded(normalizeRunDetail(detail));
-    } catch (error) {
-      automationActions.runDetailFailed(
-        toErrorMessage(error),
-        isCommandNotReady(error),
-      );
-    }
+    await readRunDetailByQueryInternal(
+      query,
+      "Failed to read run detail from desktop runtime.",
+      "This desktop build cannot read per-run detail yet.",
+    );
   }
 
   async function launchPreparedRunInternal() {
     if (!templates.selectedTemplate || !compileDraft || !automation.lastPreparedLaunch?.ready) {
       automationActions.launchFailed(
         "Launch is still blocked. Prepare a ready manifest before dispatching.",
-        true,
-      );
-      return;
-    }
-
-    if (!hasDesktopCommand("launchTemplateRun")) {
-      automationActions.launchFailed(
-        "This desktop build does not expose launchTemplateRun yet. The prepared manifest is kept locally.",
         true,
       );
       return;
@@ -514,37 +538,22 @@ export function useAutomationCenterViewModel() {
       };
       const result = await automationDesktop.launchTemplateRun(request);
 
-      const outcome = normalizeLaunchOutcome(result, "queued");
+      const outcome = normalizeLaunchOutcome(result);
       automationActions.launchSucceeded(outcome);
 
-      if (outcome.runId !== "unknown-run" || outcome.taskId) {
-        if (hasDesktopCommand("readRunDetail")) {
-          automationActions.runDetailStarted();
-          try {
-            const query: DesktopReadRunDetailQuery =
-              outcome.runId !== "unknown-run"
-                ? { runId: outcome.runId }
-                : { taskId: outcome.taskId };
-            const detail = await automationDesktop.readRunDetail(query);
-            automationActions.runDetailSucceeded(normalizeRunDetail(detail));
-          } catch (error) {
-            const message = isCommandNotReady(error)
-              ? "Run dispatched successfully, but this desktop build cannot read per-run detail yet."
-              : toErrorMessage(error);
-            automationActions.runDetailFailed(message, isCommandNotReady(error));
-          }
-        } else {
-          automationActions.runDetailFailed(
-            "Run dispatched successfully, but this desktop build does not expose readRunDetail yet.",
-            true,
-          );
-        }
+      const runDetailQuery = buildRunDetailQuery(result.runId, result.taskId);
+      if (runDetailQuery) {
+        await readRunDetailByQueryInternal(
+          runDetailQuery,
+          "Run dispatched successfully, but reading run detail failed.",
+          "Run dispatched successfully, but this desktop build cannot read per-run detail yet.",
+        );
       }
     } catch (error) {
       automationActions.launchFailed(
         isCommandNotReady(error)
-          ? "This desktop build does not expose launchTemplateRun yet. The prepared manifest remains staged locally."
-          : toErrorMessage(error),
+          ? "This desktop build cannot launch template runs yet. The prepared manifest remains staged locally."
+          : toErrorMessage(error, "Failed to dispatch prepared run."),
         isCommandNotReady(error),
       );
     }
@@ -557,18 +566,22 @@ export function useAutomationCenterViewModel() {
       return;
     }
 
-    if (!hasDesktopCommand("retryTask")) {
-      automationActions.taskWriteFailed("This desktop build does not expose retryTask yet.");
-      return;
-    }
-
     automationActions.taskWriteStarted("retry");
     try {
-      await automationDesktop.retryTask(taskId);
+      const result = await automationDesktop.retryTask(taskId);
       automationActions.taskWriteFinished();
-      await refreshRunDetailInternal();
+      const query = buildRunDetailQueryFromTaskWrite(result);
+      if (query) {
+        await readRunDetailByQueryInternal(
+          query,
+          "Task retry was accepted, but reading run detail failed.",
+          "Task retry was accepted, but this desktop build cannot read per-run detail yet.",
+        );
+      } else {
+        await refreshRunDetailInternal();
+      }
     } catch (error) {
-      automationActions.taskWriteFailed(toErrorMessage(error));
+      automationActions.taskWriteFailed(toErrorMessage(error, "Failed to retry task."));
     }
   }
 
@@ -579,18 +592,22 @@ export function useAutomationCenterViewModel() {
       return;
     }
 
-    if (!hasDesktopCommand("cancelTask")) {
-      automationActions.taskWriteFailed("This desktop build does not expose cancelTask yet.");
-      return;
-    }
-
     automationActions.taskWriteStarted("cancel");
     try {
-      await automationDesktop.cancelTask(taskId);
+      const result = await automationDesktop.cancelTask(taskId);
       automationActions.taskWriteFinished();
-      await refreshRunDetailInternal();
+      const query = buildRunDetailQueryFromTaskWrite(result);
+      if (query) {
+        await readRunDetailByQueryInternal(
+          query,
+          "Task cancellation was accepted, but reading run detail failed.",
+          "Task cancellation was accepted, but this desktop build cannot read per-run detail yet.",
+        );
+      } else {
+        await refreshRunDetailInternal();
+      }
     } catch (error) {
-      automationActions.taskWriteFailed(toErrorMessage(error));
+      automationActions.taskWriteFailed(toErrorMessage(error, "Failed to cancel task."));
     }
   }
 
@@ -604,23 +621,27 @@ export function useAutomationCenterViewModel() {
       return;
     }
 
-    if (!hasDesktopCommand("confirmManualGate")) {
-      automationActions.taskWriteFailed(
-        "This desktop build does not expose confirmManualGate yet.",
-      );
-      return;
-    }
-
     automationActions.taskWriteStarted("confirm_manual_gate");
     try {
       const request: DesktopManualGateActionRequest = {
         manualGateRequestId: requestId,
       };
-      await automationDesktop.confirmManualGate(request);
+      const result = await automationDesktop.confirmManualGate(request);
       automationActions.taskWriteFinished();
-      await refreshRunDetailInternal();
+      const query = buildRunDetailQueryFromTaskWrite(result);
+      if (query) {
+        await readRunDetailByQueryInternal(
+          query,
+          "Manual-gate approval was accepted, but reading run detail failed.",
+          "Manual-gate approval was accepted, but this desktop build cannot read per-run detail yet.",
+        );
+      } else {
+        await refreshRunDetailInternal();
+      }
     } catch (error) {
-      automationActions.taskWriteFailed(toErrorMessage(error));
+      automationActions.taskWriteFailed(
+        toErrorMessage(error, "Failed to approve manual gate."),
+      );
     }
   }
 
@@ -634,23 +655,27 @@ export function useAutomationCenterViewModel() {
       return;
     }
 
-    if (!hasDesktopCommand("rejectManualGate")) {
-      automationActions.taskWriteFailed(
-        "This desktop build does not expose rejectManualGate yet.",
-      );
-      return;
-    }
-
     automationActions.taskWriteStarted("reject_manual_gate");
     try {
       const request: DesktopManualGateActionRequest = {
         manualGateRequestId: requestId,
       };
-      await automationDesktop.rejectManualGate(request);
+      const result = await automationDesktop.rejectManualGate(request);
       automationActions.taskWriteFinished();
-      await refreshRunDetailInternal();
+      const query = buildRunDetailQueryFromTaskWrite(result);
+      if (query) {
+        await readRunDetailByQueryInternal(
+          query,
+          "Manual-gate rejection was accepted, but reading run detail failed.",
+          "Manual-gate rejection was accepted, but this desktop build cannot read per-run detail yet.",
+        );
+      } else {
+        await refreshRunDetailInternal();
+      }
     } catch (error) {
-      automationActions.taskWriteFailed(toErrorMessage(error));
+      automationActions.taskWriteFailed(
+        toErrorMessage(error, "Failed to reject manual gate."),
+      );
     }
   }
 
@@ -782,14 +807,14 @@ export function useAutomationCenterViewModel() {
                   compiledAtLabel: null,
                   blockers: [
                     "Upgrade the desktop shared base to a build that includes compileTemplateRun.",
-                    "Launch queue command is also still missing, so this request can only stay in prepared state.",
+                    "Launch dispatch depends on compile manifest success, so this request stays in prepared state until compile is available.",
                   ],
                   warnings: [...compileDraft.warnings],
                 }
               : {
                   status: "failed",
                   kind: "probe_failed",
-                  message: toErrorMessage(error),
+                  message: toErrorMessage(error, "Failed to compile launch manifest."),
                   acceptedProfileCount: 0,
                   compiledAtLabel: null,
                   blockers: ["Compile manifest write failed before launch preparation completed."],

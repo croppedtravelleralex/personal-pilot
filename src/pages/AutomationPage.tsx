@@ -1,110 +1,31 @@
 import { RecorderTimeline } from "../components/automation/RecorderTimeline";
-import {
-  RunDetailPanel,
-  type RunActionFeedback,
-  type RunActionState,
-  type RunManualGateState,
-} from "../components/automation/RunDetailPanel";
-import {
-  RunLauncher,
-  type RunLauncherLaunchResult,
-} from "../components/automation/RunLauncher";
+import { RunDetailPanel } from "../components/automation/RunDetailPanel";
+import { RunLauncher } from "../components/automation/RunLauncher";
 import { RunsBoard } from "../components/automation/RunsBoard";
 import { TemplatesBoard } from "../components/automation/TemplatesBoard";
 import { StatCard } from "../components/StatCard";
 import { useAutomationCenterViewModel } from "../features/automation/hooks";
-import type {
-  AutomationNoticeTone,
-  AutomationRunDetail,
-} from "../features/automation/model";
 import { AutomationTasksSection } from "./TasksPage";
 import { formatCount } from "../utils/format";
 
-type OptionalActionBag = {
-  launchRun?: () => void;
-  refreshRunDetail?: () => void;
-  retryRun?: () => void;
-  cancelRun?: () => void;
-  approveManualGate?: () => void;
-  rejectManualGate?: () => void;
-};
-
-type OptionalAutomationBag = {
-  isLaunchingRun?: boolean;
-  launchNotice?: string | null;
-  launchNoticeTone?: AutomationNoticeTone;
-  lastLaunchResult?: RunLauncherLaunchResult | null;
-  runDetail?: AutomationRunDetail | null;
-  isRunDetailLoading?: boolean;
-  runDetailNotice?: string | null;
-  manualGate?: RunManualGateState | null;
-  actionFeedback?: RunActionFeedback | null;
-  actionState?: RunActionState | null;
-};
-
-function readOptionalActionBag(value: unknown): OptionalActionBag {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const bag = value as Record<string, unknown>;
-
-  return {
-    launchRun: typeof bag.launchRun === "function" ? (bag.launchRun as () => void) : undefined,
-    refreshRunDetail:
-      typeof bag.refreshRunDetail === "function"
-        ? (bag.refreshRunDetail as () => void)
-        : undefined,
-    retryRun: typeof bag.retryRun === "function" ? (bag.retryRun as () => void) : undefined,
-    cancelRun: typeof bag.cancelRun === "function" ? (bag.cancelRun as () => void) : undefined,
-    approveManualGate:
-      typeof bag.approveManualGate === "function"
-        ? (bag.approveManualGate as () => void)
-        : undefined,
-    rejectManualGate:
-      typeof bag.rejectManualGate === "function"
-        ? (bag.rejectManualGate as () => void)
-        : undefined,
-  };
-}
-
-function readOptionalAutomationBag(value: unknown): OptionalAutomationBag {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const bag = value as Record<string, unknown>;
-
-  return {
-    isLaunchingRun:
-      typeof bag.isLaunchingRun === "boolean" ? (bag.isLaunchingRun as boolean) : undefined,
-    launchNotice: typeof bag.launchNotice === "string" ? bag.launchNotice : null,
-    launchNoticeTone:
-      typeof bag.launchNoticeTone === "string"
-        ? (bag.launchNoticeTone as AutomationNoticeTone)
-        : undefined,
-    lastLaunchResult: (bag.lastLaunchResult as RunLauncherLaunchResult | null | undefined) ?? null,
-    runDetail: (bag.runDetail as AutomationRunDetail | null | undefined) ?? null,
-    isRunDetailLoading:
-      typeof bag.isRunDetailLoading === "boolean"
-        ? (bag.isRunDetailLoading as boolean)
-        : undefined,
-    runDetailNotice: typeof bag.runDetailNotice === "string" ? bag.runDetailNotice : null,
-    manualGate: (bag.manualGate as RunManualGateState | null | undefined) ?? null,
-    actionFeedback: (bag.actionFeedback as RunActionFeedback | null | undefined) ?? null,
-    actionState: (bag.actionState as RunActionState | null | undefined) ?? null,
-  };
-}
-
 export function AutomationPage() {
   const viewModel = useAutomationCenterViewModel();
-  const optionalActions = readOptionalActionBag(viewModel.actions);
-  const optionalAutomation = readOptionalAutomationBag(viewModel.automation);
-  const dispatchReady = Boolean(
-    viewModel.automation.lastPreparedLaunch?.ready && optionalActions.launchRun,
-  );
-  const manualGateCount =
-    (viewModel.selectedRun?.manualGateRequestId ? 1 : 0) + (optionalAutomation.manualGate ? 1 : 0);
+  const dispatchReady = Boolean(viewModel.automation.lastPreparedLaunch?.ready);
+  const dispatchStatus =
+    viewModel.lastLaunchResult?.status ??
+    (viewModel.isLaunchingRun ? "launching" : dispatchReady ? "ready" : "staged");
+  const manualGateIds = [
+    viewModel.selectedRun?.manualGateRequestId,
+    viewModel.manualGate?.requestId,
+  ].filter((item): item is string => Boolean(item));
+  const manualGateCount = new Set(manualGateIds).size;
+  const launchNotice =
+    viewModel.actionFeedback &&
+    viewModel.actionFeedback.message !== viewModel.automation.launcherNotice
+      ? viewModel.actionFeedback.message
+      : null;
+  const launchNoticeTone = viewModel.actionFeedback?.tone ?? "info";
+  const launchResult = viewModel.lastLaunchResult;
 
   return (
     <div className="page-stack automation-center">
@@ -117,17 +38,22 @@ export function AutomationPage() {
         />
         <StatCard
           label="Dispatch"
-          value={
-            optionalAutomation.lastLaunchResult?.status ??
-            (dispatchReady ? "ready" : "staged")
-          }
+          value={dispatchStatus}
           hint={
-            optionalAutomation.lastLaunchResult?.headline ??
-            (dispatchReady
-              ? "Prepared launch can move into execution."
-              : "Prepare, review, then dispatch from the same console.")
+            launchResult?.headline ??
+            (viewModel.isLaunchingRun
+              ? "Launch request is being written into local runtime."
+              : dispatchReady
+                ? "Prepared launch can be dispatched from this page."
+                : "Prepare, review, then dispatch from this console.")
           }
-          tone={dispatchReady ? "success" : "warning"}
+          tone={
+            launchResult?.status === "failed" || launchResult?.status === "blocked"
+              ? "warning"
+              : dispatchReady || viewModel.isLaunchingRun || Boolean(launchResult)
+                ? "success"
+                : "warning"
+          }
         />
         <StatCard
           label="Recorder"
@@ -145,7 +71,7 @@ export function AutomationPage() {
           label="Manual Gates"
           value={formatCount(manualGateCount)}
           hint={
-            optionalAutomation.manualGate?.headline ??
+            viewModel.manualGate?.headline ??
             (viewModel.selectedRun?.manualGateRequestId
               ? "Selected run is waiting for operator review."
               : "No manual gate is active on the current selection.")
@@ -169,10 +95,10 @@ export function AutomationPage() {
             {formatCount(viewModel.metrics.activeRunCount)} active runs on page
           </span>
           <span className={`badge ${dispatchReady ? "badge--info" : "badge--warning"}`}>
-            {dispatchReady
-              ? "local dispatch connected"
-              : viewModel.automation.lastPreparedLaunch?.ready
-                ? "prepared; launch action unavailable in current view"
+            {viewModel.isLaunchingRun
+              ? "dispatch in progress"
+              : dispatchReady
+                ? "dispatch ready in this page"
                 : `${formatCount(viewModel.metrics.readyTemplateCount)} ready templates`}
           </span>
           <span
@@ -207,17 +133,17 @@ export function AutomationPage() {
               {viewModel.automation.lastPreparedLaunch?.compilePreview.status ?? "not prepared"}
             </strong>
             <small>
-              {optionalAutomation.lastLaunchResult?.detail ??
+              {launchResult?.detail ??
                 (viewModel.automation.lastPreparedLaunch?.compilePreview.kind ??
                   "prepare launch to write manifest")}
             </small>
           </article>
           <article className="automation-metric-strip__item">
             <span className="automation-metric-strip__label">Run detail</span>
-            <strong>{optionalAutomation.runDetail?.status ?? "live row"}</strong>
+            <strong>{viewModel.runDetail?.status ?? "live row"}</strong>
             <small>
-              {optionalAutomation.runDetail?.headline ??
-                optionalAutomation.runDetailNotice ??
+              {viewModel.runDetail?.headline ??
+                viewModel.runDetailNotice ??
                 "Refresh run detail after dispatch to load timeline, artifacts, and gate state."}
             </small>
           </article>
@@ -292,10 +218,10 @@ export function AutomationPage() {
           selectedRun={viewModel.selectedRun}
           recorderSnapshot={viewModel.recorder.state.snapshot}
           recommendation={viewModel.recommendation}
-          isLaunching={optionalAutomation.isLaunchingRun}
-          launchNotice={optionalAutomation.launchNotice}
-          launchNoticeTone={optionalAutomation.launchNoticeTone}
-          lastLaunchResult={optionalAutomation.lastLaunchResult}
+          isLaunching={viewModel.isLaunchingRun}
+          launchNotice={launchNotice}
+          launchNoticeTone={launchNoticeTone}
+          lastLaunchResult={launchResult}
           onSelectTemplate={viewModel.actions.selectTemplate}
           onSetMode={viewModel.actions.setLaunchMode}
           onSetTargetScope={viewModel.actions.setTargetScope}
@@ -306,7 +232,7 @@ export function AutomationPage() {
           onResetBindings={viewModel.actions.resetBindingDraft}
           onPrepareLaunch={viewModel.actions.prepareLaunch}
           onResetLaunch={viewModel.actions.resetLaunch}
-          onLaunch={optionalActions.launchRun}
+          onLaunch={viewModel.actions.launchRun}
         />
 
         <RecorderTimeline
@@ -334,17 +260,17 @@ export function AutomationPage() {
         contractGaps={viewModel.automation.contractGaps}
         recommendation={viewModel.recommendation}
         chainSummary={viewModel.chainSummary}
-        runDetail={optionalAutomation.runDetail}
-        isRunDetailLoading={optionalAutomation.isRunDetailLoading}
-        runDetailNotice={optionalAutomation.runDetailNotice}
-        manualGate={optionalAutomation.manualGate}
-        actionFeedback={optionalAutomation.actionFeedback}
-        actionState={optionalAutomation.actionState}
-        onRefreshRunDetail={optionalActions.refreshRunDetail}
-        onRetryRun={optionalActions.retryRun}
-        onCancelRun={optionalActions.cancelRun}
-        onApproveGate={optionalActions.approveManualGate}
-        onRejectGate={optionalActions.rejectManualGate}
+        runDetail={viewModel.runDetail}
+        isRunDetailLoading={viewModel.isRunDetailLoading}
+        runDetailNotice={viewModel.runDetailNotice}
+        manualGate={viewModel.manualGate}
+        actionFeedback={viewModel.actionFeedback}
+        actionState={viewModel.actionState}
+        onRefreshRunDetail={viewModel.actions.refreshRunDetail}
+        onRetryRun={viewModel.actions.retryRun}
+        onCancelRun={viewModel.actions.cancelRun}
+        onApproveGate={viewModel.actions.approveManualGate}
+        onRejectGate={viewModel.actions.rejectManualGate}
       />
 
       <div className="toolbar-card toolbar-card--subtle">

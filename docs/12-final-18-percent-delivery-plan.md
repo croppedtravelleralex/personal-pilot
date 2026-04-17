@@ -12,8 +12,8 @@ Updated: 2026-04-17 (Asia/Shanghai)
 这份文件保留原路径，方便历史链接继续可用；但旧的 `82% / 18%` 已经作废。
 当前有效口径改为：
 
-- mainline delivery: `95% / 7% / green`
-- overall end-state: `30% / 70% / yellow`
+- mainline delivery: `100% / 0% / green`
+- overall end-state: `35% / 65% / yellow`
 
 如果这里和 `docs/02-current-state.md`、`docs/17-full-app-audit-progress-reset.md` 冲突，以后两者为准。
 

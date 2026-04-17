@@ -119,7 +119,7 @@ function nowTs(): string {
 }
 
 function getBroadcastCapabilityHint(): string {
-  return 'Broadcast execution uses the typed desktop contract "broadcastSyncAction". Successful native runs record intent and target scope in the desktop snapshot, while physical multi-window dispatch remains intention-only.';
+  return 'Broadcast execution uses the typed desktop contract "broadcastSyncAction". Successful native runs record intent/state and target scope in the desktop snapshot, while physical multi-window dispatch remains not executed.';
 }
 
 function getBroadcastTargetWindows(
@@ -331,6 +331,8 @@ function resolveLayoutApplyResult(
     "state-write only",
     "internal layout state",
     "internal-state",
+    "physicalplacement=not_executed",
+    "physicalplacement=not-implemented",
     "intent only",
     "intention-only",
     "prepared only",
@@ -369,6 +371,160 @@ function resolveLayoutApplyResult(
 
 function appendNativeMessage(detail: string, message: string | null): string {
   return message ? `${detail} Native message: ${message}` : detail;
+}
+
+type SynchronizerBroadcastDispatchResult = "executed" | "not_executed" | "unknown";
+
+function normalizeBroadcastDispatchToken(
+  token: unknown,
+): SynchronizerBroadcastDispatchResult | null {
+  const normalized = readString(token)?.toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized.includes("not_executed") ||
+    normalized.includes("not-executed") ||
+    normalized.includes("not executed") ||
+    normalized.includes("not_implemented") ||
+    normalized.includes("not-implemented") ||
+    normalized.includes("not implemented") ||
+    normalized.includes("intent_only") ||
+    normalized.includes("intent-only") ||
+    normalized.includes("intention_only") ||
+    normalized.includes("intention-only")
+  ) {
+    return "not_executed";
+  }
+
+  if (
+    normalized.includes("executed") ||
+    normalized.includes("dispatched") ||
+    normalized.includes("applied")
+  ) {
+    return "executed";
+  }
+
+  if (normalized.includes("unknown")) {
+    return "unknown";
+  }
+
+  return null;
+}
+
+function resolveBroadcastDispatchResult(
+  result: SynchronizerNativeActionResponse,
+): SynchronizerBroadcastDispatchResult {
+  if (result.raw) {
+    const directCandidates = [
+      result.raw.physicalDispatch,
+      result.raw.physicalDispatchStatus,
+      result.raw.dispatchStatus,
+      result.raw.dispatchResult,
+      result.raw.physicalDispatchResult,
+    ];
+
+    for (const candidate of directCandidates) {
+      const normalized = normalizeBroadcastDispatchToken(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const nestedCandidates = [
+      result.raw.dispatch,
+      result.raw.broadcastDispatch,
+      result.raw.physicalDispatchDetail,
+    ];
+
+    for (const candidate of nestedCandidates) {
+      if (!isRecord(candidate)) {
+        continue;
+      }
+
+      const normalized =
+        normalizeBroadcastDispatchToken(candidate.status) ??
+        normalizeBroadcastDispatchToken(candidate.result) ??
+        normalizeBroadcastDispatchToken(candidate.outcome);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  const combined = `${result.action ?? ""} ${result.message ?? ""}`.toLowerCase();
+  if (
+    combined.includes("physicaldispatch=not_executed") ||
+    combined.includes("physical dispatch is not implemented") ||
+    combined.includes("physical dispatch not executed") ||
+    combined.includes("dispatch is not implemented")
+  ) {
+    return "not_executed";
+  }
+
+  if (
+    combined.includes("physicaldispatch=executed") ||
+    combined.includes("physical dispatch executed")
+  ) {
+    return "executed";
+  }
+
+  return "unknown";
+}
+
+function resolveBroadcastIntentSurface(
+  plan: SynchronizerBroadcastPlanTemplate,
+  request: DesktopSynchronizerBroadcastRequest,
+  result: SynchronizerNativeActionResponse,
+): SynchronizerActionSuccessResolution {
+  const targetCount = request.targetWindowIds.length;
+  const dispatchResult = resolveBroadcastDispatchResult(result);
+
+  if (dispatchResult === "executed") {
+    return {
+      title: "Broadcast dispatched physically",
+      info: appendNativeMessage(
+        `${plan.title} intent/state write landed natively and physical multi-window dispatch executed for ${targetCount} targets on channel "${plan.channel}".`,
+        result.message,
+      ),
+      capabilityDetail: appendNativeMessage(
+        `Broadcast contract reached native intent/state write and physical dispatch on channel "${plan.channel}".`,
+        result.message,
+      ),
+      feedDetail: appendNativeMessage(
+        `${plan.scopeLabel} - ${targetCount} targets - native intent/state write and physical dispatch executed on channel "${plan.channel}".`,
+        result.message,
+      ),
+      tone: "success",
+      executionMode: "native_live",
+      capabilityStatus: "native_live",
+    };
+  }
+
+  const physicalDispatchDetail =
+    dispatchResult === "unknown"
+      ? "Native response did not confirm physical dispatch, so this run is treated as intent/state-only."
+      : "Physical multi-window dispatch remains not executed in this build.";
+
+  return {
+    title: "Broadcast intent/state recorded (dispatch not executed)",
+    info: appendNativeMessage(
+      `${plan.title} intent/state write landed natively for ${targetCount} targets on channel "${plan.channel}". ${physicalDispatchDetail}`,
+      result.message,
+    ),
+    capabilityDetail: appendNativeMessage(
+      `Broadcast contract is native-live for intent/state recording on channel "${plan.channel}", but physical multi-window dispatch is not executed.`,
+      result.message,
+    ),
+    feedDetail: appendNativeMessage(
+      `${plan.scopeLabel} - ${targetCount} targets - native broadcast intent/state recorded on channel "${plan.channel}"; physical dispatch not executed.`,
+      result.message,
+    ),
+    tone: "warning",
+    executionMode: "local_staged",
+    capabilityStatus: "native_live",
+  };
 }
 
 function resolveLayoutApplySurface(
@@ -1154,19 +1310,11 @@ export const synchronizerActions = {
         updatedAt: nowTs(),
       }),
       {
-        successTitle: "Broadcast intent recorded natively",
-        successInfo: `${plan.title} intent was recorded through broadcastSyncAction for ${request.targetWindowIds.length} target windows. Physical multi-window dispatch remains intention-only in this build.`,
-        successCapabilityDetail:
-          `Broadcast intent was recorded through native contract "broadcastSyncAction" for ${request.targetWindowIds.length} targets on channel "${plan.channel}". Physical dispatch remains intention-only.`,
-        successFeedDetail:
-          `${plan.scopeLabel} - ${request.targetWindowIds.length} targets - native broadcast intent recorded on channel "${plan.channel}"; physical dispatch not executed.`,
-        successTone: "warning",
-        successExecutionMode: "native_live",
-        successCapabilityStatus: "native_live",
+        resolveSuccess: (result) => resolveBroadcastIntentSurface(plan, request, result),
         notReadyInfo:
           'Native broadcast command "broadcastSyncAction" is not ready in this build yet. The prepared plan remains available for later execution; no fallback execution was performed.',
         nativeFailureInfo:
-          "Native broadcast intent write failed. The prepared plan and current snapshot were kept for retry; no fallback execution was performed.",
+          "Native broadcast intent/state write failed. The prepared plan and current snapshot were kept for retry; no fallback execution was performed.",
       },
     );
 

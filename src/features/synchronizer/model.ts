@@ -284,7 +284,7 @@ export function createInitialCommandCapabilities(): Record<
       label: "Layout write",
       status: "local_staged",
       detail:
-        'Layout write is wired to native physical window placement. Until the first successful command in this session, the console keeps the capability staged; live outcomes surface as "applied/partial/failed" after execution.',
+        'Layout write records native layout state first, then attempts physical Win32 placement. Until the first successful command in this session, the console keeps the capability staged; physical outcomes surface as "applied/partial/failed" after execution.',
       lastUpdatedAt: null,
     },
     setMain: {
@@ -308,7 +308,7 @@ export function createInitialCommandCapabilities(): Record<
       label: "Broadcast write",
       status: "local_staged",
       detail:
-        "Broadcast write is wired to the native intent-recording contract. Successful runs update native synchronizer state and target scope, while physical multi-window dispatch remains unimplemented.",
+        "Broadcast write records native intent/state and target scope through the typed contract. Physical multi-window dispatch is not executed in the current build.",
       lastUpdatedAt: null,
     },
   };

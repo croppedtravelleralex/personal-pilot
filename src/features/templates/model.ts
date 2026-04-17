@@ -679,22 +679,26 @@ function mapVariableDefinition(
   });
 }
 
-function createDesktopFallbackSteps(
+function createDesktopOutlineSteps(
   metadata: DesktopTemplateMetadata,
 ): TemplateStepOutline[] {
-  const total = Math.max(1, Math.min(metadata.coverage.stepCount || 1, 6));
+  const total = Math.max(1, Math.min(metadata.coverage.stepCount || 1, 12));
+  const firstVariableKey = metadata.variableDefinitions[0]?.key;
 
   return Array.from({ length: total }, (_, index) => ({
-    id: `${metadata.id}-desktop-step-${index + 1}`,
+    id: `${metadata.id}-desktop-outline-step-${index + 1}`,
     index,
     actionType: index === 0 ? "visit" : index === total - 1 ? "tab" : "wait",
-    label: index === 0 ? "Open template entry" : `Desktop outline step ${index + 1}`,
+    label:
+      index === 0
+        ? "Desktop entry checkpoint"
+        : index === total - 1
+          ? "Desktop output checkpoint"
+          : `Desktop outline step ${index + 1}`,
     detail:
-      "Desktop metadata is available, but detailed template step read models still rely on the feature adapter.",
+      "Step detail is generated from desktop coverage metadata until native per-step capture is linked.",
     variableKeys:
-      index === 0 && metadata.variableDefinitions[0]
-        ? [metadata.variableDefinitions[0].key]
-        : [],
+      index === 0 && firstVariableKey ? [firstVariableKey] : [],
     sensitive: false,
     tabLabel: index === total - 1 ? "Output" : "Flow",
     waitMs: index === 0 ? 0 : 1200,
@@ -736,12 +740,15 @@ export function mapDesktopTemplateMetadata(
   seedTemplate?: TemplateSummary,
 ): TemplateSummary {
   const variables = metadata.variableDefinitions.map(mapVariableDefinition);
-  const steps = seedTemplate?.steps.length
-    ? seedTemplate.steps.map((step) => ({
-        ...step,
-        variableKeys: [...step.variableKeys],
-      }))
-    : createDesktopFallbackSteps(metadata);
+  const steps =
+    metadata.coverage.stepCount > 0
+      ? createDesktopOutlineSteps(metadata)
+      : seedTemplate?.steps.length
+        ? seedTemplate.steps.map((step) => ({
+            ...step,
+            variableKeys: [...step.variableKeys],
+          }))
+        : createDesktopOutlineSteps(metadata);
 
   return {
     id: metadata.id,
@@ -761,14 +768,12 @@ export function mapDesktopTemplateMetadata(
     updatedAt: metadata.updatedAt,
     updatedLabel: formatRelativeTimestamp(metadata.updatedAt),
     summary:
-      seedTemplate?.summary ??
-      `Desktop metadata loaded for ${metadata.platformId}. Detailed recorder-backed flow still comes from the feature adapter.`,
+      `Desktop metadata loaded for ${metadata.platformId}. Coverage reports ${metadata.coverage.stepCount} steps and ${metadata.coverage.variableCount} variables.`,
     compilerState:
       metadata.readinessLevel === "ready"
-        ? "Metadata ready, compile contract pending"
+        ? "Metadata ready; compile and launch stay on the desktop contract path."
         : `Readiness ${metadata.readinessLevel}`,
     coverageLabel:
-      seedTemplate?.coverageLabel ??
       `${metadata.coverage.stepCount} steps / ${metadata.coverage.variableCount} vars`,
     allowedRegions: [...metadata.allowedRegions],
     variables,

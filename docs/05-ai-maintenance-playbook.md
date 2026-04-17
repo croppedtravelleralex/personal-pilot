@@ -1,16 +1,16 @@
 # 05 AI Maintenance Playbook
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Default Truth
 
-- mainline delivery truth: `95% / 7% / green`
-- overall end-state truth: `30% / 70% / yellow`
-- primary acceptance entry: `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
+- mainline delivery truth: `100% / 0% / green`
+- overall end-state truth: `35% / 65% / yellow`
+- primary acceptance entry: `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1`
 
 ## Reporting Default
 
-- ask about current shipped app / current closeout / native mainline: report `95% / 7% / green` first
-- ask about complete app / final target / AdsPower catch-up / `50+` fingerprint control / `450+` fingerprint or event coverage: report `30% / 70% / yellow` first
+- ask about current shipped app / current closeout / native mainline: report `100% / 0% / green` first
+- ask about complete app / final target / AdsPower catch-up / `50+` fingerprint control / `450+` fingerprint or event coverage: report `35% / 65% / yellow` first
 - always keep these facts aligned:
   - `80` declared core control fields do not mean `80` runtime-applied fields
   - current runtime projection is still `12` env-backed fields
@@ -56,7 +56,7 @@ That document is the only canonical source for:
 
 `docs/03-roadmap.md`, `docs/04-improvement-backlog.md`, and root entrypoints may summarize or route to it, but must not carry a competing stage plan.
 
-`docs/20-wave-2a-execution-plan.md` may freeze one bounded execution round, but it must not replace the canonical wave board or the canonical mainline release gate.
+`docs/20-wave-2a-execution-plan.md` is historical context only and must not replace the canonical wave board or the canonical mainline release gate.
 
 ## Score Source Rule
 
@@ -74,7 +74,7 @@ Keep progress and capability score separate:
 ## Verification Order
 
 1. `cargo test --quiet`
-2. `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
+2. `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1`
 3. `pnpm desktop:release`
 
 ## Handoff Read Order
@@ -110,13 +110,15 @@ When the stage plan changes in `docs/19-phase-plan-and-scorecard.md`, sync in th
 
 At minimum keep these aligned:
 
-- stage ids: `A1-A4 / B1-B6`
-- verification order for `A4`
+- stage ids: `B1-B6` for the active overall track, with `A1-A4` preserved as historical closed mainline context when needed
+- verification order for any reopened mainline gate
 - backlog ledger coverage for every active stage
 - default agent-count guidance and stage-wave order
 
 ## Do Not Reuse
 
+- `95% / 7%`
+- `30% / 70%`
 - `77% / 23%`
 - `82% / 18%`
 - `90%`

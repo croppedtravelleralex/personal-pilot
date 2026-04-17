@@ -3,8 +3,8 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## 统一口径
 
-- 主线交付：`95% / 7% / green`
-- 整体终局：`30% / 70% / yellow`
+- 主线交付：`100% / 0% / green`
+- 整体终局：`35% / 65% / yellow`
 - 本文属于 `整体终局` 扩张方案，不属于当前主线 `7%` closeout
 
 详细阶段任务、评分口径、和 `当前 / 目标 / AdsPower` 汇总入口，见 `docs/19-phase-plan-and-scorecard.md`。

@@ -837,6 +837,111 @@ fn ensure_sync_windows_exist(
     ))
 }
 
+fn resolve_sync_broadcast_target_window_ids(
+    snapshot: &DesktopSynchronizerSnapshot,
+    source_window_id: Option<&str>,
+    explicit_targets: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let target_window_ids = if explicit_targets.is_empty() {
+        snapshot
+            .windows
+            .iter()
+            .filter(|window| {
+                source_window_id
+                    .map(|source_id| window.window_id.as_str() != source_id)
+                    .unwrap_or(true)
+            })
+            .map(|window| window.window_id.clone())
+            .collect::<Vec<_>>()
+    } else {
+        explicit_targets
+    };
+
+    if target_window_ids.is_empty() {
+        return Err(
+            "broadcast request produced no target windows; provide explicit targets or a valid source."
+                .to_string(),
+        );
+    }
+
+    Ok(target_window_ids)
+}
+
+fn apply_sync_broadcast_intent_to_snapshot(
+    snapshot: &mut DesktopSynchronizerSnapshot,
+    channel: &str,
+    source_window_id: Option<&str>,
+    target_window_ids: &[String],
+    action_ts: &str,
+) -> bool {
+    let mut layout_flag_updated = false;
+    match channel {
+        "scroll" => {
+            if !snapshot.layout.sync_scroll {
+                snapshot.layout.sync_scroll = true;
+                layout_flag_updated = true;
+            }
+        }
+        "navigation" => {
+            if !snapshot.layout.sync_navigation {
+                snapshot.layout.sync_navigation = true;
+                layout_flag_updated = true;
+            }
+        }
+        "input" => {
+            if !snapshot.layout.sync_input {
+                snapshot.layout.sync_input = true;
+                layout_flag_updated = true;
+            }
+        }
+        _ => {}
+    }
+
+    let target_set = target_window_ids.iter().cloned().collect::<HashSet<_>>();
+    for window in &mut snapshot.windows {
+        let is_source = source_window_id
+            .map(|source_id| window.window_id.as_str() == source_id)
+            .unwrap_or(false);
+        if is_source || target_set.contains(&window.window_id) {
+            window.last_action_at = Some(action_ts.to_string());
+        }
+    }
+
+    layout_flag_updated
+}
+
+fn format_sync_broadcast_message(
+    channel: &str,
+    target_count: usize,
+    layout_flag_updated: bool,
+    source_window_id: Option<&str>,
+    intent_label: Option<&str>,
+) -> String {
+    let mut attributes = vec![
+        "intentStateWrite=recorded".to_string(),
+        "physicalDispatch=not_executed".to_string(),
+        format!("channel={channel}"),
+        format!("targets={target_count}"),
+        format!("layoutFlagUpdated={layout_flag_updated}"),
+    ];
+
+    if let Some(source_id) = source_window_id {
+        attributes.push(format!("source={source_id}"));
+    }
+
+    if let Some(intent) = intent_label {
+        let trimmed = intent.trim();
+        if !trimmed.is_empty() {
+            attributes.push(format!("intent={trimmed}"));
+        }
+    }
+
+    format!(
+        "Recorded native broadcast intent/state write; {}. Physical multi-window dispatch is not implemented yet.",
+        attributes.join("; ")
+    )
+}
+
 const DEFAULT_LAYOUT_WINDOW_X: i64 = 100;
 const DEFAULT_LAYOUT_WINDOW_Y: i64 = 100;
 const DEFAULT_LAYOUT_WINDOW_WIDTH: i64 = 960;
@@ -1320,26 +1425,27 @@ fn format_layout_apply_message(
 ) -> String {
     let moved_count = summary.moved_count();
     let failure_count = summary.failure_count();
+    let mode_label = plan.mode.as_str();
     let mut parts = Vec::new();
 
     if failure_count == 0 {
         parts.push(format!(
-            "Applied {} layout to {} sync windows.",
-            plan.mode, moved_count
+            "Recorded native layout state write for {mode_label} mode; physically repositioned {moved_count}/{} sync windows (physicalPlacement=applied; layoutStateWrite=recorded).",
+            summary.planned
         ));
     } else if moved_count > 0 {
         parts.push(format!(
-      "Applied {} layout to {moved_count}/{} sync windows; partial success with {failure_count} failures.",
-      plan.mode, summary.planned
-    ));
+            "Recorded native layout state write for {mode_label} mode and attempted physical repositioning; moved {moved_count}/{} sync windows with {failure_count} failures (physicalPlacement=partial; layoutStateWrite=recorded).",
+            summary.planned
+        ));
         parts.push(format!(
             "Failures: {}.",
             summarize_layout_failures(summary.failures.as_slice())
         ));
     } else {
         parts.push(format!(
-            "Failed to apply {} layout to all {} planned sync windows.",
-            plan.mode, summary.planned
+            "Recorded native layout state write for {mode_label} mode, but physical repositioning failed for all {} planned sync windows (physicalPlacement=failed; layoutStateWrite=recorded).",
+            summary.planned
         ));
         parts.push(format!(
             "Failures: {}.",
@@ -2307,8 +2413,15 @@ pub fn broadcast_sync_action(
         .map_err(|_| "Failed to lock synchronizer state".to_string())?;
     let mut snapshot = capture_live_synchronizer_snapshot(&synchronizer.snapshot)?;
 
-    let channel = normalize_sync_broadcast_channel(&request.channel)?;
-    let source_window_id = request.source_window_id.and_then(|window_id| {
+    let DesktopSynchronizerBroadcastRequest {
+        channel,
+        source_window_id,
+        target_window_ids,
+        intent_label,
+    } = request;
+
+    let channel = normalize_sync_broadcast_channel(&channel)?;
+    let source_window_id = source_window_id.and_then(|window_id| {
         let trimmed = window_id.trim().to_string();
         if trimmed.is_empty() {
             None
@@ -2321,95 +2434,43 @@ pub fn broadcast_sync_action(
         ensure_sync_windows_exist(&snapshot, std::slice::from_ref(source_id), "source")?;
     }
 
-    let explicit_targets = normalize_sync_target_window_ids(request.target_window_ids);
+    let explicit_targets = normalize_sync_target_window_ids(target_window_ids);
     if !explicit_targets.is_empty() {
         ensure_sync_windows_exist(&snapshot, explicit_targets.as_slice(), "target")?;
     }
 
-    let target_window_ids = if explicit_targets.is_empty() {
-        snapshot
-            .windows
-            .iter()
-            .filter(|window| {
-                source_window_id
-                    .as_ref()
-                    .map(|source_id| &window.window_id != source_id)
-                    .unwrap_or(true)
-            })
-            .map(|window| window.window_id.clone())
-            .collect::<Vec<_>>()
-    } else {
-        explicit_targets
-    };
-
-    if target_window_ids.is_empty() {
-        return Err(
-      "broadcast request produced no target windows; provide explicit targets or a valid source."
-        .to_string(),
-    );
-    }
-
-    let mut intent_applied = false;
-    match channel.as_str() {
-        "scroll" => {
-            if !snapshot.layout.sync_scroll {
-                snapshot.layout.sync_scroll = true;
-                intent_applied = true;
-            }
-        }
-        "navigation" => {
-            if !snapshot.layout.sync_navigation {
-                snapshot.layout.sync_navigation = true;
-                intent_applied = true;
-            }
-        }
-        "input" => {
-            if !snapshot.layout.sync_input {
-                snapshot.layout.sync_input = true;
-                intent_applied = true;
-            }
-        }
-        _ => {}
-    }
+    let target_window_ids = resolve_sync_broadcast_target_window_ids(
+        &snapshot,
+        source_window_id.as_deref(),
+        explicit_targets,
+    )?;
 
     let now = now_ts_string();
-    let target_set = target_window_ids.iter().cloned().collect::<HashSet<_>>();
-    for window in &mut snapshot.windows {
-        let is_source = source_window_id
-            .as_ref()
-            .map(|source_id| &window.window_id == source_id)
-            .unwrap_or(false);
-        if is_source || target_set.contains(&window.window_id) {
-            window.last_action_at = Some(now.clone());
-        }
-    }
+    let layout_flag_updated = apply_sync_broadcast_intent_to_snapshot(
+        &mut snapshot,
+        channel.as_str(),
+        source_window_id.as_deref(),
+        target_window_ids.as_slice(),
+        now.as_str(),
+    );
 
     snapshot.layout.updated_at = now.clone();
     snapshot.updated_at = now;
 
-    let source_hint = source_window_id
-        .as_ref()
-        .map(|source_id| format!(" source={source_id};"))
-        .unwrap_or_default();
-    let intent_hint = request
-        .intent_label
-        .as_ref()
-        .map(|intent| intent.trim().to_string())
-        .filter(|intent| !intent.is_empty())
-        .map(|intent| format!(" intent={intent};"))
-        .unwrap_or_default();
+    let message = format_sync_broadcast_message(
+        channel.as_str(),
+        target_window_ids.len(),
+        layout_flag_updated,
+        source_window_id.as_deref(),
+        intent_label.as_deref(),
+    );
 
     synchronizer.snapshot = snapshot.clone();
     Ok(sync_action_result(
-    "broadcast_sync_action",
-    snapshot,
-    &format!(
-      "Recorded native broadcast intent channel={channel}; targets={};layoutFlagUpdated={intent_applied};{}{} physical multi-window dispatch is not implemented yet.",
-      target_set.len(),
-      source_hint,
-      intent_hint
-    ),
-  ))
+        "broadcast_sync_action",
+        snapshot,
+        &message,
+    ))
 }
 
 #[tauri::command]
@@ -2553,6 +2614,77 @@ mod tests {
             .expect_err("missing target windows must fail");
         assert!(error.contains("target sync windows not found: 1003, 1004"));
         assert!(error.contains("available sync windows: [1001, 1002]"));
+    }
+
+    #[test]
+    fn resolve_sync_broadcast_target_window_ids_excludes_source_when_targets_are_omitted() {
+        let snapshot = test_sync_snapshot(&["1001", "1002", "1003"]);
+        let targets = resolve_sync_broadcast_target_window_ids(&snapshot, Some("1001"), Vec::new())
+            .expect("default target resolution should succeed");
+        assert_eq!(targets, vec!["1002".to_string(), "1003".to_string()]);
+    }
+
+    #[test]
+    fn resolve_sync_broadcast_target_window_ids_rejects_empty_scope() {
+        let snapshot = test_sync_snapshot(&["1001"]);
+        let error = resolve_sync_broadcast_target_window_ids(&snapshot, Some("1001"), Vec::new())
+            .expect_err("single-source scope should fail when no target remains");
+        assert!(error.contains("broadcast request produced no target windows"));
+    }
+
+    #[test]
+    fn apply_sync_broadcast_intent_to_snapshot_sets_layout_flag_and_action_timestamps() {
+        let mut snapshot = test_sync_snapshot(&["1001", "1002", "1003"]);
+        let target_window_ids = vec!["1002".to_string()];
+
+        let layout_flag_updated = apply_sync_broadcast_intent_to_snapshot(
+            &mut snapshot,
+            "navigation",
+            Some("1001"),
+            target_window_ids.as_slice(),
+            "1700000000",
+        );
+
+        assert!(layout_flag_updated);
+        assert!(snapshot.layout.sync_navigation);
+
+        let source_window = snapshot
+            .windows
+            .iter()
+            .find(|window| window.window_id == "1001")
+            .expect("source window should exist");
+        let target_window = snapshot
+            .windows
+            .iter()
+            .find(|window| window.window_id == "1002")
+            .expect("target window should exist");
+        let untouched_window = snapshot
+            .windows
+            .iter()
+            .find(|window| window.window_id == "1003")
+            .expect("untouched window should exist");
+
+        assert_eq!(source_window.last_action_at.as_deref(), Some("1700000000"));
+        assert_eq!(target_window.last_action_at.as_deref(), Some("1700000000"));
+        assert_eq!(untouched_window.last_action_at, None);
+    }
+
+    #[test]
+    fn format_sync_broadcast_message_marks_intent_without_physical_dispatch() {
+        let message = format_sync_broadcast_message(
+            "scroll",
+            2,
+            true,
+            Some("1001"),
+            Some(" nav-mirror "),
+        );
+        assert!(message.contains("intentStateWrite=recorded"));
+        assert!(message.contains("physicalDispatch=not_executed"));
+        assert!(message.contains("channel=scroll"));
+        assert!(message.contains("targets=2"));
+        assert!(message.contains("layoutFlagUpdated=true"));
+        assert!(message.contains("source=1001"));
+        assert!(message.contains("intent=nav-mirror"));
     }
 
     #[test]
@@ -2700,7 +2832,8 @@ mod tests {
         };
 
         let message = format_layout_apply_message(false, &plan, &summary);
-        assert!(message.contains("partial success"));
+        assert!(message.contains("physicalPlacement=partial"));
+        assert!(message.contains("layoutStateWrite=recorded"));
         assert!(message.contains("5002"));
         assert!(message.contains("re-applied"));
     }

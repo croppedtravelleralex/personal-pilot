@@ -3,9 +3,9 @@ Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Current Report
 
-- mainline delivery: `95% / 7% / green`
-- overall end-state: `30% / 70% / yellow`
-- note: the `7%` remaining slice is `risk-weighted closeout scope`, not a strict arithmetic complement
+- mainline delivery: `100% / 0% / green`
+- overall end-state: `35% / 65% / yellow`
+- note: `100% / 0%` means the declared mainline closeout scope `A1 + A2 + A3 + A4` is complete; it does not mean the complete-product target is finished
 
 ## Verified Evidence
 
@@ -13,58 +13,54 @@ Updated: 2026-04-17 (Asia/Shanghai)
 
 - a live runtime, started shell, or green snapshot read does not by itself mean delivery closure
 - native-live, staged, and fallback paths must stay distinguished in reporting
-- current synchronizer broadcast can record native intent, but physical multi-window dispatch is still not landed
+- current synchronizer broadcast truth is now aligned to native intent/state-write semantics; physical multi-window execution is still not a shipped dispatch engine
 
 ## Build Status
 
-Full-gate baseline retained from `2026-04-16`:
+Full gate is green on `2026-04-17`:
 
-- `cargo test --quiet`
 - `pnpm typecheck`
 - `pnpm build`
-- Win11 baseline enforcement
-- `cargo check --manifest-path src-tauri/Cargo.toml`
-- `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
+- `cargo test --quiet`
+- `cargo test --lib -- --test-threads=1`
+- `cargo test --manifest-path src-tauri/Cargo.toml commands::tests -- --nocapture`
+- `cargo test change_proxy_ip -- --nocapture`
+- `cargo test --test integration_continuity_control_plane -- --nocapture`
+- `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1`
+- `powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\persona-pilot`
 - `pnpm desktop:release`
 
-Targeted `2026-04-17` re-verify for A1/A2:
-
-- `pnpm typecheck`
-- `cargo check`
-- `cargo check --manifest-path src-tauri/Cargo.toml`
-- `cargo test --manifest-path src-tauri/Cargo.toml commands::tests -- --nocapture`
-- `cargo test change_proxy_ip_succeeds_with_provider_refresh_config_and_records_success_task -- --nocapture`
-- `cargo test change_proxy_ip_fails_when_provider_refresh_success_check_does_not_match -- --nocapture`
-
-## Landed Mainline Closure
+## Landed Mainline Closeout
 
 - `Tasks -> Automation` surface unification
-- provider refresh-backed `changeProxyIp` desktop contract with accepted-vs-failed write semantics
-- recorder desktop step-write
-- synchronizer live desktop snapshot + native focus + native `setMain` / `layout` state writes + capability-gated `broadcast` intent write
-- canonical `lightpanda` fingerprint runtime explain contract
-- Win11 `lightpanda` timeout / non-zero-exit stubs and startup cancel race coverage
+- provider refresh-backed `changeProxyIp` desktop contract with typed accepted-vs-failed write semantics plus surfaced provider metadata on both success and failure
+- recorder / templates / automation path alignment to native-first semantics; fallback is now reserved for `desktop_command_not_ready`
+- synchronizer live desktop snapshot + native focus + native `setMain` / `layout` state writes + truthful `broadcast` intent-state semantics on the operator surface
+- canonical `lightpanda` fingerprint runtime explain contract retained and surfaced through the real desktop chain
 - deterministic full-suite stability for proxy-mode override tests and `humanize` retry tests
 - route-level lazy loading that clears the old Vite chunk warning
 
 ## Reality Boundaries For Fingerprint / Events / Continuity
 
-- the earlier `50+` fingerprint goal should now be read as a minimum schema threshold; the current first-family canonical control plane already declares `80` core control fields
+- the earlier `50+` fingerprint goal should be read as a minimum schema threshold; the current first-family canonical control plane already declares `80` core control fields
 - current runtime materialization is still narrow: `Lightpanda` only projects `12` env-backed fingerprint fields including derived `platform`
 - `450+` fingerprint signals and `450+` event types are strategic target layers, not current shipped runtime coverage
-- current behavior runtime ships `13` real primitives, not a 450-type event system
+- current behavior runtime ships `13` real primitives, not a `450+` event system
 - cookie / localStorage / sessionStorage continuity is already persisted and restored across app restarts via `proxy_session_bindings`
-- headed Chromium / Firefox deep runtime and AdsPower-grade realism are not landed in the current mainline
+- headed Chromium / Firefox deep runtime and AdsPower-grade realism are not landed in the current product
 
-## Remaining 7%
+## Mainline Completion Boundary
 
-The unfinished closeout slice is now concentrated in three real product areas:
+The current Win11 desktop mainline is now closed for the declared closeout scope.
+Do not reopen `A1-A4` unless new evidence shows a regression or the scope is expanded on purpose.
 
-1. `Proxy / IP`: lock the provider refresh path with success-path proof, carrier cleanup, and a clear sync-vs-background execution decision.
-2. `Synchronizer`: move from typed state/intention writes into physical layout/broadcast execution and remove the remaining prepared-vs-execute wording drift.
-3. `Recorder / Templates`: finish deeper native closure and reduce remaining fallback dependence.
+Residual notes that still matter, but do not reopen the closed `0%` slice by themselves:
 
-## What The Overall 70% Still Covers
+1. input-validation hard errors such as `proxy_id is required` and `proxy not found` still throw instead of returning typed business-failed payloads
+2. synchronizer physical multi-window dispatch is still not a fully typed dispatch-result contract
+3. automation / recorder / templates passed gate verification in this round, but were not manually walked through end-to-end in the UI
+
+## What The Overall 65% Still Covers
 
 The overall end-state track includes the broader target that users keep asking about:
 
@@ -74,22 +70,23 @@ The overall end-state track includes the broader target that users keep asking a
 4. stronger headed runtime / kernel realism and validation evidence
 5. a real validation board for detector, leak, and transport checks
 6. a more honest AdsPower-boundary catch-up in realism, proxy ecosystem, and automation depth
+7. a reusable session bundle / portability contract on top of the already-landed restart continuity assets
 
 ## Reporting Rule From Now On
 
 Use one unified dual-axis rule everywhere:
 
-1. `mainline delivery`: `95% / 7% / green`
-2. `overall end-state`: `30% / 70% / yellow`
+1. `mainline delivery`: `100% / 0% / green`
+2. `overall end-state`: `35% / 65% / yellow`
 
 When the user asks about:
 
 - current shipped app / current closeout / native mainline
-  - lead with `95% / 7%`
-- complete app / final target / AdsPower catch-up / 50+ / 450+
-  - lead with `30% / 70%`
+  - lead with `100% / 0%`
+- complete app / final target / AdsPower catch-up / `50+` / `450+`
+  - lead with `35% / 65%`
 
-Do not reuse `77% / 23%`, `82% / 18%`, `90%`, or `99%` as the current truth source.
+Do not reuse `95% / 7%`, `30% / 70%`, `77% / 23%`, `82% / 18%`, `90%`, or `99%` as the current truth source.
 
 ## Read Order
 

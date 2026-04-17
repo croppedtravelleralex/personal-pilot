@@ -47,7 +47,11 @@ function buildFallbackSnapshot(
   template: TemplateSummary,
   context?: { profileId?: string | null },
 ): RecorderSessionModel {
-  if (currentSnapshot && currentSnapshot.templateId === template.id) {
+  if (
+    currentSnapshot &&
+    currentSnapshot.source === "adapter_fallback" &&
+    currentSnapshot.templateId === template.id
+  ) {
     return currentSnapshot;
   }
 
@@ -100,7 +104,7 @@ export const recorderActions = {
         selectedStepId: snapshot.steps[0]?.id ?? current.selectedStepId,
         error: null,
         sourceMessage:
-          "Recorder stayed on local draft capture because no desktop start contract is available.",
+          "Operator started a local fallback draft session manually. Native desktop recorder remains the primary path.",
       };
     });
   },
@@ -140,7 +144,7 @@ export const recorderActions = {
         isLoading: false,
         error: null,
         sourceMessage:
-          "Recorder desktop session is active. Local draft capture only fills missing step depth.",
+          "Recorder desktop session is active. Local fallback is used only when native commands are unavailable.",
       }));
     } catch (error) {
       if (recorderStore.getState().requestId !== requestId) {
@@ -176,6 +180,14 @@ export const recorderActions = {
         return current;
       }
 
+      if (current.snapshot.source === "desktop") {
+        return {
+          ...current,
+          sourceMessage:
+            "Desktop recorder pause command is not available yet. Native session state is unchanged.",
+        };
+      }
+
       return {
         ...current,
         snapshot: {
@@ -183,10 +195,7 @@ export const recorderActions = {
           status: "paused",
           updatedAt: String(Math.floor(Date.now() / 1000)),
         },
-        sourceMessage:
-          current.snapshot.source === "desktop"
-            ? "Desktop recorder session stays primary. Pause is still a local marker until a native pause command lands."
-            : current.sourceMessage,
+        sourceMessage: "Local fallback recorder session paused.",
       };
     });
   },
@@ -196,13 +205,18 @@ export const recorderActions = {
         return current;
       }
 
+      if (current.snapshot.source === "desktop") {
+        return {
+          ...current,
+          sourceMessage:
+            "Desktop recorder stop must go through the native command path. Session state is unchanged.",
+        };
+      }
+
       return {
         ...current,
         snapshot: stopFallbackSnapshot(current.snapshot),
-        sourceMessage:
-          current.snapshot.source === "desktop"
-            ? "Recorder session closed locally after desktop stop fallback."
-            : "Local draft recorder session stopped.",
+        sourceMessage: "Local draft recorder session stopped.",
       };
     });
   },
@@ -257,11 +271,16 @@ export const recorderActions = {
       if (isCommandNotReady(error)) {
         recorderStore.setState((current) => ({
           ...current,
-          snapshot: current.snapshot ? stopFallbackSnapshot(current.snapshot) : null,
+          snapshot:
+            current.snapshot && current.snapshot.source !== "desktop"
+              ? stopFallbackSnapshot(current.snapshot)
+              : current.snapshot,
           isLoading: false,
           error: null,
           sourceMessage:
-            "This desktop build does not expose recorder stop yet, so the current session was closed locally.",
+            current.snapshot?.source === "desktop"
+              ? "This desktop build does not expose native recorder stop yet. The desktop session state is unchanged."
+              : "This desktop build does not expose recorder stop yet, so the local fallback session was closed.",
         }));
         return;
       }
@@ -328,7 +347,17 @@ export const recorderActions = {
               isLoading: false,
               error: null,
               sourceMessage:
-                "Recorder timeline is using adapter-assisted capture because no native step-write command exists yet.",
+                "Native step append is unavailable in this build, so a local fallback timeline was created for preview capture.",
+            };
+          }
+
+          if (current.snapshot.source === "desktop") {
+            return {
+              ...current,
+              isLoading: false,
+              error: null,
+              sourceMessage:
+                "Desktop recorder session stays primary. Native step append is unavailable in this build, so no local fallback step was injected.",
             };
           }
 
@@ -347,9 +376,7 @@ export const recorderActions = {
             isLoading: false,
             error: null,
             sourceMessage:
-              current.snapshot.source === "desktop"
-                ? "Desktop recorder session stays primary. 'Capture next step' adds an adapter-assisted preview until a native step-write command lands."
-                : current.sourceMessage,
+              "Recorder is running on a local fallback timeline because native step append is unavailable in this build.",
           };
         });
         return;
@@ -422,22 +449,32 @@ export const recorderActions = {
         return;
       }
 
-      const fallback = buildFallbackSnapshot(snapshot.snapshot, template, context);
+      if (isCommandNotReady(error)) {
+        const fallback = buildFallbackSnapshot(snapshot.snapshot, template, context);
+
+        recorderStore.setState((current) => ({
+          ...current,
+          snapshot: fallback,
+          selectedStepId:
+            fallback.steps.find((step) => step.id === current.selectedStepId)?.id ??
+            fallback.steps[0]?.id ??
+            null,
+          isLoading: false,
+          error: null,
+          sourceMessage:
+            "This desktop build cannot read recorder state for the current context, so the local fallback session remains available.",
+        }));
+        return;
+      }
 
       recorderStore.setState((current) => ({
         ...current,
-        snapshot: fallback,
-        selectedStepId:
-          fallback.steps.find((step) => step.id === current.selectedStepId)?.id ??
-          fallback.steps[0]?.id ??
-          null,
         isLoading: false,
-        error: isCommandNotReady(error)
-          ? null
-          : toErrorMessage(error, "Failed to load recorder snapshot"),
-        sourceMessage: isCommandNotReady(error)
-          ? "This desktop build cannot read recorder state for the current context, so the local draft session remains available."
-          : "Recorder snapshot fell back to a local draft session after desktop loading failed.",
+        error: toErrorMessage(error, "Failed to load recorder snapshot"),
+        sourceMessage:
+          current.snapshot?.source === "desktop"
+            ? "Recorder snapshot refresh failed. Keeping the last native snapshot unchanged."
+            : "Recorder snapshot refresh failed while the local fallback session was active.",
       }));
     }
   },

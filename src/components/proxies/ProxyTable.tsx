@@ -1,5 +1,9 @@
 import {
   getProxyChangeCooldownRemainingSeconds,
+  getProxyProviderRefreshStatusLabel,
+  getProxyProviderRequestLabel,
+  getProxyProviderSourceLabel,
+  getProxyProviderStatusCodeLabel,
   getProxyProviderWriteEvidence,
   getProxyProviderWriteDetail,
   getProxyProviderWriteLabel,
@@ -185,9 +189,11 @@ function getRotationPosture(
   const writeState = getProxyProviderWriteState(changeIpFeedback);
   const writeLabel = getProxyProviderWriteLabel(writeState);
   const writeDetail = getProxyProviderWriteDetail(changeIpFeedback);
-  const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
-  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
-  const requestId = writeEvidence.requestId ?? "pending";
+  const sourceLabel = getProxyProviderSourceLabel(
+    changeIpFeedback,
+    changeIpFeedback?.requestedProvider ?? row.rotation.requestedProvider ?? null,
+  );
+  const requestId = getProxyProviderRequestLabel(changeIpFeedback, row.rotation.trackingTaskId);
 
   if (
     changeIpFeedback.phase === "error" ||
@@ -255,10 +261,11 @@ function ProxyRow({
   const rotationPosture = getRotationPosture(row, changeIpFeedback);
   const writeEvidence = getProxyProviderWriteEvidence(changeIpFeedback);
   const rollbackLabel = writeEvidence.rollbackSignal ? "rollback-flagged" : "no-rollback-signal";
-  const sourceLabel = writeEvidence.providerSource ?? "unknown-source";
-  const requestIdLabel = writeEvidence.requestId ?? "pending";
-  const executionLabel = writeEvidence.executionStatus ?? "unknown";
-  const providerRefreshLabel = writeEvidence.providerRefreshStatus ?? "refresh-pending";
+  const sourceLabel = getProxyProviderSourceLabel(changeIpFeedback, row.rotation.requestedProvider);
+  const requestIdLabel = getProxyProviderRequestLabel(changeIpFeedback, row.rotation.trackingTaskId);
+  const executionLabel = writeEvidence.executionStatus ?? "status-unreported";
+  const providerRefreshLabel = getProxyProviderRefreshStatusLabel(changeIpFeedback);
+  const providerStatusCodeLabel = getProxyProviderStatusCodeLabel(changeIpFeedback);
 
   return (
     <article
@@ -342,10 +349,11 @@ function ProxyRow({
         </span>
         <span className="proxy-row__subline">
           accepted={getAcceptedWriteLabel(changeIpFeedback)} / rollback={rollbackLabel} /
-          execution={executionLabel} / providerRefresh={providerRefreshLabel}
+          execution={executionLabel} / providerRefresh={providerRefreshLabel} / statusCode=
+          {providerStatusCodeLabel}
         </span>
         <span className="proxy-row__subline">
-          source={sourceLabel} / request-or-tracking={requestIdLabel}
+          source={sourceLabel} / request={requestIdLabel}
         </span>
       </div>
 

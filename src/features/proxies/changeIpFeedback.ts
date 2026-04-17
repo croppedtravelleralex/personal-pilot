@@ -67,6 +67,25 @@ function pickFirstNonEmpty(...values: Array<string | null | undefined>): string 
   return null;
 }
 
+function parseStatusCode(status: string | null): number | null {
+  if (!status) {
+    return null;
+  }
+
+  const direct = Number(status.trim());
+  if (Number.isInteger(direct) && direct >= 100 && direct <= 599) {
+    return direct;
+  }
+
+  const matched = status.match(/\b([1-5]\d{2})\b/);
+  if (!matched) {
+    return null;
+  }
+
+  const parsed = Number(matched[1]);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 export interface ProxyProviderWriteEvidence {
   acceptedWrite: boolean | null;
   rollbackSignal: boolean;
@@ -75,6 +94,7 @@ export interface ProxyProviderWriteEvidence {
   executionStatus: string | null;
   rollbackStatus: string | null;
   providerRefreshStatus: string | null;
+  providerStatusCode: number | null;
   providerRefreshAt: string | null;
 }
 
@@ -174,9 +194,12 @@ export function getProxyProviderWriteEvidence(
       executionStatus: null,
       rollbackStatus: null,
       providerRefreshStatus: null,
+      providerStatusCode: null,
       providerRefreshAt: null,
     };
   }
+
+  const providerRefreshStatus = pickFirstNonEmpty(result.providerRefresh?.status ?? null);
 
   return {
     acceptedWrite: getProxyAcceptedWriteSignal(result),
@@ -191,11 +214,53 @@ export function getProxyProviderWriteEvidence(
       result.rollback?.status ?? null,
       result.rollback?.reason ?? null,
     ),
-    providerRefreshStatus: pickFirstNonEmpty(
-      result.providerRefresh?.status ?? null,
-    ),
+    providerRefreshStatus,
+    providerStatusCode: parseStatusCode(providerRefreshStatus),
     providerRefreshAt: pickFirstNonEmpty(result.providerRefresh?.refreshedAt ?? null),
   };
+}
+
+export function getProxyProviderSourceLabel(
+  result: ProxyIpChangeFeedback | null,
+  requestedProvider?: string | null,
+): string {
+  const evidence = getProxyProviderWriteEvidence(result);
+  return evidence.providerSource ?? pickFirstNonEmpty(requestedProvider ?? null) ?? "source-unreported";
+}
+
+export function getProxyProviderRequestLabel(
+  result: ProxyIpChangeFeedback | null,
+  fallbackTrackingTaskId?: string | null,
+): string {
+  const evidence = getProxyProviderWriteEvidence(result);
+  return (
+    evidence.requestId ??
+    pickFirstNonEmpty(fallbackTrackingTaskId ?? null, result?.trackingTaskId ?? null) ??
+    "request-unreported"
+  );
+}
+
+export function getProxyProviderRefreshStatusLabel(
+  result: ProxyIpChangeFeedback | null,
+): string {
+  const evidence = getProxyProviderWriteEvidence(result);
+  if (evidence.providerRefreshStatus) {
+    return evidence.providerRefreshStatus;
+  }
+  if (!result) {
+    return "not-requested";
+  }
+  if (result.phase === "running") {
+    return "awaiting-response";
+  }
+  return "status-unreported";
+}
+
+export function getProxyProviderStatusCodeLabel(
+  result: ProxyIpChangeFeedback | null,
+): string {
+  const evidence = getProxyProviderWriteEvidence(result);
+  return evidence.providerStatusCode !== null ? String(evidence.providerStatusCode) : "n/a";
 }
 
 export function getProxyProviderWriteState(

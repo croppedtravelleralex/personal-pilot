@@ -1,4 +1,8 @@
 import {
+  getProxyProviderRefreshStatusLabel,
+  getProxyProviderRequestLabel,
+  getProxyProviderSourceLabel,
+  getProxyProviderStatusCodeLabel,
   getProxyProviderWriteEvidence,
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
@@ -91,11 +95,12 @@ function getRollbackSignalLabel(rollbackSignal: boolean): string {
 
 function getExecutionStatusLine(result: ProxyIpChangeFeedback): string {
   const evidence = getProxyProviderWriteEvidence(result);
-  const refreshStatus = evidence.providerRefreshStatus ?? "refresh-pending";
+  const refreshStatus = getProxyProviderRefreshStatusLabel(result);
+  const statusCode = getProxyProviderStatusCodeLabel(result);
   const refreshAt = evidence.providerRefreshAt
     ? ` @ ${formatRelativeTimestamp(evidence.providerRefreshAt)}`
     : "";
-  return `execution=${evidence.executionStatus ?? "unknown"} / providerRefresh=${refreshStatus}${refreshAt}`;
+  return `execution=${evidence.executionStatus ?? "status-unreported"} / providerRefresh=${refreshStatus} / statusCode=${statusCode}${refreshAt}`;
 }
 
 function getResultBadge(result: ProxyIpChangeFeedback): string {
@@ -230,8 +235,8 @@ export function ProxyChangeToolbar({
                       {getRollbackSignalLabel(evidence.rollbackSignal)}
                     </p>
                     <p className="record-card__subline">
-                      source={evidence.providerSource ?? "unknown-source"} / request-or-tracking=
-                      {evidence.requestId ?? "pending"}
+                      source={getProxyProviderSourceLabel(result, result.requestedProvider)} /
+                      request={getProxyProviderRequestLabel(result)}
                     </p>
                     <p className="record-card__subline">{getExecutionStatusLine(result)}</p>
                   </div>

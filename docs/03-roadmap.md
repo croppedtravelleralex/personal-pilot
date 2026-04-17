@@ -3,53 +3,46 @@ Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Unified Progress Truth
 
-- mainline delivery: `95% / 7% / green`
-- overall end-state: `30% / 70% / yellow`
+- mainline delivery: `100% / 0% / green`
+- overall end-state: `35% / 65% / yellow`
 
-## Phase A: Mainline Closeout
+## Phase A: Mainline Closeout Completed
 
-This phase is the current shipping track. It is not the same thing as the long-term “complete app” target.
+This phase is complete for the current Win11 desktop shipping scope.
+It is not the same thing as the broader complete-app target.
 
-### Current blockers
+### What Closed
 
-1. `Proxy / IP`: harden the real provider refresh path with success-path proof, config-carrier cleanup, and an explicit sync-vs-background execution choice.
-2. `Synchronizer`: move from typed native state/intention writes to physical `layout / broadcast` execution and fully honest operator wording.
-3. `Recorder / Templates`: move from desktop step-write to deeper native capture / template closure.
+1. `Proxy / IP`: the shipped path now uses the real provider-refresh contract and surfaces truthful accepted-vs-failed write semantics.
+2. `Synchronizer`: the operator surface now matches the native intent/state-write contract instead of overstating physical execution.
+3. `Recorder / Templates`: release-default flow is now native-first, with fallback limited to command-not-ready cases.
+4. `Release gate`: typecheck, build, Rust tests, Win11 baseline enforcement, local verify, and desktop release all passed together.
 
-### Exit condition
+### Completion Guardrail
 
 - keep the current Win11 desktop shell stable
-- finish the remaining native-closeout slice without reopening architecture scope
 - preserve `src/services/desktop.ts` as the only invoke boundary
+- if future work reopens proxy / synchronizer / recorder / release-gate regressions, reopen Axis A explicitly instead of silently spending Axis B budget
 
-### Detailed stage board
+### Historical Execution Pack
 
-Use `docs/19-phase-plan-and-scorecard.md` as the canonical detailed execution board for:
-
-1. `A1 Proxy / IP closeout`
-2. `A2 Synchronizer native closure`
-3. `A3 Recorder / Templates native closure`
-4. `A4 Mainline release gate`
-
-Current execution pack:
-
-- `docs/20-wave-2a-execution-plan.md` freezes the immediate `A1 + A2 + A3` write packages, task volume, and 6-worker split for the next push from `95% / 7%`.
+- `docs/20-wave-2a-execution-plan.md` is now the completed historical pack for the six-worker round that moved mainline from `95% / 7%` to `100% / 0%`
 
 ## Phase B: Overall End-State Expansion
 
-This phase covers the broader target the user keeps asking about and is the reason the overall end-state is still `30% / 70%`.
+This is now the active phase and is the reason the product is still only `35% / 65%` against the full target.
 
-### Capability tracks
+### Capability Tracks
 
 1. `Validation board`: detector, leak, transport, and coherence evidence across fingerprint / proxy / runtime layers.
 2. `Fingerprint runtime depth`: move beyond the current `12` projected fields and establish applied vs observed coverage.
-3. `Session bundle`: stabilize profile groups, import/export, cookie-storage continuity metadata, and long-session portability.
+3. `Session bundle`: stabilize profile groups, import / export, cookie-storage continuity metadata, and long-session portability.
 4. `450+ fingerprint signals`: grow total observation coverage without turning the product into `450` random knobs.
 5. `450+ event taxonomy`: grow from the current `13` shipped primitives into a composable replayable event grammar.
-6. `AdsPower boundary refresh`: re-evaluate realism, headed runtime depth, proxy ecosystem, and automation breadth after each major expansion.
+6. `AdsPower boundary refresh`: re-evaluate realism, headed runtime depth, proxy ecosystem, and automation breadth after deeper evidence lands.
 7. `External integration plan`: land high-ROI assets from the external research set without breaking the Win11 / Tauri baseline.
 
-### Detailed stage board
+### Detailed Stage Board
 
 Use `docs/19-phase-plan-and-scorecard.md` as the canonical detailed execution board for:
 
@@ -64,11 +57,11 @@ Use `docs/19-phase-plan-and-scorecard.md` as the canonical detailed execution bo
 
 Use the following wave order by default:
 
-| Wave | Scope | Default active agents | Exit gate |
+| Wave | Scope | Default active agents | Status / exit gate |
 | --- | --- | ---: | --- |
-| `Wave 1` | `A1 + A2` | `3-4` | proxy provider write path is honest and test-backed, and synchronizer typed writes plus operator wording are aligned with the remaining physical-execution gaps explicit |
-| `Wave 2` | `A3 + A4` | `2-4` | recorder/templates are native-first and the mainline release gate is green |
-| `Wave 3` | `B1 + B2` | `4-6` | validation evidence is repeatable and fingerprint runtime depth is measurable beyond `12` projected fields |
+| `Wave 1` | `A1 + A2` | `3-4` | completed |
+| `Wave 2` | `A3 + A4` | `2-4` | completed |
+| `Wave 3` | `B1 + B2` | `4-6` | next active wave; validation evidence is repeatable and fingerprint runtime depth is measurable beyond `12` projected fields |
 | `Wave 4` | `B3 + B4` | `4-6` | session portability and event grammar both move out of concept stage |
 | `Wave 5` | `B5 + B6` | `3-6` | runtime adapter boundary is stable and the AdsPower refresh is evidence-based |
 
@@ -81,8 +74,9 @@ Execution notes:
 
 ## Re-Verify Rule
 
-Before claiming further mainline progress again, re-pass:
+Before claiming another upward move in live progress, re-pass the relevant gate for the changed scope and keep the Win11 baseline intact.
+For any mainline regression claim, the default closure gate remains:
 
 1. `cargo test --quiet`
-2. `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`
+2. `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1`
 3. `pnpm desktop:release`

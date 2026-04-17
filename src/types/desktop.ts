@@ -892,10 +892,18 @@ export type DesktopProxyChangeIpRollbackSignal =
   | "provider_refreshed_manual_rebind_required"
   | string;
 
+export type DesktopProxyChangeIpProviderRefreshStatus =
+  | "accepted"
+  | "failed"
+  | string;
+
 export interface DesktopProxyChangeIpProviderRefresh {
-  sourceLabel: string;
-  providerKey: string;
-  statusCode: number;
+  source: string | null;
+  sourceLabel: string | null;
+  providerKey: string | null;
+  status: DesktopProxyChangeIpProviderRefreshStatus;
+  refreshedAt: string;
+  statusCode: number | null;
   providerRequestId: string | null;
   responseExcerpt: string | null;
 }

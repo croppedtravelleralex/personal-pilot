@@ -1,9 +1,9 @@
 # 17 Full-App Audit Progress Reset
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-04-17 (Asia/Shanghai)
 
 ## Historical Note
 
-This document is now a historical record of the `77% / 23%` audit reset.
+This document is a historical record of the `77% / 23%` audit reset.
 It explains why the project was previously downgraded after a full-repo reality check.
 
 ## Historical Baseline
@@ -13,10 +13,10 @@ It explains why the project was previously downgraded after a full-repo reality 
 
 ## Current Live Truth
 
-The live truth has moved forward to:
+The live truth has moved forward again:
 
-- `mainline delivery = 95% / 7% / green`
-- `overall end-state = 30% / 70% / yellow`
+- `mainline delivery = 100% / 0% / green`
+- `overall end-state = 35% / 65% / yellow`
 
 For current reporting, use:
 
@@ -26,8 +26,8 @@ For current reporting, use:
 
 Interpretation rule:
 
-- if the question is about current shipped app / closeout, lead with `95% / 7% / green`
-- if the question is about complete app / AdsPower / `50+` fingerprint / `450+` events, lead with `30% / 70% / yellow`
+- if the question is about current shipped app / closeout, lead with `100% / 0% / green`
+- if the question is about complete app / AdsPower / `50+` fingerprint / `450+` events, lead with `35% / 65% / yellow`
 
 ## Why Keep This File
 

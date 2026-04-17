@@ -33,6 +33,11 @@ interface ProxyChangeIpRequestContext {
   stickyTtlSeconds?: number | null;
 }
 
+export interface ProxyChangeIpFailureInput {
+  message: string;
+  details?: unknown;
+}
+
 export interface ProxiesState {
   rows: ProxyRowModel[];
   totalCount: number;
@@ -387,6 +392,56 @@ function readBooleanValue(
   return null;
 }
 
+function readNumberValue(
+  records: Array<LooseRecord | null | undefined>,
+  keys: string[],
+): number | null {
+  for (const record of records) {
+    if (!record) {
+      continue;
+    }
+
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === "string") {
+        const numeric = Number(value.trim());
+        if (Number.isFinite(numeric)) {
+          return numeric;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseJsonRecord(value: string): LooseRecord | null {
+  try {
+    const parsed = JSON.parse(value);
+    return toRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function unwrapFailureDetails(details: unknown): LooseRecord | null {
+  const root = toRecord(details) ?? (typeof details === "string" ? parseJsonRecord(details) : null);
+  if (!root) {
+    return null;
+  }
+
+  const nested = readNestedRecord(root, ["details", "error", "payload", "data", "cause"]);
+  if (!nested) {
+    return root;
+  }
+
+  const nestedAgain = readNestedRecord(nested, ["details", "error", "payload", "data", "cause"]);
+  return nestedAgain ?? nested;
+}
+
 function inferAcceptedWrite(status: string | null, trackingTaskId: string | null): boolean | null {
   const normalized = status?.toLowerCase() ?? "";
 
@@ -413,7 +468,12 @@ function inferAcceptedWrite(status: string | null, trackingTaskId: string | null
 }
 
 function normalizeExecutionMeta(
-  result: DesktopProxyChangeIpResult,
+  result: DesktopProxyChangeIpResult | LooseRecord | null,
+  fallback?: {
+    status?: string | null;
+    message?: string | null;
+    trackingTaskId?: string | null;
+  },
 ): ProxyChangeExecutionMeta | null {
   const root = toRecord(result);
   const execution = readNestedRecord(root, [
@@ -423,6 +483,20 @@ function normalizeExecutionMeta(
     "executionFeedback",
     "execution_feedback",
   ]);
+  const resolvedStatus =
+    readStringValue([execution, root], [
+      "executionStatus",
+      "execution_status",
+      "status",
+      "writeStatus",
+      "write_status",
+    ]) ?? fallback?.status ?? null;
+  const resolvedTrackingTaskId =
+    readStringValue([execution, root], [
+      "trackingTaskId",
+      "tracking_task_id",
+    ]) ?? fallback?.trackingTaskId ?? null;
+  const resolvedMessage = fallback?.message ?? null;
 
   const meta: ProxyChangeExecutionMeta = {
     acceptedWrite:
@@ -436,7 +510,7 @@ function normalizeExecutionMeta(
         "provider_write_accepted",
         "executionAcceptedWrite",
         "execution_accepted_write",
-      ]) ?? inferAcceptedWrite(result.status, result.trackingTaskId),
+      ]) ?? inferAcceptedWrite(resolvedStatus, resolvedTrackingTaskId),
     requestId:
       readStringValue([execution, root], [
         "requestId",
@@ -447,10 +521,12 @@ function normalizeExecutionMeta(
         "write_request_id",
         "executionRequestId",
         "execution_request_id",
-      ]) ?? result.trackingTaskId,
+      ]) ?? resolvedTrackingTaskId,
     providerSource: readStringValue([execution, root], [
       "providerSource",
       "provider_source",
+      "sourceLabel",
+      "providerKey",
       "source",
       "sourceProvider",
       "source_provider",
@@ -459,17 +535,19 @@ function normalizeExecutionMeta(
     ]),
     status:
       readStringValue([execution, root], [
+        "executionStatus",
+        "execution_status",
         "status",
         "writeStatus",
         "write_status",
-        "executionStatus",
-        "execution_status",
-      ]) ?? result.status,
+      ]) ?? fallback?.status ?? null,
     stage: readStringValue([execution, root], [
       "stage",
       "phase",
       "executionStage",
       "execution_stage",
+      "errorKind",
+      "error_kind",
     ]),
     detail:
       readStringValue([execution, root], [
@@ -478,7 +556,9 @@ function normalizeExecutionMeta(
         "note",
         "executionDetail",
         "execution_detail",
-      ]) ?? result.message,
+        "errorKind",
+        "error_kind",
+      ]) ?? resolvedMessage,
   };
 
   if (
@@ -496,7 +576,7 @@ function normalizeExecutionMeta(
 }
 
 function normalizeRollbackMeta(
-  result: DesktopProxyChangeIpResult,
+  result: DesktopProxyChangeIpResult | LooseRecord | null,
 ): ProxyChangeRollbackMeta | null {
   const root = toRecord(result);
   const rollback = readNestedRecord(root, [
@@ -506,6 +586,12 @@ function normalizeRollbackMeta(
     "rollbackFeedback",
     "rollback_feedback",
   ]);
+  const rollbackSignal = readStringValue([rollback, root], [
+    "rollbackSignal",
+    "rollback_signal",
+    "signal",
+  ]);
+  const normalizedSignal = rollbackSignal?.trim().toLowerCase() ?? "";
 
   const meta: ProxyChangeRollbackMeta = {
     signaled:
@@ -526,20 +612,28 @@ function normalizeRollbackMeta(
         "rollback_flagged",
         "shouldRollback",
         "should_rollback",
-      ]),
+      ]) ??
+      (normalizedSignal
+        ? !["none", "no", "false", "0", "clear"].includes(normalizedSignal)
+        : null),
     status:
       readStringValue([rollback], [
         "status",
         "state",
+        "rollbackSignal",
+        "rollback_signal",
         "rollbackStatus",
         "rollback_status",
       ]) ??
       readStringValue([root], [
         "rollbackStatus",
         "rollback_status",
+        "rollbackSignal",
+        "rollback_signal",
         "rollbackState",
         "rollback_state",
-      ]),
+      ]) ??
+      rollbackSignal,
     reason:
       readStringValue([rollback], [
         "reason",
@@ -553,7 +647,8 @@ function normalizeRollbackMeta(
         "rollback_reason",
         "rollbackMessage",
         "rollback_message",
-      ]),
+      ]) ??
+      (rollbackSignal ? `rollbackSignal=${rollbackSignal}` : null),
     requestId:
       readStringValue([rollback], [
         "requestId",
@@ -575,7 +670,7 @@ function normalizeRollbackMeta(
 }
 
 function normalizeProviderRefreshMeta(
-  result: DesktopProxyChangeIpResult,
+  result: DesktopProxyChangeIpResult | LooseRecord | null,
 ): ProxyChangeProviderRefreshMeta | null {
   const root = toRecord(result);
   const providerRefresh = readNestedRecord(root, [
@@ -584,10 +679,49 @@ function normalizeProviderRefreshMeta(
     "providerRefreshMeta",
     "provider_refresh_meta",
   ]);
+  const statusCode =
+    readNumberValue([providerRefresh], [
+      "statusCode",
+      "status_code",
+      "httpStatus",
+      "http_status",
+      "code",
+    ]) ??
+    readNumberValue([root], [
+      "providerRefreshStatusCode",
+      "provider_refresh_status_code",
+      "statusCode",
+      "status_code",
+    ]);
+  const statusLabel =
+    readStringValue([providerRefresh], [
+      "status",
+      "state",
+      "refreshStatus",
+      "refresh_status",
+      "providerRefreshStatus",
+      "provider_refresh_status",
+    ]) ??
+    readStringValue([root], [
+      "providerRefreshStatus",
+      "provider_refresh_status",
+      "executionStatus",
+      "execution_status",
+      "refreshStatus",
+      "refresh_status",
+    ]);
+  const statusWithCode =
+    statusCode !== null
+      ? statusLabel
+        ? `${statusLabel} (${statusCode})`
+        : String(statusCode)
+      : statusLabel;
 
   const meta: ProxyChangeProviderRefreshMeta = {
     source:
       readStringValue([providerRefresh], [
+        "sourceLabel",
+        "providerKey",
         "source",
         "providerSource",
         "provider_source",
@@ -606,6 +740,8 @@ function normalizeProviderRefreshMeta(
         "request_id",
         "providerRequestId",
         "provider_request_id",
+        "providerRefreshRequestId",
+        "provider_refresh_request_id",
         "refreshRequestId",
         "refresh_request_id",
       ]) ??
@@ -618,20 +754,7 @@ function normalizeProviderRefreshMeta(
         "provider_request_id",
       ]),
     status:
-      readStringValue([providerRefresh], [
-        "status",
-        "state",
-        "refreshStatus",
-        "refresh_status",
-        "providerRefreshStatus",
-        "provider_refresh_status",
-      ]) ??
-      readStringValue([root], [
-        "providerRefreshStatus",
-        "provider_refresh_status",
-        "refreshStatus",
-        "refresh_status",
-      ]),
+      statusWithCode,
     refreshedAt:
       readStringValue([providerRefresh], [
         "refreshedAt",
@@ -705,6 +828,23 @@ function mergeExecutionMeta(
     stage: next.stage ?? previous.stage,
     detail: next.detail ?? previous.detail,
   };
+}
+
+function toFailureStatus(
+  previous: ProxyChangeExecutionMeta | null,
+): string {
+  const status = previous?.status?.trim() ?? "";
+  const normalized = status.toLowerCase();
+  if (
+    status &&
+    (normalized.includes("fail") ||
+      normalized.includes("error") ||
+      normalized.includes("blocked") ||
+      normalized.includes("reject"))
+  ) {
+    return status;
+  }
+  return "local_request_failed";
 }
 
 function buildSubmittingExecutionMeta(
@@ -1239,7 +1379,7 @@ export const proxyActions = {
   recordChangeIpFailure(
     requestId: number,
     proxyId: string,
-    error: string,
+    failure: ProxyChangeIpFailureInput,
     finishedAt: string,
     requestContext?: ProxyChangeIpRequestContext,
   ) {
@@ -1250,18 +1390,39 @@ export const proxyActions = {
 
       const previous = current.changeIp.results[proxyId];
       const context = normalizeChangeIpContext(requestContext);
-      const nextExecution: ProxyChangeExecutionMeta = {
-        acceptedWrite: false,
-        requestId: previous?.execution?.requestId ?? previous?.trackingTaskId ?? null,
-        providerSource: previous?.execution?.providerSource ?? null,
-        status: previous?.execution?.status ?? "local_request_failed",
-        stage: previous?.execution?.stage ?? "local_request_failed",
-        detail: error,
-      };
+      const failureRecord = unwrapFailureDetails(failure.details);
+      const fallbackStatus = toFailureStatus(previous?.execution ?? null);
+      const nextExecution =
+        normalizeExecutionMeta(failureRecord, {
+          status: fallbackStatus,
+          message: failure.message,
+          trackingTaskId: previous?.trackingTaskId ?? null,
+        }) ??
+        ({
+          acceptedWrite: false,
+          requestId: previous?.execution?.requestId ?? previous?.trackingTaskId ?? null,
+          providerSource: previous?.execution?.providerSource ?? null,
+          status: fallbackStatus,
+          stage: previous?.execution?.stage ?? "local_request_failed",
+          detail: failure.message,
+        } as ProxyChangeExecutionMeta);
       const nextRollback: ProxyChangeRollbackMeta | null =
-        previous?.rollback ?? null;
+        normalizeRollbackMeta(failureRecord) ?? previous?.rollback ?? null;
       const nextProviderRefresh: ProxyChangeProviderRefreshMeta | null =
-        previous?.providerRefresh ?? null;
+        normalizeProviderRefreshMeta(failureRecord) ?? previous?.providerRefresh ?? null;
+      const statusFromFailure =
+        readStringValue([failureRecord], [
+          "status",
+          "executionStatus",
+          "execution_status",
+          "errorKind",
+          "error_kind",
+        ]) ?? nextExecution.status ?? fallbackStatus;
+      const trackingTaskId =
+        readStringValue([failureRecord], ["trackingTaskId", "tracking_task_id"]) ??
+        previous?.trackingTaskId ??
+        nextExecution.requestId ??
+        null;
 
       return {
         ...current,
@@ -1270,15 +1431,15 @@ export const proxyActions = {
           completedCount: current.changeIp.completedCount + 1,
           failedCount: current.changeIp.failedCount + 1,
           feedbackTone: "error",
-          lastMessage: error,
+          lastMessage: failure.message,
           lastFinishedAt: finishedAt,
           results: {
             ...current.changeIp.results,
             [proxyId]: {
               proxyId,
               phase: "error",
-              message: error,
-              status: previous?.status ?? "local_request_failed",
+              message: failure.message,
+              status: statusFromFailure,
               execution: nextExecution,
               rollback: nextRollback,
               providerRefresh: nextProviderRefresh,
@@ -1294,7 +1455,7 @@ export const proxyActions = {
                 "Provider-side write not confirmed because local request failed.",
               residencyStatus: previous?.residencyStatus ?? null,
               rotationMode: context.mode ?? previous?.rotationMode ?? null,
-              trackingTaskId: previous?.trackingTaskId ?? null,
+              trackingTaskId,
               expiresAt: previous?.expiresAt ?? null,
               updatedAt: finishedAt,
             },

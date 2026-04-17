@@ -22,6 +22,7 @@ import type {
   ProxySortField,
   ProxyUsageFilter,
 } from "./model";
+import type { ProxyChangeIpFailureInput } from "./store";
 import { getFilteredProxyRows, proxiesStore, proxyActions } from "./store";
 
 interface FilterOption<T extends string = string> {
@@ -63,6 +64,35 @@ function toChangeIpErrorMessage(error: unknown): string {
   }
 
   return toErrorMessage(error);
+}
+
+function buildChangeIpFailureInput(error: unknown): ProxyChangeIpFailureInput {
+  if (error instanceof DesktopServiceError) {
+    return {
+      message: toChangeIpErrorMessage(error),
+      details:
+        error.details ??
+        ({
+          code: error.code,
+          message: error.message,
+        } as const),
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      message: toChangeIpErrorMessage(error),
+      details: {
+        message: error.message,
+        stack: error.stack ?? null,
+      },
+    };
+  }
+
+  return {
+    message: toChangeIpErrorMessage(error),
+    details: error,
+  };
 }
 
 function getChangeIpTargetIds(state: ReturnType<typeof proxiesStore.getState>): string[] {
@@ -193,10 +223,11 @@ export function useProxiesViewModel() {
         const result = await runProxyChangeIp(requestInput);
         proxyActions.recordChangeIpSuccess(requestId, proxyId, result);
       } catch (error) {
+        const failure = buildChangeIpFailureInput(error);
         proxyActions.recordChangeIpFailure(
           requestId,
           proxyId,
-          toChangeIpErrorMessage(error),
+          failure,
           String(Math.floor(Date.now() / 1000)),
           requestInput,
         );

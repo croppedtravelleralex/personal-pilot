@@ -286,24 +286,25 @@ export const templateActions = {
         error: null,
         source: "desktop",
         sourceMessage:
-          "Desktop template read model is primary; the adapter still fills missing flow depth and binding scaffolding.",
+          "Desktop template metadata is primary. Adapter rows are used only when a template is absent from the desktop catalog.",
       }));
     } catch (error) {
       if (templatesStore.getState().requestId !== requestId) {
         return;
       }
 
+      const commandNotReady = isCommandNotReady(error);
       const normalizedMessage =
         error instanceof Error ? error.message : "Failed to load template metadata";
 
       templatesStore.setState((current) => ({
         ...current,
         isLoading: false,
-        error: isCommandNotReady(error) ? null : normalizedMessage,
-        source: "adapter_fallback",
-        sourceMessage: isCommandNotReady(error)
+        error: commandNotReady ? null : normalizedMessage,
+        source: commandNotReady ? "adapter_fallback" : current.source,
+        sourceMessage: commandNotReady
           ? "This desktop build does not expose template metadata yet. The adapter catalog stays available."
-          : "Desktop template read failed, so the adapter catalog remains available as fallback.",
+          : "Desktop template read failed. Keeping the last successful catalog without switching away from native-first mode.",
       }));
     }
   },

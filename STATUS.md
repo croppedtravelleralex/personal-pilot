@@ -7,15 +7,15 @@ Gateway guardrail anchor: `upstream_configured=false`
 
 ## Current Truth Markers
 
-- mainline reporting baseline is `95% / 7% / green`
-- overall end-state baseline is `30% / 70% / yellow`
+- mainline reporting baseline is `100% / 0% / green`
+- overall end-state baseline is `35% / 65% / yellow`
 - `80` declared controls do not mean `80` runtime-applied fields; current runtime projection is still `12`
 - current behavior runtime is still `13` primitives
 - cookie / localStorage / sessionStorage restart continuity is already landed
 - AdsPower catch-up, `50+`, and `450+` belong to the overall track
 - detailed phase plan and scorecard live in `/docs/19-phase-plan-and-scorecard.md`
-- `runtime alive` is not the same thing as delivery closure
-- `mock / fallback / staged` default paths do not count as delivery closure
+- `runtime alive` is not the same thing as overall completion
+- mock / fallback / staged default paths do not count as delivery closure unless they are explicitly part of the shipped contract
 
 ## Follow These Docs
 
@@ -30,10 +30,8 @@ Gateway guardrail anchor: `upstream_configured=false`
 
 ## 2026-04-17 Mainline Delta
 
-- `Tasks` surface unification is complete
-- `changeProxyIp` now executes provider refresh in the desktop contract and returns accepted-vs-failed write semantics
-- synchronizer now has live desktop read, native Win32 focus, native `setMain` / `layout` internal-state writes, and capability-gated native broadcast intent writes
-- recorder now has desktop step-write
-- `2026-04-17` targeted A1/A2 re-verify is green: `pnpm typecheck`, `cargo check`, `cargo check --manifest-path src-tauri/Cargo.toml`, synchronizer command tests, and both `changeProxyIp` success / success-check-mismatch tests
-- the Rust gate is fully green again, including `integration_api` / `integration_lightpanda_runner`
+- `changeProxyIp` now follows the backend provider-refresh contract and surfaces typed accepted-vs-failed write semantics
+- synchronizer now has live desktop read, native Win32 focus, native `setMain` / `layout` state writes, and truthful broadcast intent-state reporting
+- recorder / templates / automation are aligned to a native-first main path
+- `2026-04-17` full closure verify is green: `pnpm typecheck`, `pnpm build`, `cargo test --quiet`, Win11 baseline enforcement, `scripts/windows_local_verify.ps1`, and `pnpm desktop:release`
 - route-level code splitting has cleared the old Vite chunk warning

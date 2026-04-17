@@ -7,12 +7,12 @@ Canonical maintenance docs live under `/docs`.
 
 Use the `2026-04-17` dual-axis split everywhere:
 
-- mainline delivery: `95% / 7% / green`
-- overall end-state: `30% / 70% / yellow`
-- mainline acceptance was verified by: `cargo test --quiet`, `pnpm typecheck`, `pnpm build`, Win11 baseline, `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`, `pnpm desktop:release`
-- AdsPower catch-up, `50+` control, `450+` fingerprint signals, and `450+` event taxonomy belong to the overall track, not the current `7%` closeout
+- mainline delivery: `100% / 0% / green`
+- overall end-state: `35% / 65% / yellow`
+- mainline acceptance was verified by: `cargo test --quiet`, `pnpm typecheck`, `pnpm build`, Win11 baseline, `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1`, `pnpm desktop:release`
+- AdsPower catch-up, `50+` control, `450+` fingerprint signals, and `450+` event taxonomy belong to the overall track, not the closed mainline
 
-Do not treat legacy `77% / 23%`, `82% / 18%`, `90%`, or `99%` as the current truth source.
+Do not treat legacy `95% / 7%`, `30% / 70%`, `77% / 23%`, `82% / 18%`, `90%`, or `99%` as the current truth source.
 
 ## Current Reality Anchors
 
@@ -37,11 +37,9 @@ Do not treat legacy `77% / 23%`, `82% / 18%`, `90%`, or `99%` as the current tru
 
 ## Mainline Landed Delta
 
-- `Tasks` is no longer an orphan route; queue control now lives inside `Automation`
-- `changeProxyIp` now executes provider refresh through the desktop contract and returns accepted-vs-failed write semantics; exit-IP drift still needs later detail/health observation
-- recorder now appends steps through the desktop contract, and synchronizer now reads live desktop windows, applies native focus, writes `setMain` / `layout` internal state, and records capability-gated broadcast intent
-- `lightpanda` now emits the canonical fingerprint runtime explain contract
-- Win11 `lightpanda` timeout / non-zero-exit test stubs are native-testable, and startup cancel race coverage is in place
+- provider refresh-backed `changeProxyIp` is aligned end-to-end from desktop contract to operator feedback
+- automation / recorder / templates now stay native-first and only fall back on `desktop_command_not_ready`
+- synchronizer now reports truthful native intent/state semantics instead of overstating physical multi-window execution
 - the full Rust gate is green again, including `integration_api` and `integration_lightpanda_runner`
-- `2026-04-17` targeted re-verify passed for A1/A2: `pnpm typecheck`, `cargo check`, `cargo check --manifest-path src-tauri/Cargo.toml`, `cargo test --manifest-path src-tauri/Cargo.toml commands::tests -- --nocapture`, `cargo test change_proxy_ip_succeeds_with_provider_refresh_config_and_records_success_task -- --nocapture`, and `cargo test change_proxy_ip_fails_when_provider_refresh_success_check_does_not_match -- --nocapture`
+- `2026-04-17` full closure verify passed: `pnpm typecheck`, `pnpm build`, `cargo test --quiet`, Win11 baseline enforcement, `scripts/windows_local_verify.ps1`, and `pnpm desktop:release`
 - route-level lazy loading is in place and the previous Vite chunk warning has been cleared

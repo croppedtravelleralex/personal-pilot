@@ -1,4 +1,8 @@
 import {
+  getProxyProviderRefreshStatusLabel,
+  getProxyProviderRequestLabel,
+  getProxyProviderSourceLabel,
+  getProxyProviderStatusCodeLabel,
   getProxyProviderWriteEvidence,
   getProxyProviderWriteLabel,
   getProxyProviderWriteState,
@@ -99,7 +103,7 @@ export function ProxyOperationsSummary({
     <Panel
       title="Proxy Operations Overview"
       subtitle="Dense operator summary for inventory posture, residency/rotation semantics, and immediate risk follow-up."
-      actions={<span className="badge">{dataSource ?? "unknown-source"}</span>}
+      actions={<span className="badge">{dataSource ?? "data-unreported"}</span>}
     >
       <div className="details-grid details-grid--two">
         <div className="details-grid__item">
@@ -173,7 +177,8 @@ export function ProxyOperationsSummary({
         <div className="record-list">
           {recentResults.map((result) => {
             const evidence = getProxyProviderWriteEvidence(result);
-            const refreshStatus = evidence.providerRefreshStatus ?? "refresh-pending";
+            const refreshStatus = getProxyProviderRefreshStatusLabel(result);
+            const statusCode = getProxyProviderStatusCodeLabel(result);
 
             return (
               <article className="record-card record-card--compact" key={result.proxyId}>
@@ -186,12 +191,12 @@ export function ProxyOperationsSummary({
                       {evidence.rollbackSignal ? "rollback-flagged" : "no-rollback-signal"}
                     </p>
                     <p className="record-card__subline">
-                      source={evidence.providerSource ?? "unknown-source"} / request-or-tracking=
-                      {evidence.requestId ?? "pending"}
+                      source={getProxyProviderSourceLabel(result, result.requestedProvider)} /
+                      request={getProxyProviderRequestLabel(result)}
                     </p>
                     <p className="record-card__subline">
-                      execution={evidence.executionStatus ?? "unknown"} / providerRefresh=
-                      {refreshStatus}
+                      execution={evidence.executionStatus ?? "status-unreported"} /
+                      providerRefresh={refreshStatus} / statusCode={statusCode}
                     </p>
                   </div>
                   <span className={getResultBadge(result)}>{getResultHumanLabel(result)}</span>

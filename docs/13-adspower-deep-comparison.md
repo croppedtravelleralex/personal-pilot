@@ -3,8 +3,8 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## 统一口径
 
-- 主线交付：`95% / 7% / green`
-- 整体终局：`30% / 70% / yellow`
+- 主线交付：`100% / 0% / green`
+- 整体终局：`35% / 65% / yellow`
 - 本文属于 `整体终局` 轨道，不是当前主线 closeout 进度板
 
 详细阶段任务、评分板、以及 `当前 / 目标 / AdsPower` 的统一汇报入口，见 `docs/19-phase-plan-and-scorecard.md`。
@@ -32,7 +32,7 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## 为什么不是“已经追平”
 
-- 当前主线 `95% / 7%` 只代表 Win11 本地桌面 App closeout，不能外推成 AdsPower 级整体成熟度
+- 当前主线 `100% / 0%` 只代表 Win11 本地桌面 App closeout，不能外推成 AdsPower 级整体成熟度
 - `50+` 现在应理解为最低控制面门槛，而当前 first-family 已声明 `80` 个控制字段
 - 这 `80` 个字段不等于都已经被 runtime 消费；当前 runtime 投影仍只有 `12`
 - `450+` 指纹信号和 `450+` 事件类型都还是整体终局目标，不是当前 shipped depth
@@ -40,7 +40,7 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## 追评 AdsPower 应该并到哪条线
 
-AdsPower 追评属于 `整体终局 30% / 70% / yellow` 的范围，主要覆盖：
+AdsPower 追评属于 `整体终局 35% / 65% / yellow` 的范围，主要覆盖：
 
 1. 更深的指纹 / 内核 materialization
 2. 更强的真实性 observation / validation board
@@ -51,6 +51,6 @@ AdsPower 追评属于 `整体终局 30% / 70% / yellow` 的范围，主要覆盖
 
 ## 当前结论
 
-- 如果问“当前桌面 App 主线是否接近收口”，答案是：`95% / 7% / green`
-- 如果问“是否已经做到 AdsPower 级丰富、真实、完整”，答案是：还没有，这部分应按 `30% / 70% / yellow` 口径理解
+- 如果问“当前桌面 App 主线是否接近收口”，答案是：`100% / 0% / green`
+- 如果问“是否已经做到 AdsPower 级丰富、真实、完整”，答案是：还没有，这部分应按 `35% / 65% / yellow` 口径理解
 - 当前和 AdsPower 的差距，核心不在“有没有页面”，而在真实性、运行时深度、验证证据、代理生态和自动化广度

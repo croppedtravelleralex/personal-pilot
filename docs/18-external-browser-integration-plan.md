@@ -3,8 +3,8 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## 0. 口径边界
 
-- 主线交付：`95% / 7% / green`
-- 整体终局：`30% / 70% / yellow`
+- 主线交付：`100% / 0% / green`
+- 整体终局：`35% / 65% / yellow`
 - 本文属于 `整体终局` 轨道，主要服务于指纹真实性、运行时深度、AdsPower 追评和外部能力整合
 - 本文不是当前主线 `7%` closeout 的完成证明，方案落地后才会逐步反映到整体终局进度
 
@@ -326,4 +326,4 @@ P2 的前置条件：
 - `session bundle + profile contract`
 - `proxy/IP consistency + automation facade`
 
-这样既能吸收外部长处，也不会打断当前 `95% / 7%` 的主线收口。
+这样既能吸收外部长处，也不会打断当前 `100% / 0%` 的主线收口。

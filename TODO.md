@@ -5,23 +5,14 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 
 ## Closed In This Round
 
-- [x] Merge `Tasks` into `Automation` and close the orphan route gap
-- [x] Restore the full Rust gate to green
-- [x] Promote `scripts/windows_local_verify.ps1` into the primary Win11 acceptance entry
-- [x] Push `changeProxyIp` to a provider-aware / sticky-aware local closure
-- [x] Push `Synchronizer` to live snapshot / native focus with honest staged-only unsupported writes
-- [x] Push `Recorder` to desktop step-write
-- [x] Fix the remaining `cargo test --quiet` integration failures and stabilize the full Rust gate
-- [x] Clear the Vite chunk warning with route-level code splitting
+- [x] Close the declared mainline scope to `100% / 0% / green`
+- [x] Align `changeProxyIp` backend truth and operator feedback
+- [x] Align automation / recorder / templates to native-first semantics
+- [x] Align synchronizer wording to truthful native intent / state semantics
+- [x] Re-pass the full Rust gate, Win11 baseline, local verify, and desktop release
+- [x] Rewrite canonical docs and root entrypoints to one unified progress truth
 
-## Mainline Remaining 7%
-
-- [ ] Finish provider-grade proxy API write behind the now-stable local `changeProxyIp` contract
-- [ ] Finish `Synchronizer` native batch / broadcast writes and move more staged paths out of the default route
-- [ ] Finish `Recorder / Templates` native-first de-fallback closure
-- [ ] Tighten final Win11 packaging / operator acceptance polish without reopening scope
-
-## Overall End-State 70%
+## Active Overall End-State 65%
 
 - [ ] Build the validation board for detector, leak, DNS, WebRTC, canvas, audio, worker, and transport evidence
 - [ ] Deepen fingerprint runtime from `80` declared controls and `12` projected fields toward broader applied / observed coverage

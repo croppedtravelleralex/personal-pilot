@@ -10,13 +10,14 @@ UI code does not invoke Tauri directly; all native access stays behind `src/serv
 - `setMainSyncWindow`
   - Update the synchronizer main-window anchor in native state.
 - `applyWindowLayout`
-  - Apply native window layout planning and surface physical placement outcome through the returned snapshot and message.
+  - Record native layout state and attempt physical window placement.
+  - Returned message and capability feedback distinguish physical placement outcome (`applied` / `partial` / `failed`) from state-write acceptance.
 - `focusSyncWindow`
   - Use native Win32 focus control.
 - `broadcastSyncAction`
   - Execute the typed native broadcast-intent contract.
-  - Successful runs record native intent, source/target scope, and layout-flag state.
-  - Physical multi-window event dispatch is still not implemented.
+  - Successful runs record native intent/state, source/target scope, and layout-flag state.
+  - Physical multi-window event dispatch is still not implemented, and is explicitly reported as not executed.
 
 ## Module split
 

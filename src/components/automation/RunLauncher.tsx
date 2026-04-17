@@ -224,7 +224,7 @@ export function RunLauncher({
   return (
     <Panel
       title="Launch Console"
-      subtitle="Review preflight, confirm dispatch posture, and move a prepared local manifest into local runtime execution through the connected desktop launch contract."
+      subtitle="Review preflight, confirm dispatch posture, and move a prepared local manifest into local runtime execution."
       actions={
         <span className={`badge ${getPostureTone(canLaunch, isPreparingLaunch, isLaunching)}`}>
           {isPreparingLaunch
@@ -657,8 +657,8 @@ export function RunLauncher({
 
         {!onLaunch && lastPreparedLaunch?.ready ? (
           <div className="banner banner--warning">
-            Launch is prepared, but this view did not expose a launch action. Keep this package
-            staged and trigger dispatch from the connected launch surface.
+            Launch is prepared, but dispatch is not enabled in this screen composition. Keep this
+            package staged and use the bound dispatch entry for this environment.
           </div>
         ) : null}
 
