@@ -1,3 +1,4 @@
+import { InlineContentPreview } from "../components/InlineContentPreview";
 import { ProfilesBatchBar } from "../components/profiles/ProfilesBatchBar";
 import { ProfilesFilterRail } from "../components/profiles/ProfilesFilterRail";
 import { ProfilesTable } from "../components/profiles/ProfilesTable";
@@ -37,13 +38,17 @@ export function ProfilesPage() {
       />
 
       <div className="profiles-workbench__main">
-        {state.list.error ? <div className="banner banner--error">{state.list.error}</div> : null}
+        {state.list.error ? (
+          <div className="banner banner--error">
+            <InlineContentPreview value={state.list.error} collapseAt={260} inlineLimit={4000} />
+          </div>
+        ) : null}
 
         {state.actionNotice ? (
           <div className="toolbar-card toolbar-card--subtle profiles-workbench__hint">
             <div>
               <strong>Workbench notice</strong>
-              <p>{state.actionNotice}</p>
+              <InlineContentPreview value={state.actionNotice} collapseAt={220} inlineLimit={4000} />
             </div>
             <button
               className="button button--secondary"

@@ -1,4 +1,8 @@
 import { EmptyState } from "../EmptyState";
+import {
+  InlineContentPreview,
+  truncateInlineContent,
+} from "../InlineContentPreview";
 import { Panel } from "../Panel";
 import { SearchInput } from "../SearchInput";
 import { VirtualList } from "../VirtualList";
@@ -67,7 +71,11 @@ export function RunsBoard({
 
   return (
     <div className="page-stack">
-      {state.error ? <div className="banner banner--error">{state.error}</div> : null}
+      {state.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={state.error} collapseAt={240} inlineLimit={4000} />
+        </div>
+      ) : null}
 
       <Panel
         title={title}
@@ -177,7 +185,7 @@ export function RunsBoard({
             <VirtualList
               items={state.items}
               height={height}
-              itemHeight={156}
+              itemHeight={188}
               getKey={(item) => item.id}
               renderItem={(item) => {
                 const selected = item.id === selectedRunId;
@@ -231,18 +239,19 @@ export function RunsBoard({
                       <span>{timingSummary}</span>
                       <span>Content {item.contentReady === true ? "ready" : item.contentReady === false ? "pending" : "n/a"}</span>
                     </div>
-                    {item.contentPreview ? (
-                      <p className="record-card__content">{item.contentPreview}</p>
-                    ) : (
-                      <p className="record-card__content record-card__content--muted">
-                        No preview recorded for this run.
-                      </p>
-                    )}
+                    <InlineContentPreview
+                      className="record-card__content"
+                      value={item.contentPreview ?? "No preview recorded for this run."}
+                      collapseAt={200}
+                      expandable={false}
+                      copyable={false}
+                      muted={!item.contentPreview}
+                    />
                     <div className="record-card__footer">
                       <span>Started {formatRelativeTimestamp(item.startedAt)}</span>
                       <span>Finished {formatRelativeTimestamp(item.finishedAt)}</span>
                       <span>Gate {item.manualGateRequestId ?? "none"}</span>
-                      <span>Error: {item.errorMessage ?? "None"}</span>
+                      <span>Error: {truncateInlineContent(item.errorMessage ?? "None", 120)}</span>
                     </div>
                   </article>
                 );

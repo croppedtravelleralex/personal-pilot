@@ -1,4 +1,8 @@
 import { EmptyState } from "../EmptyState";
+import {
+  InlineContentPreview,
+  truncateInlineContent,
+} from "../InlineContentPreview";
 import { formatRelativeTimestamp } from "../../utils/format";
 import type {
   RecorderSessionModel,
@@ -182,10 +186,16 @@ export function RecorderTimeline({
                         </div>
                         <span className={getStepBadge(step)}>{step.actionType}</span>
                       </div>
-                      <p className="record-card__content">{step.detail}</p>
+                      <InlineContentPreview
+                        className="record-card__content"
+                        value={step.detail}
+                        collapseAt={220}
+                        expandable={false}
+                        copyable={false}
+                      />
                       <div className="record-card__footer">
                         <span>{formatRelativeTimestamp(step.capturedAt)}</span>
-                        <span>{step.url ?? step.selector ?? "Adapter timeline step"}</span>
+                        <span>{truncateInlineContent(step.url ?? step.selector ?? "Adapter timeline step", 110)}</span>
                       </div>
                     </article>
                   );
@@ -202,19 +212,50 @@ export function RecorderTimeline({
               </div>
               <div className="details-grid__item">
                 <dt>Step detail</dt>
-                <dd>{selectedStep?.detail ?? snapshot.note}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={selectedStep?.detail ?? snapshot.note}
+                    empty="No recorder detail"
+                    collapseAt={240}
+                    inlineLimit={8000}
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Selector / URL</dt>
-                <dd>{selectedStep?.selector ?? selectedStep?.url ?? "Not captured"}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={selectedStep?.selector ?? selectedStep?.url}
+                    empty="Not captured"
+                    collapseAt={160}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Value preview</dt>
-                <dd>{selectedStep?.valuePreview ?? "No value preview"}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={selectedStep?.valuePreview}
+                    empty="No value preview"
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono={Boolean(selectedStep?.sensitive)}
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Current URL</dt>
-                <dd>{snapshot.currentUrl ?? "No captured URL"}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={snapshot.currentUrl}
+                    empty="No captured URL"
+                    collapseAt={160}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Variable candidates</dt>

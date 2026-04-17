@@ -440,6 +440,42 @@ textarea {
   color: var(--ink-muted);
 }
 
+.inline-content-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inline-content-preview__body {
+  min-width: 0;
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inline-content-preview__body--muted {
+  color: var(--ink-muted);
+}
+
+.inline-content-preview__body--mono {
+  font-family:
+    "Cascadia Mono",
+    "Consolas",
+    "Microsoft YaHei UI",
+    monospace;
+  font-size: 0.92rem;
+}
+
+.inline-content-preview__actions {
+  justify-content: flex-start;
+}
+
+.inline-content-preview__note {
+  color: var(--ink-muted);
+  font-size: 0.84rem;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

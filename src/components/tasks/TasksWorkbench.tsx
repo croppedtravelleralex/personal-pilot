@@ -1,3 +1,4 @@
+import { InlineContentPreview } from "../InlineContentPreview";
 import { Panel } from "../Panel";
 import { SearchInput } from "../SearchInput";
 import { VirtualList } from "../VirtualList";
@@ -188,7 +189,11 @@ export function TasksWorkbench({
       }
     >
       <div className="page-stack">
-        {error ? <div className="banner banner--error">{error}</div> : null}
+        {error ? (
+          <div className="banner banner--error">
+            <InlineContentPreview value={error} collapseAt={240} inlineLimit={4000} />
+          </div>
+        ) : null}
 
         <div className="automation-metric-strip">
           <article className="automation-metric-strip__item">
@@ -448,7 +453,7 @@ export function TasksWorkbench({
           <VirtualList
             items={items}
             height={720}
-            itemHeight={224}
+            itemHeight={252}
             getKey={(item) => item.id}
             renderItem={(item) => {
               const selected = selectedIds.includes(item.id);
@@ -520,12 +525,20 @@ export function TasksWorkbench({
                     </div>
                   ) : null}
 
-                  <p className="record-card__content">
-                    {item.errorMessage ??
+                  <InlineContentPreview
+                    className="record-card__content"
+                    value={
+                      item.errorMessage ??
                       item.contentPreview ??
                       item.finalUrl ??
-                      "No preview or diagnostic detail was recorded for this task yet."}
-                  </p>
+                      "No preview or diagnostic detail was recorded for this task yet."
+                    }
+                    collapseAt={220}
+                    expandable={false}
+                    copyable={false}
+                    mono={!item.errorMessage && !item.contentPreview && Boolean(item.finalUrl)}
+                    muted={!item.errorMessage && !item.contentPreview}
+                  />
 
                   <div className="record-card__footer">
                     <span>Created {formatRelativeTimestamp(item.createdAt)}</span>

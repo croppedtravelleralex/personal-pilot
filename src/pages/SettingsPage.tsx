@@ -4,6 +4,7 @@ import type {
   DesktopSettingsSnapshot,
 } from "../types/desktop";
 import { EmptyState } from "../components/EmptyState";
+import { InlineContentPreview } from "../components/InlineContentPreview";
 import { Panel } from "../components/Panel";
 import { useRuntimeViewModel } from "../features/runtime/hooks";
 import { useSettingsViewModel } from "../features/settings/hooks";
@@ -159,11 +160,21 @@ export function SettingsPage() {
 
   return (
     <div className="page-stack">
-      {state.error ? <div className="banner banner--error">{state.error}</div> : null}
-      {runtime.state.error ? (
-        <div className="banner banner--error">{runtime.state.error}</div>
+      {state.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={state.error} collapseAt={280} inlineLimit={4000} />
+        </div>
       ) : null}
-      {state.info ? <div className="banner banner--info">{state.info}</div> : null}
+      {runtime.state.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={runtime.state.error} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
+      {state.info ? (
+        <div className="banner banner--info">
+          <InlineContentPreview value={state.info} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
 
       <div className="toolbar-card settings-toolbar">
         <div>
@@ -412,7 +423,11 @@ export function SettingsPage() {
             </div>
           }
         >
-          {runtime.state.info ? <div className="banner banner--info">{runtime.state.info}</div> : null}
+          {runtime.state.info ? (
+            <div className="banner banner--info">
+              <InlineContentPreview value={runtime.state.info} collapseAt={280} inlineLimit={4000} />
+            </div>
+          ) : null}
           {localApiSnapshot ? (
             <div className="details-grid details-grid--two">
               <div className="details-grid__item">
@@ -425,11 +440,25 @@ export function SettingsPage() {
               </div>
               <div className="details-grid__item">
                 <dt>Health URL</dt>
-                <dd>{localApiSnapshot.healthUrl}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={localApiSnapshot.healthUrl}
+                    collapseAt={160}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Base URL</dt>
-                <dd>{localApiSnapshot.baseUrl}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={localApiSnapshot.baseUrl}
+                    collapseAt={160}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Reachable</dt>
@@ -441,7 +470,14 @@ export function SettingsPage() {
               </div>
               <div className="details-grid__item">
                 <dt>Config file</dt>
-                <dd>{localApiSnapshot.configPath}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={localApiSnapshot.configPath}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>PID</dt>
@@ -620,23 +656,58 @@ export function SettingsPage() {
             <div className="details-grid details-grid--two">
               <div className="details-grid__item">
                 <dt>Environment root</dt>
-                <dd>{browserEnvironmentSnapshot.environmentRoot}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={browserEnvironmentSnapshot.environmentRoot}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Profile workspace</dt>
-                <dd>{browserEnvironmentSnapshot.profileWorkspaceDir}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={browserEnvironmentSnapshot.profileWorkspaceDir}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Downloads dir</dt>
-                <dd>{browserEnvironmentSnapshot.downloadsDir}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={browserEnvironmentSnapshot.downloadsDir}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Extensions dir</dt>
-                <dd>{browserEnvironmentSnapshot.extensionsDir}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={browserEnvironmentSnapshot.extensionsDir}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Bookmarks catalog</dt>
-                <dd>{browserEnvironmentSnapshot.bookmarksCatalogPath}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={browserEnvironmentSnapshot.bookmarksCatalogPath}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </div>
               <div className="details-grid__item">
                 <dt>Updated</dt>
@@ -791,7 +862,17 @@ export function SettingsPage() {
                       {entry.status === "ready" ? "Ready" : "Provision on demand"}
                     </span>
                   </div>
-                  <p className="record-card__content record-card__content--muted">{entry.path}</p>
+                  <InlineContentPreview
+                    className="record-card__content"
+                    bodyClassName="record-card__content--muted"
+                    value={entry.path}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    expandable={false}
+                    copyable={false}
+                    mono
+                    muted
+                  />
                   <div className="record-card__footer">
                     <span>{formatStatusLabel(entry.kind)}</span>
                     <button
@@ -857,11 +938,25 @@ export function SettingsPage() {
                 </div>
                 <div className="details-grid__item">
                   <dt>Import manifest</dt>
-                  <dd>{importExportSkeleton.importManifestPath}</dd>
+                  <dd>
+                    <InlineContentPreview
+                      value={importExportSkeleton.importManifestPath}
+                      collapseAt={180}
+                      inlineLimit={6000}
+                      mono
+                    />
+                  </dd>
                 </div>
                 <div className="details-grid__item">
                   <dt>Export manifest</dt>
-                  <dd>{importExportSkeleton.exportManifestPath}</dd>
+                  <dd>
+                    <InlineContentPreview
+                      value={importExportSkeleton.exportManifestPath}
+                      collapseAt={180}
+                      inlineLimit={6000}
+                      mono
+                    />
+                  </dd>
                 </div>
               </div>
 
@@ -936,7 +1031,14 @@ export function SettingsPage() {
               {LOCAL_DIRECTORY_ITEMS.map((item) => (
                 <article className="details-grid__item" key={item.target}>
                   <dt>{item.label}</dt>
-                  <dd className="details-grid__value">{item.getValue(snapshot)}</dd>
+                  <dd className="details-grid__value">
+                    <InlineContentPreview
+                      value={item.getValue(snapshot)}
+                      collapseAt={180}
+                      inlineLimit={6000}
+                      mono
+                    />
+                  </dd>
                   <div className="details-grid__actions">
                     <button
                       className="button button--secondary"
@@ -952,7 +1054,14 @@ export function SettingsPage() {
               {PACKAGED_DIRECTORY_ITEMS.map((item) => (
                 <article className="details-grid__item" key={item.target}>
                   <dt>{item.label}</dt>
-                  <dd className="details-grid__value">{item.getValue(snapshot)}</dd>
+                  <dd className="details-grid__value">
+                    <InlineContentPreview
+                      value={item.getValue(snapshot)}
+                      collapseAt={180}
+                      inlineLimit={6000}
+                      mono
+                    />
+                  </dd>
                   <div className="details-grid__actions">
                     <button
                       className="button button--secondary"
@@ -967,11 +1076,25 @@ export function SettingsPage() {
               ))}
               <article className="details-grid__item">
                 <dt>Database URL</dt>
-                <dd>{snapshot.databaseUrl}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={snapshot.databaseUrl}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </article>
               <article className="details-grid__item">
                 <dt>Database path</dt>
-                <dd>{snapshot.databasePath}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={snapshot.databasePath}
+                    collapseAt={180}
+                    inlineLimit={6000}
+                    mono
+                  />
+                </dd>
               </article>
             </div>
           ) : (

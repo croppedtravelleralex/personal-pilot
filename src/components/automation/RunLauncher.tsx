@@ -1,4 +1,5 @@
 import { EmptyState } from "../EmptyState";
+import { InlineContentPreview } from "../InlineContentPreview";
 import { Panel } from "../Panel";
 import type {
   AutomationNoticeTone,
@@ -520,7 +521,9 @@ export function RunLauncher({
         ) : null}
 
         {launcherNotice ? (
-          <div className={getNoticeClassName(launcherNoticeTone)}>{launcherNotice}</div>
+          <div className={getNoticeClassName(launcherNoticeTone)}>
+            <InlineContentPreview value={launcherNotice} collapseAt={240} inlineLimit={6000} />
+          </div>
         ) : null}
 
         {lastPreparedLaunch ? (
@@ -537,7 +540,12 @@ export function RunLauncher({
               <span>{lastPreparedLaunch.boundProfileIds.length} target profiles</span>
               <span>{lastPreparedLaunch.recorderStepCount} recorder steps</span>
             </div>
-            <p className="record-card__content">{lastPreparedLaunch.compilePreview.message}</p>
+            <InlineContentPreview
+              className="record-card__content"
+              value={lastPreparedLaunch.compilePreview.message}
+              collapseAt={240}
+              inlineLimit={10000}
+            />
             <div className="details-grid details-grid--two">
               <article className="details-grid__item">
                 <dt>Prepared at</dt>
@@ -575,14 +583,23 @@ export function RunLauncher({
               </div>
             ) : null}
             {lastPreparedLaunch.note ? (
-              <p className="record-card__content record-card__content--muted">
-                Operator note: {lastPreparedLaunch.note}
-              </p>
+              <InlineContentPreview
+                className="record-card__content"
+                bodyClassName="record-card__content--muted"
+                value={`Operator note: ${lastPreparedLaunch.note}`}
+                collapseAt={220}
+                inlineLimit={8000}
+                muted
+              />
             ) : null}
           </article>
         ) : null}
 
-        {launchNotice ? <div className={getNoticeClassName(launchNoticeTone)}>{launchNotice}</div> : null}
+        {launchNotice ? (
+          <div className={getNoticeClassName(launchNoticeTone)}>
+            <InlineContentPreview value={launchNotice} collapseAt={240} inlineLimit={6000} />
+          </div>
+        ) : null}
 
         {lastLaunchResult ? (
           <article className="record-card record-card--compact launcher-preview">
@@ -590,10 +607,20 @@ export function RunLauncher({
               <strong>Dispatch result</strong>
               <span className={`badge badge--${lastLaunchResult.status}`}>{lastLaunchResult.status}</span>
             </div>
-            <p className="record-card__content">{lastLaunchResult.headline}</p>
-            <p className="record-card__content record-card__content--muted">
-              {lastLaunchResult.detail}
-            </p>
+            <InlineContentPreview
+              className="record-card__content"
+              value={lastLaunchResult.headline}
+              collapseAt={220}
+              inlineLimit={8000}
+            />
+            <InlineContentPreview
+              className="record-card__content"
+              bodyClassName="record-card__content--muted"
+              value={lastLaunchResult.detail}
+              collapseAt={240}
+              inlineLimit={10000}
+              muted
+            />
             <div className="details-grid details-grid--two">
               <article className="details-grid__item">
                 <dt>Run</dt>

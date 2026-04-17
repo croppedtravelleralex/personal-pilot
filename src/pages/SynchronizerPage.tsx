@@ -1,3 +1,4 @@
+import { InlineContentPreview } from "../components/InlineContentPreview";
 import { Panel } from "../components/Panel";
 import { StatCard } from "../components/StatCard";
 import { LayoutToolbar } from "../components/synchronizer/LayoutToolbar";
@@ -55,8 +56,16 @@ export function SynchronizerPage() {
 
   return (
     <div className="page-stack">
-      {state.error ? <div className="banner banner--error">{state.error}</div> : null}
-      {state.info ? <div className="banner banner--info">{state.info}</div> : null}
+      {state.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={state.error} collapseAt={260} inlineLimit={4000} />
+        </div>
+      ) : null}
+      {state.info ? (
+        <div className="banner banner--info">
+          <InlineContentPreview value={state.info} collapseAt={260} inlineLimit={4000} />
+        </div>
+      ) : null}
 
       <div className="toolbar-card">
         <div className="automation-center__hero">

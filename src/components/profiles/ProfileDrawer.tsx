@@ -1,6 +1,10 @@
 import type { ProfileDataSource, ProfileDetail, ProfileDrawerTab } from "../../features/profiles/model";
 import { formatRelativeTimestamp } from "../../utils/format";
 import { EmptyState } from "../EmptyState";
+import {
+  InlineContentPreview,
+  truncateInlineContent,
+} from "../InlineContentPreview";
 
 const TABS: Array<{ value: ProfileDrawerTab; label: string }> = [
   { value: "overview", label: "Overview" },
@@ -166,10 +170,17 @@ function renderTabBody(activeTab: ProfileDrawerTab, detail: ProfileDetail) {
               )}
             </dd>
           </div>
-          <div className="details-grid__item">
-            <dt>Runtime warning</dt>
-            <dd>{fingerprintSummary?.consumption?.partialSupportWarning ?? "None"}</dd>
-          </div>
+        <div className="details-grid__item">
+          <dt>Runtime warning</dt>
+          <dd>
+            <InlineContentPreview
+              value={fingerprintSummary?.consumption?.partialSupportWarning}
+              empty="None"
+              collapseAt={200}
+              inlineLimit={6000}
+            />
+          </dd>
+        </div>
         </dl>
 
         <div className="record-list">
@@ -213,11 +224,18 @@ function renderTabBody(activeTab: ProfileDrawerTab, detail: ProfileDetail) {
             <article className="record-card record-card--compact" key={log.id}>
               <div className="record-card__top">
                 <div>
-                  <strong>{log.message}</strong>
+                  <strong>{truncateInlineContent(log.message, 140)}</strong>
                   <p className="record-card__subline">{log.id}</p>
                 </div>
                 <span className={`badge badge--${log.level.toLowerCase()}`}>{log.level}</span>
               </div>
+              <InlineContentPreview
+                className="record-card__content"
+                value={log.message}
+                collapseAt={220}
+                expandable={false}
+                copyable={false}
+              />
               <div className="record-card__footer">
                 <span>{formatRelativeTimestamp(log.createdAt)}</span>
                 <span>Profile detail log stream</span>
@@ -379,7 +397,9 @@ export function ProfileDrawer({
 
       {openedProfileId && status === "error" ? (
         <div className="profile-drawer__error">
-          <div className="banner banner--error">{error}</div>
+          <div className="banner banner--error">
+            <InlineContentPreview value={error} collapseAt={240} inlineLimit={4000} />
+          </div>
           <button className="button button--secondary" type="button" onClick={onRetry}>
             Retry
           </button>

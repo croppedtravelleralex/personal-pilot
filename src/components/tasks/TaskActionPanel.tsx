@@ -1,3 +1,4 @@
+import { InlineContentPreview } from "../InlineContentPreview";
 import type { DesktopTaskItem } from "../../types/desktop";
 import type { TaskLaneSummary } from "../../features/tasks/hooks";
 import { formatRelativeTimestamp, formatStatusLabel } from "../../utils/format";
@@ -133,12 +134,19 @@ export function TaskActionPanel({
                       : "No manual gate"}
                   </span>
                 </div>
-                <p className="record-card__content">
-                  {focusedTask.errorMessage ??
+                <InlineContentPreview
+                  className="record-card__content"
+                  value={
+                    focusedTask.errorMessage ??
                     focusedTask.contentPreview ??
                     focusedTask.finalUrl ??
-                    "No extra task detail is available yet."}
-                </p>
+                    "No extra task detail is available yet."
+                  }
+                  collapseAt={260}
+                  inlineLimit={8000}
+                  mono={!focusedTask.errorMessage && !focusedTask.contentPreview && Boolean(focusedTask.finalUrl)}
+                  muted={!focusedTask.errorMessage && !focusedTask.contentPreview}
+                />
                 <div className="record-card__footer">
                   <span>Created {formatRelativeTimestamp(focusedTask.createdAt)}</span>
                   <span>Started {formatRelativeTimestamp(focusedTask.startedAt)}</span>
@@ -234,7 +242,12 @@ export function TaskActionPanel({
                 </div>
                 <span className="badge badge--info">{activeAction ?? "idle"}</span>
               </div>
-              <p className="record-card__content">{feedbackMessage}</p>
+              <InlineContentPreview
+                className="record-card__content"
+                value={feedbackMessage}
+                collapseAt={220}
+                inlineLimit={6000}
+              />
               <div className="record-card__footer">
                 <span>Retry-ready {retryEligibleCount}</span>
                 <span>Cancel-ready {cancelEligibleCount}</span>

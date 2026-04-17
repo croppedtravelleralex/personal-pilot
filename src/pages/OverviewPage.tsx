@@ -1,4 +1,5 @@
 import { EmptyState } from "../components/EmptyState";
+import { InlineContentPreview } from "../components/InlineContentPreview";
 import { Panel } from "../components/Panel";
 import { StatCard } from "../components/StatCard";
 import { useRuntimeViewModel } from "../features/runtime/hooks";
@@ -78,9 +79,26 @@ function renderTaskList(
             {item.manualGateRequestId ? <span className="automation-pill">Manual gate</span> : null}
           </div>
           {item.errorMessage ? (
-            <p className="record-card__content record-card__content--muted">{item.errorMessage}</p>
+            <InlineContentPreview
+              className="record-card__content"
+              bodyClassName="record-card__content--muted"
+              value={item.errorMessage}
+              collapseAt={180}
+              expandable={false}
+              copyable={false}
+              muted
+            />
           ) : item.finalUrl ? (
-            <p className="record-card__content record-card__content--muted">{item.finalUrl}</p>
+            <InlineContentPreview
+              className="record-card__content"
+              bodyClassName="record-card__content--muted"
+              value={item.finalUrl}
+              collapseAt={160}
+              expandable={false}
+              copyable={false}
+              mono
+              muted
+            />
           ) : null}
           <div className="record-card__footer">
             <span>Created {formatRelativeTimestamp(item.createdAt)}</span>
@@ -118,9 +136,21 @@ export function OverviewPage() {
 
   return (
     <div className="page-stack">
-      {state.error ? <div className="banner banner--error">{state.error}</div> : null}
-      {runtime.state.error ? <div className="banner banner--error">{runtime.state.error}</div> : null}
-      {runtime.state.info ? <div className="banner banner--info">{runtime.state.info}</div> : null}
+      {state.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={state.error} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
+      {runtime.state.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={runtime.state.error} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
+      {runtime.state.info ? (
+        <div className="banner banner--info">
+          <InlineContentPreview value={runtime.state.info} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
 
       <div className="toolbar-card">
         <div className="automation-center__hero">
@@ -312,17 +342,29 @@ export function OverviewPage() {
             <article className="details-grid__item">
               <dt>Binary / log dir</dt>
               <dd>
-                {runtimeSnapshot?.binaryPath ?? "No binary path"}
-                <br />
-                {runtimeSnapshot?.logDir ?? "No log directory"}
+                <InlineContentPreview
+                  value={[
+                    runtimeSnapshot?.binaryPath ?? "No binary path",
+                    runtimeSnapshot?.logDir ?? "No log directory",
+                  ].join("\n")}
+                  collapseAt={180}
+                  inlineLimit={6000}
+                  mono
+                />
               </dd>
             </article>
             <article className="details-grid__item">
               <dt>Stdout / stderr</dt>
               <dd>
-                {runtimeSnapshot?.stdoutPath ?? "No stdout path"}
-                <br />
-                {runtimeSnapshot?.stderrPath ?? "No stderr path"}
+                <InlineContentPreview
+                  value={[
+                    runtimeSnapshot?.stdoutPath ?? "No stdout path",
+                    runtimeSnapshot?.stderrPath ?? "No stderr path",
+                  ].join("\n")}
+                  collapseAt={180}
+                  inlineLimit={6000}
+                  mono
+                />
               </dd>
             </article>
           </div>

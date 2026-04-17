@@ -1,4 +1,8 @@
 import { EmptyState } from "../components/EmptyState";
+import {
+  InlineContentPreview,
+  truncateInlineContent,
+} from "../components/InlineContentPreview";
 import { Panel } from "../components/Panel";
 import { SearchInput } from "../components/SearchInput";
 import { StatCard } from "../components/StatCard";
@@ -69,9 +73,21 @@ export function LogsPage() {
 
   return (
     <div className="page-stack">
-      {runtime.error ? <div className="banner banner--error">{runtime.error}</div> : null}
-      {action.error ? <div className="banner banner--error">{action.error}</div> : null}
-      {state.info ? <div className="banner banner--info">{state.info}</div> : null}
+      {runtime.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={runtime.error} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
+      {action.error ? (
+        <div className="banner banner--error">
+          <InlineContentPreview value={action.error} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
+      {state.info ? (
+        <div className="banner banner--info">
+          <InlineContentPreview value={state.info} collapseAt={280} inlineLimit={4000} />
+        </div>
+      ) : null}
 
       <div className="toolbar-card logs-toolbar">
         <div className="automation-center__hero">
@@ -435,13 +451,13 @@ export function LogsPage() {
               <VirtualList
                 items={runtime.items}
                 height={640}
-                itemHeight={98}
+                itemHeight={148}
                 getKey={(item) => item.id}
                 renderItem={(item) => (
                   <article className="record-card record-card--log">
                     <div className="record-card__top">
                       <div>
-                        <strong>{item.message}</strong>
+                        <strong>{truncateInlineContent(item.message, 150)}</strong>
                         <p className="record-card__subline">
                           Task {item.taskId} {item.runId ? `| Run ${item.runId}` : ""}
                         </p>
@@ -460,6 +476,13 @@ export function LogsPage() {
                             : "Routine trace"}
                       </span>
                     </div>
+                    <InlineContentPreview
+                      className="record-card__content"
+                      value={item.message}
+                      collapseAt={220}
+                      expandable={false}
+                      copyable={false}
+                    />
                     <div className="record-card__footer">
                       <span>Log id: {item.id}</span>
                       <span>{formatRelativeTimestamp(item.createdAt)}</span>
@@ -495,7 +518,7 @@ export function LogsPage() {
               <VirtualList
                 items={action.items}
                 height={640}
-                itemHeight={148}
+                itemHeight={196}
                 getKey={(item) => item.id}
                 renderItem={(item) => (
                   <article
@@ -543,15 +566,34 @@ export function LogsPage() {
                       {item.contentReady ? <span className="automation-pill">Content ready</span> : null}
                     </div>
                     {item.contentPreview ? (
-                      <p className="record-card__content">{item.contentPreview}</p>
+                      <InlineContentPreview
+                        className="record-card__content"
+                        value={item.contentPreview}
+                        collapseAt={220}
+                        expandable={false}
+                        copyable={false}
+                      />
                     ) : item.errorMessage ? (
-                      <p className="record-card__content record-card__content--muted">
-                        {item.errorMessage}
-                      </p>
+                      <InlineContentPreview
+                        className="record-card__content"
+                        bodyClassName="record-card__content--muted"
+                        value={item.errorMessage}
+                        collapseAt={220}
+                        expandable={false}
+                        copyable={false}
+                        muted
+                      />
                     ) : item.finalUrl ? (
-                      <p className="record-card__content record-card__content--muted">
-                        {item.finalUrl}
-                      </p>
+                      <InlineContentPreview
+                        className="record-card__content"
+                        bodyClassName="record-card__content--muted"
+                        value={item.finalUrl}
+                        collapseAt={200}
+                        expandable={false}
+                        copyable={false}
+                        mono
+                        muted
+                      />
                     ) : null}
                   </article>
                 )}
@@ -641,7 +683,15 @@ export function LogsPage() {
                   </article>
                   <article className="details-grid__item">
                     <dt>Final URL</dt>
-                    <dd>{action.selectedTaskSnapshot.finalUrl ?? "N/A"}</dd>
+                    <dd>
+                      <InlineContentPreview
+                        value={action.selectedTaskSnapshot.finalUrl}
+                        empty="N/A"
+                        collapseAt={180}
+                        inlineLimit={6000}
+                        mono
+                      />
+                    </dd>
                   </article>
                   <article className="details-grid__item">
                     <dt>Created</dt>
@@ -650,11 +700,23 @@ export function LogsPage() {
                 </div>
 
                 {action.selectedTaskSnapshot.errorMessage ? (
-                  <div className="banner banner--error">{action.selectedTaskSnapshot.errorMessage}</div>
+                  <div className="banner banner--error">
+                    <InlineContentPreview
+                      value={action.selectedTaskSnapshot.errorMessage}
+                      collapseAt={240}
+                      inlineLimit={6000}
+                    />
+                  </div>
                 ) : null}
 
                 {action.selectedTaskLogsError ? (
-                  <div className="banner banner--error">{action.selectedTaskLogsError}</div>
+                  <div className="banner banner--error">
+                    <InlineContentPreview
+                      value={action.selectedTaskLogsError}
+                      collapseAt={240}
+                      inlineLimit={6000}
+                    />
+                  </div>
                 ) : null}
 
                 <div className="task-log-list">
@@ -667,11 +729,18 @@ export function LogsPage() {
                     action.selectedTaskLogs.map((item) => (
                       <article className="task-log-card" key={item.id}>
                         <div className="task-log-card__top">
-                          <strong>{item.message}</strong>
+                          <strong>{truncateInlineContent(item.message, 150)}</strong>
                           <span className={`badge badge--${getLogBadgeTone(item.level)}`}>
                             {item.level.toUpperCase()}
                           </span>
                         </div>
+                        <InlineContentPreview
+                          className="record-card__content"
+                          value={item.message}
+                          collapseAt={220}
+                          expandable={false}
+                          copyable={false}
+                        />
                         <div className="record-card__footer">
                           <span>{item.runId ? `Run ${item.runId}` : "No run id"}</span>
                           <span>{formatRelativeTimestamp(item.createdAt)}</span>

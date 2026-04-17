@@ -1,4 +1,5 @@
 import { EmptyState } from "../EmptyState";
+import { InlineContentPreview } from "../InlineContentPreview";
 import { Panel } from "../Panel";
 import { SearchInput } from "../SearchInput";
 import type { TemplateSummary } from "../../features/templates/model";
@@ -126,7 +127,13 @@ export function TemplatesBoard({
                         <span className={`badge badge--${item.status}`}>{item.status}</span>
                       </div>
                     </div>
-                    <p className="record-card__content">{item.summary}</p>
+                    <InlineContentPreview
+                      className="record-card__content"
+                      value={item.summary}
+                      collapseAt={220}
+                      expandable={false}
+                      copyable={false}
+                    />
                     <div className="record-card__meta">
                       <span>{item.platformId}</span>
                       <span>{item.stepCount} steps</span>
@@ -150,9 +157,15 @@ export function TemplatesBoard({
                       ))}
                     </div>
                     {item.id === recommendedTemplateId && recommendedReason ? (
-                      <p className="record-card__content record-card__content--muted">
-                        {recommendedReason}
-                      </p>
+                      <InlineContentPreview
+                        className="record-card__content"
+                        bodyClassName="record-card__content--muted"
+                        value={recommendedReason}
+                        collapseAt={200}
+                        expandable={false}
+                        copyable={false}
+                        muted
+                      />
                     ) : null}
                     <div className="record-card__footer">
                       <span>{item.compilerState}</span>

@@ -1,4 +1,5 @@
 import { EmptyState } from "../EmptyState";
+import { InlineContentPreview } from "../InlineContentPreview";
 import { Panel } from "../Panel";
 import type {
   AutomationContractGap,
@@ -223,11 +224,26 @@ export function RunDetailPanel({
               </article>
               <article className="details-grid__item">
                 <dt>Final URL</dt>
-                <dd>{selectedRun.finalUrl ?? "N/A"}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={selectedRun.finalUrl}
+                    empty="N/A"
+                    collapseAt={180}
+                    inlineLimit={8000}
+                    mono
+                  />
+                </dd>
               </article>
               <article className="details-grid__item">
                 <dt>Error</dt>
-                <dd>{selectedRun.errorMessage ?? "None"}</dd>
+                <dd>
+                  <InlineContentPreview
+                    value={selectedRun.errorMessage}
+                    empty="None"
+                    collapseAt={220}
+                    inlineLimit={8000}
+                  />
+                </dd>
               </article>
             </div>
 
@@ -238,11 +254,16 @@ export function RunDetailPanel({
                   {isRunDetailLoading ? "refreshing" : detailStatus}
                 </span>
               </div>
-              <p className="record-card__content">
-                {runDetail?.message ??
+              <InlineContentPreview
+                className="record-card__content"
+                value={
+                  runDetail?.message ??
                   selectedRun.contentPreview ??
-                  "No detailed execution narrative is available yet for this run."}
-              </p>
+                  "No detailed execution narrative is available yet for this run."
+                }
+                collapseAt={280}
+                inlineLimit={12000}
+              />
               <div className="details-grid details-grid--two">
                 <article className="details-grid__item">
                   <dt>Run detail headline</dt>
@@ -266,7 +287,14 @@ export function RunDetailPanel({
                 </article>
                 <article className="details-grid__item">
                   <dt>Failure reason</dt>
-                  <dd>{runDetail?.failureReason ?? selectedRun.errorMessage ?? "None"}</dd>
+                  <dd>
+                    <InlineContentPreview
+                      value={runDetail?.failureReason ?? selectedRun.errorMessage}
+                      empty="None"
+                      collapseAt={220}
+                      inlineLimit={8000}
+                    />
+                  </dd>
                 </article>
               </div>
             </article>
@@ -370,7 +398,11 @@ export function RunDetailPanel({
 
         {actionFeedback ? (
           <div className={getNoticeClassName(actionFeedback.tone)}>
-            <strong>{actionFeedback.message}</strong>
+            <InlineContentPreview
+              value={actionFeedback.message}
+              collapseAt={240}
+              inlineLimit={6000}
+            />
             {actionFeedback.updatedAtLabel ? <div>{actionFeedback.updatedAtLabel}</div> : null}
           </div>
         ) : null}
@@ -378,7 +410,11 @@ export function RunDetailPanel({
         {runDetailNotice ? (
           <div className="banner banner--warning">
             <strong>Run detail sync</strong>
-            <div>{runDetailNotice}</div>
+            <InlineContentPreview
+              value={runDetailNotice}
+              collapseAt={220}
+              inlineLimit={6000}
+            />
           </div>
         ) : null}
 
@@ -390,14 +426,27 @@ export function RunDetailPanel({
                 {effectiveManualGate.status}
               </span>
             </div>
-            <p className="record-card__content">{effectiveManualGate.headline}</p>
-            <p className="record-card__content record-card__content--muted">
-              {effectiveManualGate.detail}
-            </p>
+            <InlineContentPreview
+              className="record-card__content"
+              value={effectiveManualGate.headline}
+              collapseAt={220}
+              inlineLimit={6000}
+            />
+            <InlineContentPreview
+              className="record-card__content"
+              bodyClassName="record-card__content--muted"
+              value={effectiveManualGate.detail}
+              collapseAt={240}
+              inlineLimit={8000}
+              muted
+            />
             {effectiveManualGate.failureReason ? (
-              <p className="record-card__content">
-                Failure reason: {effectiveManualGate.failureReason}
-              </p>
+              <InlineContentPreview
+                className="record-card__content"
+                value={`Failure reason: ${effectiveManualGate.failureReason}`}
+                collapseAt={240}
+                inlineLimit={8000}
+              />
             ) : null}
             <div className="record-card__footer">
               <span>Request {effectiveManualGate.requestId}</span>
@@ -418,9 +467,12 @@ export function RunDetailPanel({
                   </strong>
                   <span className={`badge badge--${item.status}`}>{item.status}</span>
                 </div>
-                <p className="record-card__content">
-                  {item.detail ?? "No event detail returned for this timeline entry."}
-                </p>
+                <InlineContentPreview
+                  className="record-card__content"
+                  value={item.detail ?? "No event detail returned for this timeline entry."}
+                  collapseAt={220}
+                  inlineLimit={8000}
+                />
                 <div className="record-card__footer">
                   <span>{item.createdAt ? formatRelativeTimestamp(item.createdAt) : "No timestamp"}</span>
                   <span>{runDetail.runId}</span>
@@ -440,7 +492,13 @@ export function RunDetailPanel({
                     {artifact.status ?? "captured"}
                   </span>
                 </div>
-                <p className="record-card__content">{artifact.path ?? "Artifact path not returned."}</p>
+                <InlineContentPreview
+                  className="record-card__content"
+                  value={artifact.path ?? "Artifact path not returned."}
+                  collapseAt={180}
+                  inlineLimit={8000}
+                  mono
+                />
                 <div className="record-card__footer">
                   <span>{artifact.id}</span>
                   <span>Run artifact</span>
@@ -453,7 +511,13 @@ export function RunDetailPanel({
                   <strong>Final URL</strong>
                   <span className="badge badge--info">result</span>
                 </div>
-                <p className="record-card__content">{selectedRun.finalUrl}</p>
+                <InlineContentPreview
+                  className="record-card__content"
+                  value={selectedRun.finalUrl}
+                  collapseAt={180}
+                  inlineLimit={8000}
+                  mono
+                />
               </article>
             ) : null}
             {selectedRun?.contentPreview ? (
@@ -462,7 +526,12 @@ export function RunDetailPanel({
                   <strong>Content preview</strong>
                   <span className="badge badge--info">snapshot</span>
                 </div>
-                <p className="record-card__content">{selectedRun.contentPreview}</p>
+                <InlineContentPreview
+                  className="record-card__content"
+                  value={selectedRun.contentPreview}
+                  collapseAt={240}
+                  inlineLimit={12000}
+                />
               </article>
             ) : null}
           </div>
@@ -506,7 +575,14 @@ export function RunDetailPanel({
                   </strong>
                   <span className="badge badge--info">{step.actionType}</span>
                 </div>
-                <p className="record-card__content">{step.detail}</p>
+                <InlineContentPreview
+                  className="record-card__content"
+                  value={step.detail}
+                  collapseAt={220}
+                  inlineLimit={8000}
+                  expandable={false}
+                  copyable={false}
+                />
                 <div className="record-card__footer">
                   <span>{step.tabLabel}</span>
                   <span>{formatRelativeTimestamp(step.capturedAt)}</span>

@@ -12,6 +12,7 @@ import type {
 } from "../../features/proxies/model";
 import { formatCount, formatRelativeTimestamp } from "../../utils/format";
 import { EmptyState } from "../EmptyState";
+import { InlineContentPreview } from "../InlineContentPreview";
 import { Panel } from "../Panel";
 
 interface UsagePanelProps {
@@ -223,7 +224,11 @@ export function UsagePanel({
             </div>
           ) : null}
 
-          {error ? <div className="banner banner--error">{error}</div> : null}
+          {error ? (
+            <div className="banner banner--error">
+              <InlineContentPreview value={error} collapseAt={240} inlineLimit={4000} />
+            </div>
+          ) : null}
           {changeIpFeedback ? (
             <div
               className={`banner${
@@ -232,7 +237,11 @@ export function UsagePanel({
                   : ""
               } usage-panel__banner`}
             >
-              {changeIpFeedback.message}
+              <InlineContentPreview
+                value={changeIpFeedback.message}
+                collapseAt={240}
+                inlineLimit={6000}
+              />
             </div>
           ) : null}
 
@@ -358,8 +367,18 @@ export function UsagePanel({
                   ? "Submitting provider-write request..."
                   : verificationStatus ?? "Operator detail ready"}
             </strong>
-            <p>{rotationPosture.detail}</p>
-            <p>{getRiskNote(proxy, detail)}</p>
+            <InlineContentPreview
+              className="record-card__content"
+              value={rotationPosture.detail}
+              collapseAt={220}
+              inlineLimit={8000}
+            />
+            <InlineContentPreview
+              className="record-card__content"
+              value={getRiskNote(proxy, detail)}
+              collapseAt={220}
+              inlineLimit={8000}
+            />
           </div>
 
           <div className="proxy-row__tags">
