@@ -38,6 +38,37 @@ func (a *App) stopRuntimeServices() {
 			a.speedScheduler = nil
 		}
 
+		if a.ruleEngine != nil {
+			a.ruleEngine.Stop()
+			a.ruleEngine = nil
+		}
+
+		a.behaviorEnginesMu.Lock()
+		for id, engine := range a.behaviorEngines {
+			engine.Stop()
+			delete(a.behaviorEngines, id)
+		}
+		a.behaviorEnginesMu.Unlock()
+
+	// Stop all active recorders and playbacks
+	a.recMu.Lock()
+	for id := range a.recorders {
+		delete(a.recorders, id)
+	}
+	a.recMu.Unlock()
+
+	a.playMu.Lock()
+	for id, engine := range a.playbacks {
+		engine.Stop()
+		delete(a.playbacks, id)
+	}
+	a.playMu.Unlock()
+
+		if a.scheduler != nil {
+			a.scheduler.Stop()
+			a.scheduler = nil
+		}
+
 		if a.launchServer != nil {
 			if err := a.launchServer.Stop(); err != nil {
 				log.Error("LaunchServer 关闭失败", logger.F("error", err))

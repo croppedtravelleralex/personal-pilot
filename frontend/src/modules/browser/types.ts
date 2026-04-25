@@ -25,6 +25,7 @@ export interface BrowserProfile {
   lastStartAt?: string
   lastStopAt?: string
   launchCode?: string
+  behaviorProfileId?: string
 }
 
 export interface BrowserProfileInput {
@@ -38,6 +39,7 @@ export interface BrowserProfileInput {
   tags: string[]
   keywords: string[]
   groupId?: string
+  behaviorProfileId?: string
 }
 
 export interface BrowserTab {
@@ -159,4 +161,38 @@ export interface BrowserGroupInput {
 
 export interface BrowserGroupWithCount extends BrowserGroup {
   instanceCount: number
+}
+
+// ─── Behavior Recording ──────────────────────────────────────────────
+
+export interface RecordedEvent {
+  t: number        // timestamp ms from recording start
+  type: string     // "move"|"down"|"up"|"key"|"scroll"|"click"
+  x?: number
+  y?: number
+  btn?: number     // 0=left, 1=middle, 2=right
+  key?: string
+  text?: string
+  dx?: number
+  dy?: number
+}
+
+export interface Recording {
+  id: string
+  name: string
+  description: string
+  events: RecordedEvent[]
+  durationMs: number
+  viewportW: number
+  viewportH: number
+  createdAt: string
+}
+
+export interface VariationConfig {
+  intensity: number        // 0.0-1.0
+  timingJitter: number     // max timing offset ms
+  positionJitter: number   // max position offset px
+  speedVariation: number   // 0.0-1.0 speed multiplier range
+  microCorrections: boolean
+  extraPauses: boolean
 }

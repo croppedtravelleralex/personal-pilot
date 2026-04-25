@@ -1,4 +1,4 @@
-import type { BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings, BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended, CookieInfo, SnapshotInfo, BrowserBookmark, BrowserGroup, BrowserGroupInput, BrowserGroupWithCount, ProxyIPHealthResult } from './types'
+import type { BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings, BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended, CookieInfo, SnapshotInfo, BrowserBookmark, BrowserGroup, BrowserGroupInput, BrowserGroupWithCount, ProxyIPHealthResult, Recording, VariationConfig } from './types'
 
 const getBindings = async () => {
   try {
@@ -795,6 +795,70 @@ export async function moveInstancesToGroup(profileIds: string[], groupId: string
   const bindings: any = await getBindings()
   if (bindings?.MoveInstancesToGroup) {
     await bindings.MoveInstancesToGroup(profileIds, groupId)
+    return true
+  }
+  return false
+}
+
+// ============================================================================
+// Behavior Recording & Playback API
+// ============================================================================
+
+export async function startRecording(profileId: string): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorStartRecording) {
+    await bindings.BehaviorStartRecording(profileId)
+    return true
+  }
+  return false
+}
+
+export async function stopRecording(profileId: string, name: string): Promise<Recording | null> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorStopRecording) {
+    return (await bindings.BehaviorStopRecording(profileId, name)) || null
+  }
+  return null
+}
+
+export async function fetchRecordings(): Promise<Recording[]> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorRecordingList) {
+    return (await bindings.BehaviorRecordingList()) || []
+  }
+  return []
+}
+
+export async function deleteRecording(id: string): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorRecordingDelete) {
+    await bindings.BehaviorRecordingDelete(id)
+    return true
+  }
+  return false
+}
+
+export async function getRecording(id: string): Promise<Recording | null> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorGetRecording) {
+    return (await bindings.BehaviorGetRecording(id)) || null
+  }
+  return null
+}
+
+export async function playRecording(profileId: string, recordingId: string, variation: VariationConfig): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorPlayRecording) {
+    await bindings.BehaviorPlayRecording(profileId, recordingId, variation)
+    return true
+  }
+  return false
+}
+
+export async function stopPlayback(profileId: string): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorStopPlayback) {
+    await bindings.BehaviorStopPlayback(profileId)
     return true
   }
   return false

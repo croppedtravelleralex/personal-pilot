@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, RefreshCw, Wand2 } from 'lucide-react'
-import { ConfirmModal, FormItem, Input, Select, Textarea } from '../../../shared/components'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, RefreshCw, Wand2, AlertCircle } from 'lucide-react'
+import { ConfirmModal, FormItem, Input, Select, Textarea, Alert, Badge } from '../../../shared/components'
 import {
   type FingerprintConfig,
   FINGERPRINT_PRESETS,
@@ -10,10 +10,14 @@ import {
   randomFingerprintSeed,
   serialize,
 } from '../utils/fingerprintSerializer'
+import { BehaviorPresetList } from '../../../wailsjs/go/main/App'
+import { RecordingPanel } from './RecordingPanel'
 
 interface FingerprintPanelProps {
   value: string[]
   onChange: (args: string[]) => void
+  behaviorProfileId?: string
+  onBehaviorProfileChange?: (id: string) => void
 }
 
 const BRAND_OPTIONS = [
@@ -170,17 +174,31 @@ const PRESET_OPTIONS = [
   ...FINGERPRINT_PRESETS.map(p => ({ value: p.id, label: p.name })),
 ]
 
-export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
+export function FingerprintPanel({ value, onChange, behaviorProfileId, onBehaviorProfileChange }: FingerprintPanelProps) {
   const [config, setConfig] = useState<FingerprintConfig>(() => deserialize(value))
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [deprecatedOpen, setDeprecatedOpen] = useState(false)
   const [, setCustomRenderer] = useState('')
   const [confirmSeedOpen, setConfirmSeedOpen] = useState(false)
+  const [behaviorPresets, setBehaviorPresets] = useState<Array<{ id: string; name: string; description: string }>>([])
+
+  const isInternalUpdate = useRef(false)
 
   useEffect(() => {
+    BehaviorPresetList().then(setBehaviorPresets).catch(() => setBehaviorPresets([]))
+  }, [])
+
+  useEffect(() => {
+    if (isInternalUpdate.current) {
+      isInternalUpdate.current = false
+      return
+    }
     setConfig(deserialize(value))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value.join('\n')])
 
   const update = (patch: Partial<FingerprintConfig>) => {
+    isInternalUpdate.current = true
     const next = { ...config, ...patch }
     setConfig(next)
     onChange(serialize(next))
@@ -273,6 +291,29 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
         <span className="text-xs text-[var(--color-text-muted)] shrink-0">选择后覆盖当前配置</span>
       </div>
 
+      {/* 行为生物特征模拟 */}
+      {onBehaviorProfileChange && (
+        <div className="p-3 rounded-lg bg-[var(--color-bg-hover)] border border-[var(--color-border)] space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wide">行为生物特征模拟</span>
+            <span className="text-xs text-[var(--color-text-muted)]">模拟人类鼠标、键盘、滚动行为模式</span>
+          </div>
+          <Select
+            value={behaviorProfileId ?? ''}
+            onChange={e => onBehaviorProfileChange(e.target.value || '')}
+            options={[
+              { value: '', label: '不启用行为模拟' },
+              ...behaviorPresets.map(p => ({ value: p.id, label: p.name })),
+            ]}
+          />
+          {behaviorProfileId && (
+            <p className="text-xs text-[var(--color-text-muted)]">
+              {behaviorPresets.find(p => p.id === behaviorProfileId)?.description ?? ''}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* 基础身份 */}
       <div>
         <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">基础身份</p>
@@ -296,6 +337,105 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
         </div>
       </div>
 
+      {/* 系统版本与 HTTP 头 */}
+      <div>
+        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">系统版本与 HTTP 头</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormItem label="操作系统版本">
+            <Select
+              value={config.platformVersion ?? ''}
+              onChange={e => update({ platformVersion: e.target.value || undefined })}
+              options={[
+                { value: '', label: '不设置' },
+                { value: '10.0.0', label: 'Windows 10 (10.0.0)' },
+                { value: '10.0.22631', label: 'Windows 11 23H2 (10.0.22631)' },
+                { value: '15.0.0', label: 'macOS Sequoia (15.0.0)' },
+                { value: '14.0.0', label: 'macOS Sonoma (14.0.0)' },
+                { value: '13.0.0', label: 'macOS Ventura (13.0.0)' },
+              ]}
+            />
+          </FormItem>
+          <FormItem label="浏览器版本">
+            <Select
+              value={config.brandVersion ?? ''}
+              onChange={e => update({ brandVersion: e.target.value || undefined })}
+              options={[
+                { value: '', label: '不设置' },
+                { value: '120.0.0.0', label: 'Chrome 120' },
+                { value: '125.0.0.0', label: 'Chrome 125' },
+                { value: '130.0.0.0', label: 'Chrome 130' },
+                { value: '133.0.0.0', label: 'Chrome 133' },
+              ]}
+            />
+          </FormItem>
+          <FormItem label="Accept-Language">
+            <Input
+              value={config.acceptLang ?? ''}
+              onChange={e => update({ acceptLang: e.target.value || undefined })}
+              placeholder="zh-CN,zh;q=0.9,en;q=0.8"
+            />
+          </FormItem>
+          <FormItem label="禁用反指纹 (Chrome 144+)">
+            <Select
+              value={config.disableSpoofing ?? ''}
+              onChange={e => update({ disableSpoofing: e.target.value || undefined })}
+              options={[
+                { value: '', label: '不设置（全部开启）' },
+                { value: 'font', label: '仅禁用字体伪装' },
+                { value: 'audio', label: '仅禁用音频噪声' },
+                { value: 'canvas', label: '仅禁用 Canvas 噪声' },
+                { value: 'clientrects', label: '仅禁用 ClientRects' },
+                { value: 'gpu', label: '仅禁用 GPU 伪装' },
+                { value: 'font,audio', label: '禁用 字体+音频' },
+                { value: 'canvas,audio', label: '禁用 Canvas+音频' },
+                { value: 'font,audio,canvas,clientrects,gpu', label: '全部禁用（完全透明）' },
+              ]}
+            />
+          </FormItem>
+        </div>
+      </div>
+
+      {/* 设备指纹 */}
+      <div>
+        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">设备指纹</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormItem label="User-Agent">
+            <Select
+              value={config.userAgent ?? ''}
+              onChange={e => update({ userAgent: e.target.value || undefined })}
+              options={[
+                { value: '', label: '不设置' },
+                { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', label: 'Win10 / Chrome 130' },
+                { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36', label: 'Win10 / Chrome 133' },
+                { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', label: 'macOS / Chrome 130' },
+                { value: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', label: 'Linux / Chrome 130' },
+                { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0', label: 'Win10 / Edge 120' },
+              ]}
+            />
+          </FormItem>
+          <FormItem label="设备像素比 (DPR)">
+            <Select
+              value={config.deviceScaleFactor ?? ''}
+              onChange={e => update({ deviceScaleFactor: e.target.value || undefined })}
+              options={[
+                { value: '', label: '不设置' },
+                { value: '1.0', label: '1.0 (标准)' },
+                { value: '1.25', label: '1.25 (125%)' },
+                { value: '1.5', label: '1.5 (150% / 高清)' },
+                { value: '2.0', label: '2.0 (Retina / 2K)' },
+              ]}
+            />
+          </FormItem>
+          <FormItem label="禁用电池 API">
+            <Select
+              value={config.disableBatteryApi === undefined ? '' : String(config.disableBatteryApi)}
+              onChange={e => { const v = e.target.value; update({ disableBatteryApi: v === '' ? undefined : v === 'true' }) }}
+              options={BOOL_OPTIONS}
+            />
+          </FormItem>
+        </div>
+      </div>
+
       {/* 屏幕与硬件 */}
       <div>
         <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">屏幕与硬件</p>
@@ -312,68 +452,8 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
               <Input value={config.customResolution ?? ''} onChange={e => update({ customResolution: e.target.value || undefined })} placeholder="1600,900" />
             </FormItem>
           )}
-          <FormItem label="色深">
-            <Select value={config.colorDepth ?? ''} onChange={e => update({ colorDepth: e.target.value || undefined })} options={COLOR_DEPTH_OPTIONS} />
-          </FormItem>
           <FormItem label="CPU 核心数">
             <Select value={config.hardwareConcurrency ?? ''} onChange={e => update({ hardwareConcurrency: e.target.value || undefined })} options={HARDWARE_CONCURRENCY_OPTIONS} />
-          </FormItem>
-          <FormItem label="设备内存">
-            <Select value={config.deviceMemory ?? ''} onChange={e => update({ deviceMemory: e.target.value || undefined })} options={DEVICE_MEMORY_OPTIONS} />
-          </FormItem>
-          <FormItem label="触摸点数">
-            <Select value={config.touchPoints ?? ''} onChange={e => update({ touchPoints: e.target.value || undefined })} options={TOUCH_POINTS_OPTIONS} />
-          </FormItem>
-        </div>
-      </div>
-
-      {/* 渲染指纹 */}
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">渲染指纹</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormItem label="WebGL 供应商">
-            <Select
-              value={config.webglVendor ?? ''}
-              onChange={e => update({ webglVendor: e.target.value || undefined, webglRenderer: undefined })}
-              options={WEBGL_VENDOR_OPTIONS}
-            />
-          </FormItem>
-          <FormItem label="WebGL 渲染器">
-            {isCustomRenderer ? (
-              <Input
-                value={config.webglRenderer ?? ''}
-                onChange={e => update({ webglRenderer: e.target.value || undefined })}
-                placeholder="自定义渲染器名称"
-              />
-            ) : (
-              <Select
-                value={config.webglRenderer ?? ''}
-                onChange={e => {
-                  if (e.target.value === 'custom') {
-                    setCustomRenderer('')
-                    update({ webglRenderer: undefined })
-                  } else {
-                    update({ webglRenderer: e.target.value || undefined })
-                  }
-                }}
-                options={rendererOptions}
-                disabled={!config.webglVendor}
-              />
-            )}
-          </FormItem>
-          <FormItem label="Canvas 噪声">
-            <Select
-              value={config.canvasNoise === undefined ? '' : String(config.canvasNoise)}
-              onChange={e => { const v = e.target.value; update({ canvasNoise: v === '' ? undefined : v === 'true' }) }}
-              options={BOOL_OPTIONS}
-            />
-          </FormItem>
-          <FormItem label="Audio 噪声">
-            <Select
-              value={config.audioNoise === undefined ? '' : String(config.audioNoise)}
-              onChange={e => { const v = e.target.value; update({ audioNoise: v === '' ? undefined : v === 'true' }) }}
-              options={BOOL_OPTIONS}
-            />
           </FormItem>
         </div>
       </div>
@@ -385,33 +465,103 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
           <FormItem label="WebRTC 策略">
             <Select value={config.webrtcPolicy ?? ''} onChange={e => update({ webrtcPolicy: e.target.value || undefined })} options={WEBRTC_OPTIONS} />
           </FormItem>
-          <FormItem label="Do Not Track">
-            <Select
-              value={config.doNotTrack === undefined ? '' : String(config.doNotTrack)}
-              onChange={e => { const v = e.target.value; update({ doNotTrack: v === '' ? undefined : v === 'true' }) }}
-              options={BOOL_OPTIONS}
-            />
-          </FormItem>
-          <FormItem label="媒体设备 (摄像头,麦克风,扬声器)">
-            <Input
-              value={config.mediaDevices ?? ''}
-              onChange={e => update({ mediaDevices: e.target.value || undefined })}
-              placeholder="2,1,1"
-            />
-          </FormItem>
         </div>
       </div>
 
-      {/* 字体 */}
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">字体</p>
-        <FormItem label="字体列表">
-          <Input
-            value={config.fonts ?? ''}
-            onChange={e => update({ fonts: e.target.value || undefined })}
-            placeholder="Arial,Helvetica,Times New Roman（逗号分隔）"
-          />
-        </FormItem>
+      {/* 已弃用设置 (无实际效果) */}
+      <div className="border border-[var(--color-warning)]/30 rounded-lg overflow-hidden">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between px-4 py-2.5 text-sm bg-[var(--color-warning)]/10 hover:bg-[var(--color-warning)]/15 transition-colors"
+          onClick={() => setDeprecatedOpen(v => !v)}
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-[var(--color-warning)]" />
+            <span className="text-[var(--color-warning)] font-medium">已弃用的设置（无实际效果）</span>
+            <Badge variant="warning" size="sm">10 项</Badge>
+          </div>
+          {deprecatedOpen ? <ChevronUp className="w-4 h-4 text-[var(--color-warning)]" /> : <ChevronDown className="w-4 h-4 text-[var(--color-warning)]" />}
+        </button>
+        {deprecatedOpen && (
+          <div className="px-4 pb-4 pt-2 border-t border-[var(--color-warning)]/20 space-y-3">
+            <Alert
+              type="warning"
+              message="以下设置对应的是 --fingerprint-* 系列标志，但这些标志在 fingerprint-chromium 中已被种子模型接管，实际运行中会被忽略。这些值仅保留用于兼容旧配置，后续版本将移除。"
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormItem label="色深 (无效)">
+                <Select value={config.colorDepth ?? ''} onChange={e => update({ colorDepth: e.target.value || undefined })} options={COLOR_DEPTH_OPTIONS} />
+              </FormItem>
+              <FormItem label="设备内存 (无效)">
+                <Select value={config.deviceMemory ?? ''} onChange={e => update({ deviceMemory: e.target.value || undefined })} options={DEVICE_MEMORY_OPTIONS} />
+              </FormItem>
+              <FormItem label="触摸点数 (无效)">
+                <Select value={config.touchPoints ?? ''} onChange={e => update({ touchPoints: e.target.value || undefined })} options={TOUCH_POINTS_OPTIONS} />
+              </FormItem>
+              <FormItem label="Canvas 噪声 (无效)">
+                <Select
+                  value={config.canvasNoise === undefined ? '' : String(config.canvasNoise)}
+                  onChange={e => { const v = e.target.value; update({ canvasNoise: v === '' ? undefined : v === 'true' }) }}
+                  options={BOOL_OPTIONS}
+                />
+              </FormItem>
+              <FormItem label="Audio 噪声 (无效)">
+                <Select
+                  value={config.audioNoise === undefined ? '' : String(config.audioNoise)}
+                  onChange={e => { const v = e.target.value; update({ audioNoise: v === '' ? undefined : v === 'true' }) }}
+                  options={BOOL_OPTIONS}
+                />
+              </FormItem>
+              <FormItem label="WebGL 供应商 (无效)">
+                <Select
+                  value={config.webglVendor ?? ''}
+                  onChange={e => update({ webglVendor: e.target.value || undefined, webglRenderer: undefined })}
+                  options={WEBGL_VENDOR_OPTIONS}
+                />
+              </FormItem>
+              <FormItem label="WebGL 渲染器 (无效)">
+                {isCustomRenderer ? (
+                  <Input value={config.webglRenderer ?? ''} onChange={e => update({ webglRenderer: e.target.value || undefined })} placeholder="自定义渲染器名称" />
+                ) : (
+                  <Select
+                    value={config.webglRenderer ?? ''}
+                    onChange={e => {
+                      if (e.target.value === 'custom') {
+                        setCustomRenderer('')
+                        update({ webglRenderer: undefined })
+                      } else {
+                        update({ webglRenderer: e.target.value || undefined })
+                      }
+                    }}
+                    options={rendererOptions}
+                    disabled={!config.webglVendor}
+                  />
+                )}
+              </FormItem>
+              <FormItem label="Do Not Track (无效)">
+                <Select
+                  value={config.doNotTrack === undefined ? '' : String(config.doNotTrack)}
+                  onChange={e => { const v = e.target.value; update({ doNotTrack: v === '' ? undefined : v === 'true' }) }}
+                  options={BOOL_OPTIONS}
+                />
+              </FormItem>
+              <FormItem label="媒体设备 (无效)">
+                <Input
+                  value={config.mediaDevices ?? ''}
+                  onChange={e => update({ mediaDevices: e.target.value || undefined })}
+                  placeholder="2,1,1"
+                />
+              </FormItem>
+              <FormItem label="字体列表 (无效)">
+                <Input
+                  value={config.fonts ?? ''}
+                  onChange={e => update({ fonts: e.target.value || undefined })}
+                  placeholder="Arial,Helvetica,Times New Roman（逗号分隔）"
+                />
+              </FormItem>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 高级模式 */}
@@ -435,6 +585,11 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             />
           </div>
         )}
+      </div>
+
+      {/* 行为录制与回放 */}
+      <div className="border border-[var(--color-border)] rounded-lg p-4">
+        <RecordingPanel />
       </div>
     </div>
   )

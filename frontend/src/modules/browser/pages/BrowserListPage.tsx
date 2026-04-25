@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, ExternalLink, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
+import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, LayoutGrid, List, Circle, Video } from 'lucide-react'
 import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
-import { fetchDashboardStats, redeemCDKey, redeemGithubStar, reloadConfig } from '../../dashboard/api'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
 import { InstanceFilterBar, EMPTY_FILTERS } from '../components/InstanceFilterBar'
 import type { InstanceFilters } from '../components/InstanceFilterBar'
 import { KeywordsModal } from '../components/KeywordsModal'
-import { EventsOn, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
-import { PROJECT_GITHUB_URL } from '../../../config/links'
+import { RecordingPanel } from '../components/RecordingPanel'
+import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
 import {
   copyBrowserProfile,
@@ -30,6 +29,8 @@ import {
   stopBrowserInstance,
   validateBrowserCorePath,
   validateProxyConfig,
+  startRecording,
+  stopRecording,
 } from '../api'
 
 // 批量操作工具栏
@@ -218,6 +219,10 @@ export function BrowserListPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchLoading, setBatchLoading] = useState(false)
 
+  // 录制状态
+  const [recordingProfiles, setRecordingProfiles] = useState<Set<string>>(new Set())
+  const [recordingProfileId, setRecordingProfileId] = useState('')
+
   // 筛选状态（从 localStorage 恢复）
   const [filters, setFilters] = useState<InstanceFilters>(() => {
     try {
@@ -298,12 +303,7 @@ export function BrowserListPage() {
   const [coreValidation, setCoreValidation] = useState<{ valid: boolean; message: string } | null>(null)
   const [savingCore, setSavingCore] = useState(false)
 
-  // 扩容管理
-  const [expandModalOpen, setExpandModalOpen] = useState(false)
-  const [cdKey, setCdKey] = useState('')
-  const [redeeming, setRedeeming] = useState(false)
-  const [maxProfileLimit, setMaxProfileLimit] = useState(20)
-
+  // 实例状态管理
   const updatePendingIds = (
     setter: React.Dispatch<React.SetStateAction<Set<string>>>,
     profileId: string,
@@ -393,20 +393,9 @@ export function BrowserListPage() {
     setCores(await fetchBrowserCores())
   }
 
-  const loadQuota = async () => {
-    try {
-      await reloadConfig()
-      const stats = await fetchDashboardStats()
-      setMaxProfileLimit(stats.maxProfileLimit || 20)
-    } catch {
-      // ignore
-    }
-  }
-
   useEffect(() => {
     void loadProfiles()
     loadGroups()
-    loadQuota()
     fetchBrowserProxies().then(setProxies)
     fetchBrowserCores().then(setCores)
 
@@ -583,6 +572,31 @@ export function BrowserListPage() {
       await loadProfiles({ silent: true, syncRuntimeState: true })
     } finally {
       updatePendingIds(setStoppingIds, profileId, false)
+    }
+  }
+
+  const handleStartRecording = async (profileId: string) => {
+    try {
+      await startRecording(profileId)
+      setRecordingProfiles(prev => new Set(prev).add(profileId))
+      toast.success('录制已开始 - 请在浏览器中操作')
+    } catch (error: any) {
+      toast.error(`开始录制失败: ${error?.message || error}`)
+    }
+  }
+
+  const handleStopRecording = async (profileId: string) => {
+    try {
+      const name = `录制 ${new Date().toLocaleString('zh-CN')}`
+      await stopRecording(profileId, name)
+      setRecordingProfiles(prev => {
+        const next = new Set(prev)
+        next.delete(profileId)
+        return next
+      })
+      toast.success('录制已保存')
+    } catch (error: any) {
+      toast.error(`停止录制失败: ${error?.message || error}`)
     }
   }
 
@@ -807,38 +821,6 @@ export function BrowserListPage() {
     loadCores()
   }
 
-  const handleRedeem = async () => {
-    if (!cdKey.trim()) return
-    setRedeeming(true)
-    const result = await redeemCDKey(cdKey.trim())
-    setRedeeming(false)
-    if (result.success) {
-      toast.success('兑换成功！此名额已到账')
-      setCdKey('')
-      loadQuota()
-    } else {
-      toast.error(result.message || '兑换失败')
-    }
-  }
-
-  const handleClaimStarGift = async () => {
-    setRedeeming(true)
-    const starRes = await redeemGithubStar()
-    setRedeeming(false)
-    if (starRes.success) {
-      toast.success('感谢您的支持！已额外赠送 50 个永久额度！')
-      setCdKey('')
-      loadQuota()
-    } else {
-      toast.error(starRes.message || '领取失败')
-    }
-  }
-
-  const handleOpenGithubStarGift = async () => {
-    BrowserOpenURL(PROJECT_GITHUB_URL)
-    await handleClaimStarGift()
-  }
-
   const columns: TableColumn<BrowserProfile>[] = [
     {
       key: 'selection',
@@ -941,6 +923,16 @@ export function BrowserListPage() {
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" disabled={isBusy}><RotateCcw className="w-3.5 h-3.5" /></Button>
+            {record.running && !recordingProfiles.has(record.profileId) && (
+              <Button size="sm" variant="ghost" onClick={() => handleStartRecording(record.profileId)} title="录制操作" disabled={isBusy}>
+                <Circle className="w-3.5 h-3.5 fill-red-500 text-red-500" />
+              </Button>
+            )}
+            {record.running && recordingProfiles.has(record.profileId) && (
+              <Button size="sm" variant="ghost" onClick={() => handleStopRecording(record.profileId)} title="停止录制" disabled={isBusy}>
+                <Square className="w-3.5 h-3.5 text-red-500" />
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={() => openKwModal(record)} title="关键字" disabled={isBusy}><Key className="w-3.5 h-3.5" /></Button>
             <Link to={`/browser/edit/${record.profileId}`}><Button size="sm" variant="ghost" title="配置" disabled={isBusy}><Settings className="w-3.5 h-3.5" /></Button></Link>
             <Button size="sm" variant="ghost" onClick={() => openCopyModal(record)} title="克隆" disabled={isBusy}><Copy className="w-3.5 h-3.5" /></Button>
@@ -986,14 +978,12 @@ export function BrowserListPage() {
             当前配置总数 {profiles.length}
             {filteredProfiles.length !== profiles.length && <span className="ml-1 text-[var(--color-accent)]">（已筛选 {filteredProfiles.length}）</span>}
           </p>
+          <p className="text-xs text-[var(--color-success)] mt-1">实例策略：本地无限实例，无需外部授权。</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => setHeaderCollapsed(prev => !prev)}>{headerCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}{headerCollapsed ? '展开面板' : '收起面板'}</Button>
           <Button variant="secondary" size="sm" onClick={() => { void loadProfiles() }}><RefreshCw className="w-4 h-4" />刷新</Button>
           <Button variant="secondary" size="sm" onClick={handleOpenSettings}><Sliders className="w-4 h-4" />基础配置</Button>
-          <Button variant="secondary" size="sm" onClick={() => { setCdKey(''); setExpandModalOpen(true); loadQuota() }} className="text-[var(--color-primary)] border-[var(--color-primary)] hover:bg-[var(--color-primary)]/10">
-            <Gift className="w-4 h-4" />扩容实例
-          </Button>
           <div className="flex items-center bg-[var(--color-bg-secondary)] rounded-md border border-[var(--color-border-default)] p-0.5 ml-2">
             <button
               className={`p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors ${viewMode === 'card' ? 'bg-[var(--color-bg-surface)] shadow-sm text-[var(--color-accent)]' : ''}`}
@@ -1034,6 +1024,56 @@ export function BrowserListPage() {
           />
         </>
       )}
+
+      {/* ====== 行为录制与回放（主要入口） ====== */}
+      <div className="border-2 border-[var(--color-accent)]/30 rounded-xl bg-gradient-to-r from-[var(--color-bg-subtle)] to-[var(--color-bg-surface)] p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center shrink-0">
+            <Video className="w-5 h-5 text-[var(--color-accent)]" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-[var(--color-text)]">行为录制与回放</h2>
+            <p className="text-xs text-[var(--color-text-muted)]">录制真人在浏览器中的操作（点击、输入、滚动），回放时自动添加随机偏移，每次回放都独一无二，规避平台风控</p>
+          </div>
+        </div>
+
+        {/* 步骤 1：选择实例 */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-[var(--color-accent)] text-white text-xs flex items-center justify-center font-bold shrink-0">1</span>
+            <span className="text-sm font-medium text-[var(--color-text)]">选择运行中的实例</span>
+          </div>
+          <select
+            className="flex-1 min-w-[200px] max-w-sm px-3 py-2 text-sm border-2 border-[var(--color-border)] rounded-lg bg-[var(--color-bg-surface)] text-[var(--color-text)] font-medium focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+            value={recordingProfileId}
+            onChange={e => setRecordingProfileId(e.target.value)}
+          >
+            <option value="">-- 请选择实例 --</option>
+            {profiles.filter(p => p.running).map(p => (
+              <option key={p.profileId} value={p.profileId}>
+                {p.profileName} {recordingProfiles.has(p.profileId) ? '(录制中...)' : ''}
+              </option>
+            ))}
+          </select>
+          {profiles.filter(p => p.running).length === 0 && (
+            <span className="text-xs text-amber-500 font-medium">请先启动一个浏览器实例</span>
+          )}
+        </div>
+
+        {/* 步骤 2 + 3：录制/回放操作区（选完实例后出现） */}
+        {recordingProfileId ? (
+          <div className="pl-8">
+            <RecordingPanel
+              profileId={recordingProfileId}
+              isRunning={profiles.find(p => p.profileId === recordingProfileId)?.running ?? false}
+            />
+          </div>
+        ) : (
+          <div className="pl-8 py-3 text-xs text-[var(--color-text-muted)] border border-dashed border-[var(--color-border)] rounded-lg text-center">
+            选择实例后，此处将显示录制和回放操作面板
+          </div>
+        )}
+      </div>
 
       {/* 批量操作工具栏 */}
       <BatchToolbar
@@ -1278,66 +1318,6 @@ export function BrowserListPage() {
           }}
         />
       )}
-
-      {/* 扩容弹窗 */}
-      <Modal
-        open={expandModalOpen}
-        onClose={() => setExpandModalOpen(false)}
-        title="实例扩容系统"
-        width="480px"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setExpandModalOpen(false)}>关闭</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="bg-[var(--color-bg-secondary)] p-4 rounded-lg flex items-center justify-between border border-[var(--color-border-default)]">
-            <div>
-              <p className="text-sm font-medium text-[var(--color-text-primary)]">当前使用情况</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">每个配置都需要消耗 1 个实例额度</p>
-            </div>
-            <div className="text-right">
-              <span className={`text-2xl font-semibold ${profiles.length >= maxProfileLimit ? 'text-red-500' : 'text-[var(--color-success)]'}`}>
-                {profiles.length}
-              </span>
-              <span className="text-sm text-[var(--color-text-muted)] ml-1">/ {maxProfileLimit}</span>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-[var(--color-border-muted)]">
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">使用兑换码扩容</label>
-            <div className="flex gap-2">
-              <Input
-                value={cdKey}
-                onChange={e => setCdKey(e.target.value)}
-                placeholder="输入兑换码 (如 ANT-...)"
-                onKeyDown={e => e.key === 'Enter' && handleRedeem()}
-                className="flex-1"
-              />
-              <Button onClick={handleRedeem} loading={redeeming} disabled={!cdKey.trim()}>
-                进行兑换
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-[var(--color-text-primary)]">点亮 GitHub Star 后，可再获赠 50 个永久额度</p>
-              <button
-                type="button"
-                className="shrink-0 rounded-full p-2 text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10 disabled:opacity-50"
-                onClick={handleOpenGithubStarGift}
-                disabled={redeeming}
-                title="打开 GitHub 并领取赠送"
-                aria-label="打开 GitHub 并领取赠送"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </Modal>
 
       {/* 复制实例弹窗 */}
       <Modal

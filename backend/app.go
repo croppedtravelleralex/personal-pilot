@@ -2,12 +2,16 @@ package backend
 
 import (
 	"ant-chrome/backend/internal/apppath"
+	"ant-chrome/backend/internal/automation"
+	"ant-chrome/backend/internal/behavior"
 	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/config"
 	"ant-chrome/backend/internal/database"
+	"ant-chrome/backend/internal/events"
 	"ant-chrome/backend/internal/launchcode"
 	"ant-chrome/backend/internal/logger"
 	"ant-chrome/backend/internal/proxy"
+	"ant-chrome/backend/internal/scheduler"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -54,6 +58,26 @@ type App struct {
 	xrayBridgeRefs   map[string]string
 	stopServicesOnce sync.Once
 	finalizeOnce     sync.Once
+
+	crashTimestampsMu sync.Mutex
+	crashTimestamps   map[string][]time.Time // profileId → crash times, for crash-loop detection
+
+	scheduler *scheduler.Scheduler
+	taskStore scheduler.TaskStore
+
+	eventLogStore events.EventLogStore
+
+	ruleEngine *automation.RuleEngine
+	ruleStore  automation.RuleStore
+
+	behaviorEngines   map[string]*behavior.Engine // profileId → engine
+	behaviorEnginesMu sync.Mutex
+
+	recorders      map[string]*behavior.Recorder       // profileId → recorder
+	playbacks      map[string]*behavior.PlaybackEngine // profileId → playback
+	recordingStore *behavior.FileRecordingStore
+	recMu          sync.Mutex
+	playMu         sync.Mutex
 }
 
 // NewApp 创建新的应用实例
@@ -63,19 +87,22 @@ func NewApp(appRoot string, appVersion ...string) *App {
 		version = strings.TrimSpace(appVersion[0])
 	}
 	return &App{
-		appRoot:        strings.TrimSpace(appRoot),
-		version:        version,
-		xrayBridgeRefs: make(map[string]string),
+		appRoot:         strings.TrimSpace(appRoot),
+		version:         version,
+		xrayBridgeRefs:  make(map[string]string),
+		crashTimestamps: make(map[string][]time.Time),
+		recorders:       make(map[string]*behavior.Recorder),
+		playbacks:       make(map[string]*behavior.PlaybackEngine),
 	}
 }
 
 func (a *App) appName() string {
 	if a.config != nil {
-		if name := strings.TrimSpace(a.config.App.Name); name != "" {
+		if name := normalizeBrandName(a.config.App.Name); name != "" {
 			return name
 		}
 	}
-	return "Ant Browser"
+	return personalPilotBrandName
 }
 
 func (a *App) appVersion() string {
@@ -98,6 +125,7 @@ func (a *App) startup(ctx context.Context) {
 		cfg = config.DefaultConfig()
 	}
 	a.config = cfg
+	a.config.App.Name = normalizeBrandName(a.config.App.Name)
 	a.applyRuntimeConfig(cfg.Runtime)
 
 	logConfig := logger.LoggerConfig{
@@ -180,6 +208,19 @@ func (a *App) startup(ctx context.Context) {
 	a.loadProxies()
 	a.reconcileProfileProxyBindings()
 
+	// 初始化事件日志持久化
+	a.eventLogStore = events.NewSQLiteEventLogStore(conn)
+	events.SetEventLogStore(a.eventLogStore)
+
+	// 初始化行为录制存储
+	recordingDir := a.resolveAppPath("data/recordings")
+	recStore, err := behavior.NewFileRecordingStore(recordingDir)
+	if err != nil {
+		log.Error("初始化录制存储失败", logger.F("error", err))
+	} else {
+		a.recordingStore = recStore
+	}
+
 	// 初始化 LaunchCode 服务
 	launchCodeDAO := launchcode.NewSQLiteLaunchCodeDAO(a.db.GetConn())
 	a.launchCodeSvc = launchcode.NewLaunchCodeService(launchCodeDAO)
@@ -208,7 +249,7 @@ func (a *App) startup(ctx context.Context) {
 	// 连接池失效通知
 	a.xrayMgr.OnBridgeDied = func(key string, err error) {
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "proxy:bridge:died", map[string]interface{}{
+			runtime.EventsEmit(a.ctx, events.EventProxyBridgeDied, map[string]interface{}{
 				"engine": "xray",
 				"key":    key[:8],
 				"error":  err.Error(),
@@ -217,7 +258,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.singboxMgr.OnBridgeDied = func(key string, err error) {
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "proxy:bridge:died", map[string]interface{}{
+			runtime.EventsEmit(a.ctx, events.EventProxyBridgeDied, map[string]interface{}{
 				"engine": "singbox",
 				"key":    key[:8],
 				"error":  err.Error(),
@@ -236,6 +277,27 @@ func (a *App) startup(ctx context.Context) {
 		5,
 	)
 	a.speedScheduler.Start()
+
+	// 初始化任务调度器
+	a.taskStore = scheduler.NewSQLiteTaskStore(conn)
+	a.scheduler = scheduler.New(a.taskStore, &scheduler.NoopRunner{}, func(eventName string, data ...interface{}) {
+		if a.ctx != nil {
+			events.EmitAndLog(a.ctx, eventName, data...)
+		}
+	})
+	a.scheduler.Start(ctx)
+
+	// 初始化自动响应规则引擎
+	a.ruleStore = automation.NewSQLiteRuleStore(conn)
+	a.ruleEngine = automation.NewRuleEngine(a.ruleStore, func(eventName string, data ...interface{}) {
+		if a.ctx != nil {
+			events.EmitAndLog(a.ctx, eventName, data...)
+		}
+	}, func(taskID string) {
+		a.scheduler.RunTaskNow(taskID)
+	})
+	events.SetRuleEngine(a.ruleEngine)
+	a.ruleEngine.Start(ctx)
 
 	log.Info("应用启动成功")
 }
@@ -356,7 +418,7 @@ func ShouldBlockClose(a *App, ctx context.Context) bool {
 	if !platformSupportsTrayCloseFlow() {
 		return false
 	}
-	runtime.EventsEmit(ctx, "app:request-close")
+	runtime.EventsEmit(ctx, events.EventAppRequestClose)
 	return true
 }
 
@@ -708,6 +770,10 @@ func (a *App) BrowserProxyTestSpeed(proxyId string) ProxyTestResult {
 		testedAt := time.Now().Format(time.RFC3339)
 		_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(proxyId, r.Ok, r.LatencyMs, testedAt)
 	}
+	// 风险信号：代理延迟 >3s
+	if r.Ok && r.LatencyMs > 3000 {
+		a.emitProxyHighLatency(proxyId, r.LatencyMs)
+	}
 	return ProxyTestResult{ProxyId: r.ProxyId, Ok: r.Ok, LatencyMs: r.LatencyMs, Error: r.Error}
 }
 
@@ -747,7 +813,11 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 
 				// 实时推送单个结果到前端
 				if a.ctx != nil {
-					runtime.EventsEmit(a.ctx, "proxy:speed:result", result)
+					runtime.EventsEmit(a.ctx, events.EventProxySpeedResult, result)
+				}
+				// 风险信号：代理延迟 >3s
+				if r.Ok && r.LatencyMs > 3000 {
+					a.emitProxyHighLatency(r.ProxyId, r.LatencyMs)
 				}
 			}
 		}()
@@ -769,8 +839,9 @@ func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 	result := buildProxyIPHealthResult(proxyId, data, err)
 	a.persistProxyIPHealthResult(result)
 	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "proxy:iphealth:result", result)
+		runtime.EventsEmit(a.ctx, events.EventProxyIPHealthResult, result)
 	}
+	a.emitProxyIPHealthRisks(result)
 	return result
 }
 
@@ -805,8 +876,9 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 				a.persistProxyIPHealthResult(result)
 				results[job.Idx] = result
 				if a.ctx != nil {
-					runtime.EventsEmit(a.ctx, "proxy:iphealth:result", result)
+					runtime.EventsEmit(a.ctx, events.EventProxyIPHealthResult, result)
 				}
+				a.emitProxyIPHealthRisks(result)
 			}
 		}()
 	}
@@ -863,6 +935,42 @@ func (a *App) persistProxyIPHealthResult(result ProxyIPHealthResult) {
 		return
 	}
 	_ = a.browserMgr.ProxyDAO.UpdateIPHealthResult(result.ProxyId, string(payload))
+}
+
+// emitProxyHighLatency 推送代理高延迟风险事件。
+func (a *App) emitProxyHighLatency(proxyId string, latencyMs int64) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, events.EventRiskProxyHighLatency, map[string]interface{}{
+		"proxyId":   proxyId,
+		"latencyMs": latencyMs,
+	})
+}
+
+// emitProxyIPHealthRisks 根据 IP 健康检测结果推送相关风险事件。
+func (a *App) emitProxyIPHealthRisks(result ProxyIPHealthResult) {
+	if a.ctx == nil || !result.Ok {
+		return
+	}
+	// 机房 IP 检测
+	if !result.IsResidential && result.FraudScore >= 30 {
+		runtime.EventsEmit(a.ctx, events.EventRiskProxyDatacenter, map[string]interface{}{
+			"proxyId":       result.ProxyId,
+			"ip":            result.IP,
+			"fraudScore":    result.FraudScore,
+			"isResidential": result.IsResidential,
+			"country":       result.Country,
+		})
+	}
+	// 欺诈分骤升
+	if result.FraudScore >= 70 {
+		runtime.EventsEmit(a.ctx, events.EventRiskProxyHealthDrop, map[string]interface{}{
+			"proxyId":    result.ProxyId,
+			"ip":         result.IP,
+			"fraudScore": result.FraudScore,
+		})
+	}
 }
 
 func mapString(m map[string]interface{}, key string) string {

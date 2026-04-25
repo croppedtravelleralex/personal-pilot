@@ -1,5 +1,75 @@
 export namespace backend {
 	
+	export class AutomationRuleInfo {
+	    id: string;
+	    name: string;
+	    triggerEvent: string;
+	    condition?: string;
+	    action: string;
+	    actionParams?: Record<string, any>;
+	    cooldown: string;
+	    enabled: boolean;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AutomationRuleInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.triggerEvent = source["triggerEvent"];
+	        this.condition = source["condition"];
+	        this.action = source["action"];
+	        this.actionParams = source["actionParams"];
+	        this.cooldown = source["cooldown"];
+	        this.enabled = source["enabled"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class AutomationRuleInput {
+	    name: string;
+	    triggerEvent: string;
+	    condition?: string;
+	    action: string;
+	    actionParams?: Record<string, any>;
+	    cooldown: string;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AutomationRuleInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.triggerEvent = source["triggerEvent"];
+	        this.condition = source["condition"];
+	        this.action = source["action"];
+	        this.actionParams = source["actionParams"];
+	        this.cooldown = source["cooldown"];
+	        this.enabled = source["enabled"];
+	    }
+	}
+	export class BehaviorPresetInfo {
+	    id: string;
+	    name: string;
+	    description: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BehaviorPresetInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	    }
+	}
 	export class CookieInfo {
 	    name: string;
 	    value: string;
@@ -24,6 +94,30 @@ export namespace backend {
 	        this.httpOnly = source["httpOnly"];
 	        this.secure = source["secure"];
 	        this.sameSite = source["sameSite"];
+	    }
+	}
+	export class EventLogQueryInput {
+	    after: string;
+	    before: string;
+	    namespace: string;
+	    severity: string;
+	    eventName: string;
+	    limit: number;
+	    offset: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new EventLogQueryInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.after = source["after"];
+	        this.before = source["before"];
+	        this.namespace = source["namespace"];
+	        this.severity = source["severity"];
+	        this.eventName = source["eventName"];
+	        this.limit = source["limit"];
+	        this.offset = source["offset"];
 	    }
 	}
 	export class LicenseStatus {
@@ -112,6 +206,143 @@ export namespace backend {
 	        this.errorMsg = source["errorMsg"];
 	    }
 	}
+	export class SchedulerTaskAction {
+	    type: string;
+	    target: string;
+	    value: string;
+	    timeout: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchedulerTaskAction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.target = source["target"];
+	        this.value = source["value"];
+	        this.timeout = source["timeout"];
+	    }
+	}
+	export class SchedulerTaskTrigger {
+	    type: string;
+	    cron?: string;
+	    interval?: string;
+	    event?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchedulerTaskTrigger(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.cron = source["cron"];
+	        this.interval = source["interval"];
+	        this.event = source["event"];
+	    }
+	}
+	export class SchedulerTaskInfo {
+	    id: string;
+	    name: string;
+	    trigger: SchedulerTaskTrigger;
+	    actions: SchedulerTaskAction[];
+	    maxRetries: number;
+	    retryDelay: string;
+	    dependsOn: string[];
+	    profileId: string;
+	    enabled: boolean;
+	    createdAt: string;
+	    status: string;
+	    lastRunAt: string;
+	    lastError: string;
+	    retryCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchedulerTaskInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.trigger = this.convertValues(source["trigger"], SchedulerTaskTrigger);
+	        this.actions = this.convertValues(source["actions"], SchedulerTaskAction);
+	        this.maxRetries = source["maxRetries"];
+	        this.retryDelay = source["retryDelay"];
+	        this.dependsOn = source["dependsOn"];
+	        this.profileId = source["profileId"];
+	        this.enabled = source["enabled"];
+	        this.createdAt = source["createdAt"];
+	        this.status = source["status"];
+	        this.lastRunAt = source["lastRunAt"];
+	        this.lastError = source["lastError"];
+	        this.retryCount = source["retryCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SchedulerTaskInput {
+	    name: string;
+	    trigger: SchedulerTaskTrigger;
+	    actions: SchedulerTaskAction[];
+	    maxRetries: number;
+	    retryDelay: string;
+	    dependsOn: string[];
+	    profileId: string;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SchedulerTaskInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.trigger = this.convertValues(source["trigger"], SchedulerTaskTrigger);
+	        this.actions = this.convertValues(source["actions"], SchedulerTaskAction);
+	        this.maxRetries = source["maxRetries"];
+	        this.retryDelay = source["retryDelay"];
+	        this.dependsOn = source["dependsOn"];
+	        this.profileId = source["profileId"];
+	        this.enabled = source["enabled"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class SnapshotInfo {
 	    snapshotId: string;
 	    profileId: string;
@@ -280,6 +511,105 @@ export namespace backup {
 
 }
 
+export namespace behavior {
+	
+	export class RecordedEvent {
+	    t: number;
+	    type: string;
+	    x?: number;
+	    y?: number;
+	    btn?: number;
+	    key?: string;
+	    text?: string;
+	    dx?: number;
+	    dy?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordedEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.t = source["t"];
+	        this.type = source["type"];
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.btn = source["btn"];
+	        this.key = source["key"];
+	        this.text = source["text"];
+	        this.dx = source["dx"];
+	        this.dy = source["dy"];
+	    }
+	}
+	export class Recording {
+	    id: string;
+	    name: string;
+	    description: string;
+	    events: RecordedEvent[];
+	    durationMs: number;
+	    viewportW: number;
+	    viewportH: number;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Recording(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.events = this.convertValues(source["events"], RecordedEvent);
+	        this.durationMs = source["durationMs"];
+	        this.viewportW = source["viewportW"];
+	        this.viewportH = source["viewportH"];
+	        this.createdAt = source["createdAt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class VariationConfig {
+	    intensity: number;
+	    timingJitter: number;
+	    positionJitter: number;
+	    speedVariation: number;
+	    microCorrections: boolean;
+	    extraPauses: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new VariationConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.intensity = source["intensity"];
+	        this.timingJitter = source["timingJitter"];
+	        this.positionJitter = source["positionJitter"];
+	        this.speedVariation = source["speedVariation"];
+	        this.microCorrections = source["microCorrections"];
+	        this.extraPauses = source["extraPauses"];
+	    }
+	}
+
+}
+
 export namespace browser {
 	
 	export class CoreExtendedInfo {
@@ -398,6 +728,7 @@ export namespace browser {
 	    userDataDir: string;
 	    coreId: string;
 	    fingerprintArgs: string[];
+	    preferencesOverrides?: Record<string, any>;
 	    proxyId: string;
 	    proxyConfig: string;
 	    proxyBindSourceId: string;
@@ -409,6 +740,7 @@ export namespace browser {
 	    keywords: string[];
 	    groupId: string;
 	    launchCode: string;
+	    behaviorProfileId: string;
 	    running: boolean;
 	    debugPort: number;
 	    debugReady: boolean;
@@ -431,6 +763,7 @@ export namespace browser {
 	        this.userDataDir = source["userDataDir"];
 	        this.coreId = source["coreId"];
 	        this.fingerprintArgs = source["fingerprintArgs"];
+	        this.preferencesOverrides = source["preferencesOverrides"];
 	        this.proxyId = source["proxyId"];
 	        this.proxyConfig = source["proxyConfig"];
 	        this.proxyBindSourceId = source["proxyBindSourceId"];
@@ -442,6 +775,7 @@ export namespace browser {
 	        this.keywords = source["keywords"];
 	        this.groupId = source["groupId"];
 	        this.launchCode = source["launchCode"];
+	        this.behaviorProfileId = source["behaviorProfileId"];
 	        this.running = source["running"];
 	        this.debugPort = source["debugPort"];
 	        this.debugReady = source["debugReady"];
@@ -459,12 +793,14 @@ export namespace browser {
 	    userDataDir: string;
 	    coreId: string;
 	    fingerprintArgs: string[];
+	    preferencesOverrides?: Record<string, any>;
 	    proxyId: string;
 	    proxyConfig: string;
 	    launchArgs: string[];
 	    tags: string[];
 	    keywords: string[];
 	    groupId: string;
+	    behaviorProfileId: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileInput(source);
@@ -476,12 +812,14 @@ export namespace browser {
 	        this.userDataDir = source["userDataDir"];
 	        this.coreId = source["coreId"];
 	        this.fingerprintArgs = source["fingerprintArgs"];
+	        this.preferencesOverrides = source["preferencesOverrides"];
 	        this.proxyId = source["proxyId"];
 	        this.proxyConfig = source["proxyConfig"];
 	        this.launchArgs = source["launchArgs"];
 	        this.tags = source["tags"];
 	        this.keywords = source["keywords"];
 	        this.groupId = source["groupId"];
+	        this.behaviorProfileId = source["behaviorProfileId"];
 	    }
 	}
 	export class Settings {
@@ -601,6 +939,33 @@ export namespace config {
 	        this.lastTestOk = source["lastTestOk"];
 	        this.lastTestedAt = source["lastTestedAt"];
 	        this.lastIPHealthJson = source["lastIPHealthJson"];
+	    }
+	}
+
+}
+
+export namespace events {
+	
+	export class EventLogEntry {
+	    id: number;
+	    eventName: string;
+	    namespace: string;
+	    severity: string;
+	    payload: Record<string, any>;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EventLogEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.eventName = source["eventName"];
+	        this.namespace = source["namespace"];
+	        this.severity = source["severity"];
+	        this.payload = source["payload"];
+	        this.createdAt = source["createdAt"];
 	    }
 	}
 

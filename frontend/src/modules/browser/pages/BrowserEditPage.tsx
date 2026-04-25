@@ -35,6 +35,7 @@ export function BrowserEditPage() {
     tags: [],
     keywords: [],
     groupId: '',
+    behaviorProfileId: '',
   })
   const [cores, setCores] = useState<BrowserCore[]>([])
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
@@ -84,6 +85,7 @@ export function BrowserEditPage() {
         tags: current.tags,
         keywords: current.keywords || [],
         groupId: current.groupId || '',
+        behaviorProfileId: current.behaviorProfileId || '',
       })
       setLaunchArgsText(currentLaunchArgs.join('\n'))
     }
@@ -244,6 +246,8 @@ export function BrowserEditPage() {
         <FingerprintPanel
           value={formData.fingerprintArgs}
           onChange={args => handleChange('fingerprintArgs', args)}
+          behaviorProfileId={formData.behaviorProfileId}
+          onBehaviorProfileChange={id => handleChange('behaviorProfileId', id)}
         />
       </Card>
 
