@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Play, Square, Trash2, Circle } from 'lucide-react'
 import { Button, FormItem, Input, Select, toast } from '../../../shared/components'
 import type { Recording, VariationConfig } from '../types'
@@ -10,6 +10,7 @@ import {
   BehaviorStopRecording,
   BehaviorStartRecording,
 } from '../../../wailsjs/go/main/App'
+import { EventsOn, EventsOff } from '../../../wailsjs/runtime'
 
 interface RecordingPanelProps {
   profileId?: string
@@ -47,6 +48,21 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
   useEffect(() => {
     loadRecordings()
   }, [])
+
+  // Listen for playback completion/failure events to reset UI state
+  const handlePlaybackEvent = useCallback((data: { profileId?: string }) => {
+    if (data?.profileId === profileId || !data?.profileId) {
+      setIsPlaying(false)
+    }
+  }, [profileId])
+
+  useEffect(() => {
+    EventsOn('automation:playback:completed', handlePlaybackEvent)
+    EventsOn('automation:playback:failed', handlePlaybackEvent)
+    return () => {
+      EventsOff('automation:playback:completed', 'automation:playback:failed')
+    }
+  }, [handlePlaybackEvent])
 
   // Start recording
   const handleStartRecording = async () => {

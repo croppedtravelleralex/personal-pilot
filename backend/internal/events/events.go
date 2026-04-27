@@ -100,6 +100,11 @@ const (
 
 const (
 	EventAppRequestClose = "app:request-close"
+
+	// ─── Automation ──────────────────────────────────────────────────────────────
+
+	EventAutomationPlaybackCompleted = "automation:playback:completed"
+	EventAutomationPlaybackFailed    = "automation:playback:failed"
 )
 
 // ─── Download ──────────────────────────────────────────────────────────────────
@@ -142,5 +147,7 @@ func AllEventNames() []string {
 		EventRiskNodeOffline,
 		EventAppRequestClose,
 		EventDownloadProgress,
+		EventAutomationPlaybackCompleted,
+		EventAutomationPlaybackFailed,
 	}
 }

@@ -280,7 +280,19 @@ func (a *App) startup(ctx context.Context) {
 
 	// 初始化任务调度器
 	a.taskStore = scheduler.NewSQLiteTaskStore(conn)
-	a.scheduler = scheduler.New(a.taskStore, &scheduler.NoopRunner{}, func(eventName string, data ...interface{}) {
+	cdpRunner := scheduler.NewCDPTaskRunner(func(profileID string) (int, error) {
+		a.browserMgr.Mutex.Lock()
+		profile, exists := a.browserMgr.Profiles[profileID]
+		a.browserMgr.Mutex.Unlock()
+		if !exists || profile == nil {
+			return 0, fmt.Errorf("profile not found: %s", profileID)
+		}
+		if !profile.Running || !profile.DebugReady {
+			return 0, fmt.Errorf("browser not running or debug not ready for profile %s", profileID)
+		}
+		return profile.DebugPort, nil
+	})
+	a.scheduler = scheduler.New(a.taskStore, cdpRunner, func(eventName string, data ...interface{}) {
 		if a.ctx != nil {
 			events.EmitAndLog(a.ctx, eventName, data...)
 		}

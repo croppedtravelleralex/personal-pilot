@@ -17,22 +17,22 @@ type TaskRunner interface {
 
 // Scheduler manages task scheduling with cron/interval/event triggers.
 type Scheduler struct {
-	store    TaskStore
-	runner   TaskRunner
-	emitFn   EmitFn
-	log      *logger.Logger
+	store  TaskStore
+	runner TaskRunner
+	emitFn EmitFn
+	log    *logger.Logger
 
-	ctx       context.Context
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-	started   bool
-	mu        sync.Mutex
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	started bool
+	mu      sync.Mutex
 
 	// Event channel for event-triggered tasks
 	eventCh chan string
 
 	// Track currently running tasks
-	running map[string]bool
+	running   map[string]bool
 	runningMu sync.Mutex
 }
 
@@ -355,8 +355,7 @@ func (s *Scheduler) cronMatches(cron string, now time.Time, lastRun time.Time) b
 		if len(target) == 5 && target[2] == ':' {
 			currentHM := now.Format("15:04")
 			if currentHM == target {
-				lastHM := lastRun.Format("15:04")
-				return lastHM != target
+				return lastRun.IsZero() || lastRun.Format("2006-01-02") != now.Format("2006-01-02")
 			}
 		}
 	}

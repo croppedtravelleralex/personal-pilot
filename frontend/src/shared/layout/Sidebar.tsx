@@ -17,6 +17,7 @@ import {
   Globe,
   Tag,
   Bot,
+  Radio,
   type LucideIcon,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -42,6 +43,7 @@ const iconMap: Record<string, LucideIcon> = {
   BookOpen,
   Tag,
   Bot,
+  Radio,
 }
 
 function getIcon(iconName: string): LucideIcon {

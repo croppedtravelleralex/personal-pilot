@@ -111,39 +111,57 @@ func (e *PlaybackEngine) run(ctx context.Context) error {
 
 		switch evt.Type {
 		case "move":
-			e.dispatchMouseMove(msgID, lastX, lastY, x, y)
+			if err := e.dispatchMouseMove(msgID, lastX, lastY, x, y); err != nil {
+				return fmt.Errorf("move event failed: %w", err)
+			}
 			msgID++
 			lastX, lastY = x, y
 
 		case "down":
-			e.dispatchMouseEvent(msgID, "mousePressed", x, y, evt.Button)
+			if err := e.dispatchMouseEvent(msgID, "mousePressed", x, y, evt.Button); err != nil {
+				return fmt.Errorf("mouseDown event failed: %w", err)
+			}
 			msgID++
 			lastX, lastY = x, y
 
 		case "up":
-			e.dispatchMouseEvent(msgID, "mouseReleased", x, y, evt.Button)
+			if err := e.dispatchMouseEvent(msgID, "mouseReleased", x, y, evt.Button); err != nil {
+				return fmt.Errorf("mouseUp event failed: %w", err)
+			}
 			msgID++
 
 		case "click":
-			e.dispatchMouseEvent(msgID, "mousePressed", x, y, evt.Button)
+			if err := e.dispatchMouseEvent(msgID, "mousePressed", x, y, evt.Button); err != nil {
+				return fmt.Errorf("click press failed: %w", err)
+			}
 			msgID++
 			// Small delay between down and up
 			time.Sleep(time.Duration(30+e.rng.Intn(70)) * time.Millisecond)
-			e.dispatchMouseEvent(msgID, "mouseReleased", x, y, evt.Button)
+			if err := e.dispatchMouseEvent(msgID, "mouseReleased", x, y, evt.Button); err != nil {
+				return fmt.Errorf("click release failed: %w", err)
+			}
 			msgID++
 
 		case "key":
-			e.dispatchKeyEvent(msgID, "rawKeyDown", evt.Key, evt.Text)
+			if err := e.dispatchKeyEvent(msgID, "rawKeyDown", evt.Key, evt.Text); err != nil {
+				return fmt.Errorf("keyDown event failed: %w", err)
+			}
 			msgID++
 			if evt.Text != "" {
-				e.dispatchKeyEvent(msgID, "char", evt.Key, evt.Text)
+				if err := e.dispatchKeyEvent(msgID, "char", evt.Key, evt.Text); err != nil {
+					return fmt.Errorf("keyChar event failed: %w", err)
+				}
 				msgID++
 			}
-			e.dispatchKeyEvent(msgID, "keyUp", evt.Key, "")
+			if err := e.dispatchKeyEvent(msgID, "keyUp", evt.Key, ""); err != nil {
+				return fmt.Errorf("keyUp event failed: %w", err)
+			}
 			msgID++
 
 		case "scroll":
-			e.dispatchScroll(msgID, evt.DeltaX, evt.DeltaY)
+			if err := e.dispatchScroll(msgID, evt.DeltaX, evt.DeltaY); err != nil {
+				return fmt.Errorf("scroll event failed: %w", err)
+			}
 			msgID++
 		}
 
@@ -157,7 +175,9 @@ func (e *PlaybackEngine) run(ctx context.Context) error {
 			}
 			overshootX := x + float64(e.rng.Intn(3)-1)
 			overshootY := y + float64(e.rng.Intn(3)-1)
-			e.dispatchMouseMove(msgID, x, y, overshootX, overshootY)
+			if err := e.dispatchMouseMove(msgID, x, y, overshootX, overshootY); err != nil {
+				return fmt.Errorf("micro-correction failed: %w", err)
+			}
 			msgID++
 			lastX, lastY = overshootX, overshootY
 		}
@@ -182,7 +202,7 @@ func (e *PlaybackEngine) run(ctx context.Context) error {
 	return nil
 }
 
-func (e *PlaybackEngine) dispatchMouseMove(msgID int, fromX, fromY, toX, toY float64) {
+func (e *PlaybackEngine) dispatchMouseMove(msgID int, fromX, fromY, toX, toY float64) error {
 	// Use simple linear interpolation for replay (not bezier - replay already has the path)
 	steps := 5 + e.rng.Intn(5)
 	for step := 0; step <= steps; step++ {
@@ -193,7 +213,7 @@ func (e *PlaybackEngine) dispatchMouseMove(msgID int, fromX, fromY, toX, toY flo
 			x += e.gaussian(0, 1)
 			y += e.gaussian(0, 1)
 		}
-		e.sendMessage(map[string]interface{}{
+		if err := e.sendMessage(map[string]interface{}{
 			"id":     msgID*1000 + step,
 			"method": "Input.dispatchMouseEvent",
 			"params": map[string]interface{}{
@@ -201,12 +221,15 @@ func (e *PlaybackEngine) dispatchMouseMove(msgID int, fromX, fromY, toX, toY flo
 				"x":    math.Round(x),
 				"y":    math.Round(y),
 			},
-		})
+		}); err != nil {
+			return err
+		}
 		time.Sleep(time.Duration(8+e.rng.Intn(8)) * time.Millisecond)
 	}
+	return nil
 }
 
-func (e *PlaybackEngine) dispatchMouseEvent(msgID int, eventType string, x, y float64, button int) {
+func (e *PlaybackEngine) dispatchMouseEvent(msgID int, eventType string, x, y float64, button int) error {
 	btn := "left"
 	if button == 1 {
 		btn = "middle"
@@ -214,7 +237,7 @@ func (e *PlaybackEngine) dispatchMouseEvent(msgID int, eventType string, x, y fl
 		btn = "right"
 	}
 
-	e.sendMessage(map[string]interface{}{
+	return e.sendMessage(map[string]interface{}{
 		"id":     msgID,
 		"method": "Input.dispatchMouseEvent",
 		"params": map[string]interface{}{
@@ -227,7 +250,7 @@ func (e *PlaybackEngine) dispatchMouseEvent(msgID int, eventType string, x, y fl
 	})
 }
 
-func (e *PlaybackEngine) dispatchKeyEvent(msgID int, eventType string, key, text string) {
+func (e *PlaybackEngine) dispatchKeyEvent(msgID int, eventType string, key, text string) error {
 	params := map[string]interface{}{
 		"type": eventType,
 		"key":  key,
@@ -239,27 +262,29 @@ func (e *PlaybackEngine) dispatchKeyEvent(msgID int, eventType string, key, text
 		params["text"] = text
 	}
 
-	e.sendMessage(map[string]interface{}{
+	return e.sendMessage(map[string]interface{}{
 		"id":     msgID,
 		"method": "Input.dispatchKeyEvent",
 		"params": params,
 	})
 }
 
-func (e *PlaybackEngine) dispatchScroll(msgID int, deltaX, deltaY float64) {
+func (e *PlaybackEngine) dispatchScroll(msgID int, deltaX, deltaY float64) error {
 	// Scroll via injected JS for smoother scrolling
 	js := fmt.Sprintf("window.scrollBy(%d, %d)", int(math.Round(deltaX)), int(math.Round(deltaY)))
-	e.sendMessage(map[string]interface{}{
+	if err := e.sendMessage(map[string]interface{}{
 		"id":     msgID,
 		"method": "Runtime.evaluate",
 		"params": map[string]interface{}{
 			"expression":    js,
 			"returnByValue": false,
 		},
-	})
+	}); err != nil {
+		return err
+	}
 
 	// Also dispatch a wheel event for completeness
-	e.sendMessage(map[string]interface{}{
+	return e.sendMessage(map[string]interface{}{
 		"id":     msgID * 1000,
 		"method": "Input.dispatchMouseEvent",
 		"params": map[string]interface{}{
@@ -272,16 +297,18 @@ func (e *PlaybackEngine) dispatchScroll(msgID int, deltaX, deltaY float64) {
 	})
 }
 
-func (e *PlaybackEngine) sendMessage(msg map[string]interface{}) {
+func (e *PlaybackEngine) sendMessage(msg map[string]interface{}) error {
 	if e.wsConn == nil {
-		return
+		return fmt.Errorf("websocket not connected")
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return
+		return fmt.Errorf("marshal message: %w", err)
 	}
-	// Non-blocking read to consume response (simplified: we don't wait for ACKs)
-	e.wsConn.WriteMessage(websocket.TextMessage, data)
+	if err := e.wsConn.WriteMessage(websocket.TextMessage, data); err != nil {
+		return fmt.Errorf("write websocket message: %w", err)
+	}
+	return nil
 }
 
 // gaussian generates a random number from a normal distribution (Box-Muller).

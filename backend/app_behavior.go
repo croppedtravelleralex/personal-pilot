@@ -3,6 +3,8 @@ package backend
 import (
 	"fmt"
 	"ant-chrome/backend/internal/behavior"
+	"ant-chrome/backend/internal/events"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // BehaviorPresetInfo is the frontend-facing preset metadata.
@@ -125,9 +127,18 @@ func (a *App) BehaviorPlayRecording(profileId string, recordingId string, variat
 
 	// Run playback in background so the Wails call returns immediately
 	go func() {
-		if err := engine.Play(a.ctx, profile.DebugPort); err != nil {
-			// Log error but don't crash
-			_ = err
+		playErr := engine.Play(a.ctx, profile.DebugPort)
+		if a.ctx != nil {
+			if playErr != nil {
+				runtime.EventsEmit(a.ctx, events.EventAutomationPlaybackFailed, map[string]interface{}{
+					"profileId": profileId,
+					"error":     playErr.Error(),
+				})
+			} else {
+				runtime.EventsEmit(a.ctx, events.EventAutomationPlaybackCompleted, map[string]interface{}{
+					"profileId": profileId,
+				})
+			}
 		}
 		a.playMu.Lock()
 		delete(a.playbacks, profileId)
