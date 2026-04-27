@@ -25,6 +25,14 @@ func CoreExecutableCandidates() []string {
 	}
 }
 
+// CoreExecutableCandidatesForKind returns executable candidates for a given core kind.
+func CoreExecutableCandidatesForKind(kind string) []string {
+	if kind == "lightpanda" {
+		return LightpandaExecutableCandidates()
+	}
+	return CoreExecutableCandidates()
+}
+
 // FindCoreExecutable 在指定目录查找可执行文件，返回绝对路径和命中的候选名。
 func FindCoreExecutable(baseDir string) (string, string, bool) {
 	baseDir = strings.TrimSpace(baseDir)
@@ -32,6 +40,21 @@ func FindCoreExecutable(baseDir string) (string, string, bool) {
 		return "", "", false
 	}
 	for _, candidate := range CoreExecutableCandidates() {
+		p := filepath.Join(baseDir, filepath.FromSlash(candidate))
+		if _, err := os.Stat(p); err == nil {
+			return p, candidate, true
+		}
+	}
+	return "", "", false
+}
+
+// FindCoreExecutableForKind searches for an executable of the given kind.
+func FindCoreExecutableForKind(baseDir, kind string) (string, string, bool) {
+	baseDir = strings.TrimSpace(baseDir)
+	if baseDir == "" {
+		return "", "", false
+	}
+	for _, candidate := range CoreExecutableCandidatesForKind(kind) {
 		p := filepath.Join(baseDir, filepath.FromSlash(candidate))
 		if _, err := os.Stat(p); err == nil {
 			return p, candidate, true

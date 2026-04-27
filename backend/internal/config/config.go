@@ -118,8 +118,15 @@ type BrowserCore struct {
 	CoreId    string `yaml:"core_id" json:"coreId"`
 	CoreName  string `yaml:"core_name" json:"coreName"`
 	CorePath  string `yaml:"core_path" json:"corePath"`
+	Kind      string `yaml:"kind,omitempty" json:"kind,omitempty"` // "chromium" (default) or "lightpanda"
 	IsDefault bool   `yaml:"is_default" json:"isDefault"`
 }
+
+// CoreKind constants
+const (
+	CoreKindChromium   = "chromium"
+	CoreKindLightpanda = "lightpanda"
+)
 
 type BrowserProxy struct {
 	ProxyId     string `yaml:"proxy_id" json:"proxyId"`

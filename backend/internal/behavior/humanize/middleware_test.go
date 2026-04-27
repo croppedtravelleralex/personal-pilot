@@ -12,6 +12,7 @@ func TestNewBehavioralMutationMiddleware(t *testing.T) {
 
 func TestMiddleware_Mutate_Goto(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	action := LlmAction{Type: ActionGoto, URL: "https://example.com"}
 	mutated := mw.Mutate(action, nil)
 
@@ -28,6 +29,7 @@ func TestMiddleware_Mutate_Goto(t *testing.T) {
 
 func TestMiddleware_Mutate_TypeText(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	action := LlmAction{Type: ActionTypeText, Selector: "#input", Text: "hello"}
 	mutated := mw.Mutate(action, nil)
 
@@ -47,6 +49,7 @@ func TestMiddleware_Mutate_TypeText(t *testing.T) {
 
 func TestMiddleware_Mutate_Click(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	bounds := &ElementBounds{X1: 100, Y1: 100, X2: 200, Y2: 160, Width: 100, Height: 60}
 	action := LlmAction{Type: ActionClick, Selector: "#btn"}
 	mutated := mw.Mutate(action, bounds)
@@ -61,6 +64,7 @@ func TestMiddleware_Mutate_Click(t *testing.T) {
 
 func TestMiddleware_Mutate_Click_NoElement(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	action := LlmAction{Type: ActionClick, Selector: "#btn"}
 	mutated := mw.Mutate(action, nil)
 
@@ -71,6 +75,7 @@ func TestMiddleware_Mutate_Click_NoElement(t *testing.T) {
 
 func TestMiddleware_Mutate_Wait(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	action := LlmAction{Type: ActionWait, DurationMs: 1000}
 	mutated := mw.Mutate(action, nil)
 
@@ -85,6 +90,7 @@ func TestMiddleware_Mutate_Wait(t *testing.T) {
 
 func TestMiddleware_Mutate_Scroll(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	dist := uint32(400)
 	action := LlmAction{Type: ActionScroll, Direction: ScrollDown, DistancePx: &dist}
 	mutated := mw.Mutate(action, nil)
@@ -102,6 +108,7 @@ func TestMiddleware_Mutate_Scroll(t *testing.T) {
 
 func TestMiddleware_DecideRetry_Success(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	result := ActionResultSuccess()
 	d := mw.DecideRetry(&result, 0)
 	if d.Action.Type != RecoveryRetry {
@@ -111,6 +118,7 @@ func TestMiddleware_DecideRetry_Success(t *testing.T) {
 
 func TestMiddleware_DecideRetry_Failure(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	result := ActionResultFailure(ErrElementNotFound, "not found")
 	d := mw.DecideRetry(&result, 0)
 	// For ErrElementNotFound at attempt 0, should be RetryAfter (human hesitation)
@@ -121,6 +129,7 @@ func TestMiddleware_DecideRetry_Failure(t *testing.T) {
 
 func TestMiddleware_UpdateConfig(t *testing.T) {
 	mw := NewBehavioralMutationMiddleware(DefaultConfig())
+	mw.config.Failure.GiveUpChance = 0
 	oldLevel := mw.Config().Level
 
 	cfg := ConfigForLevel(LevelHigh)

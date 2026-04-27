@@ -52,7 +52,11 @@ func (m *Manager) GetDefaultCore() (Core, bool) {
 func (m *Manager) ResolveCoreExecutable(core Core) (string, error) {
 	corePath := strings.TrimSpace(core.CorePath)
 	if corePath == "" {
-		return "", fmt.Errorf("浏览器内核路径为空，请在“内核管理”中补充内核目录")
+		return "", fmt.Errorf("浏览器内核路径为空,请在\u201c内核管理\u201d中补充内核目录")
+	}
+
+	if core.Kind == "lightpanda" {
+		return m.ResolveLightpandaExecutable(core)
 	}
 
 	baseDir := m.ResolveRelativePath(corePath)
@@ -69,6 +73,11 @@ func (m *Manager) ResolveCoreExecutable(core Core) (string, error) {
 
 // ValidateCorePath 验证内核路径是否有效
 func (m *Manager) ValidateCorePath(corePath string) CoreValidateResult {
+	return m.ValidateCorePathForKind(corePath, "")
+}
+
+// ValidateCorePathForKind validates a core path for a specific browser kind.
+func (m *Manager) ValidateCorePathForKind(corePath, kind string) CoreValidateResult {
 	corePath = strings.TrimSpace(corePath)
 	if corePath == "" {
 		return CoreValidateResult{Valid: false, Message: "路径不能为空"}
@@ -79,9 +88,21 @@ func (m *Manager) ValidateCorePath(corePath string) CoreValidateResult {
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 		return CoreValidateResult{Valid: false, Message: fmt.Sprintf("目录不存在: %s", baseDir)}
 	}
-	exePath, _, ok := FindCoreExecutable(baseDir)
+
+	candidates := CoreExecutableCandidatesForKind(kind)
+	_, _, ok := FindCoreExecutableForKind(baseDir, kind)
 	if !ok {
-		return CoreValidateResult{Valid: false, Message: fmt.Sprintf("未找到浏览器可执行文件（候选：%s）", strings.Join(CoreExecutableCandidates(), ", "))}
+		return CoreValidateResult{Valid: false, Message: fmt.Sprintf("未找到浏览器可执行文件（候选：%s）", strings.Join(candidates, ", "))}
+	}
+
+	var exePath string
+	if kind == "lightpanda" {
+		exePath, _, ok = FindLightpandaExecutable(baseDir)
+	} else {
+		exePath, _, ok = FindCoreExecutable(baseDir)
+	}
+	if !ok {
+		return CoreValidateResult{Valid: false, Message: fmt.Sprintf("未找到浏览器可执行文件（候选：%s）", strings.Join(candidates, ", "))}
 	}
 	if err := fsutil.ValidateExecutable(exePath); err != nil {
 		return CoreValidateResult{Valid: false, Message: fmt.Sprintf("浏览器可执行文件不可用：%v", err)}
@@ -95,7 +116,7 @@ func (m *Manager) ListCores() []Core {
 	if m.CoreDAO != nil {
 		cores, err := m.CoreDAO.List()
 		if err == nil {
-			// 同步到内存 config，供其他逻辑使用
+			// 同步到内存 config,供其他逻辑使用
 			m.Config.Browser.Cores = cores
 			return cores
 		}
@@ -123,7 +144,7 @@ func (m *Manager) SaveCore(input CoreInput) error {
 		}
 		if input.IsDefault {
 			if err := m.CoreDAO.SetDefault(""); err != nil {
-				// SetDefault 空串只清除，忽略错误
+				// SetDefault 空串只清除,忽略错误
 				_ = err
 			}
 		}
@@ -255,7 +276,7 @@ func (m *Manager) clearDefaultCore() {
 	}
 }
 
-// ResolveChromeBinary 解析 Chrome 二进制路径（简化版）
+// ResolveChromeBinary 解析浏览器二进制路径（简化版）。支持 Chromium 和 Lightpanda。
 func (m *Manager) ResolveChromeBinary(profile *Profile) (string, error) {
 	log := logger.New("Browser")
 	coreId := normalizeProfileCoreID(profile.CoreId)
@@ -270,16 +291,16 @@ func (m *Manager) ResolveChromeBinary(profile *Profile) (string, error) {
 		core, found = m.GetDefaultCore()
 	}
 	if !found {
-		return "", fmt.Errorf("未配置可用浏览器内核。请先在“内核管理”中添加内核并设置默认内核")
+		return "", fmt.Errorf("未配置可用浏览器内核。请先在\u201c内核管理\u201d中添加内核并设置默认内核")
 	}
 
-	exePath, err := m.ResolveCoreExecutable(core)
+	exePath, err := m.ResolveBrowserBinary(core)
 	if err != nil {
-		log.Error("内核路径解析失败", logger.F("core_id", core.CoreId), logger.F("error", err.Error()))
+		log.Error("内核路径解析失败", logger.F("core_id", core.CoreId), logger.F("kind", core.Kind), logger.F("error", err.Error()))
 		return "", err
 	}
 
-	log.Debug("使用内核", logger.F("core_id", core.CoreId), logger.F("path", exePath))
+	log.Debug("使用内核", logger.F("core_id", core.CoreId), logger.F("kind", core.Kind), logger.F("path", exePath))
 	return exePath, nil
 }
 
@@ -299,7 +320,7 @@ func (m *Manager) GetChromeVersion(corePath string) string {
 		// 尝试查找 *.manifest 文件
 		matches, _ := filepath.Glob(filepath.Join(baseDir, "*.manifest"))
 		if len(matches) > 0 {
-			// 从文件名提取版本号，如 "142.0.7444.175.manifest"
+			// 从文件名提取版本号,如 "142.0.7444.175.manifest"
 			baseName := filepath.Base(matches[0])
 			version := strings.TrimSuffix(baseName, ".manifest")
 			if version != "" {
@@ -325,7 +346,7 @@ func (m *Manager) CountInstancesByCore(coreId string) int {
 	coreId = strings.TrimSpace(coreId)
 	count := 0
 	countByCoreID := func(profileCoreId string) {
-		// 如果实例的 CoreId 为空，则使用默认内核
+		// 如果实例的 CoreId 为空,则使用默认内核
 		if profileCoreId == "" {
 			defaultCore, found := m.GetDefaultCore()
 			if found && strings.EqualFold(defaultCore.CoreId, coreId) {
