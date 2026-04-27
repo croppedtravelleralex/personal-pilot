@@ -9,10 +9,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const personalPilotBrandName = "personal-pilot"
 
 // ============================================================================
 // 工具函数
@@ -53,6 +56,103 @@ func nextAvailablePort() (int, error) {
 // ============================================================================
 // 内核初始化
 // ============================================================================
+
+func normalizeBrandName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return personalPilotBrandName
+	}
+
+	switch strings.ToLower(trimmed) {
+	case "ant browser", "ant chrome":
+		return personalPilotBrandName
+	default:
+		return trimmed
+	}
+}
+
+func normalizeCorePathKey(corePath string) string {
+	return strings.ToLower(filepath.ToSlash(strings.TrimSpace(corePath)))
+}
+
+func buildDetectedCoreID(folderName string) string {
+	folder := strings.TrimSpace(strings.ToLower(folderName))
+	if folder == "" {
+		return "core-custom"
+	}
+
+	var b strings.Builder
+	lastDash := false
+	for _, r := range folder {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+
+	id := strings.Trim(b.String(), "-")
+	if id == "" {
+		id = "custom"
+	}
+	return "core-" + id
+}
+
+func friendlyDetectedCoreName(folderName string) string {
+	trimmed := strings.TrimSpace(folderName)
+	if trimmed == "" {
+		return "Chrome Core"
+	}
+
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "fingerprint-chromium-") {
+		version := strings.TrimSpace(trimmed[len("fingerprint-chromium-"):])
+		if version != "" {
+			return fmt.Sprintf("Fingerprint Chromium %s (Win64)", version)
+		}
+		return "Fingerprint Chromium (Win64)"
+	}
+
+	if strings.HasPrefix(lower, "ungoogled-chromium_") {
+		version := strings.TrimSpace(trimmed[len("ungoogled-chromium_"):])
+		if version != "" {
+			return fmt.Sprintf("Ungoogled Chromium %s (Win64)", version)
+		}
+		return "Ungoogled Chromium (Win64)"
+	}
+
+	return fmt.Sprintf("Chrome %s", trimmed)
+}
+
+func shouldReplaceDetectedCoreName(currentName string) bool {
+	trimmed := strings.TrimSpace(currentName)
+	if trimmed == "" {
+		return true
+	}
+
+	lower := strings.ToLower(trimmed)
+	if lower == "default" || lower == "default core" || lower == "默认内核" {
+		return true
+	}
+
+	if strings.HasPrefix(lower, "chrome ") {
+		return true
+	}
+
+	if strings.HasPrefix(lower, "fingerprint-chromium-") {
+		return true
+	}
+
+	if strings.HasPrefix(lower, "ungoogled chromium_") {
+		return true
+	}
+
+	return false
+}
 
 func (a *App) ensureDefaultCores() {
 	log := logger.New("Browser")
@@ -100,6 +200,7 @@ func (a *App) ensureDefaultCores() {
 
 func (a *App) autoDetectCores() {
 	log := logger.New("Browser")
+	a.syncDetectedCoresToStore()
 	// ensureDefaultCores 已完成扫描注册，这里只做路径有效性日志。
 	// SQLite 模式下以内核表为准，避免与 config.yaml 历史条目不一致。
 	cores := a.config.Browser.Cores
@@ -118,6 +219,73 @@ func (a *App) autoDetectCores() {
 
 // scanChromeDir 扫描指定目录，将包含浏览器可执行文件的子文件夹识别为内核。
 // 如果目录本身包含可执行文件（旧版单内核结构），则直接返回该目录作为内核。
+func (a *App) syncDetectedCoresToStore() {
+	log := logger.New("Browser")
+	if a.browserMgr == nil {
+		return
+	}
+
+	detected := a.scanChromeDir("chrome")
+	if len(detected) == 0 {
+		return
+	}
+
+	existing := a.browserMgr.ListCores()
+	byPath := make(map[string]browser.Core, len(existing))
+	hasDefault := false
+	for _, core := range existing {
+		byPath[normalizeCorePathKey(core.CorePath)] = core
+		if core.IsDefault {
+			hasDefault = true
+		}
+	}
+
+	for _, detectedCore := range detected {
+		pathKey := normalizeCorePathKey(detectedCore.CorePath)
+		if existingCore, ok := byPath[pathKey]; ok {
+			targetName := strings.TrimSpace(existingCore.CoreName)
+			if shouldReplaceDetectedCoreName(targetName) {
+				targetName = detectedCore.CoreName
+			}
+
+			currentName := strings.TrimSpace(existingCore.CoreName)
+			currentPath := normalizeCorePathKey(existingCore.CorePath)
+			if currentName == targetName && currentPath == pathKey {
+				continue
+			}
+
+			if err := a.browserMgr.SaveCore(browser.CoreInput{
+				CoreId:    existingCore.CoreId,
+				CoreName:  targetName,
+				CorePath:  detectedCore.CorePath,
+				IsDefault: existingCore.IsDefault,
+			}); err != nil {
+				log.Warn("更新内核注册失败", logger.F("path", detectedCore.CorePath), logger.F("error", err.Error()))
+			}
+			continue
+		}
+
+		isDefault := false
+		if !hasDefault {
+			isDefault = true
+			hasDefault = true
+		}
+
+		if err := a.browserMgr.SaveCore(browser.CoreInput{
+			CoreId:    detectedCore.CoreId,
+			CoreName:  detectedCore.CoreName,
+			CorePath:  detectedCore.CorePath,
+			IsDefault: isDefault,
+		}); err != nil {
+			log.Warn("注册预置内核失败", logger.F("path", detectedCore.CorePath), logger.F("error", err.Error()))
+			continue
+		}
+		log.Info("已注册预置内核", logger.F("name", detectedCore.CoreName), logger.F("path", detectedCore.CorePath))
+	}
+
+	a.config.Browser.Cores = a.browserMgr.ListCores()
+}
+
 func (a *App) scanChromeDir(chromeRoot string) []browser.Core {
 	log := logger.New("Browser")
 
@@ -158,8 +326,8 @@ func (a *App) scanChromeDir(chromeRoot string) []browser.Core {
 		}
 		isDefault := len(cores) == 0
 		cores = append(cores, browser.Core{
-			CoreId:    fmt.Sprintf("core-%s", entry.Name()),
-			CoreName:  fmt.Sprintf("Chrome %s", entry.Name()),
+			CoreId:    buildDetectedCoreID(entry.Name()),
+			CoreName:  friendlyDetectedCoreName(entry.Name()),
 			CorePath:  subPath,
 			IsDefault: isDefault,
 		})

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"ant-chrome/backend/internal/events"
 	"ant-chrome/backend/internal/logger"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -69,14 +70,14 @@ func (a *App) emitBrowserInstanceStarted(profile *BrowserProfile, reused bool) {
 	if a == nil || a.ctx == nil || profile == nil {
 		return
 	}
-	runtime.EventsEmit(a.ctx, "browser:instance:started", browserInstanceEventPayload(profile, reused))
+	runtime.EventsEmit(a.ctx, events.EventBrowserInstanceStarted, browserInstanceEventPayload(profile, reused))
 }
 
 func (a *App) emitBrowserInstanceUpdated(profile *BrowserProfile) {
 	if a == nil || a.ctx == nil || profile == nil {
 		return
 	}
-	runtime.EventsEmit(a.ctx, "browser:instance:updated", browserInstanceEventPayload(profile, false))
+	runtime.EventsEmit(a.ctx, events.EventBrowserInstanceUpdated, browserInstanceEventPayload(profile, false))
 }
 
 func (a *App) markProfileRunningLocked(profileId string, profile *BrowserProfile, cmd *exec.Cmd, pid int, debugPort int, debugReady bool, runtimeWarning string) {

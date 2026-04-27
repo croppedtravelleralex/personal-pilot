@@ -6,95 +6,116 @@ import (
 	"testing"
 )
 
-func TestLoadConfigRestoresLocalLicenseState(t *testing.T) {
+func TestLoadConfigNormalizesLegacyLocalLicenseState(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yaml")
 
 	cfg := appconfig.DefaultConfig()
+	cfg.App.MaxProfileLimit = 88
+	cfg.App.UsedCDKeys = []string{"LEGACY-A", "LEGACY-B"}
 	if err := cfg.Save(configPath); err != nil {
-		t.Fatalf("写入测试配置失败: %v", err)
+		t.Fatalf("save config failed: %v", err)
 	}
 	if err := saveLocalLicenseState(configPath, &localLicenseState{
-		MaxProfileLimit: appconfig.GithubStarProfileTotal + appconfig.StandardCDKeyProfileBonus,
-		UsedCDKeys:      []string{"GITHUB_STAR_REWARD", "ANT-AAAA-BBBB-CCCC-DDDD-EEEEEEEE"},
+		MaxProfileLimit: 188,
+		UsedCDKeys:      []string{"LOCAL-AAA", "LOCAL-BBB"},
 	}); err != nil {
-		t.Fatalf("写入本机额度状态失败: %v", err)
+		t.Fatalf("save local license state failed: %v", err)
 	}
 
 	loaded, err := LoadConfig(configPath)
 	if err != nil {
-		t.Fatalf("LoadConfig 失败: %v", err)
+		t.Fatalf("LoadConfig failed: %v", err)
 	}
 
-	if loaded.App.MaxProfileLimit != appconfig.GithubStarProfileTotal+appconfig.StandardCDKeyProfileBonus {
-		t.Fatalf("本机额度状态未恢复: got=%d", loaded.App.MaxProfileLimit)
+	if loaded.App.MaxProfileLimit != appconfig.DefaultMaxProfileLimit {
+		t.Fatalf("max profile limit should be normalized to local unlimited mode, got=%d", loaded.App.MaxProfileLimit)
 	}
-	if len(loaded.App.UsedCDKeys) != 2 {
-		t.Fatalf("兑换记录未恢复: %+v", loaded.App.UsedCDKeys)
-	}
-}
-
-func TestLoadConfigSeedsLocalLicenseStateFromConfig(t *testing.T) {
-	root := t.TempDir()
-	configPath := filepath.Join(root, "config.yaml")
-
-	cfg := appconfig.DefaultConfig()
-	cfg.App.MaxProfileLimit = appconfig.GithubStarProfileTotal
-	cfg.App.UsedCDKeys = []string{"GITHUB_STAR_REWARD"}
-	if err := cfg.Save(configPath); err != nil {
-		t.Fatalf("写入测试配置失败: %v", err)
-	}
-
-	loaded, err := LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("LoadConfig 失败: %v", err)
-	}
-	if loaded.App.MaxProfileLimit != appconfig.GithubStarProfileTotal {
-		t.Fatalf("LoadConfig 读取额度失败: got=%d", loaded.App.MaxProfileLimit)
+	if len(loaded.App.UsedCDKeys) != 0 {
+		t.Fatalf("used cd keys should be cleared, got=%+v", loaded.App.UsedCDKeys)
 	}
 
 	state, exists, err := loadLocalLicenseState(configPath)
 	if err != nil {
-		t.Fatalf("读取本机额度状态失败: %v", err)
+		t.Fatalf("load local license state failed: %v", err)
 	}
 	if !exists {
-		t.Fatalf("应当从现有配置补建本机额度状态")
+		t.Fatalf("existing local license file should be kept and normalized")
 	}
-	if state.MaxProfileLimit != appconfig.GithubStarProfileTotal {
-		t.Fatalf("本机额度状态未补建: got=%d", state.MaxProfileLimit)
+	if state.MaxProfileLimit != appconfig.DefaultMaxProfileLimit {
+		t.Fatalf("local license file max profile limit should be normalized, got=%d", state.MaxProfileLimit)
 	}
-	if len(state.UsedCDKeys) != 1 || state.UsedCDKeys[0] != "GITHUB_STAR_REWARD" {
-		t.Fatalf("本机兑换记录未补建: %+v", state.UsedCDKeys)
+	if len(state.UsedCDKeys) != 0 {
+		t.Fatalf("local license file used keys should be cleared, got=%+v", state.UsedCDKeys)
 	}
 }
 
-func TestRedeemGithubStarPersistsLocalLicenseState(t *testing.T) {
+func TestLoadConfigDoesNotCreateLocalLicenseStateWhenMissing(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yaml")
 
 	cfg := appconfig.DefaultConfig()
+	cfg.App.MaxProfileLimit = 66
+	cfg.App.UsedCDKeys = []string{"LEGACY-C"}
 	if err := cfg.Save(configPath); err != nil {
-		t.Fatalf("写入测试配置失败: %v", err)
+		t.Fatalf("save config failed: %v", err)
+	}
+
+	loaded, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if loaded.App.MaxProfileLimit != appconfig.DefaultMaxProfileLimit {
+		t.Fatalf("max profile limit should be normalized to local unlimited mode, got=%d", loaded.App.MaxProfileLimit)
+	}
+	if len(loaded.App.UsedCDKeys) != 0 {
+		t.Fatalf("used cd keys should be cleared, got=%+v", loaded.App.UsedCDKeys)
+	}
+
+	state, exists, err := loadLocalLicenseState(configPath)
+	if err != nil {
+		t.Fatalf("load local license state failed: %v", err)
+	}
+	if exists {
+		t.Fatalf("local unlimited mode should not create local license file on read when it does not exist: %+v", state)
+	}
+}
+
+func TestRedeemGithubStarNormalizesLegacyLocalLicenseState(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.yaml")
+
+	cfg := appconfig.DefaultConfig()
+	cfg.App.MaxProfileLimit = 30
+	cfg.App.UsedCDKeys = []string{"LEGACY-D"}
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	if err := saveLocalLicenseState(configPath, &localLicenseState{
+		MaxProfileLimit: 90,
+		UsedCDKeys:      []string{"OLD-KEY"},
+	}); err != nil {
+		t.Fatalf("save local license state failed: %v", err)
 	}
 
 	app := NewApp(root)
 	app.config = cfg
 
 	if err := app.RedeemGithubStar(); err != nil {
-		t.Fatalf("RedeemGithubStar 失败: %v", err)
+		t.Fatalf("RedeemGithubStar failed: %v", err)
 	}
 
 	state, exists, err := loadLocalLicenseState(configPath)
 	if err != nil {
-		t.Fatalf("读取本机额度状态失败: %v", err)
+		t.Fatalf("load local license state failed: %v", err)
 	}
 	if !exists {
-		t.Fatalf("兑换后应写入本机额度状态")
+		t.Fatalf("existing local license file should still exist after redeem compatibility call")
 	}
-	if state.MaxProfileLimit != appconfig.GithubStarProfileTotal {
-		t.Fatalf("兑换后本机额度状态错误: got=%d", state.MaxProfileLimit)
+	if state.MaxProfileLimit != appconfig.DefaultMaxProfileLimit {
+		t.Fatalf("local license file max profile limit should be normalized, got=%d", state.MaxProfileLimit)
 	}
-	if len(state.UsedCDKeys) != 1 || state.UsedCDKeys[0] != "GITHUB_STAR_REWARD" {
-		t.Fatalf("兑换后本机兑换记录错误: %+v", state.UsedCDKeys)
+	if len(state.UsedCDKeys) != 0 {
+		t.Fatalf("local license file used keys should be cleared, got=%+v", state.UsedCDKeys)
 	}
 }

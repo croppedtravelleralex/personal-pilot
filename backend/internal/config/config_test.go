@@ -33,11 +33,14 @@ browser: {}
 	if cfg.Database.SQLite.Path != "data/app.db" {
 		t.Fatalf("Database.SQLite.Path 未补齐: got=%q", cfg.Database.SQLite.Path)
 	}
-	if cfg.App.Name != "Ant Browser" {
+	if cfg.App.Name != "personal-pilot" {
 		t.Fatalf("App.Name 未补齐: got=%q", cfg.App.Name)
 	}
-	if cfg.App.MaxProfileLimit != GithubStarProfileTotal {
-		t.Fatalf("MaxProfileLimit 计算错误: got=%d want=%d", cfg.App.MaxProfileLimit, GithubStarProfileTotal)
+	if cfg.App.MaxProfileLimit != DefaultMaxProfileLimit {
+		t.Fatalf("MaxProfileLimit 应为本地无限语义: got=%d want=%d", cfg.App.MaxProfileLimit, DefaultMaxProfileLimit)
+	}
+	if len(cfg.App.UsedCDKeys) != 0 {
+		t.Fatalf("UsedCDKeys 应归一化为空: got=%v", cfg.App.UsedCDKeys)
 	}
 	if cfg.Runtime.MaxMemoryMB != 0 || cfg.Runtime.GCPercent != 100 {
 		t.Fatalf("Runtime 未补齐: got=%+v", cfg.Runtime)
@@ -92,7 +95,8 @@ app:
     min_width: 900
     min_height: 600
   max_profile_limit: 20
-  used_cd_keys: []
+  used_cd_keys:
+    - LEGACY-KEY
 runtime:
   max_memory_mb: 2048
   gc_percent: 80
@@ -142,8 +146,14 @@ launch_server:
 		t.Fatalf("加载配置失败: %v", err)
 	}
 
-	if cfg.App.Name != "Custom App" || cfg.App.MaxProfileLimit != 20 {
-		t.Fatalf("App 显式配置被覆盖: got=%+v", cfg.App)
+	if cfg.App.Name != "Custom App" {
+		t.Fatalf("App.Name 显式配置被覆盖: got=%q", cfg.App.Name)
+	}
+	if cfg.App.MaxProfileLimit != DefaultMaxProfileLimit {
+		t.Fatalf("App.MaxProfileLimit 应归一化为本地无限语义: got=%d want=%d", cfg.App.MaxProfileLimit, DefaultMaxProfileLimit)
+	}
+	if len(cfg.App.UsedCDKeys) != 0 {
+		t.Fatalf("App.UsedCDKeys 应归一化为空: got=%v", cfg.App.UsedCDKeys)
 	}
 	if cfg.Database.SQLite.Path != "custom/app.db" {
 		t.Fatalf("Database.SQLite.Path 显式配置被覆盖: got=%q", cfg.Database.SQLite.Path)

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import type { ComponentType } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { ThemeProvider } from './shared/theme'
 import { Layout } from './shared/layout'
 import { ToastContainer, Modal, Button, Loading } from './shared/components'
@@ -38,6 +38,7 @@ const BookmarkSettingsPage = lazyNamed(() => import('./modules/browser/pages/Boo
 const LaunchApiDocsPage = lazyNamed(() => import('./modules/browser/pages/LaunchApiDocsPage'), 'LaunchApiDocsPage')
 const TagManagementPage = lazyNamed(() => import('./modules/browser/pages/TagManagementPage'), 'TagManagementPage')
 const AutomationPage = lazyNamed(() => import('./modules/browser/pages/AutomationPage'), 'AutomationPage')
+const EventMonitorPage = lazyNamed(() => import('./modules/monitor/EventMonitorPage'), 'EventMonitorPage')
 const UsageTutorialPage = lazyNamed(() => import('./modules/browser/pages/UsageTutorialPage'), 'UsageTutorialPage')
 const QuickLaunchModal = lazyNamed(() => import('./modules/browser/components/QuickLaunchModal'), 'QuickLaunchModal')
 
@@ -287,7 +288,7 @@ function App() {
               <Route path="/browser/detail/:id" element={<BrowserDetailPage />} />
               <Route path="/browser/edit/:id" element={<BrowserEditPage />} />
               <Route path="/browser/copy/:id" element={<BrowserCopyPage />} />
-              <Route path="/browser/monitor" element={<Navigate to="/browser/list" replace />} />
+              <Route path="/browser/monitor" element={<EventMonitorPage />} />
               <Route path="/browser/logs" element={<BrowserLogsPage />} />
               <Route path="/browser/proxy-pool" element={<ProxyPoolPage />} />
               <Route path="/browser/cores" element={<CoreManagementPage />} />

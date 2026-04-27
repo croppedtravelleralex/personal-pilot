@@ -16,7 +16,8 @@ import {
   Cpu,
   Globe,
   Tag,
-  type LucideIcon
+  Bot,
+  type LucideIcon,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useLayoutStore } from '../../store/layoutStore'
@@ -40,6 +41,7 @@ const iconMap: Record<string, LucideIcon> = {
   Bookmark,
   BookOpen,
   Tag,
+  Bot,
 }
 
 function getIcon(iconName: string): LucideIcon {

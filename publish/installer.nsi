@@ -10,10 +10,10 @@ Unicode True
   !define STAGINGDIR "..\publish\staging"
 !endif
 
-!define PRODUCT_NAME    "Ant Browser"
-!define PRODUCT_EXE     "ant-chrome.exe"
-!define UNINSTALL_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\AntBrowser"
-!define INSTALL_DIR     "$PROGRAMFILES64\Ant Browser"
+!define PRODUCT_NAME    "personal-pilot"
+!define PRODUCT_EXE     "personal-pilot.exe"
+!define UNINSTALL_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\personal-pilot"
+!define INSTALL_DIR     "$PROGRAMFILES64\personal-pilot"
 !define POWERSHELL_EXE  "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
 
 !include "MUI2.nsh"
@@ -26,19 +26,19 @@ Unicode True
   FileWrite ${HANDLE} "$$root = [System.IO.Path]::GetFullPath($$InstallDir).TrimEnd('\') + '\'$\r$\n"
   FileWrite ${HANDLE} "$$exclude = ''$\r$\n"
   FileWrite ${HANDLE} "if (-not [string]::IsNullOrWhiteSpace($$ExcludePath)) { $$exclude = [System.IO.Path]::GetFullPath($$ExcludePath) }$\r$\n"
-  FileWrite ${HANDLE} "function Get-AntBrowserProcesses {$\r$\n"
+  FileWrite ${HANDLE} "function GetPersonalPilotProcesses {$\r$\n"
   FileWrite ${HANDLE} "  @(Get-CimInstance Win32_Process | Where-Object {$\r$\n"
   FileWrite ${HANDLE} "    $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$root, [System.StringComparison]::OrdinalIgnoreCase) -and ($$exclude -eq '' -or -not $$_.ExecutablePath.Equals($$exclude, [System.StringComparison]::OrdinalIgnoreCase))$\r$\n"
   FileWrite ${HANDLE} "  })$\r$\n"
   FileWrite ${HANDLE} "}$\r$\n"
   FileWrite ${HANDLE} "$$deadline = (Get-Date).AddSeconds(10)$\r$\n"
   FileWrite ${HANDLE} "do {$\r$\n"
-  FileWrite ${HANDLE} "  $$procs = Get-AntBrowserProcesses$\r$\n"
+  FileWrite ${HANDLE} "  $$procs = GetPersonalPilotProcesses$\r$\n"
   FileWrite ${HANDLE} "  if (-not $$procs -or $$procs.Count -eq 0) { exit 0 }$\r$\n"
   FileWrite ${HANDLE} "  foreach ($$p in $$procs) { try { Stop-Process -Id $$p.ProcessId -Force -ErrorAction Stop } catch {} }$\r$\n"
   FileWrite ${HANDLE} "  Start-Sleep -Milliseconds 400$\r$\n"
   FileWrite ${HANDLE} "} while ((Get-Date) -lt $$deadline)$\r$\n"
-  FileWrite ${HANDLE} "$$left = Get-AntBrowserProcesses$\r$\n"
+  FileWrite ${HANDLE} "$$left = GetPersonalPilotProcesses$\r$\n"
   FileWrite ${HANDLE} "if ($$left -and $$left.Count -gt 0) {$\r$\n"
   FileWrite ${HANDLE} "  $$names = ($$left | ForEach-Object { $$_.Name + '#' + $$_.ProcessId }) -join ', '$\r$\n"
   FileWrite ${HANDLE} "  Write-Host ('still running: ' + $$names)$\r$\n"
@@ -120,7 +120,7 @@ done:
 FunctionEnd
 
 Name "${PRODUCT_NAME} ${VERSION}"
-OutFile "..\publish\output\AntBrowser-Setup-${VERSION}.exe"
+OutFile "..\publish\output\personal-pilot-Setup-${VERSION}.exe"
 InstallDir "${INSTALL_DIR}"
 InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel admin
@@ -139,7 +139,7 @@ RequestExecutionLevel admin
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT "Launch Ant Browser"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch personal-pilot"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -147,7 +147,7 @@ RequestExecutionLevel admin
 
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-Section "Ant Browser (required)" SecMain
+Section "personal-pilot (required)" SecMain
   SectionIn RO
   Call CloseInstalledProcesses
   SetOutPath "$INSTDIR"
@@ -166,7 +166,7 @@ Section "Ant Browser (required)" SecMain
   CreateDirectory "$INSTDIR\data"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayName"     "${PRODUCT_NAME}"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayVersion"  "${VERSION}"
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher"       "Ant Chrome Team"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher"       "personal-pilot"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayIcon"     "$INSTDIR\${PRODUCT_EXE}"
@@ -190,7 +190,7 @@ Section /o "Desktop Shortcut" SecDesktop
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecMain}    "Ant Browser main program and default config (required)"
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecMain}    "personal-pilot main program and default config (required)"
   !insertmacro MUI_DESCRIPTION_TEXT ${SecRuntime} "xray and sing-box proxy tools (vless/vmess/hysteria2)"
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Create a shortcut on the desktop"
 !insertmacro MUI_FUNCTION_DESCRIPTION_END

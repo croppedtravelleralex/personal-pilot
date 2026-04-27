@@ -1,18 +1,14 @@
 /**
  * 项目配置文件
- * 
- * 基于此脚手架创建新项目时，修改此文件即可完成定制
  */
 
-// 项目基础信息
 export const projectConfig = {
-  name: 'Ant Browser',
-  shortName: 'Ant',
-  description: '面向多账号隔离、代理绑定和本地环境管理的桌面浏览器工具',
+  name: 'personal-pilot',
+  shortName: 'personal-pilot',
+  description: '本地优先的指纹浏览器工作台，支持本地无限实例',
   primaryColor: 'primary',
 }
 
-// 导航菜单配置
 export interface NavItem {
   name: string
   path: string
@@ -29,7 +25,7 @@ export const navigationConfig: NavSection[] = [
     title: '主菜单',
     items: [
       { name: '控制台', path: '/', icon: 'LayoutDashboard' },
-    ]
+    ],
   },
   {
     title: '指纹浏览器',
@@ -40,7 +36,8 @@ export const navigationConfig: NavSection[] = [
       { name: '代理池配置', path: '/browser/proxy-pool', icon: 'Globe' },
       { name: '默认书签', path: '/browser/bookmarks', icon: 'Bookmark' },
       { name: '标签管理', path: '/browser/tags', icon: 'Tag' },
-    ]
+      { name: '事件监控', path: '/browser/monitor', icon: 'Activity' },
+    ],
   },
   {
     title: '系统维护',
@@ -49,18 +46,16 @@ export const navigationConfig: NavSection[] = [
       { name: '使用教程', path: '/system/tutorial', icon: 'BookOpen' },
       { name: '日志查看', path: '/browser/logs', icon: 'FileText' },
       { name: '接口文档', path: '/browser/launch-api', icon: 'BookOpen' },
-    ]
+    ],
   },
 ]
 
-// 功能开关
 export const featuresConfig = {
   dashboard: true,
   data: true,
   settings: true,
 }
 
-// UI 配置
 export const uiConfig = {
   pagination: {
     defaultPageSize: 20,

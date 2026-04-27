@@ -11,6 +11,46 @@ import (
 	"github.com/google/uuid"
 )
 
+// KnownIneffectiveFingerprintFlags lists flags that fingerprint-chromium silently ignores
+// because it uses a seed-based spoofing model rather than individual override flags.
+var KnownIneffectiveFingerprintFlags = []string{
+	"--fingerprint-color-depth",
+	"--fingerprint-device-memory",
+	"--fingerprint-canvas-noise",
+	"--fingerprint-audio-noise",
+	"--fingerprint-fonts",
+	"--fingerprint-do-not-track",
+	"--fingerprint-media-devices",
+	"--fingerprint-touch-points",
+	"--fingerprint-webgl-vendor",
+	"--fingerprint-webgl-renderer",
+}
+
+// ValidateFingerprintArgs checks fingerprint args for known-ineffective flags and
+// returns warnings. It does not block or modify -- these are informational only.
+func ValidateFingerprintArgs(args []string) []string {
+	var warnings []string
+	ineffectiveSet := make(map[string]bool, len(KnownIneffectiveFingerprintFlags))
+	for _, f := range KnownIneffectiveFingerprintFlags {
+		ineffectiveSet[f] = true
+	}
+
+	for _, arg := range args {
+		eqIdx := strings.Index(arg, "=")
+		if eqIdx == -1 {
+			continue
+		}
+		key := arg[:eqIdx]
+		if ineffectiveSet[key] {
+			warnings = append(warnings, fmt.Sprintf(
+				"fingerprint flag %s has no effect in fingerprint-chromium (seed-based model)",
+				key,
+			))
+		}
+	}
+	return warnings
+}
+
 // InitData 初始化浏览器数据
 func (m *Manager) InitData() {
 	m.Mutex.Lock()
@@ -218,9 +258,10 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 	m.InitData()
 	m.Mutex.Lock()
 	defer m.Mutex.Unlock()
+	limitEnforced := false // Local edition: profile quota is not enforced.
 
 	// Check Profile Limit
-	if m.Config.App.MaxProfileLimit > 0 && len(m.Profiles) >= m.Config.App.MaxProfileLimit {
+	if limitEnforced && m.Config.App.MaxProfileLimit > 0 && len(m.Profiles) >= m.Config.App.MaxProfileLimit {
 		return nil, fmt.Errorf("实例数量已达上限 (%d个)，无法创建新的实例。请兑换额度后重试！", m.Config.App.MaxProfileLimit)
 	}
 
@@ -263,7 +304,8 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		LaunchArgs:      input.LaunchArgs,
 		Tags:            input.Tags,
 		Keywords:        append([]string{}, input.Keywords...),
-		GroupId:         strings.TrimSpace(input.GroupId),
+		GroupId:           strings.TrimSpace(input.GroupId),
+		BehaviorProfileID: input.BehaviorProfileID,
 		Running:         false,
 		DebugPort:       0,
 		Pid:             0,
@@ -275,6 +317,12 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		_ = BindProfileToProxy(profile, selectedProxy, true)
 	}
 	m.Profiles[profileId] = profile
+	if warnings := ValidateFingerprintArgs(profile.FingerprintArgs); len(warnings) > 0 {
+		log.Warn("实例包含无效指纹标志",
+			logger.F("profile_id", profileId),
+			logger.F("warnings", strings.Join(warnings, "; ")),
+		)
+	}
 	log.Info("浏览器配置创建", logger.F("profile_id", profileId), logger.F("profile_name", input.ProfileName))
 	if err := m.SaveProfiles(); err != nil {
 		return nil, err
@@ -302,6 +350,12 @@ func (m *Manager) Update(profileId string, input ProfileInput) (*Profile, error)
 	profile.UserDataDir = input.UserDataDir
 	profile.CoreId = normalizeProfileCoreID(input.CoreId)
 	profile.FingerprintArgs = input.FingerprintArgs
+	if warnings := ValidateFingerprintArgs(profile.FingerprintArgs); len(warnings) > 0 {
+		log.Warn("实例包含无效指纹标志",
+			logger.F("profile_id", profileId),
+			logger.F("warnings", strings.Join(warnings, "; ")),
+		)
+	}
 	profile.ProxyId = strings.TrimSpace(input.ProxyId)
 	if profile.ProxyId != "" {
 		if proxyItem, ok := m.GetProxyByID(profile.ProxyId); ok {
@@ -317,6 +371,7 @@ func (m *Manager) Update(profileId string, input ProfileInput) (*Profile, error)
 	profile.Tags = input.Tags
 	profile.Keywords = append([]string{}, input.Keywords...)
 	profile.GroupId = strings.TrimSpace(input.GroupId)
+	profile.BehaviorProfileID = input.BehaviorProfileID
 	profile.UpdatedAt = time.Now().Format(time.RFC3339)
 	log.Info("浏览器配置更新", logger.F("profile_id", profileId), logger.F("profile_name", input.ProfileName))
 	if err := m.SaveProfiles(); err != nil {
@@ -406,9 +461,10 @@ func (m *Manager) Copy(profileId string, newName string) (*Profile, error) {
 	m.InitData()
 	m.Mutex.Lock()
 	defer m.Mutex.Unlock()
+	limitEnforced := false // Local edition: profile quota is not enforced.
 
 	// Check Profile Limit
-	if m.Config.App.MaxProfileLimit > 0 && len(m.Profiles) >= m.Config.App.MaxProfileLimit {
+	if limitEnforced && m.Config.App.MaxProfileLimit > 0 && len(m.Profiles) >= m.Config.App.MaxProfileLimit {
 		log.Error("复制实例失败: 达到数量上限", logger.F("limit", m.Config.App.MaxProfileLimit))
 		return nil, fmt.Errorf("实例数量已达上限 (%d个)，无法复制实例。请兑换额度后重试！", m.Config.App.MaxProfileLimit)
 	}

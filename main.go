@@ -40,6 +40,8 @@ type App struct {
 	*backend.App
 }
 
+const appBrandName = "personal-pilot"
+
 type wailsBuildConfig struct {
 	Info struct {
 		ProductVersion string `json:"productVersion"`
@@ -53,6 +55,20 @@ func envFlagEnabled(name string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func normalizeWindowTitle(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return appBrandName
+	}
+
+	switch strings.ToLower(trimmed) {
+	case "ant browser", "ant chrome":
+		return appBrandName
+	default:
+		return trimmed
 	}
 }
 
@@ -130,7 +146,7 @@ func main() {
 		}
 	}
 
-	startupDebugEnabled := envFlagEnabled("ANT_BROWSER_DEBUG_STARTUP")
+	startupDebugEnabled := envFlagEnabled("PERSONAL_PILOT_DEBUG_STARTUP") || envFlagEnabled("ANT_BROWSER_DEBUG_STARTUP")
 	if startupDebugEnabled {
 		log.Printf("应用根目录: %s (dev=%v)", appRoot, isDevMode)
 	}
@@ -165,6 +181,7 @@ func main() {
 	}
 
 	// 创建应用实例
+	cfg.App.Name = normalizeWindowTitle(cfg.App.Name)
 	app := NewApp(appRoot, buildVersion)
 
 	var wailsCtx context.Context

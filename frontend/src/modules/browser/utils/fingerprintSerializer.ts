@@ -22,6 +22,19 @@ export interface FingerprintConfig {
   lang?: string            // --lang=
   timezone?: string        // --timezone=
 
+  // 系统版本与 HTTP 头
+  platformVersion?: string   // --fingerprint-platform-version=   e.g. "10.0.0"
+  brandVersion?: string      // --fingerprint-brand-version=      e.g. "120.0.0.0"
+  acceptLang?: string        // --accept-lang=                   e.g. "zh-CN,zh;q=0.9,en;q=0.8"
+
+  // 反指纹微调 (Chrome 144+)
+  disableSpoofing?: string   // --disable-spoofing=  comma-separated: font,audio,canvas,clientrects,gpu
+
+  // 设备指纹扩展
+  userAgent?: string           // --user-agent=                   完整 UA 字符串
+  deviceScaleFactor?: string   // --force-device-scale-factor=    devicePixelRatio (1.0/1.25/1.5/2.0)
+  disableBatteryApi?: boolean  // --disable-battery-api-override  阻止 getBattery() 指纹检测
+
   // 屏幕与窗口
   resolution?: string      // --window-size=（预设值或 'custom'）
   customResolution?: string // 当 resolution === 'custom' 时使用
@@ -62,6 +75,13 @@ export const KEY_MAP: Record<string, keyof FingerprintConfig> = {
   '--fingerprint-platform': 'platform',
   '--lang': 'lang',
   '--timezone': 'timezone',
+  '--fingerprint-platform-version': 'platformVersion',
+  '--fingerprint-brand-version': 'brandVersion',
+  '--accept-lang': 'acceptLang',
+  '--disable-spoofing': 'disableSpoofing',
+  '--user-agent': 'userAgent',
+  '--force-device-scale-factor': 'deviceScaleFactor',
+  '--disable-battery-api-override': 'disableBatteryApi',
   '--window-size': 'resolution',
   '--fingerprint-color-depth': 'colorDepth',
   '--fingerprint-hardware-concurrency': 'hardwareConcurrency',
@@ -77,6 +97,7 @@ export const KEY_MAP: Record<string, keyof FingerprintConfig> = {
   '--fingerprint-touch-points': 'touchPoints',
 }
 
+
 // FingerprintConfig → string[]
 export function serialize(config: FingerprintConfig): string[] {
   const args: string[] = []
@@ -90,24 +111,25 @@ export function serialize(config: FingerprintConfig): string[] {
     args.push(`--timezone=${tz}`)
   }
 
+  if (config.platformVersion) args.push(`--fingerprint-platform-version=${config.platformVersion}`)
+  if (config.brandVersion) args.push(`--fingerprint-brand-version=${config.brandVersion}`)
+  if (config.acceptLang) args.push(`--accept-lang=${config.acceptLang}`)
+  if (config.disableSpoofing) args.push(`--disable-spoofing=${config.disableSpoofing}`)
+
+  if (config.userAgent) args.push(`--user-agent=${config.userAgent}`)
+  if (config.deviceScaleFactor) args.push(`--force-device-scale-factor=${config.deviceScaleFactor}`)
+  if (config.disableBatteryApi !== undefined) args.push(`--disable-battery-api-override`)
+
   const res = config.resolution === 'custom' ? config.customResolution : config.resolution
   if (res) args.push(`--window-size=${res}`)
 
-  if (config.colorDepth) args.push(`--fingerprint-color-depth=${config.colorDepth}`)
   if (config.hardwareConcurrency) args.push(`--fingerprint-hardware-concurrency=${config.hardwareConcurrency}`)
-  if (config.deviceMemory) args.push(`--fingerprint-device-memory=${config.deviceMemory}`)
-
-  if (config.canvasNoise !== undefined) args.push(`--fingerprint-canvas-noise=${config.canvasNoise}`)
-  if (config.webglVendor) args.push(`--fingerprint-webgl-vendor=${config.webglVendor}`)
-  if (config.webglRenderer) args.push(`--fingerprint-webgl-renderer=${config.webglRenderer}`)
-  if (config.audioNoise !== undefined) args.push(`--fingerprint-audio-noise=${config.audioNoise}`)
-
-  if (config.fonts) args.push(`--fingerprint-fonts=${config.fonts}`)
 
   if (config.webrtcPolicy) args.push(`--webrtc-ip-handling-policy=${config.webrtcPolicy}`)
-  if (config.doNotTrack !== undefined) args.push(`--fingerprint-do-not-track=${config.doNotTrack}`)
-  if (config.mediaDevices) args.push(`--fingerprint-media-devices=${config.mediaDevices}`)
-  if (config.touchPoints) args.push(`--fingerprint-touch-points=${config.touchPoints}`)
+
+  // colorDepth, deviceMemory, canvasNoise, audioNoise, fonts, doNotTrack,
+  // mediaDevices, touchPoints, webglVendor, webglRenderer are deprecated —
+  // fingerprint-chromium ignores them in favor of seed-based generation.
 
   return [...args, ...(config.unknownArgs ?? [])]
 }
@@ -117,6 +139,12 @@ export function deserialize(args: string[]): FingerprintConfig {
   const config: FingerprintConfig = { unknownArgs: [] }
 
   for (const arg of args) {
+    // Handle boolean flags without value (e.g. --disable-battery-api-override)
+    if (arg === '--disable-battery-api-override') {
+      config.disableBatteryApi = true
+      continue
+    }
+
     const eqIdx = arg.indexOf('=')
     if (eqIdx === -1) {
       config.unknownArgs!.push(arg)
@@ -131,7 +159,7 @@ export function deserialize(args: string[]): FingerprintConfig {
       continue
     }
 
-    if (field === 'canvasNoise' || field === 'audioNoise' || field === 'doNotTrack') {
+    if (field === 'canvasNoise' || field === 'audioNoise' || field === 'doNotTrack' || field === 'disableBatteryApi') {
       (config as Record<string, unknown>)[field] = val === 'true'
     } else if (field === 'resolution') {
       if (PRESET_RESOLUTIONS.includes(val)) {
@@ -149,8 +177,13 @@ export function deserialize(args: string[]): FingerprintConfig {
 }
 
 // 生成随机指纹种子（32位正整数）
+// Generate a cryptographically random 32-bit positive integer seed.
+// Uses crypto.getRandomValues for unpredictability (important for fingerprint isolation).
 export function randomFingerprintSeed(): string {
-  return String(Math.floor(Math.random() * 2147483647) + 1)
+  const buf = new Uint32Array(1)
+  crypto.getRandomValues(buf)
+  // Ensure positive and within int32 range (1 .. 2147483647)
+  return String((buf[0] % 2147483647) + 1)
 }
 
 // ─── 预设指纹配置 ────────────────────────────────────────────────────────────
@@ -172,18 +205,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'windows',
       lang: 'zh-CN',
       timezone: 'Asia/Shanghai',
+      platformVersion: '10.0.22631',
+      brandVersion: '130.0.0.0',
+      acceptLang: 'zh-CN,zh;q=0.9,en;q=0.8',
       resolution: '1920,1080',
-      colorDepth: '24',
       hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Intel',
-      webglRenderer: 'Intel(R) UHD Graphics 630',
-      fonts: 'Arial,Microsoft YaHei,SimSun,SimHei,Helvetica,Times New Roman',
       webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
     },
   },
   {
@@ -195,18 +222,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'windows',
       lang: 'en-US',
       timezone: 'America/New_York',
+      platformVersion: '10.0.22631',
+      brandVersion: '133.0.0.0',
+      acceptLang: 'en-US,en;q=0.9',
       resolution: '2560,1440',
-      colorDepth: '24',
       hardwareConcurrency: '16',
-      deviceMemory: '16',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'NVIDIA',
-      webglRenderer: 'NVIDIA GeForce RTX 3080',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Verdana',
       webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
     },
   },
   {
@@ -218,18 +239,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'mac',
       lang: 'zh-CN',
       timezone: 'Asia/Shanghai',
+      platformVersion: '15.0.0',
+      brandVersion: '133.0.0.0',
+      acceptLang: 'zh-CN,zh;q=0.9,en;q=0.8',
       resolution: '2560,1440',
-      colorDepth: '30',
       hardwareConcurrency: '10',
-      deviceMemory: '16',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Apple',
-      webglRenderer: 'Apple M2',
-      fonts: 'Arial,Helvetica,PingFang SC,Hiragino Sans GB,STHeiti,Times New Roman',
       webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: true,
-      touchPoints: '0',
     },
   },
   {
@@ -241,18 +256,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'windows',
       lang: 'zh-CN',
       timezone: 'Asia/Shanghai',
+      platformVersion: '10.0.22631',
+      brandVersion: '125.0.0.0',
+      acceptLang: 'zh-CN,zh;q=0.9,en;q=0.8',
       resolution: '1366,768',
-      colorDepth: '24',
       hardwareConcurrency: '4',
-      deviceMemory: '4',
-      canvasNoise: true,
-      audioNoise: false,
-      webglVendor: 'Intel',
-      webglRenderer: 'Intel(R) HD Graphics 520',
-      fonts: 'Arial,Microsoft YaHei,Calibri,Segoe UI,Times New Roman',
       webrtcPolicy: 'default_public_interface_only',
-      doNotTrack: false,
-      touchPoints: '0',
     },
   },
   {
@@ -264,18 +273,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'windows',
       lang: 'en-US',
       timezone: 'America/Los_Angeles',
+      platformVersion: '10.0.22631',
+      brandVersion: '130.0.0.0',
+      acceptLang: 'en-US,en;q=0.9',
       resolution: '1920,1080',
-      colorDepth: '24',
       hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'AMD',
-      webglRenderer: 'AMD Radeon RX 6600',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Georgia',
       webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
     },
   },
   {
@@ -287,18 +290,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'mac',
       lang: 'ja-JP',
       timezone: 'Asia/Tokyo',
+      platformVersion: '14.0.0',
+      brandVersion: '120.0.0.0',
+      acceptLang: 'ja-JP,ja;q=0.9,en;q=0.8',
       resolution: '1440,900',
-      colorDepth: '24',
       hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Apple',
-      webglRenderer: 'Apple M1',
-      fonts: 'Arial,Helvetica,Hiragino Kaku Gothic ProN,Yu Gothic,Times New Roman',
       webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: true,
-      touchPoints: '0',
     },
   },
   {
@@ -310,18 +307,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'windows',
       lang: 'en-GB',
       timezone: 'Europe/London',
+      platformVersion: '10.0.22631',
+      brandVersion: '130.0.0.0',
+      acceptLang: 'en-GB,en;q=0.9',
       resolution: '1920,1080',
-      colorDepth: '24',
       hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Intel',
-      webglRenderer: 'Intel(R) UHD Graphics 630',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Verdana',
       webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
     },
   },
   {
@@ -333,18 +324,12 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       platform: 'mac',
       lang: 'en-US',
       timezone: 'America/New_York',
+      platformVersion: '14.0.0',
+      brandVersion: '130.0.0.0',
+      acceptLang: 'en-US,en;q=0.9',
       resolution: '1440,900',
-      colorDepth: '24',
       hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Apple',
-      webglRenderer: 'Apple M1',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Georgia',
       webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
     },
   },
 ]

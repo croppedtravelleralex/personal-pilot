@@ -11,8 +11,8 @@ import (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	fmt.Println("=== Ant Browser 兑换码生成器 ===")
-	fmt.Println("生成 5 个有效兑换码 (每个可增加 10 额度):")
+	fmt.Println("=== personal-pilot 本地兼容码生成器 ===")
+	fmt.Println("生成 5 个本地兼容占位码（不再用于扩容）:")
 	fmt.Println(strings.Repeat("-", 30))
 
 	for i := 0; i < 5; i++ {

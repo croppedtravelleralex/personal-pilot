@@ -13,8 +13,9 @@ type Profile struct {
 	ProfileName        string   `json:"profileName"`
 	UserDataDir        string   `json:"userDataDir"`
 	CoreId             string   `json:"coreId"`
-	FingerprintArgs    []string `json:"fingerprintArgs"`
-	ProxyId            string   `json:"proxyId"`
+	FingerprintArgs       []string               `json:"fingerprintArgs"`
+	PreferencesOverrides  map[string]interface{}  `json:"preferencesOverrides,omitempty"`
+	ProxyId               string                 `json:"proxyId"`
 	ProxyConfig        string   `json:"proxyConfig"`
 	ProxyBindSourceID  string   `json:"proxyBindSourceId"`
 	ProxyBindSourceURL string   `json:"proxyBindSourceUrl"`
@@ -25,6 +26,7 @@ type Profile struct {
 	Keywords           []string `json:"keywords"`
 	GroupId            string   `json:"groupId"` // 所属分组ID
 	LaunchCode         string   `json:"launchCode"`
+	BehaviorProfileID string   `json:"behaviorProfileId"`
 	Running            bool     `json:"running"`
 	DebugPort          int      `json:"debugPort"`
 	DebugReady         bool     `json:"debugReady"`
@@ -42,13 +44,15 @@ type ProfileInput struct {
 	ProfileName     string   `json:"profileName"`
 	UserDataDir     string   `json:"userDataDir"`
 	CoreId          string   `json:"coreId"`
-	FingerprintArgs []string `json:"fingerprintArgs"`
-	ProxyId         string   `json:"proxyId"`
+	FingerprintArgs      []string               `json:"fingerprintArgs"`
+	PreferencesOverrides map[string]interface{}  `json:"preferencesOverrides,omitempty"`
+	ProxyId              string                 `json:"proxyId"`
 	ProxyConfig     string   `json:"proxyConfig"`
 	LaunchArgs      []string `json:"launchArgs"`
 	Tags            []string `json:"tags"`
 	Keywords        []string `json:"keywords"`
 	GroupId         string   `json:"groupId"` // 所属分组ID
+	BehaviorProfileID string `json:"behaviorProfileId"`
 }
 
 // Tab 浏览器标签页

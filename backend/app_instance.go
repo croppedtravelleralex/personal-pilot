@@ -1,9 +1,12 @@
 package backend
 
 import (
+	"ant-chrome/backend/internal/behavior"
 	"ant-chrome/backend/internal/browser"
+	"ant-chrome/backend/internal/events"
 	"ant-chrome/backend/internal/logger"
 	"ant-chrome/backend/internal/proxy"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -103,6 +106,10 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 	if err := browser.EnsureDefaultBookmarks(userDataDir, a.BookmarkList()); err != nil {
 		log.Error("默认书签写入失败", logger.F("error", err.Error()))
 	}
+	// 每次启动时注入 Chrome Preferences 覆盖（deep-merge 到 Default/Preferences）
+	if err := browser.EnsurePreferences(userDataDir, profile.PreferencesOverrides); err != nil {
+		log.Error("Preferences 注入失败", logger.F("error", err.Error()))
+	}
 
 	proxies := a.getLatestProxies()
 	acquiredXrayBridgeKey := ""
@@ -145,7 +152,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			log.Error("代理桥接失败(sing-box)", logger.F("error", bridgeErr.Error()), logger.F("reason", startErr.Error()))
 			profile.LastError = startErr.Error()
 			if a.ctx != nil {
-				runtime.EventsEmit(a.ctx, "proxy:bridge:failed", map[string]interface{}{
+				runtime.EventsEmit(a.ctx, events.EventProxyBridgeFailed, map[string]interface{}{
 					"profileId":   profileId,
 					"profileName": profile.ProfileName,
 					"error":       startErr.Error(),
@@ -163,7 +170,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			log.Error("代理桥接失败(xray)", logger.F("error", bridgeErr.Error()), logger.F("reason", startErr.Error()))
 			profile.LastError = startErr.Error()
 			if a.ctx != nil {
-				runtime.EventsEmit(a.ctx, "proxy:bridge:failed", map[string]interface{}{
+				runtime.EventsEmit(a.ctx, events.EventProxyBridgeFailed, map[string]interface{}{
 					"profileId":   profileId,
 					"profileName": profile.ProfileName,
 					"error":       startErr.Error(),
@@ -262,6 +269,12 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			a.emitBrowserInstanceStarted(profile, false)
 
 			go a.waitBrowserProcess(profileId, monitor)
+			// Phase 1: 启动后异步验证指纹 + 检测时区-IP 地理不匹配
+			go a.verifyFingerprintAndGeo(profileId, profile, stableDebugPort)
+			// Phase 3: 启动行为模拟引擎
+			if profile.BehaviorProfileID != "" {
+				go a.startBehaviorEngine(profileId, profile.BehaviorProfileID, stableDebugPort)
+			}
 			return profile, nil
 		}
 
@@ -597,13 +610,39 @@ func (a *App) waitBrowserProcess(profileId string, monitor *browserProcessMonito
 			profile.LastError = fmt.Sprintf("实例运行异常退出：%s", err.Error())
 		}
 		log.Error("浏览器进程异常退出", logger.F("profile_id", profileId), logger.F("profile_name", profileName), logger.F("error", err))
-		runtime.EventsEmit(a.ctx, "browser:instance:crashed", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.EventBrowserInstanceCrashed, map[string]interface{}{
 			"profileId":   profileId,
 			"profileName": profileName,
 			"error":       err.Error(),
 		})
+
+		// 崩溃回路检测：同一实例 5 分钟内崩溃 3+ 次
+		a.crashTimestampsMu.Lock()
+		now := time.Now()
+		a.crashTimestamps[profileId] = append(a.crashTimestamps[profileId], now)
+		// 清理 5 分钟之前的记录
+		cutoff := now.Add(-5 * time.Minute)
+		recent := a.crashTimestamps[profileId][:0]
+		for _, ts := range a.crashTimestamps[profileId] {
+			if ts.After(cutoff) {
+				recent = append(recent, ts)
+			}
+		}
+		a.crashTimestamps[profileId] = recent
+		crashCount := len(recent)
+		a.crashTimestampsMu.Unlock()
+
+		if crashCount >= 3 {
+			log.Error("检测到崩溃回路", logger.F("profile_id", profileId), logger.F("crash_count", crashCount), logger.F("window", "5m"))
+			runtime.EventsEmit(a.ctx, events.EventRiskBrowserCrashLoop, map[string]interface{}{
+				"profileId":   profileId,
+				"profileName": profileName,
+				"crashCount":  crashCount,
+				"window":      "5m",
+			})
+		}
 	} else {
-		runtime.EventsEmit(a.ctx, "browser:instance:stopped", profileId)
+		runtime.EventsEmit(a.ctx, events.EventBrowserInstanceStopped, profileId)
 	}
 }
 
@@ -645,7 +684,7 @@ func (a *App) waitDetachedBrowser(profileId string, debugPort int) {
 			logger.F("debug_port", debugPort),
 		)
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "browser:instance:stopped", profileId)
+			runtime.EventsEmit(a.ctx, events.EventBrowserInstanceStopped, profileId)
 		}
 		return
 	}
@@ -712,6 +751,7 @@ func (a *App) markProfileStoppedLocked(profileId string, profile *BrowserProfile
 	profile.LastStopAt = time.Now().Format(time.RFC3339)
 	delete(a.browserMgr.BrowserProcesses, profileId)
 	a.releaseProfileXrayBridge(profileId)
+	go a.stopBehaviorEngine(profileId)
 	if a.launchServer != nil {
 		a.launchServer.ClearActiveProfile(profileId)
 	}
@@ -846,4 +886,87 @@ func isProcessAliveWindows(pid int) (bool, error) {
 	}
 	token := fmt.Sprintf("\",\"%d\",", pid)
 	return strings.Contains(line, token), nil
+}
+
+// verifyFingerprintAndGeo 在浏览器启动后异步验证指纹并检测时区-IP 地理不匹配。
+func (a *App) verifyFingerprintAndGeo(profileId string, profile *BrowserProfile, debugPort int) {
+	if a.ctx == nil {
+		return
+	}
+
+	emitFn := func(event string, data ...interface{}) {
+		runtime.EventsEmit(a.ctx, event, data...)
+	}
+
+	// 1. CDP 指纹验证
+	browser.VerifyFingerprint(debugPort, profileId, profile.FingerprintArgs, emitFn)
+
+	// 2. 时区-IP 地理不匹配检测
+	if profile.ProxyId == "" || profile.ProxyId == "__direct__" {
+		return
+	}
+
+	ipCountry, ipCity := a.getProxyCachedGeo(profile.ProxyId)
+	if ipCountry != "" {
+		browser.CheckGeoMismatchFromProfile(profileId, profile.FingerprintArgs, ipCountry, ipCity, emitFn)
+	}
+}
+
+// getProxyCachedGeo 从代理的缓存 IP 健康数据中提取国家/城市。
+func (a *App) getProxyCachedGeo(proxyId string) (country, city string) {
+	if a.browserMgr == nil || a.browserMgr.ProxyDAO == nil {
+		return "", ""
+	}
+
+	proxies := a.getLatestProxies()
+	for _, p := range proxies {
+		if strings.EqualFold(p.ProxyId, proxyId) {
+			if p.LastIPHealthJSON == "" {
+				return "", ""
+			}
+			var result struct {
+				Country string `json:"country"`
+				City    string `json:"city"`
+			}
+			if err := json.Unmarshal([]byte(p.LastIPHealthJSON), &result); err != nil {
+				return "", ""
+			}
+			return result.Country, result.City
+		}
+	}
+	return "", ""
+}
+
+// startBehaviorEngine 启动行为模拟引擎
+func (a *App) startBehaviorEngine(profileId, behaviorProfileID string, debugPort int) {
+	preset := behavior.GetPreset(behaviorProfileID)
+	if preset == nil {
+		log := logger.New("Behavior")
+		log.Warn("行为模拟预设不存在", logger.F("profile_id", profileId), logger.F("preset_id", behaviorProfileID))
+		return
+	}
+
+	engine := behavior.NewEngine(debugPort, preset)
+	if err := engine.Start(a.ctx); err != nil {
+		log := logger.New("Behavior")
+		log.Error("行为模拟引擎启动失败", logger.F("profile_id", profileId), logger.F("error", err))
+		return
+	}
+
+	a.behaviorEnginesMu.Lock()
+	if a.behaviorEngines == nil {
+		a.behaviorEngines = make(map[string]*behavior.Engine)
+	}
+	a.behaviorEngines[profileId] = engine
+	a.behaviorEnginesMu.Unlock()
+}
+
+// stopBehaviorEngine 停止指定 profile 的行为模拟引擎
+func (a *App) stopBehaviorEngine(profileId string) {
+	a.behaviorEnginesMu.Lock()
+	defer a.behaviorEnginesMu.Unlock()
+	if engine, ok := a.behaviorEngines[profileId]; ok {
+		engine.Stop()
+		delete(a.behaviorEngines, profileId)
+	}
 }

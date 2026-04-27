@@ -135,14 +135,66 @@ var migrations = []migration{
 			`ALTER TABLE browser_profiles ADD COLUMN proxy_bind_updated_at TEXT NOT NULL DEFAULT ''`,
 		},
 	},
-	// ── 新版本在此追加，格式：
-	// {
-	//     version: 4,
-	//     desc:    "描述本次变更",
-	//     stmts: []string{
-	//         `ALTER TABLE xxx ADD COLUMN yyy TEXT NOT NULL DEFAULT ''`,
-	//     },
-	// },
+	{
+		version: 7,
+		desc:    "事件日志表",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS event_log (
+				id         INTEGER PRIMARY KEY AUTOINCREMENT,
+				event_name TEXT    NOT NULL,
+				namespace  TEXT    NOT NULL,
+				severity   TEXT    NOT NULL DEFAULT 'info',
+				payload    TEXT    NOT NULL DEFAULT '{}',
+				created_at TEXT    NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_event_log_name ON event_log(event_name)`,
+			`CREATE INDEX IF NOT EXISTS idx_event_log_ns ON event_log(namespace)`,
+			`CREATE INDEX IF NOT EXISTS idx_event_log_time ON event_log(created_at)`,
+		},
+	},
+	{
+		version: 9,
+		desc:    "行为模拟配置",
+		stmts: []string{
+			`ALTER TABLE browser_profiles ADD COLUMN behavior_profile_id TEXT NOT NULL DEFAULT ''`,
+		},
+	},
+
+	{
+		version: 8,
+		desc:    "任务调度与自动化规则表",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS scheduler_tasks (
+				id               TEXT PRIMARY KEY,
+				name             TEXT    NOT NULL,
+				trigger_type     TEXT    NOT NULL DEFAULT 'interval',
+				trigger_cron     TEXT    NOT NULL DEFAULT '',
+				trigger_interval TEXT    NOT NULL DEFAULT '',
+				trigger_event    TEXT    NOT NULL DEFAULT '',
+				actions          TEXT    NOT NULL DEFAULT '[]',
+				max_retries      INTEGER NOT NULL DEFAULT 3,
+				retry_delay      TEXT    NOT NULL DEFAULT '10s',
+				depends_on       TEXT    NOT NULL DEFAULT '[]',
+				profile_id       TEXT    NOT NULL DEFAULT '',
+				enabled          INTEGER NOT NULL DEFAULT 1,
+				created_at       TEXT    NOT NULL,
+				updated_at       TEXT    NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_scheduler_tasks_enabled ON scheduler_tasks(enabled)`,
+			`CREATE TABLE IF NOT EXISTS automation_rules (
+				id            TEXT PRIMARY KEY,
+				name          TEXT    NOT NULL,
+				trigger_event TEXT    NOT NULL,
+				condition     TEXT    NOT NULL DEFAULT '',
+				action        TEXT    NOT NULL DEFAULT 'emit_event',
+				action_params TEXT    NOT NULL DEFAULT '{}',
+				cooldown      TEXT    NOT NULL DEFAULT '5m',
+				enabled       INTEGER NOT NULL DEFAULT 1,
+				created_at    TEXT    NOT NULL,
+				updated_at    TEXT    NOT NULL
+			)`,
+		},
+	},
 }
 
 // NewDB 创建新的数据库连接

@@ -21,6 +21,7 @@ func localLicenseStatePath(configPath string) string {
 	if configPath == "" {
 		return localLicenseStateFilename
 	}
+
 	dir := filepath.Dir(configPath)
 	if dir == "." || dir == "" {
 		if cwd, err := os.Getwd(); err == nil {
@@ -37,14 +38,15 @@ func loadLocalLicenseState(configPath string) (*localLicenseState, bool, error) 
 		if os.IsNotExist(err) {
 			return &localLicenseState{}, false, nil
 		}
-		return nil, false, fmt.Errorf("读取本机额度状态失败: %w", err)
+		return nil, false, fmt.Errorf("read local license state failed: %w", err)
 	}
 
 	var state localLicenseState
 	if err := json.Unmarshal(data, &state); err != nil {
-		// 状态文件损坏时回退到当前配置并在后续自动重建，避免阻断启动。
+		// Keep startup resilient on corrupted legacy state.
 		return &localLicenseState{}, false, nil
 	}
+
 	normalizeLocalLicenseState(&state)
 	return &state, true, nil
 }
@@ -53,15 +55,16 @@ func saveLocalLicenseState(configPath string, state *localLicenseState) error {
 	if state == nil {
 		state = &localLicenseState{}
 	}
+
 	cloned := *state
 	normalizeLocalLicenseState(&cloned)
 
 	data, err := json.MarshalIndent(cloned, "", "  ")
 	if err != nil {
-		return fmt.Errorf("序列化本机额度状态失败: %w", err)
+		return fmt.Errorf("marshal local license state failed: %w", err)
 	}
-	if err := os.WriteFile(localLicenseStatePath(configPath), data, 0644); err != nil {
-		return fmt.Errorf("写入本机额度状态失败: %w", err)
+	if err := os.WriteFile(localLicenseStatePath(configPath), data, 0o644); err != nil {
+		return fmt.Errorf("write local license state failed: %w", err)
 	}
 	return nil
 }
@@ -71,53 +74,42 @@ func reconcileConfigWithLocalLicense(configPath string, cfg *Config) (bool, bool
 		return false, false, nil
 	}
 
+	originalMax := cfg.App.MaxProfileLimit
+	originalUsed := normalizeUsedCDKeys(cfg.App.UsedCDKeys)
+
 	state, stateExists, err := loadLocalLicenseState(configPath)
 	if err != nil {
 		return false, false, err
 	}
 
-	originalKeys := normalizeUsedCDKeys(cfg.App.UsedCDKeys)
-	originalMax := cfg.App.MaxProfileLimit
-
-	mergedKeys := unionUsedCDKeys(originalKeys, state.UsedCDKeys)
-	effectiveMax := maxInt(originalMax, state.MaxProfileLimit)
-	minLimit := appconfig.MinimumProfileLimitForUsedKeys(mergedKeys)
-	if effectiveMax < minLimit {
-		effectiveMax = minLimit
-	}
-
-	cfg.App.UsedCDKeys = mergedKeys
-	cfg.App.MaxProfileLimit = effectiveMax
-
-	configChanged := originalMax != effectiveMax || !sameStringSlice(originalKeys, mergedKeys)
+	cfg.App.MaxProfileLimit = appconfig.DefaultMaxProfileLimit
+	cfg.App.UsedCDKeys = []string{}
 
 	desiredState := &localLicenseState{
-		MaxProfileLimit: effectiveMax,
-		UsedCDKeys:      mergedKeys,
+		MaxProfileLimit: appconfig.DefaultMaxProfileLimit,
+		UsedCDKeys:      []string{},
 	}
 	normalizeLocalLicenseState(desiredState)
 
 	stateChanged := state.MaxProfileLimit != desiredState.MaxProfileLimit || !sameStringSlice(state.UsedCDKeys, desiredState.UsedCDKeys)
-	shouldPersist := stateExists || desiredState.MaxProfileLimit > DefaultConfig().App.MaxProfileLimit || len(desiredState.UsedCDKeys) > 0
-	if shouldPersist && stateChanged {
+	persisted := false
+	if stateExists && stateChanged {
 		if err := saveLocalLicenseState(configPath, desiredState); err != nil {
-			return configChanged, false, err
+			return false, false, err
 		}
-		return configChanged, true, nil
+		persisted = true
 	}
 
-	return configChanged, false, nil
+	configChanged := originalMax != appconfig.DefaultMaxProfileLimit || len(originalUsed) > 0
+	return configChanged, persisted, nil
 }
 
 func normalizeLocalLicenseState(state *localLicenseState) {
 	if state == nil {
 		return
 	}
-	state.UsedCDKeys = normalizeUsedCDKeys(state.UsedCDKeys)
-	minLimit := appconfig.MinimumProfileLimitForUsedKeys(state.UsedCDKeys)
-	if state.MaxProfileLimit < minLimit {
-		state.MaxProfileLimit = minLimit
-	}
+	state.MaxProfileLimit = appconfig.DefaultMaxProfileLimit
+	state.UsedCDKeys = []string{}
 }
 
 func normalizeUsedCDKeys(keys []string) []string {
@@ -137,23 +129,6 @@ func normalizeUsedCDKeys(keys []string) []string {
 	return result
 }
 
-func unionUsedCDKeys(primary, secondary []string) []string {
-	result := make([]string, 0, len(primary)+len(secondary))
-	seen := make(map[string]struct{}, len(primary)+len(secondary))
-	appendKeys := func(list []string) {
-		for _, key := range normalizeUsedCDKeys(list) {
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			result = append(result, key)
-		}
-	}
-	appendKeys(primary)
-	appendKeys(secondary)
-	return result
-}
-
 func sameStringSlice(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -164,11 +139,4 @@ func sameStringSlice(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

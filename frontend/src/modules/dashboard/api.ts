@@ -8,52 +8,40 @@ const getBindings = async () => {
   }
 }
 
+const DEFAULT_UNLIMITED = Number.POSITIVE_INFINITY
+
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   const bindings: any = await getBindings()
   if (bindings?.GetDashboardStats) {
     try {
       const data = await bindings.GetDashboardStats()
-      const licenseStatus = bindings.GetLicenseStatus ? await bindings.GetLicenseStatus() : { maxLimit: 20 }
+      const licenseStatus = bindings.GetLicenseStatus ? await bindings.GetLicenseStatus() : null
+      const rawLimit = Number(licenseStatus?.maxLimit ?? 0)
+      const maxProfileLimit = rawLimit > 0 ? rawLimit : DEFAULT_UNLIMITED
+
       return {
         totalInstances: data?.totalInstances ?? 0,
         runningInstances: data?.runningInstances ?? 0,
         proxyCount: data?.proxyCount ?? 0,
         coreCount: data?.coreCount ?? 0,
         memUsedMB: data?.memUsedMB ?? 0,
-        maxProfileLimit: licenseStatus?.maxLimit ?? 20,
+        maxProfileLimit,
         appVersion: data?.appVersion ?? 'unknown',
       }
     } catch (e) {
       console.error('fetchDashboardStats error:', e)
     }
   }
-  return { totalInstances: 0, runningInstances: 0, proxyCount: 0, coreCount: 0, memUsedMB: 0, maxProfileLimit: 20, appVersion: 'unknown' }
-}
 
-export async function redeemCDKey(cdkey: string): Promise<{ success: boolean, message?: string }> {
-  const bindings: any = await getBindings()
-  if (bindings?.RedeemCDKey) {
-    try {
-      await bindings.RedeemCDKey(cdkey)
-      return { success: true }
-    } catch (e: any) {
-      return { success: false, message: e.message || '兑换失败' }
-    }
+  return {
+    totalInstances: 0,
+    runningInstances: 0,
+    proxyCount: 0,
+    coreCount: 0,
+    memUsedMB: 0,
+    maxProfileLimit: DEFAULT_UNLIMITED,
+    appVersion: 'unknown',
   }
-  return { success: false, message: '系统 API 未就绪' }
-}
-
-export async function redeemGithubStar(): Promise<{ success: boolean, message?: string }> {
-  const bindings: any = await getBindings()
-  if (bindings?.RedeemGithubStar) {
-    try {
-      await bindings.RedeemGithubStar()
-      return { success: true }
-    } catch (e: any) {
-      return { success: false, message: e.message || '领取失败' }
-    }
-  }
-  return { success: false, message: '系统 API 未就绪' }
 }
 
 export async function reloadConfig(): Promise<void> {

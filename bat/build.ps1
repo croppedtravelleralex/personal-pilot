@@ -41,19 +41,20 @@ function Assert-RequiredSourceFiles {
 
 try {
     Write-Host "========================================"
-    Write-Host "  Ant Browser - Build Script"
+    Write-Host "  personal-pilot - Build Script"
     Write-Host "========================================"
     Write-Host ""
     Write-Host "Current workdir: $repoRoot"
     Write-Host ""
 
-    $proxyHost = "127.0.0.1"
-    $proxyPort = "7890"
-    $useProxy = $true
+    $proxyValue = $env:PERSONAL_PILOT_PROXY
+    if ([string]::IsNullOrWhiteSpace($proxyValue)) {
+        $proxyValue = $env:ANT_BROWSER_PROXY
+    }
+    $useProxy = -not [string]::IsNullOrWhiteSpace($proxyValue)
 
     if ($useProxy) {
         Write-Host "[0/7] Configuring proxy..."
-        $proxyValue = "http://${proxyHost}:${proxyPort}"
         $env:HTTP_PROXY = $proxyValue
         $env:HTTPS_PROXY = $proxyValue
         $env:http_proxy = $proxyValue
@@ -63,7 +64,7 @@ try {
         & npm config set proxy $proxyValue | Out-Null
         & npm config set https-proxy $proxyValue | Out-Null
 
-        Write-Host "OK proxy configured: ${proxyHost}:${proxyPort}"
+        Write-Host "OK proxy configured: $proxyValue"
         Write-Host ""
     }
 
@@ -106,7 +107,7 @@ try {
     Write-Host "[4/7] Generating Wails bindings..."
     Invoke-NativeCommand -FilePath "cmd" -Arguments @("/c", "call bat\generate-bindings.bat --no-pause")
 
-    $binaryPath = Join-Path $repoRoot "build/bin/ant-chrome.exe"
+    $binaryPath = Join-Path $repoRoot "build/bin/personal-pilot.exe"
 
     Write-Host ""
     Write-Host "[5/7] Building frontend..."
@@ -140,12 +141,27 @@ try {
         Write-Host "[WARN] bin directory not found, skipping copy"
     }
 
+    $chromeDir = Join-Path $repoRoot "chrome"
+    $targetChromeDir = Join-Path $repoRoot "build/bin/chrome"
+    if (Test-Path -LiteralPath $chromeDir -PathType Container) {
+        if (Test-Path -LiteralPath $targetChromeDir -PathType Container) {
+            Remove-Item -LiteralPath $targetChromeDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $targetChromeDir -Force | Out-Null
+        foreach ($entry in (Get-ChildItem -LiteralPath $chromeDir -Force)) {
+            Copy-Item -LiteralPath $entry.FullName -Destination (Join-Path $targetChromeDir $entry.Name) -Recurse -Force
+        }
+        Write-Host "OK copied chrome directory to build\bin\chrome\"
+    } else {
+        Write-Host "[WARN] chrome directory not found, skipping copy"
+    }
+
     Write-Host ""
     Write-Host "========================================"
     Write-Host "  OK build completed"
     Write-Host "========================================"
     Write-Host ""
-    Write-Host "Executable: build\bin\ant-chrome.exe"
+    Write-Host "Executable: build\bin\personal-pilot.exe"
     exit 0
 }
 catch {

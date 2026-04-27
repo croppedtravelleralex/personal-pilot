@@ -26,7 +26,7 @@ export function AdminKeygenPage() {
 
         if (res.success) {
             setKeys(res.keys)
-            toast.success(`成功生成 ${res.keys.length} 个兑换码`)
+            toast.success(`成功生成 ${res.keys.length} 个本地兼容码`)
         } else {
             toast.error(res.message || '生成失败')
         }
@@ -36,7 +36,7 @@ export function AdminKeygenPage() {
         if (keys.length === 0) return
         try {
             await navigator.clipboard.writeText(keys.join('\n'))
-            toast.success('已复制全部兑换码到剪贴板')
+            toast.success('已复制全部本地兼容码到剪贴板')
         } catch {
             toast.error('复制失败，请手动选择复制')
         }
@@ -48,7 +48,7 @@ export function AdminKeygenPage() {
         if (passwordInput.trim() === ADMIN_PAGE_PASSWORD) {
             setAccessGranted(true)
             setPasswordInput('')
-            toast.success('验证通过，已进入兑换码生成页面')
+            toast.success('验证通过，已进入本地兼容码页面')
             return
         }
 
@@ -93,8 +93,8 @@ export function AdminKeygenPage() {
             {accessGranted && (
                 <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
                     <div>
-                        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">系统核心管理 - CDKey 生成器</h1>
-                        <p className="text-sm text-[var(--color-text-muted)] mt-1">隐藏管理员工具。生成的每个兑换码均可为客户端增加 10 个永久额度。</p>
+                        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">系统核心管理 - 本地兼容码生成器</h1>
+                        <p className="text-sm text-[var(--color-text-muted)] mt-1">隐藏管理员工具。这里生成的是本地兼容占位码，仅用于兼容旧流程，不再用于扩容。</p>
                     </div>
 
                     <Card>

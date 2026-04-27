@@ -10,43 +10,23 @@ import (
 )
 
 const (
-	DefaultMaxProfileLimit          = 20
-	StandardCDKeyProfileBonus       = 10
+	DefaultMaxProfileLimit          = 0
+	StandardCDKeyProfileBonus       = 0
 	GithubStarRewardKey             = "GITHUB_STAR_REWARD"
-	GithubStarProfileBonus          = 50
+	GithubStarProfileBonus          = 0
 	GithubStarProfileTotal          = DefaultMaxProfileLimit + GithubStarProfileBonus
 	DefaultLaunchServerPort         = 19876
 	DefaultLaunchServerAPIKeyHeader = "X-Ant-Api-Key"
 )
 
 // RewardForUsedKey 返回指定兑换记录对应的永久额度奖励。
-func RewardForUsedKey(key string) int {
-	normalized := strings.ToUpper(strings.TrimSpace(key))
-	if normalized == "" {
-		return 0
-	}
-	if normalized == GithubStarRewardKey {
-		return GithubStarProfileBonus
-	}
-	return StandardCDKeyProfileBonus
+func RewardForUsedKey(_ string) int {
+	return 0
 }
 
 // MinimumProfileLimitForUsedKeys 根据兑换记录计算最低应得实例额度。
-func MinimumProfileLimitForUsedKeys(keys []string) int {
-	limit := DefaultMaxProfileLimit
-	seen := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		normalized := strings.ToUpper(strings.TrimSpace(key))
-		if normalized == "" {
-			continue
-		}
-		if _, exists := seen[normalized]; exists {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		limit += RewardForUsedKey(normalized)
-	}
-	return limit
+func MinimumProfileLimitForUsedKeys(_ []string) int {
+	return DefaultMaxProfileLimit
 }
 
 // LaunchServerConfig Launch HTTP 服务配置
@@ -274,16 +254,12 @@ func normalizeConfig(config *Config) {
 	if config.App.Window.MinHeight <= 0 {
 		config.App.Window.MinHeight = defaultConfig.App.Window.MinHeight
 	}
-	if config.App.UsedCDKeys == nil {
-		config.App.UsedCDKeys = []string{}
-	}
+	// Local edition: always normalize license fields to unlimited semantics.
+	config.App.UsedCDKeys = []string{}
 
 	// 兼容老版本/损坏配置：若 max_profile_limit 缺失或被写成过小值，
 	// 通过兑换记录重新计算最低应得额度，避免基础额度或奖励额度丢失。
-	expectedLimit := MinimumProfileLimitForUsedKeys(config.App.UsedCDKeys)
-	if config.App.MaxProfileLimit < expectedLimit {
-		config.App.MaxProfileLimit = expectedLimit
-	}
+	config.App.MaxProfileLimit = DefaultMaxProfileLimit
 
 	if config.Runtime.MaxMemoryMB <= 0 {
 		config.Runtime.MaxMemoryMB = defaultConfig.Runtime.MaxMemoryMB
@@ -390,7 +366,7 @@ func DefaultConfig() *Config {
 			},
 		},
 		App: AppConfig{
-			Name: "Ant Browser",
+			Name: "personal-pilot",
 			Window: WindowConfig{
 				Width:     1750,
 				Height:    1000,
@@ -406,7 +382,7 @@ func DefaultConfig() *Config {
 		},
 		Browser: BrowserConfig{
 			UserDataRoot:           "data",
-			DefaultFingerprintArgs: []string{"--fingerprint-brand=Chrome", "--fingerprint-platform=windows"},
+			DefaultFingerprintArgs: []string{"--fingerprint-brand=Chrome", "--fingerprint-platform=windows", "--fingerprint-platform-version=10.0.22631", "--fingerprint-brand-version=130.0.0.0", "--accept-lang=zh-CN,zh;q=0.9,en;q=0.8", "--disable-battery-api-override"},
 			DefaultLaunchArgs:      []string{"--disable-sync", "--no-first-run"},
 			DefaultProxy:           "",
 			StartReadyTimeoutMs:    3000,
