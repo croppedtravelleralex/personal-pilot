@@ -334,22 +334,6 @@ export function DeleteRecording(arg1) {
   return window['go']['main']['App']['DeleteRecording'](arg1);
 }
 
-export function EmbeddedBrowserFocus(arg1) {
-  return window['go']['main']['App']['EmbeddedBrowserFocus'](arg1);
-}
-
-export function EmbeddedBrowserResize(arg1, arg2) {
-  return window['go']['main']['App']['EmbeddedBrowserResize'](arg1, arg2);
-}
-
-export function EmbeddedBrowserStart(arg1) {
-  return window['go']['main']['App']['EmbeddedBrowserStart'](arg1);
-}
-
-export function EmbeddedBrowserStop(arg1) {
-  return window['go']['main']['App']['EmbeddedBrowserStop'](arg1);
-}
-
 export function EmitAndLogEvent(arg1, arg2) {
   return window['go']['main']['App']['EmitAndLogEvent'](arg1, arg2);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, LayoutGrid, List, Circle, Video } from 'lucide-react'
 import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
@@ -206,7 +206,6 @@ function KeywordInlineRow({ keywords }: { keywords: string[] }) {
 }
 
 export function BrowserListPage() {
-  const navigate = useNavigate()
   const [profiles, setProfiles] = useState<BrowserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
@@ -542,8 +541,19 @@ export function BrowserListPage() {
     }).sort((a, b) => naturalCompare(a.profileName, b.profileName))
   }, [profiles, filters, defaultCore, cores])
 
-  const handleStart = (profileId: string) => {
-    navigate(`/browser/embedded?launch=${encodeURIComponent(profileId)}`)
+  const handleStart = async (profileId: string) => {
+    updatePendingIds(setStartingIds, profileId, true)
+    try {
+      const startedProfile = await startBrowserInstance(profileId)
+      mergeProfileState(startedProfile)
+      toast.success('瀹炰緥宸插惎鍔?')
+      await loadProfiles({ silent: true, syncRuntimeState: true })
+    } catch (error: any) {
+      toast.error(resolveActionErrorMessage(error, '瀹炰緥鍚姩澶辫触'))
+      await loadProfiles({ silent: true, syncRuntimeState: true })
+    } finally {
+      updatePendingIds(setStartingIds, profileId, false)
+    }
   }
 
   const handleStop = async (profileId: string) => {

@@ -13,6 +13,9 @@ use std::{
 use tauri::{Emitter, Manager};
 
 const READY_PREFIX: &str = "ANTBROWSER_CORE_READY ";
+const BODY_PREVIEW_LIMIT: usize = 240;
+
+type HttpHeaders = Vec<(String, String)>;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -338,17 +341,7 @@ fn http_post_json(
     stream
         .read_to_end(&mut response)
         .map_err(|err| format!("failed to read sidecar response: {err}"))?;
-    let text = String::from_utf8_lossy(&response);
-    let (head, body) = text
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "invalid sidecar HTTP response".to_string())?;
-    if !head.starts_with("HTTP/1.1 2") && !head.starts_with("HTTP/1.0 2") {
-        return Err(format!(
-            "sidecar HTTP error: {}",
-            head.lines().next().unwrap_or(head)
-        ));
-    }
-    serde_json::from_str(body.trim()).map_err(|err| format!("invalid sidecar JSON response: {err}"))
+    parse_http_json_response(&response)
 }
 
 fn parse_local_http_url(raw: &str) -> Result<(String, u16), String> {
@@ -369,6 +362,227 @@ fn parse_local_http_url(raw: &str) -> Result<(String, u16), String> {
         .parse::<u16>()
         .map_err(|err| format!("invalid sidecar URL port: {err}"))?;
     Ok((host.to_string(), port))
+}
+
+fn parse_http_json_response(response: &[u8]) -> Result<Value, String> {
+    let (head, body_start) = split_http_head(response).ok_or_else(|| {
+        format!(
+            "invalid sidecar HTTP response: {}",
+            response_context("<missing>", &HttpHeaders::new(), response)
+        )
+    })?;
+    let raw_body = &response[body_start..];
+    let head = std::str::from_utf8(head).map_err(|err| {
+        format!(
+            "invalid sidecar HTTP header: {err}; {}",
+            response_context("<unreadable>", &HttpHeaders::new(), raw_body)
+        )
+    })?;
+    let (status_line, headers) = parse_http_head(head)?;
+    let decoded_body = decode_http_body(&headers, raw_body);
+    let context_body = decoded_body.as_deref().unwrap_or(raw_body);
+
+    if !is_success_status(status_line) {
+        return Err(format!(
+            "sidecar HTTP error: {}",
+            response_context(status_line, &headers, context_body)
+        ));
+    }
+
+    let body = decoded_body.map_err(|err| {
+        format!(
+            "{err}; {}",
+            response_context(status_line, &headers, raw_body)
+        )
+    })?;
+    serde_json::from_slice(&body).map_err(|err| {
+        format!(
+            "invalid sidecar JSON response: {err}; {}",
+            response_context(status_line, &headers, &body)
+        )
+    })
+}
+
+fn split_http_head(response: &[u8]) -> Option<(&[u8], usize)> {
+    response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|head_end| (&response[..head_end], head_end + 4))
+}
+
+fn parse_http_head(head: &str) -> Result<(&str, HttpHeaders), String> {
+    let mut lines = head.split("\r\n");
+    let status_line = lines
+        .next()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .ok_or_else(|| "invalid sidecar HTTP response: missing status line".to_string())?;
+    let mut headers = HttpHeaders::new();
+    for line in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let (name, value) = line
+            .split_once(':')
+            .ok_or_else(|| format!("invalid sidecar HTTP header: {line}"))?;
+        headers.push((name.trim().to_ascii_lowercase(), value.trim().to_string()));
+    }
+    Ok((status_line, headers))
+}
+
+fn is_success_status(status_line: &str) -> bool {
+    let mut parts = status_line.split_whitespace();
+    let Some(version) = parts.next() else {
+        return false;
+    };
+    if !version.starts_with("HTTP/") {
+        return false;
+    }
+    parts
+        .next()
+        .and_then(|code| code.parse::<u16>().ok())
+        .is_some_and(|code| (200..300).contains(&code))
+}
+
+fn decode_http_body(headers: &HttpHeaders, raw_body: &[u8]) -> Result<Vec<u8>, String> {
+    if has_chunked_transfer_encoding(headers) {
+        return decode_chunked_body(raw_body);
+    }
+
+    if let Some(length) = content_length(headers)? {
+        if raw_body.len() < length {
+            return Err(format!(
+                "incomplete sidecar HTTP body: expected {length} bytes, got {} bytes",
+                raw_body.len()
+            ));
+        }
+        return Ok(raw_body[..length].to_vec());
+    }
+
+    Ok(raw_body.to_vec())
+}
+
+fn has_chunked_transfer_encoding(headers: &HttpHeaders) -> bool {
+    headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("transfer-encoding"))
+        .any(|(_, value)| {
+            value
+                .split(',')
+                .any(|encoding| encoding.trim().eq_ignore_ascii_case("chunked"))
+        })
+}
+
+fn content_length(headers: &HttpHeaders) -> Result<Option<usize>, String> {
+    let mut parsed_length = None;
+    for (_, value) in headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+    {
+        let length = value
+            .parse::<usize>()
+            .map_err(|err| format!("invalid sidecar Content-Length header: {err}"))?;
+        if parsed_length.is_some_and(|existing| existing != length) {
+            return Err("conflicting sidecar Content-Length headers".to_string());
+        }
+        parsed_length = Some(length);
+    }
+    Ok(parsed_length)
+}
+
+fn decode_chunked_body(raw_body: &[u8]) -> Result<Vec<u8>, String> {
+    let mut body = Vec::new();
+    let mut position = 0;
+
+    loop {
+        let line_end = find_crlf(&raw_body[position..])
+            .ok_or_else(|| "invalid sidecar chunked body: missing chunk size".to_string())?;
+        let size_line = std::str::from_utf8(&raw_body[position..position + line_end])
+            .map_err(|err| format!("invalid sidecar chunk size: {err}"))?;
+        let size_text = size_line
+            .split_once(';')
+            .map(|(size, _)| size)
+            .unwrap_or(size_line)
+            .trim();
+        let size = usize::from_str_radix(size_text, 16)
+            .map_err(|err| format!("invalid sidecar chunk size `{size_text}`: {err}"))?;
+        position += line_end + 2;
+
+        if size == 0 {
+            loop {
+                let trailer_end = find_crlf(&raw_body[position..]).ok_or_else(|| {
+                    "invalid sidecar chunked body: missing final chunk terminator".to_string()
+                })?;
+                position += trailer_end + 2;
+                if trailer_end == 0 {
+                    return Ok(body);
+                }
+            }
+        }
+
+        let data_end = position
+            .checked_add(size)
+            .ok_or_else(|| "sidecar chunk size overflow".to_string())?;
+        let next_position = data_end
+            .checked_add(2)
+            .ok_or_else(|| "sidecar chunk size overflow".to_string())?;
+        if raw_body.len() < next_position {
+            return Err(format!(
+                "incomplete sidecar chunked body: expected chunk of {size} bytes"
+            ));
+        }
+        if &raw_body[data_end..next_position] != b"\r\n" {
+            return Err("invalid sidecar chunked body: missing chunk terminator".to_string());
+        }
+        body.extend_from_slice(&raw_body[position..data_end]);
+        position = next_position;
+    }
+}
+
+fn find_crlf(bytes: &[u8]) -> Option<usize> {
+    bytes.windows(2).position(|window| window == b"\r\n")
+}
+
+fn response_context(status_line: &str, headers: &HttpHeaders, body: &[u8]) -> String {
+    format!(
+        "status_line=\"{}\", headers=\"{}\", body_preview=\"{}\"",
+        status_line,
+        key_header_preview(headers),
+        body_preview(body)
+    )
+}
+
+fn key_header_preview(headers: &HttpHeaders) -> String {
+    let mut preview = Vec::new();
+    for (name, value) in headers {
+        if matches!(
+            name.as_str(),
+            "content-length" | "transfer-encoding" | "content-type"
+        ) {
+            preview.push(format!("{name}: {value}"));
+        }
+    }
+    if preview.is_empty() {
+        "none".to_string()
+    } else {
+        preview.join("; ")
+    }
+}
+
+fn body_preview(body: &[u8]) -> String {
+    if body.is_empty() {
+        return "<empty>".to_string();
+    }
+    let preview_len = body.len().min(BODY_PREVIEW_LIMIT);
+    let mut preview = String::from_utf8_lossy(&body[..preview_len])
+        .replace('\\', "\\\\")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n")
+        .replace('"', "\\\"");
+    if body.len() > BODY_PREVIEW_LIMIT {
+        preview.push_str("...");
+    }
+    preview
 }
 
 #[tauri::command]
@@ -500,6 +714,76 @@ fn app_quit_full(app: tauri::AppHandle, core: tauri::State<CoreManager>) -> Resu
     core.stop();
     app.exit(0);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn response(headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
+        let mut response = b"HTTP/1.1 200 OK\r\n".to_vec();
+        for (name, value) in headers {
+            response.extend_from_slice(name.as_bytes());
+            response.extend_from_slice(b": ");
+            response.extend_from_slice(value.as_bytes());
+            response.extend_from_slice(b"\r\n");
+        }
+        response.extend_from_slice(b"\r\n");
+        response.extend_from_slice(body);
+        response
+    }
+
+    #[test]
+    fn parses_content_length_json_body() {
+        let body = br#"{"ok":true,"result":{"answer":42}}"#;
+        let response = response(
+            &[
+                ("Content-Type", "application/json".to_string()),
+                ("Content-Length", body.len().to_string()),
+            ],
+            body,
+        );
+
+        let parsed = parse_http_json_response(&response).expect("content-length JSON parses");
+
+        assert_eq!(parsed, json!({"ok": true, "result": {"answer": 42}}));
+    }
+
+    #[test]
+    fn parses_chunked_json_body() {
+        let chunked = b"6\r\n{\"ok\":\r\n4\r\ntrue\r\n1\r\n}\r\n0\r\n\r\n";
+        let response = response(
+            &[
+                ("Content-Type", "application/json".to_string()),
+                ("Transfer-Encoding", "chunked".to_string()),
+            ],
+            chunked,
+        );
+
+        let parsed = parse_http_json_response(&response).expect("chunked JSON parses");
+
+        assert_eq!(parsed, json!({"ok": true}));
+    }
+
+    #[test]
+    fn rejects_concatenated_json_bodies() {
+        let body = br#"{"ok":true}{"extra":true}"#;
+        let response = response(
+            &[
+                ("Content-Type", "application/json".to_string()),
+                ("Content-Length", body.len().to_string()),
+            ],
+            body,
+        );
+
+        let error =
+            parse_http_json_response(&response).expect_err("concatenated JSON bodies must fail");
+
+        assert!(error.contains("invalid sidecar JSON response"));
+        assert!(error.contains("status_line=\"HTTP/1.1 200 OK\""));
+        assert!(error.contains("content-length"));
+        assert!(error.contains("{\\\"ok\\\":true}{\\\"extra\\\":true}"));
+    }
 }
 
 pub fn run() {

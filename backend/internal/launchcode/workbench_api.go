@@ -109,6 +109,40 @@ func (s *LaunchServer) handleWorkbenchFingerprint(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "fingerprint": snapshot})
 }
 
+func (s *LaunchServer) handleWorkbenchFingerprintHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	health, err := operator.WorkbenchFingerprintHealthProfile(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	if health == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "profileId": profileID, "error": "fingerprint health is empty"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":          true,
+		"profileId":   profileID,
+		"score":       health.Score,
+		"level":       health.Level,
+		"checks":      health.Checks,
+		"fingerprint": health.Fingerprint,
+		"capturedAt":  health.CapturedAt,
+		"source":      health.Source,
+	})
+}
+
 func (s *LaunchServer) handleWorkbenchActivate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})

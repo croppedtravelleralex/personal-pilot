@@ -4,6 +4,7 @@ import (
 	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/launchcode"
 	"fmt"
+	"time"
 )
 
 // StartInstance 实现 launchcode.BrowserStarter 接口
@@ -39,6 +40,18 @@ func (a *App) WorkbenchFingerprintProfile(profileId string) (*browser.Fingerprin
 		return nil, err
 	}
 	return browser.ExtractFingerprint(profile.DebugPort)
+}
+
+func (a *App) WorkbenchFingerprintHealthProfile(profileId string) (*browser.FingerprintHealthProfile, error) {
+	profile, err := a.runningProfileForWorkbench(profileId)
+	if err != nil {
+		return nil, err
+	}
+	fingerprint, err := browser.ExtractFingerprint(profile.DebugPort)
+	if err != nil {
+		return nil, err
+	}
+	return browser.NewFingerprintHealthProfile(profile.ProfileId, profile.FingerprintArgs, fingerprint, time.Now()), nil
 }
 
 func (a *App) WorkbenchActivateProfile(profileId string) error {

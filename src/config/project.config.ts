@@ -33,8 +33,6 @@ export const navigationConfig: NavSection[] = [
       { name: '实例列表', path: '/browser/list', icon: 'Monitor' },
       { name: '实例工作台', path: '/browser/synchronizer', icon: 'Layers' },
       { name: '行为录制', path: '/browser/recording', icon: 'Radio' },
-      { name: '嵌入浏览器（实验）', path: '/browser/embedded', icon: 'Monitor' },
-
       { name: '自动化接口（实验）', path: '/browser/automation', icon: 'Bot' },
       { name: '内核管理', path: '/browser/cores', icon: 'Cpu' },
       { name: '代理池配置', path: '/browser/proxy-pool', icon: 'Globe' },

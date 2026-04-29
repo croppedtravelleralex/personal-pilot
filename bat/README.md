@@ -4,35 +4,31 @@
 
 ## 用途
 
-- `dev.bat`：统一的本地开发入口
+- `..\antbrowserDev.bat`：根目录统一本地开发入口
 - `build.bat`：本地构建可执行文件
 - `publish.bat`：发布打包入口（Windows / Linux / 两者）
 - `recover-profiles.ps1`：从现有 `user_data_root` 目录补回丢失的实例配置
 
 ## 用法
 
-### `dev.bat`
+### `..\antbrowserDev.bat`
 
-统一入口，按参数切换开发模式，避免多个 bat 文件误导使用者。
+统一入口已迁移到仓库根目录，旧 Wails 开发入口已移除，避免继续使用过期启动链路。
 
 ```bat
-bat\dev.bat
-bat\dev.bat live
-bat\dev.bat limited
+antbrowserDev.bat
 ```
 
-模式说明：
+说明：
 
-- `bat\dev.bat`：默认稳定模式。先生成 Wails bindings，再构建 `frontend/dist`，最后以静态资源模式启动 Wails
-- `bat\dev.bat live`：显式启动 `frontend/scripts/dev-watcher.mjs`，并通过 `-frontenddevserverurl` 接入 Vite dev server
-- `bat\dev.bat limited`：在 `live` 基础上通过 `scripts/run-limited-frontend-dev.ps1` 给 watcher 及其子进程附加 Windows Job Object 内存限制
+- `antbrowserDev.bat` 调用 `npm run tauri:dev`
+- Tauri `beforeDevCommand` 负责执行 `npm run build:sidecar && npm run dev`
+- 不再通过旧 Wails 开发模式、`frontend/dist` 静态模式或旧 live/limited 参数启动开发环境
 
 默认行为：
 
-- 稳定模式不依赖外部 Vite dev server，因此不会因为 watcher 或 `5218` 端口异常直接白屏
-- `live` 模式默认优先使用 `5218`，若端口被其他程序占用，会自动切换到下一个可用端口
+- Vite watcher 由 `scripts/dev-watcher.mjs` 管理，默认优先使用 `5218`，若端口被其他程序占用，会自动切换到下一个可用端口
 - watcher 默认 `FRONTEND_NODE_RSS_HARD_LIMIT_MB=0`，即只告警，不默认 RSS 强杀
-- `limited` 模式默认 `FRONTEND_PROCESS_MEMORY_LIMIT_MB=512`
 
 常用内存控制变量：
 
@@ -61,15 +57,14 @@ DEV_GOPROXY     -> 覆盖 GOPROXY；未设置时默认使用 https://goproxy.cn,
 
 日志：
 
-- `live` / `limited` 模式的 watcher 日志会写入仓库根目录：
+- watcher 日志会写入仓库根目录：
 - `tmp-npm-dev.log`
 - `tmp-npm-dev.err.log`
 
 FAQ：
 
-- 为什么默认模式没有 HMR：因为默认入口优先保证桌面壳可用性，不依赖外部 Vite
-- 什么情况下用 `bat\dev.bat live`：页面样式、交互、接口联调需要快速热更新时
-- 什么情况下用 `bat\dev.bat limited`：低内存机器、复现 Vite 内存膨胀、或需要显式进程级内存约束时
+- 开发入口在哪里：使用仓库根目录 `antbrowserDev.bat`
+- 是否还使用 Wails dev：不使用。当前开发入口走 Tauri 2 dev 链路
 
 ### `build.bat`
 
@@ -210,5 +205,5 @@ pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Ant Browser' -Apply -R
 ## 备注
 
 - `generate-bindings.bat` 是辅助脚本，通常由 `build.bat` 调用。
-- `generate-bindings.bat`、`build.bat`、`dev.bat` 都假定当前分支是完整源码仓库。
+- `generate-bindings.bat`、`build.bat` 都假定当前分支是完整源码仓库。
 - 如果这些脚本报告缺少 `go.mod`、`main.go`、`wails.json`，应先恢复源码入口，而不是继续复用旧二进制。

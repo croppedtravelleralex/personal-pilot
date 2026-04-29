@@ -39,7 +39,6 @@ const LaunchApiDocsPage = lazyNamed(() => import('./modules/browser/pages/Launch
 const TagManagementPage = lazyNamed(() => import('./modules/browser/pages/TagManagementPage'), 'TagManagementPage')
 const AutomationPage = lazyNamed(() => import('./modules/browser/pages/AutomationPage'), 'AutomationPage')
 const BehaviorRecordingPage = lazyNamed(() => import('./modules/browser/pages/BehaviorRecordingPage'), 'BehaviorRecordingPage')
-const EmbeddedBrowserPage = lazyNamed(() => import('./modules/browser/pages/EmbeddedBrowserPage'), 'EmbeddedBrowserPage')
 const SynchronizerPage = lazyNamed(() => import('./modules/synchronizer/SynchronizerPage'), 'SynchronizerPage')
 const EventMonitorPage = lazyNamed(() => import('./modules/monitor/EventMonitorPage'), 'EventMonitorPage')
 const UsageTutorialPage = lazyNamed(() => import('./modules/browser/pages/UsageTutorialPage'), 'UsageTutorialPage')
@@ -298,7 +297,6 @@ function App() {
               <Route path="/browser/bookmarks" element={<BookmarkSettingsPage />} />
               <Route path="/browser/automation" element={<AutomationPage />} />
               <Route path="/browser/recording" element={<BehaviorRecordingPage />} />
-              <Route path="/browser/embedded" element={<EmbeddedBrowserPage />} />
               <Route path="/browser/launch-api" element={<LaunchApiDocsPage />} />
 <Route path="/browser/synchronizer" element={<SynchronizerPage />} />
               <Route path="/browser/tags" element={<TagManagementPage />} />

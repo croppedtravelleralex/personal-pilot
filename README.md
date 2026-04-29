@@ -140,16 +140,15 @@ Ant Browser 适合以下场景：
 
 1. 开发默认使用 `master` 分支；该分支不带测试用户数据，适合作为日常开发基线。
 2. 如需带测试库的演示环境，请切换到 `user_data` 分支。
-3. Windows 统一执行 `RunBuild\dev.bat`；默认是稳定模式，如需前端 HMR 联调使用 `RunBuild\dev.bat live`，如需受限内存复现使用 `RunBuild\dev.bat limited`。
+3. Windows 统一执行根目录 `antbrowserDev.bat`；该入口启动 Tauri 2 dev 模式，并由 Tauri `beforeDevCommand` 构建 Go sidecar、启动 Vite。
 4. Windows 运行时使用 `bin/xray.exe`、`bin/sing-box.exe`；Linux 运行时使用 `bin/linux-<arch>/xray`、`bin/linux-<arch>/sing-box`。
 5. 运行时文件采用“仓库固定 + 哈希校验”，校验清单在 `publish/runtime-manifest.json`，固定来源清单在 `publish/runtime-sources.json`。
 6. 如需刷新 Linux 运行时，执行 `python3 tools/runtime/sync-runtime.py`（会按固定来源下载、校验归档并更新 manifest）。
 
 开发模式说明：
 
-- `RunBuild\dev.bat`：默认稳定模式，先构建 `frontend/dist`，再以静态资源模式启动 Wails，不依赖外部 Vite dev server
-- `RunBuild\dev.bat live`：显式启动 Vite watcher，并通过 `-frontenddevserverurl` 接入桌面壳
-- `RunBuild\dev.bat limited`：在 `live` 基础上为 watcher 与其子进程附加 Windows Job Object 内存限制
+- `antbrowserDev.bat`：根目录唯一开发入口，调用 `npm run tauri:dev` 启动 Tauri 2 + Vite + Go sidecar
+- `antbrowserDev.bat -- <tauri-dev-args>`：如需透传 Tauri dev 参数，可在命令后追加参数
 - 如需为依赖下载配置代理，可在启动前设置 `DEV_PROXY_URL`、`DEV_NO_PROXY`、`DEV_GOPROXY`
 
 ### Linux 发布打包（源码）

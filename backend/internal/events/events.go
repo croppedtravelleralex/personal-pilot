@@ -115,12 +115,6 @@ const (
 	EventLLMTaskStepDone  = "llm:task:step-done"
 	EventLLMTaskComplete  = "llm:task:complete"
 
-	// ─── Embedded Browser ──────────────────────────────────────────────────────
-
-	EventEmbeddedFailed = "embedded:failed"
-	EventEmbeddedExited = "embedded:exited"
-	EventEmbeddedFocus  = "embedded:focus"
-	EventEmbeddedFrame  = "embedded:frame"
 )
 
 // ─── Download ──────────────────────────────────────────────────────────────────
@@ -171,9 +165,5 @@ func AllEventNames() []string {
 		EventLLMTaskExecuting,
 		EventLLMTaskStepDone,
 		EventLLMTaskComplete,
-		EventEmbeddedFailed,
-		EventEmbeddedExited,
-		EventEmbeddedFocus,
-		EventEmbeddedFrame,
 	}
 }

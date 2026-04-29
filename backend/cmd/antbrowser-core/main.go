@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -241,6 +242,7 @@ var allowedRPCMethods = map[string]struct{}{
 	"WorkbenchActivateProfile":             {},
 	"WorkbenchArrangeProfiles":             {},
 	"WorkbenchCaptureScreenshot":           {},
+	"WorkbenchFingerprintHealthProfile":    {},
 	"WorkbenchFingerprintProfile":          {},
 	"WorkbenchNavigateProfile":             {},
 	"WorkbenchRefreshProfile":              {},
@@ -534,7 +536,13 @@ func setCORS(w http.ResponseWriter) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		status = http.StatusInternalServerError
+		body = []byte(`{"ok":false,"error":"json marshal failed"}`)
+	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	_, _ = w.Write(body)
 }

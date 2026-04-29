@@ -78,6 +78,7 @@ type WorkbenchOperator interface {
 	WorkbenchRefreshProfile(profileId string) error
 	WorkbenchCaptureScreenshot(profileId string) (string, error)
 	WorkbenchFingerprintProfile(profileId string) (*browser.FingerprintSnapshot, error)
+	WorkbenchFingerprintHealthProfile(profileId string) (*browser.FingerprintHealthProfile, error)
 	WorkbenchActivateProfile(profileId string) error
 	WorkbenchArrangeProfiles(profileIds []string, layout string) ([]WorkbenchWindowPlacement, error)
 }
@@ -186,6 +187,7 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/workbench/refresh", s.handleWorkbenchRefresh)
 	mux.HandleFunc("/api/workbench/screenshot", s.handleWorkbenchScreenshot)
 	mux.HandleFunc("/api/workbench/fingerprint", s.handleWorkbenchFingerprint)
+	mux.HandleFunc("/api/workbench/fingerprint-health", s.handleWorkbenchFingerprintHealth)
 	mux.HandleFunc("/api/workbench/activate", s.handleWorkbenchActivate)
 	mux.HandleFunc("/api/workbench/arrange", s.handleWorkbenchArrange)
 	// Recording & behavior endpoints

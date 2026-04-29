@@ -6,6 +6,7 @@ import {
   CheckCircle,
   Clock,
   ExternalLink,
+  Fingerprint,
   Globe,
   LayoutGrid,
   Layers,
@@ -27,20 +28,32 @@ import {
   captureProfileScreenshot,
   activateProfileWindow,
   arrangeProfileWindows,
+  checkWorkbenchFingerprintHealthProfile,
+  getBrowserInstanceStatus,
   listSyncGroups,
   listWorkbenchTasks,
   navigateProfile,
+  onBrowserInstanceLifecycle,
   refreshProfile,
   saveWorkbenchTasks,
 } from './api'
-import type { SyncGroup, SyncWindow, WorkbenchTask, WorkbenchTaskType } from './types'
+import type {
+  SyncGroup,
+  SyncWindow,
+  WorkbenchFingerprintHealthProfile,
+  WorkbenchTask,
+  WorkbenchTaskType,
+} from './types'
 import type { BrowserProfile } from '../browser/types'
 import { fetchBrowserProfiles, startBrowserInstance, stopBrowserInstance } from '../browser/api'
 
 const TASK_CONCURRENCY = 3
 const TASK_HISTORY_LIMIT = 200
-const PROFILE_ROW_HEIGHT = 194
+const PROFILE_ROW_HEIGHT = 260
 const PROFILE_LIST_OVERSCAN = 6
+const INSTANCE_EVENT_REFRESH_DEBOUNCE_MS = 300
+const START_STATUS_POLL_INTERVAL_MS = 350
+const START_STATUS_POLL_TIMEOUT_MS = 8000
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -73,6 +86,8 @@ function taskLabel(type: WorkbenchTaskType) {
       return '截图'
     case 'activate':
       return '激活'
+    case 'fingerprint-health':
+      return '指纹体检'
     default:
       return type
   }
@@ -93,6 +108,112 @@ function taskStatusBadge(status: WorkbenchTask['status']) {
   if (status === 'error') return <Badge variant="error">失败</Badge>
   if (status === 'running') return <Badge variant="info">执行中</Badge>
   return <Badge variant="default">等待中</Badge>
+}
+
+type FingerprintHealthMap = Record<string, WorkbenchFingerprintHealthProfile>
+type FingerprintHealthUiLevel = WorkbenchFingerprintHealthProfile['level'] | 'coherent' | 'suspicious' | 'inconsistent'
+type FingerprintHealthCheck = WorkbenchFingerprintHealthProfile['checks'][number]
+type FingerprintHealthCheckStatus = 'passed' | 'warning' | 'failed' | 'unknown'
+
+const FINGERPRINT_HEALTH_LEVEL_UI: Record<
+  'good' | 'warning' | 'risk' | 'unknown',
+  { label: string; variant: 'default' | 'success' | 'error' | 'warning' | 'info' }
+> = {
+  good: { label: '良好', variant: 'success' },
+  warning: { label: '预警', variant: 'warning' },
+  risk: { label: '风险', variant: 'error' },
+  unknown: { label: '未知', variant: 'default' },
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
+
+function readRecordValue(source: unknown, key: string): unknown {
+  if (!source || typeof source !== 'object') return undefined
+  return (source as Record<string, unknown>)[key]
+}
+
+function readStringField(source: unknown, keys: string[], fallback = '') {
+  for (const key of keys) {
+    const value = readRecordValue(source, key)
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return fallback
+}
+
+function normalizeFingerprintHealthLevel(level: FingerprintHealthUiLevel): keyof typeof FINGERPRINT_HEALTH_LEVEL_UI {
+  switch (level) {
+    case 'good':
+    case 'coherent':
+      return 'good'
+    case 'warning':
+    case 'suspicious':
+      return 'warning'
+    case 'risk':
+    case 'inconsistent':
+      return 'risk'
+    default:
+      return 'unknown'
+  }
+}
+
+function fingerprintHealthLevelLabel(level: FingerprintHealthUiLevel) {
+  return FINGERPRINT_HEALTH_LEVEL_UI[normalizeFingerprintHealthLevel(level)].label
+}
+
+function fingerprintHealthBadge(health: WorkbenchFingerprintHealthProfile) {
+  const ui = FINGERPRINT_HEALTH_LEVEL_UI[normalizeFingerprintHealthLevel(health.level)]
+  return (
+    <Badge variant={ui.variant} dot>
+      {ui.label} {health.score}
+    </Badge>
+  )
+}
+
+function getFingerprintHealthTime(health: WorkbenchFingerprintHealthProfile) {
+  return readStringField(health, ['capturedAt', 'updatedAt', 'checkedAt'])
+}
+
+function getFingerprintHealthTimestamp(health: WorkbenchFingerprintHealthProfile) {
+  const parsed = Date.parse(getFingerprintHealthTime(health))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function getFingerprintHealthSource(health: WorkbenchFingerprintHealthProfile) {
+  return readStringField(health, ['source'])
+}
+
+function getFingerprintCheckStatus(check: FingerprintHealthCheck): FingerprintHealthCheckStatus {
+  const status = readStringField(check, ['status']).toLowerCase()
+  if (['passed', 'pass', 'ok', 'good', 'success'].includes(status)) return 'passed'
+  if (['warning', 'warn'].includes(status)) return 'warning'
+  if (['failed', 'fail', 'risk', 'error'].includes(status)) return 'failed'
+
+  const passed = readRecordValue(check, 'passed')
+  if (typeof passed === 'boolean') return passed ? 'passed' : 'failed'
+  return 'unknown'
+}
+
+function getFingerprintCheckName(check: FingerprintHealthCheck) {
+  return readStringField(check, ['id', 'dimension', 'name', 'key'], '检查项')
+}
+
+function getFingerprintCheckMessage(check: FingerprintHealthCheck) {
+  return readStringField(check, ['message', 'detail', 'summary'], '-')
+}
+
+function getFingerprintHealthSummary(health: WorkbenchFingerprintHealthProfile) {
+  const checks = health.checks || []
+  if (checks.length === 0) return '暂无检查项'
+  const abnormal = checks.filter((check) => {
+    const status = getFingerprintCheckStatus(check)
+    return status === 'failed' || status === 'warning'
+  })
+  if (abnormal.length === 0) return `全部 ${checks.length} 项通过`
+  return abnormal.slice(0, 2).map((check) => (
+    `${getFingerprintCheckName(check)}：${getFingerprintCheckMessage(check)}`
+  )).join('；')
 }
 
 interface PreviewMap {
@@ -165,7 +286,14 @@ export function SynchronizerPage() {
   const [tasksLoaded, setTasksLoaded] = useState(false)
   const [taskRunning, setTaskRunning] = useState(false)
   const [previews, setPreviews] = useState<PreviewMap>({})
+  const [fingerprintHealthById, setFingerprintHealthById] = useState<FingerprintHealthMap>({})
+  const [fingerprintHealthCheckingIds, setFingerprintHealthCheckingIds] = useState<Set<string>>(new Set())
+  const activeGroupIdRef = useRef(activeGroupId)
   const debouncedSearch = useDebouncedValue(search, 300)
+
+  useEffect(() => {
+    activeGroupIdRef.current = activeGroupId
+  }, [activeGroupId])
 
   const runningById = useMemo(() => {
     const map = new Map<string, SyncWindow>()
@@ -176,9 +304,11 @@ export function SynchronizerPage() {
   }, [groups])
 
   const refreshWorkspace = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
-    if (!silent) setLoading(true)
-    setRefreshing(true)
-    setError('')
+    if (!silent) {
+      setLoading(true)
+      setRefreshing(true)
+      setError('')
+    }
     try {
       const [profileResult, groupResult] = await Promise.allSettled([
         fetchBrowserProfiles(),
@@ -193,19 +323,24 @@ export function SynchronizerPage() {
 
       if (groupResult.status === 'fulfilled') {
         const nextGroups = groupResult.value || []
+        const currentActiveGroupId = activeGroupIdRef.current
         setGroups(nextGroups)
-        if (nextGroups.length > 0 && (!activeGroupId || !nextGroups.some((g) => g.id === activeGroupId))) {
+        if (nextGroups.length > 0 && (!currentActiveGroupId || !nextGroups.some((g) => g.id === currentActiveGroupId))) {
           setActiveGroup(nextGroups[0].id)
         }
       }
     } catch (err) {
       const message = normalizeError(err)
-      setError(message.includes('Wails runtime not available') ? 'Wails 运行时不可用，请在应用中打开。' : message)
+      if (!silent) {
+        setError(message.includes('Wails runtime not available') ? 'Wails 运行时不可用，请在应用中打开。' : message)
+      }
     } finally {
-      if (!silent) setLoading(false)
-      setRefreshing(false)
+      if (!silent) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
-  }, [activeGroupId, setActiveGroup, setGroups])
+  }, [setActiveGroup, setGroups])
 
   useEffect(() => {
     void refreshWorkspace()
@@ -214,6 +349,22 @@ export function SynchronizerPage() {
       void refreshWorkspace({ silent: true })
     }, 5000)
     return () => window.clearInterval(timer)
+  }, [refreshWorkspace])
+
+  useEffect(() => {
+    let refreshTimer: number | undefined
+    const off = onBrowserInstanceLifecycle(() => {
+      if (refreshTimer) window.clearTimeout(refreshTimer)
+      refreshTimer = window.setTimeout(() => {
+        if (document.visibilityState !== 'visible') return
+        void refreshWorkspace({ silent: true })
+      }, INSTANCE_EVENT_REFRESH_DEBOUNCE_MS)
+    })
+
+    return () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer)
+      off()
+    }
   }, [refreshWorkspace])
 
   useEffect(() => {
@@ -292,6 +443,16 @@ export function SynchronizerPage() {
     () => tasks.filter((task) => task.status === 'pending' || task.status === 'running').length,
     [tasks],
   )
+  const profileNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    profiles.forEach((profile) => map.set(profile.profileId, profile.profileName))
+    return map
+  }, [profiles])
+  const fingerprintHealthResults = useMemo(() => (
+    Object.values(fingerprintHealthById)
+      .sort((a, b) => getFingerprintHealthTimestamp(b) - getFingerprintHealthTimestamp(a))
+      .slice(0, 12)
+  ), [fingerprintHealthById])
 
   const toggleSelect = (profileId: string) => {
     setSelectedIds((prev) => {
@@ -331,16 +492,64 @@ export function SynchronizerPage() {
     }))
   }
 
+  const mergeProfileStatus = useCallback((profile: BrowserProfile | null) => {
+    if (!profile) return
+    setProfiles((prev) => prev.map((item) => (
+      item.profileId === profile.profileId ? { ...item, ...profile } : item
+    )))
+  }, [])
+
+  const waitForDebugReady = useCallback(async (profileId: string) => {
+    const deadline = Date.now() + START_STATUS_POLL_TIMEOUT_MS
+    let latestProfile: BrowserProfile | null = null
+
+    while (Date.now() < deadline) {
+      await sleep(START_STATUS_POLL_INTERVAL_MS)
+      try {
+        const status = await getBrowserInstanceStatus(profileId)
+        if (status) {
+          latestProfile = status
+          mergeProfileStatus(status)
+        }
+        if (status && (!status.running || status.lastError)) return status
+        if (status?.debugReady) return status
+      } catch {
+        // Startup polling is best-effort; the start action itself has already succeeded.
+      }
+    }
+
+    return latestProfile
+  }, [mergeProfileStatus])
+
   const executeTask = async (task: WorkbenchTask) => {
     updateTask(task.id, { status: 'running', error: '' })
+    let feedDetail = task.detail || taskLabel(task.type)
     try {
       switch (task.type) {
-        case 'start':
-          await startBrowserInstance(task.profileId)
+        case 'start': {
+          const startedProfile = await startBrowserInstance(task.profileId)
+          mergeProfileStatus(startedProfile)
+          const readyProfile = startedProfile?.debugReady ? startedProfile : await waitForDebugReady(task.profileId)
+          if (!readyProfile?.debugReady) {
+            feedDetail = '启动完成，等待调试就绪'
+          }
           break
-        case 'stop':
-          await stopBrowserInstance(task.profileId)
+        }
+        case 'stop': {
+          const stoppedProfile = await stopBrowserInstance(task.profileId)
+          mergeProfileStatus(stoppedProfile)
+          setPreviews((prev) => {
+            const next = { ...prev }
+            delete next[task.profileId]
+            return next
+          })
+          setFingerprintHealthById((prev) => {
+            const next = { ...prev }
+            delete next[task.profileId]
+            return next
+          })
           break
+        }
         case 'navigate':
           await navigateProfile(task.profileId, task.detail)
           break
@@ -361,16 +570,43 @@ export function SynchronizerPage() {
         case 'activate':
           await activateProfileWindow(task.profileId)
           break
+        case 'fingerprint-health': {
+          setFingerprintHealthCheckingIds((prev) => {
+            const next = new Set(prev)
+            next.add(task.profileId)
+            return next
+          })
+          try {
+            const health = await checkWorkbenchFingerprintHealthProfile(task.profileId)
+            const normalizedHealth = {
+              ...health,
+              profileId: health.profileId || task.profileId,
+              profileName: health.profileName || task.profileName,
+            }
+            setFingerprintHealthById((prev) => ({
+              ...prev,
+              [normalizedHealth.profileId]: normalizedHealth,
+            }))
+            feedDetail = `指纹体检 ${normalizedHealth.score} 分 · ${fingerprintHealthLevelLabel(normalizedHealth.level)}`
+          } finally {
+            setFingerprintHealthCheckingIds((prev) => {
+              const next = new Set(prev)
+              next.delete(task.profileId)
+              return next
+            })
+          }
+          break
+        }
         default:
           throw new Error(`未知任务: ${task.type}`)
       }
 
-      updateTask(task.id, { status: 'success' })
+      updateTask(task.id, { status: 'success', detail: feedDetail })
       addActionToFeed({
         id: task.id,
         operation: task.type,
         windowName: task.profileName,
-        detail: task.detail || taskLabel(task.type),
+        detail: feedDetail,
         timestamp: new Date().toISOString(),
         status: 'ok',
       })
@@ -553,6 +789,9 @@ export function SynchronizerPage() {
                   <Button size="sm" variant="secondary" onClick={() => enqueueTasks('screenshot', selectedRunningProfiles)} disabled={selectedRunningProfiles.length === 0 || taskRunning}>
                     <Camera className="w-3.5 h-3.5" /> 截图
                   </Button>
+                  <Button size="sm" variant="secondary" className="whitespace-nowrap shrink-0" onClick={() => enqueueTasks('fingerprint-health', selectedRunningProfiles)} disabled={selectedRunningProfiles.length === 0 || taskRunning}>
+                    <Fingerprint className="w-3.5 h-3.5" /> 指纹体检
+                  </Button>
                 </div>
               </div>
 
@@ -646,6 +885,8 @@ export function SynchronizerPage() {
                 {virtualProfiles.virtualItems.map(({ profile, index }) => {
                 const runtime = runningById.get(profile.profileId)
                 const preview = previews[profile.profileId]
+                const fingerprintHealth = fingerprintHealthById[profile.profileId]
+                const fingerprintHealthChecking = fingerprintHealthCheckingIds.has(profile.profileId)
                 const selected = selectedIds.has(profile.profileId)
 
                 return (
@@ -692,6 +933,7 @@ export function SynchronizerPage() {
                               {(profile.tags || []).slice(0, 4).map((tag) => (
                                 <Badge key={tag} size="sm">{tag}</Badge>
                               ))}
+                              {fingerprintHealth && fingerprintHealthBadge(fingerprintHealth)}
                             </div>
                           </div>
                           <Link to={`/browser/edit/${profile.profileId}`}>
@@ -720,6 +962,23 @@ export function SynchronizerPage() {
                           </div>
                         </div>
 
+                        {fingerprintHealth && (
+                          <div className="rounded-md border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] px-2.5 py-2 text-xs min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Fingerprint className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)]" />
+                                <span className="font-medium text-[var(--color-text-primary)] shrink-0">指纹体检</span>
+                                <span className="text-[var(--color-text-muted)] truncate">
+                                  {getFingerprintHealthSummary(fingerprintHealth)}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-[var(--color-text-muted)] shrink-0">
+                                {getFingerprintHealthSource(fingerprintHealth) || 'local-cdp'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex flex-wrap gap-2 mt-auto">
                           <Button size="sm" variant="ghost" onClick={() => enqueueTasks('activate', [profile])} disabled={!profile.running || !(runtime?.pid || profile.pid) || taskRunning}>
                             <MousePointer2 className="w-3.5 h-3.5" /> 激活
@@ -742,6 +1001,9 @@ export function SynchronizerPage() {
                           <Button size="sm" variant="ghost" onClick={() => enqueueTasks('screenshot', [profile])} disabled={!profile.running || !profile.debugReady || taskRunning}>
                             <Camera className="w-3.5 h-3.5" /> 预览
                           </Button>
+                          <Button size="sm" variant="ghost" className="whitespace-nowrap shrink-0" onClick={() => enqueueTasks('fingerprint-health', [profile])} disabled={!profile.running || !profile.debugReady || taskRunning} loading={fingerprintHealthChecking}>
+                            <Fingerprint className="w-3.5 h-3.5" /> 体检
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -755,6 +1017,75 @@ export function SynchronizerPage() {
         </div>
 
         <div className="space-y-4 min-w-0">
+          <Card title="指纹体检结果" subtitle={fingerprintHealthResults.length > 0 ? `最近 ${fingerprintHealthResults.length} 条` : '等待体检'}>
+            {fingerprintHealthResults.length === 0 ? (
+              <div className="py-10 text-center text-xs text-[var(--color-text-muted)]">
+                暂无体检结果
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {fingerprintHealthResults.map((health) => {
+                  const checks = health.checks || []
+                  const abnormalChecks = checks.filter((check) => {
+                    const status = getFingerprintCheckStatus(check)
+                    return status === 'failed' || status === 'warning'
+                  })
+                  const visibleChecks = (abnormalChecks.length > 0 ? abnormalChecks : checks).slice(0, 2)
+                  const checkedAt = getFingerprintHealthTimestamp(health)
+                  const source = getFingerprintHealthSource(health)
+                  const profileName = health.profileName || profileNameById.get(health.profileId) || health.profileId
+
+                  return (
+                    <div key={health.profileId} className="rounded-lg border border-[var(--color-border-muted)] px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">
+                            {profileName}
+                          </p>
+                          <p className="text-[11px] text-[var(--color-text-muted)] truncate">
+                            {checkedAt > 0 ? new Date(checkedAt).toLocaleTimeString() : '刚刚'}
+                            {source ? ` · ${source}` : ''}
+                          </p>
+                        </div>
+                        {fingerprintHealthBadge(health)}
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <Badge size="sm" variant="success">通过 {checks.filter((check) => getFingerprintCheckStatus(check) === 'passed').length}</Badge>
+                        <Badge size="sm" variant={abnormalChecks.length > 0 ? 'error' : 'default'}>异常 {abnormalChecks.length}</Badge>
+                      </div>
+
+                      <p className="mt-2 text-[11px] text-[var(--color-text-secondary)] line-clamp-2">
+                        {getFingerprintHealthSummary(health)}
+                      </p>
+
+                      {visibleChecks.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {visibleChecks.map((check, index) => {
+                            const checkStatus = getFingerprintCheckStatus(check)
+                            return (
+                              <div key={`${health.profileId}-${getFingerprintCheckName(check)}-${index}`} className="flex items-center gap-2 text-[11px] min-w-0">
+                                <Badge
+                                  size="sm"
+                                  variant={checkStatus === 'passed' ? 'success' : checkStatus === 'warning' ? 'warning' : checkStatus === 'failed' ? 'error' : 'default'}
+                                >
+                                  {checkStatus === 'passed' ? '通过' : checkStatus === 'warning' ? '预警' : checkStatus === 'failed' ? '异常' : '未知'}
+                                </Badge>
+                                <span className="text-[var(--color-text-muted)] truncate">
+                                  {getFingerprintCheckName(check)}：{getFingerprintCheckMessage(check)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+
           <Card title="任务队列" subtitle={taskRunning ? '执行中' : '空闲'}>
             {tasks.length === 0 ? (
               <div className="py-10 text-center text-xs text-[var(--color-text-muted)]">

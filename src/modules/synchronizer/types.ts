@@ -48,7 +48,7 @@ export interface SyncActionFeedEntry {
   status: 'ok' | 'error'
 }
 
-export type WorkbenchTaskType = 'start' | 'stop' | 'navigate' | 'refresh' | 'screenshot' | 'activate'
+export type WorkbenchTaskType = 'start' | 'stop' | 'navigate' | 'refresh' | 'screenshot' | 'activate' | 'fingerprint-health'
 export type WorkbenchTaskStatus = 'pending' | 'running' | 'success' | 'error'
 
 export interface WorkbenchTask {
@@ -60,5 +60,66 @@ export interface WorkbenchTask {
   status: WorkbenchTaskStatus
   createdAt: string
   updatedAt: string
+  error?: string
+}
+
+export type BrowserInstanceLifecycleEventName =
+  | 'browser:instance:started'
+  | 'browser:instance:updated'
+  | 'browser:instance:stopped'
+  | 'browser:instance:crashed'
+
+export interface BrowserInstanceLifecycleEvent {
+  eventName: BrowserInstanceLifecycleEventName
+  profileId?: string
+  profileName?: string
+  error?: string
+  payload: unknown
+}
+
+export type FingerprintHealthLevel = 'good' | 'warning' | 'risk' | 'unknown'
+export type FingerprintHealthCheckStatus = 'pass' | 'warning' | 'fail' | 'info'
+
+export interface WorkbenchFingerprintSnapshot {
+  userAgent?: string
+  platform?: string
+  hardwareConcurrency?: number
+  deviceMemory?: number
+  colorDepth?: number
+  pixelDepth?: number
+  screenWidth?: number
+  screenHeight?: number
+  availWidth?: number
+  availHeight?: number
+  devicePixelRatio?: number
+  maxTouchPoints?: number
+  vendor?: string
+  timezone?: string
+  language?: string
+  languages?: string[]
+  canvasHash?: string
+  webglVendor?: string
+  webglRenderer?: string
+  fontHash?: string
+}
+
+export interface WorkbenchFingerprintHealthCheck {
+  id: string
+  status: FingerprintHealthCheckStatus
+  message: string
+  expected?: string
+  actual?: string
+  penalty?: number
+}
+
+export interface WorkbenchFingerprintHealthProfile {
+  profileId: string
+  profileName?: string
+  score: number
+  level: FingerprintHealthLevel
+  checks: WorkbenchFingerprintHealthCheck[]
+  fingerprint?: WorkbenchFingerprintSnapshot
+  capturedAt: string
+  source: string
   error?: string
 }

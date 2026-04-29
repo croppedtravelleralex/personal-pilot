@@ -132,7 +132,7 @@
 | BR-P2-002 | P2 | Done | `/api/recording/sessions/cleanup` 支持 POST；GET 保留兼容并返回 `deprecated` / `compatibility` | 后续可在版本切换时移除 GET 兼容 |
 | BR-P2-003 | P2 | Done | `BehaviorRecordingPage.tsx`、`RecordingPanel.tsx`、`NaturalLanguageTask.tsx` 行为录制调用收口到 `frontend/src/modules/browser/api.ts` | 其他非行为录制页面的历史 Wails 调用不在本切片范围 |
 | BR-P2-004 | P2 | Done | 后端暴露 `ActiveRecordingStatus` / `BehaviorRecordingStatus` / HTTP `/api/recording/status`；`BrowserListPage.tsx` 与 `RecordingPanel.tsx` 均从 `fetchRecordingStatus()` 同步录制中 profile | 当前用查询/轮询同步，不依赖前端本地状态作为权威来源 |
-| BR-P2-005 | P2 | Done | `RecordingPanel.tsx` 播放事件、`NaturalLanguageTask.tsx` LLM 事件均通过 `api.ts` 中的订阅函数释放 `EventsOn` 返回的 off 函数，不再对同事件名调用 `EventsOff` | `CoreManagementPage`、`EmbeddedBrowserPage` 等非录制页仍有历史 `EventsOff`，另行治理 |
+| BR-P2-005 | P2 | Done | `RecordingPanel.tsx` 播放事件、`NaturalLanguageTask.tsx` LLM 事件均通过 `api.ts` 中的订阅函数释放 `EventsOn` 返回的 off 函数，不再对同事件名调用 `EventsOff` | `CoreManagementPage` 等非录制页如有历史 `EventsOff`，另行治理；旧实验页已移除 |
 | BR-P3-001 | P3 | Done | 新增 `RecordingSummary`、`RecordingDetailPage`、`BehaviorRecordingSummaryList()`、`BehaviorGetRecordingDetail(id, offset, limit)`；HTTP list 默认返回 metadata，Wails 详情按页返回 events；manifest/index 已完成，detail page 已走索引 | 后续用超大录制样本复核读取成本，不应退回一次性全量 JSON 读取 |
 | BR-P3-002 | P3 | Done | `RecordingPanel.tsx` 搜索使用 300ms debounce；录制列表使用 25/50/100 分页；`RecordingDetailModal.tsx` 事件列表使用 50/100/200 分页 | 未新增虚拟滚动库；本切片选择分页满足大量数据渲染约束 |
 | BR-P3-003 | P3 | Done | `inject_script.go` 识别 password/otp/captcha/token 等敏感字段并标记 `sensitive`；`recorder_model_test.go` 验证敏感 text 被清空 | 真实敏感值不会回放，这是安全边界 |

@@ -45,7 +45,7 @@
 ## 实例工作台专项接手规则
 
 - 主线是非容器化：浏览器保持外部真实顶层窗口，软件内做可视化、API 操作和任务编排。
-- 不要把 `EmbeddedBrowserPage` 或 headless screencast 继续扩展成主体验。
+- 不要恢复已移除的旧实验页或 headless screencast 主体验；L0 主线只管理外部真实 Chromium。
 - 工作台任务必须优先复用现有实例、profile、debugPort 和 CDP 能力，不改指纹启动参数。
 - 外部窗口激活/排列只作为 Windows-only 辅助能力；按 PID 查找真实顶层窗口，不做 re-parent，不改变启动参数。
 - 超过 200 条实例列表必须继续走虚拟滚动，搜索默认 250-400ms debounce。

@@ -175,14 +175,6 @@ export function DeleteGroup(arg1:string):Promise<void>;
 
 export function DeleteRecording(arg1:string):Promise<void>;
 
-export function EmbeddedBrowserFocus(arg1:string):Promise<void>;
-
-export function EmbeddedBrowserResize(arg1:number,arg2:number):Promise<void>;
-
-export function EmbeddedBrowserStart(arg1:string):Promise<browser.Profile>;
-
-export function EmbeddedBrowserStop(arg1:string):Promise<void>;
-
 export function EmitAndLogEvent(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function EventLogCount(arg1:backend.EventLogQueryInput):Promise<number>;

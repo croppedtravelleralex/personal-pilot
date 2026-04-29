@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/launchcode"
@@ -95,6 +96,27 @@ func (s *instanceWorkbenchStarter) WorkbenchFingerprintProfile(profileId string)
 		Timezone:            "Asia/Shanghai",
 		Language:            "zh-CN",
 	}, nil
+}
+
+func (s *instanceWorkbenchStarter) WorkbenchFingerprintHealthProfile(profileId string) (*browser.FingerprintHealthProfile, error) {
+	if s.workbenchErr != nil {
+		return nil, s.workbenchErr
+	}
+	return browser.NewFingerprintHealthProfile(profileId, nil, &browser.FingerprintSnapshot{
+		UserAgent:           "test-agent Chrome",
+		Platform:            "Win32",
+		HardwareConcurrency: 8,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		AvailWidth:          1920,
+		AvailHeight:         1040,
+		Timezone:            "Asia/Shanghai",
+		Language:            "zh-CN",
+		CanvasHash:          "abc123",
+		WebGLVendor:         "Google Inc.",
+		WebGLRenderer:       "ANGLE",
+		FontHash:            "10.00,20.00",
+	}, time.Now()), nil
 }
 
 func (s *instanceWorkbenchStarter) WorkbenchActivateProfile(profileId string) error {
@@ -197,6 +219,7 @@ func TestWorkbenchHTTPAPI(t *testing.T) {
 		postJSON(t, handler, "/api/workbench/navigate", `{"profileId":"profile-1","url":"https://example.com"}`, http.StatusOK)
 		postJSON(t, handler, "/api/workbench/refresh", `{"profileId":"profile-1"}`, http.StatusOK)
 		wScreenshot := postJSON(t, handler, "/api/workbench/screenshot", `{"profileId":"profile-1"}`, http.StatusOK)
+		wHealth := postJSON(t, handler, "/api/workbench/fingerprint-health", `{"profileId":"profile-1"}`, http.StatusOK)
 		wArrange := postJSON(t, handler, "/api/workbench/arrange", `{"profileIds":["profile-1","profile-2"],"layout":"grid"}`, http.StatusOK)
 
 		if len(starter.navigated) != 1 || starter.navigated[0] != "profile-1 https://example.com" {
@@ -218,6 +241,20 @@ func TestWorkbenchHTTPAPI(t *testing.T) {
 		}
 		if !screenshotResp.OK || screenshotResp.Screenshot == "" {
 			t.Fatalf("bad screenshot response: %+v", screenshotResp)
+		}
+
+		var healthResp struct {
+			OK          bool                         `json:"ok"`
+			Score       int                          `json:"score"`
+			Level       string                       `json:"level"`
+			Source      string                       `json:"source"`
+			Fingerprint *browser.FingerprintSnapshot `json:"fingerprint"`
+		}
+		if err := json.NewDecoder(wHealth.Body).Decode(&healthResp); err != nil {
+			t.Fatalf("decode fingerprint health: %v", err)
+		}
+		if !healthResp.OK || healthResp.Score <= 0 || healthResp.Level == "" || healthResp.Source != browser.FingerprintHealthSourceLocalCDP || healthResp.Fingerprint == nil {
+			t.Fatalf("bad fingerprint health response: %+v", healthResp)
 		}
 
 		var arrangeResp struct {
