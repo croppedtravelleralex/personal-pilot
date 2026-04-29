@@ -59,17 +59,11 @@ func TestCharInterval(t *testing.T) {
 
 func TestCharInterval_UppercasePenalty(t *testing.T) {
 	cfg := ConfigForLevel(LevelMedium)
-	// With variance, uppercase might not always be slower, but on average it should
-	var lowerSum, upperSum uint32
-	const n = 500
-	for i := 0; i < n; i++ {
-		lowerSum += CharInterval(&cfg, 'a')
-		upperSum += CharInterval(&cfg, 'A')
-	}
-	lowerAvg := float64(lowerSum) / float64(n)
-	upperAvg := float64(upperSum) / float64(n)
-	// Uppercase should be ~25ms slower on average
-	if upperAvg < lowerAvg-10 {
-		t.Fatalf("Uppercase avg (%.1f) should be >= lowercase avg (%.1f)", upperAvg, lowerAvg)
+	cfg.Typing.SpeedVariancePercent = 0
+
+	lower := CharInterval(&cfg, 'a')
+	upper := CharInterval(&cfg, 'A')
+	if upper != lower+25 {
+		t.Fatalf("Uppercase interval = %d, want lowercase+25 (%d)", upper, lower+25)
 	}
 }

@@ -1,6 +1,6 @@
 module ant-chrome
 
-go 1.22.0
+go 1.25.0
 
 require (
 	github.com/energye/systray v1.0.3
@@ -10,7 +10,7 @@ require (
 	github.com/metacubex/mihomo v1.19.20
 	github.com/wailsapp/wails/v2 v2.11.0
 	golang.org/x/net v0.35.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.28.0
 )

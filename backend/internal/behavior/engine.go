@@ -12,12 +12,12 @@ import (
 
 // Engine runs behavioral simulation for a single browser instance.
 type Engine struct {
-	mu       sync.Mutex
-	ctx      context.Context
-	cancel   context.CancelFunc
-	cdp      *cdpConn
-	profile  *Profile
-	state    State
+	mu        sync.Mutex
+	ctx       context.Context
+	cancel    context.CancelFunc
+	cdp       *cdpConn
+	profile   *Profile
+	state     State
 	debugPort int
 }
 

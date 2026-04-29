@@ -146,7 +146,7 @@ func VerifyFingerprint(debugPort int, profileID string, expectedArgs []string, e
 
 	log := logger.New("Browser")
 
-	actual, err := extractFingerprint(debugPort)
+	actual, err := ExtractFingerprint(debugPort)
 	if err != nil {
 		log.Error("CDP 指纹提取失败", logger.F("profile_id", profileID), logger.F("error", err))
 		return
@@ -173,26 +173,37 @@ var (
 	cdpWSDialer   = &websocket.Dialer{HandshakeTimeout: 5 * time.Second}
 )
 
-func extractFingerprint(debugPort int) (*FingerprintSnapshot, error) {
-	// Step 1: get the WebSocket debugger URL from /json/version
-	resp, err := cdpHTTPClient.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", debugPort))
+func ExtractFingerprint(debugPort int) (*FingerprintSnapshot, error) {
+	// Step 1: get a page target WebSocket URL from /json.
+	resp, err := cdpHTTPClient.Get(fmt.Sprintf("http://127.0.0.1:%d/json", debugPort))
 	if err != nil {
 		return nil, fmt.Errorf("cdp connect failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var version struct {
+	var targets []struct {
+		Type                 string `json:"type"`
+		URL                  string `json:"url"`
 		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&version); err != nil {
-		return nil, fmt.Errorf("decode /json/version: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
+		return nil, fmt.Errorf("decode /json: %w", err)
 	}
-	if version.WebSocketDebuggerURL == "" {
-		return nil, fmt.Errorf("no webSocketDebuggerUrl in /json/version")
+	wsURL := ""
+	for _, target := range targets {
+		if strings.EqualFold(target.Type, "page") &&
+			strings.TrimSpace(target.WebSocketDebuggerURL) != "" &&
+			!strings.HasPrefix(strings.ToLower(strings.TrimSpace(target.URL)), "devtools://") {
+			wsURL = target.WebSocketDebuggerURL
+			break
+		}
+	}
+	if wsURL == "" {
+		return nil, fmt.Errorf("no page webSocketDebuggerUrl in /json")
 	}
 
 	// Step 2: connect via WebSocket
-	ws, _, err := cdpWSDialer.Dial(version.WebSocketDebuggerURL, nil)
+	ws, _, err := cdpWSDialer.Dial(wsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("websocket dial: %w", err)
 	}
@@ -200,22 +211,33 @@ func extractFingerprint(debugPort int) (*FingerprintSnapshot, error) {
 
 	// Step 3: send Runtime.evaluate
 	type cdpParams struct {
-		Expression string `json:"expression"`
+		Expression    string `json:"expression"`
+		ReturnByValue bool   `json:"returnByValue"`
+		AwaitPromise  bool   `json:"awaitPromise"`
 	}
 	type cdpRequest struct {
 		ID     int       `json:"id"`
 		Method string    `json:"method"`
 		Params cdpParams `json:"params"`
 	}
-	type cdpResult struct {
-		Value string `json:"value"`
-	}
 	type cdpResponse struct {
-		ID     int        `json:"id"`
-		Result *cdpResult `json:"result"`
+		ID     int `json:"id"`
+		Result *struct {
+			Result *struct {
+				Value string `json:"value"`
+			} `json:"result"`
+			ExceptionDetails json.RawMessage `json:"exceptionDetails,omitempty"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
 	}
 
-	req := cdpRequest{ID: 1, Method: "Runtime.evaluate", Params: cdpParams{Expression: jsExtractFingerprint}}
+	req := cdpRequest{
+		ID:     1,
+		Method: "Runtime.evaluate",
+		Params: cdpParams{Expression: jsExtractFingerprint, ReturnByValue: true, AwaitPromise: true},
+	}
 	if err := ws.WriteJSON(req); err != nil {
 		return nil, fmt.Errorf("write cdp request: %w", err)
 	}
@@ -225,12 +247,18 @@ func extractFingerprint(debugPort int) (*FingerprintSnapshot, error) {
 	if err := ws.ReadJSON(&cdpResp); err != nil {
 		return nil, fmt.Errorf("read cdp response: %w", err)
 	}
-	if cdpResp.Result == nil || cdpResp.Result.Value == "" {
+	if cdpResp.Error != nil {
+		return nil, fmt.Errorf("cdp error: %s", cdpResp.Error.Message)
+	}
+	if cdpResp.Result != nil && len(cdpResp.Result.ExceptionDetails) > 0 {
+		return nil, fmt.Errorf("cdp exception: %s", string(cdpResp.Result.ExceptionDetails))
+	}
+	if cdpResp.Result == nil || cdpResp.Result.Result == nil || cdpResp.Result.Result.Value == "" {
 		return nil, fmt.Errorf("cdp returned empty result")
 	}
 
 	var snap FingerprintSnapshot
-	if err := json.Unmarshal([]byte(cdpResp.Result.Value), &snap); err != nil {
+	if err := json.Unmarshal([]byte(cdpResp.Result.Result.Value), &snap); err != nil {
 		return nil, fmt.Errorf("unmarshal fingerprint json: %w", err)
 	}
 	return &snap, nil

@@ -50,19 +50,19 @@ func (a *App) stopRuntimeServices() {
 		}
 		a.behaviorEnginesMu.Unlock()
 
-	// Stop all active recorders and playbacks
-	a.recMu.Lock()
-	for id := range a.recorders {
-		delete(a.recorders, id)
-	}
-	a.recMu.Unlock()
+		// Stop all active recorders and playbacks
+		a.recMu.Lock()
+		for id := range a.recorders {
+			delete(a.recorders, id)
+		}
+		a.recMu.Unlock()
 
-	a.playMu.Lock()
-	for id, engine := range a.playbacks {
-		engine.Stop()
-		delete(a.playbacks, id)
-	}
-	a.playMu.Unlock()
+		a.playMu.Lock()
+		for id, engine := range a.playbacks {
+			engine.Stop()
+			delete(a.playbacks, id)
+		}
+		a.playMu.Unlock()
 
 		if a.scheduler != nil {
 			a.scheduler.Stop()

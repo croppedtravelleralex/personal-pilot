@@ -12,6 +12,8 @@ Thumbs.db
 
 # Local agent/editor rules
 .windsurfrules
+.claude/
+.playwright-mcp/
 
 # Logs
 *.log
@@ -51,15 +53,16 @@ chrome/*
 publish/staging/
 publish/output/
 
-# Internal docs / scratch files
-docs/
+# Internal scratch files
 DEPLOYMENT_GUIDE.md
 plan.md
 pic/
+dev-log.txt
 
 # Runtime data
 data/*
 !data/README.md
+backend/data/
 snapshots/
 app.db
 config.yaml.broken-*
@@ -70,9 +73,13 @@ proxies.yaml
 profiles.yaml
 
 # Frontend deps/cache
+node_modules/
+dist/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+src-tauri/target/
+src-tauri/gen/
 
 # Python cache
 __pycache__/

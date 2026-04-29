@@ -43,24 +43,24 @@ type TaskAction struct {
 
 // TaskDef is a complete task definition.
 type TaskDef struct {
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	Trigger    TaskTrigger `json:"trigger"`
+	ID         string       `json:"id"`
+	Name       string       `json:"name"`
+	Trigger    TaskTrigger  `json:"trigger"`
 	Actions    []TaskAction `json:"actions"`
-	MaxRetries int         `json:"maxRetries"`
-	RetryDelay string      `json:"retryDelay"` // "5s", "1m"
-	DependsOn  []string    `json:"dependsOn,omitempty"`
-	ProfileID  string      `json:"profileId,omitempty"`
-	Enabled    bool        `json:"enabled"`
-	CreatedAt  time.Time   `json:"createdAt"`
-	UpdatedAt  time.Time   `json:"updatedAt"`
+	MaxRetries int          `json:"maxRetries"`
+	RetryDelay string       `json:"retryDelay"` // "5s", "1m"
+	DependsOn  []string     `json:"dependsOn,omitempty"`
+	ProfileID  string       `json:"profileId,omitempty"`
+	Enabled    bool         `json:"enabled"`
+	CreatedAt  time.Time    `json:"createdAt"`
+	UpdatedAt  time.Time    `json:"updatedAt"`
 
 	// Runtime state (not persisted)
-	status      TaskStatus
-	lastRunAt   time.Time
-	lastError   string
-	retryCount  int
-	mu          sync.Mutex
+	status     TaskStatus
+	lastRunAt  time.Time
+	lastError  string
+	retryCount int
+	mu         sync.Mutex
 }
 
 // Status returns the current task status.

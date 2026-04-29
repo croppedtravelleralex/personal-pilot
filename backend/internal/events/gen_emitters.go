@@ -12,83 +12,83 @@ import (
 
 // AccountFollowBlockPayload is the payload for event "account:follow:block".
 type AccountFollowBlockPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId    string `json:"profileId"`
 	TargetUserId string `json:"targetUserId"`
 }
 
 // AccountFollowFollowPayload is the payload for event "account:follow:follow".
 type AccountFollowFollowPayload struct {
-	ProfileId string `json:"profileId"`
-	TargetUserId string `json:"targetUserId"`
+	ProfileId      string `json:"profileId"`
+	TargetUserId   string `json:"targetUserId"`
 	TargetUserName string `json:"targetUserName"`
 }
 
 // AccountFollowMutePayload is the payload for event "account:follow:mute".
 type AccountFollowMutePayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId    string `json:"profileId"`
 	TargetUserId string `json:"targetUserId"`
 }
 
 // AccountFollowUnfollowPayload is the payload for event "account:follow:unfollow".
 type AccountFollowUnfollowPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId    string `json:"profileId"`
 	TargetUserId string `json:"targetUserId"`
 }
 
 // AccountLoginAttemptPayload is the payload for event "account:login:attempt".
 type AccountLoginAttemptPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	AccountName string `json:"accountName"`
 	LoginMethod string `json:"loginMethod"`
 }
 
 // AccountLoginBlockedPayload is the payload for event "account:login:blocked".
 type AccountLoginBlockedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	AccountName string `json:"accountName"`
 	BlockReason string `json:"blockReason"`
-	BlockUntil string `json:"blockUntil"`
+	BlockUntil  string `json:"blockUntil"`
 }
 
 // AccountLoginCaptchaPayload is the payload for event "account:login:captcha".
 type AccountLoginCaptchaPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	AccountName string `json:"accountName"`
 	CaptchaType string `json:"captchaType"`
 }
 
 // AccountLoginFailedPayload is the payload for event "account:login:failed".
 type AccountLoginFailedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	AccountName string `json:"accountName"`
-	Reason string `json:"reason"`
+	Reason      string `json:"reason"`
 }
 
 // AccountLoginSessionExpiredPayload is the payload for event "account:login:session-expired".
 type AccountLoginSessionExpiredPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	AccountName string `json:"accountName"`
 }
 
 // AccountLoginSuccessPayload is the payload for event "account:login:success".
 type AccountLoginSuccessPayload struct {
-	ProfileId string `json:"profileId"`
-	AccountName string `json:"accountName"`
-	AccountId string `json:"accountId"`
-	LoginDuration int64 `json:"loginDuration"`
+	ProfileId     string `json:"profileId"`
+	AccountName   string `json:"accountName"`
+	AccountId     string `json:"accountId"`
+	LoginDuration int64  `json:"loginDuration"`
 }
 
 // AccountLoginTimeoutPayload is the payload for event "account:login:timeout".
 type AccountLoginTimeoutPayload struct {
-	ProfileId string `json:"profileId"`
-	AccountName string `json:"accountName"`
-	TimeoutSeconds int `json:"timeoutSeconds"`
+	ProfileId      string `json:"profileId"`
+	AccountName    string `json:"accountName"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
 }
 
 // AccountLoginVerifyPayload is the payload for event "account:login:verify".
 type AccountLoginVerifyPayload struct {
-	ProfileId string `json:"profileId"`
-	AccountName string `json:"accountName"`
+	ProfileId    string `json:"profileId"`
+	AccountName  string `json:"accountName"`
 	VerifyMethod string `json:"verifyMethod"`
 }
 
@@ -99,84 +99,84 @@ type AccountProfileAvatarChangedPayload struct {
 
 // AccountProfileReportedPayload is the payload for event "account:profile:reported".
 type AccountProfileReportedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId    string `json:"profileId"`
 	ReportReason string `json:"reportReason"`
 }
 
 // AccountProfileUpdatedPayload is the payload for event "account:profile:updated".
 type AccountProfileUpdatedPayload struct {
-	ProfileId string `json:"profileId"`
-	Fields []string `json:"fields"`
+	ProfileId string   `json:"profileId"`
+	Fields    []string `json:"fields"`
 }
 
 // AccountProfileVerifiedPayload is the payload for event "account:profile:verified".
 type AccountProfileVerifiedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId  string `json:"profileId"`
 	VerifyType string `json:"verifyType"`
-	Status string `json:"status"`
+	Status     string `json:"status"`
 }
 
 // AutomationBatchFailedPayload is the payload for event "automation:batch:failed".
 type AutomationBatchFailedPayload struct {
 	BatchId string `json:"batchId"`
-	Error string `json:"error"`
+	Error   string `json:"error"`
 }
 
 // AutomationBatchItemCompletePayload is the payload for event "automation:batch:item-complete".
 type AutomationBatchItemCompletePayload struct {
-	BatchId string `json:"batchId"`
-	TaskId string `json:"taskId"`
-	Completed int `json:"completed"`
-	Total int `json:"total"`
+	BatchId   string `json:"batchId"`
+	TaskId    string `json:"taskId"`
+	Completed int    `json:"completed"`
+	Total     int    `json:"total"`
 }
 
 // AutomationBatchStartedPayload is the payload for event "automation:batch:started".
 type AutomationBatchStartedPayload struct {
-	BatchId string `json:"batchId"`
-	TotalTasks int `json:"totalTasks"`
+	BatchId    string `json:"batchId"`
+	TotalTasks int    `json:"totalTasks"`
 }
 
 // AutomationBatchSummaryPayload is the payload for event "automation:batch:summary".
 type AutomationBatchSummaryPayload struct {
-	BatchId string `json:"batchId"`
-	Total int `json:"total"`
-	Success int `json:"success"`
-	Failed int `json:"failed"`
-	Duration int64 `json:"duration"`
+	BatchId  string `json:"batchId"`
+	Total    int    `json:"total"`
+	Success  int    `json:"success"`
+	Failed   int    `json:"failed"`
+	Duration int64  `json:"duration"`
 }
 
 // AutomationRuleCooldownSkippedPayload is the payload for event "automation:rule:cooldown-skipped".
 type AutomationRuleCooldownSkippedPayload struct {
-	RuleId string `json:"ruleId"`
+	RuleId   string `json:"ruleId"`
 	RuleName string `json:"ruleName"`
 }
 
 // AutomationRuleTriggeredPayload is the payload for event "automation:rule:triggered".
 type AutomationRuleTriggeredPayload struct {
-	RuleId string `json:"ruleId"`
-	RuleName string `json:"ruleName"`
+	RuleId       string `json:"ruleId"`
+	RuleName     string `json:"ruleName"`
 	TriggerEvent string `json:"triggerEvent"`
 }
 
 // AutomationScriptActionCompletedPayload is the payload for event "automation:script:action-completed".
 type AutomationScriptActionCompletedPayload struct {
-	TaskId string `json:"taskId"`
+	TaskId     string `json:"taskId"`
 	ActionType string `json:"actionType"`
-	DurationMs int64 `json:"durationMs"`
+	DurationMs int64  `json:"durationMs"`
 }
 
 // AutomationScriptActionFailedPayload is the payload for event "automation:script:action-failed".
 type AutomationScriptActionFailedPayload struct {
-	TaskId string `json:"taskId"`
+	TaskId     string `json:"taskId"`
 	ActionType string `json:"actionType"`
-	Error string `json:"error"`
+	Error      string `json:"error"`
 }
 
 // AutomationScriptActionStartingPayload is the payload for event "automation:script:action-starting".
 type AutomationScriptActionStartingPayload struct {
-	TaskId string `json:"taskId"`
+	TaskId     string `json:"taskId"`
 	ActionType string `json:"actionType"`
-	Target string `json:"target"`
+	Target     string `json:"target"`
 }
 
 // AutomationScriptCancelledPayload is the payload for event "automation:script:cancelled".
@@ -186,14 +186,14 @@ type AutomationScriptCancelledPayload struct {
 
 // AutomationScriptCompletedPayload is the payload for event "automation:script:completed".
 type AutomationScriptCompletedPayload struct {
-	TaskId string `json:"taskId"`
-	DurationMs int64 `json:"durationMs"`
+	TaskId     string `json:"taskId"`
+	DurationMs int64  `json:"durationMs"`
 }
 
 // AutomationScriptFailedPayload is the payload for event "automation:script:failed".
 type AutomationScriptFailedPayload struct {
 	TaskId string `json:"taskId"`
-	Error string `json:"error"`
+	Error  string `json:"error"`
 }
 
 // AutomationScriptPausedPayload is the payload for event "automation:script:paused".
@@ -209,14 +209,14 @@ type AutomationScriptResumedPayload struct {
 
 // AutomationScriptRetryingPayload is the payload for event "automation:script:retrying".
 type AutomationScriptRetryingPayload struct {
-	TaskId string `json:"taskId"`
-	Attempt int `json:"attempt"`
-	MaxRetries int `json:"maxRetries"`
+	TaskId     string `json:"taskId"`
+	Attempt    int    `json:"attempt"`
+	MaxRetries int    `json:"maxRetries"`
 }
 
 // AutomationScriptStartedPayload is the payload for event "automation:script:started".
 type AutomationScriptStartedPayload struct {
-	TaskId string `json:"taskId"`
+	TaskId   string `json:"taskId"`
 	TaskName string `json:"taskName"`
 }
 
@@ -227,30 +227,30 @@ type AutomationTaskCancelledPayload struct {
 
 // AutomationTaskCompletedPayload is the payload for event "automation:task:completed".
 type AutomationTaskCompletedPayload struct {
-	TaskId string `json:"taskId"`
-	Duration int64 `json:"duration"`
-	Result map[string]interface{} `json:"result"`
+	TaskId   string                 `json:"taskId"`
+	Duration int64                  `json:"duration"`
+	Result   map[string]interface{} `json:"result"`
 }
 
 // AutomationTaskCreatedPayload is the payload for event "automation:task:created".
 type AutomationTaskCreatedPayload struct {
-	TaskId string `json:"taskId"`
-	TaskName string `json:"taskName"`
+	TaskId      string `json:"taskId"`
+	TaskName    string `json:"taskName"`
 	TriggerType string `json:"triggerType"`
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 }
 
 // AutomationTaskExpiredPayload is the payload for event "automation:task:expired".
 type AutomationTaskExpiredPayload struct {
-	TaskId string `json:"taskId"`
+	TaskId    string `json:"taskId"`
 	ExpiredAt string `json:"expiredAt"`
 }
 
 // AutomationTaskFailedPayload is the payload for event "automation:task:failed".
 type AutomationTaskFailedPayload struct {
 	TaskId string `json:"taskId"`
-	Error string `json:"error"`
-	Step string `json:"step"`
+	Error  string `json:"error"`
+	Step   string `json:"step"`
 }
 
 // AutomationTaskPausedPayload is the payload for event "automation:task:paused".
@@ -260,8 +260,8 @@ type AutomationTaskPausedPayload struct {
 
 // AutomationTaskProgressPayload is the payload for event "automation:task:progress".
 type AutomationTaskProgressPayload struct {
-	TaskId string `json:"taskId"`
-	Progress int `json:"progress"`
+	TaskId      string `json:"taskId"`
+	Progress    int    `json:"progress"`
 	CurrentStep string `json:"currentStep"`
 }
 
@@ -272,15 +272,15 @@ type AutomationTaskResumedPayload struct {
 
 // AutomationTaskRetriedPayload is the payload for event "automation:task:retried".
 type AutomationTaskRetriedPayload struct {
-	TaskId string `json:"taskId"`
-	Attempt int `json:"attempt"`
-	MaxRetries int `json:"maxRetries"`
+	TaskId     string `json:"taskId"`
+	Attempt    int    `json:"attempt"`
+	MaxRetries int    `json:"maxRetries"`
 }
 
 // AutomationTaskStartedPayload is the payload for event "automation:task:started".
 type AutomationTaskStartedPayload struct {
-	TaskId string `json:"taskId"`
-	TaskName string `json:"taskName"`
+	TaskId    string `json:"taskId"`
+	TaskName  string `json:"taskName"`
 	ProfileId string `json:"profileId"`
 }
 
@@ -291,8 +291,8 @@ type BackupExportCollectingPayload struct {
 
 // BackupExportCompletedPayload is the payload for event "backup:export:completed".
 type BackupExportCompletedPayload struct {
-	Path string `json:"path"`
-	SizeBytes int64 `json:"sizeBytes"`
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"sizeBytes"`
 }
 
 // BackupExportCompressingPayload is the payload for event "backup:export:compressing".
@@ -322,21 +322,21 @@ type BackupImportStartedPayload struct {
 
 // BrowserInstanceCrashedPayload is the payload for event "browser:instance:crashed".
 type BrowserInstanceCrashedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	ProfileName string `json:"profileName"`
-	Error string `json:"error"`
+	Error       string `json:"error"`
 }
 
 // BrowserInstanceStartCdpAttachedPayload is the payload for event "browser:instance:start:cdp-attached".
 type BrowserInstanceStartCdpAttachedPayload struct {
 	ProfileId string `json:"profileId"`
-	CdpUrl string `json:"cdpUrl"`
+	CdpUrl    string `json:"cdpUrl"`
 }
 
 // BrowserInstanceStartCdpAttachingPayload is the payload for event "browser:instance:start:cdp-attaching".
 type BrowserInstanceStartCdpAttachingPayload struct {
 	ProfileId string `json:"profileId"`
-	DebugPort int `json:"debugPort"`
+	DebugPort int    `json:"debugPort"`
 }
 
 // BrowserInstanceStartCheckingRunningPayload is the payload for event "browser:instance:start:checking-running".
@@ -346,27 +346,27 @@ type BrowserInstanceStartCheckingRunningPayload struct {
 
 // BrowserInstanceStartCompletedPayload is the payload for event "browser:instance:start:completed".
 type BrowserInstanceStartCompletedPayload struct {
-	ProfileId string `json:"profileId"`
-	DurationMs int64 `json:"durationMs"`
-	CdpUrl string `json:"cdpUrl"`
+	ProfileId  string `json:"profileId"`
+	DurationMs int64  `json:"durationMs"`
+	CdpUrl     string `json:"cdpUrl"`
 }
 
 // BrowserInstanceStartCoreReadyPayload is the payload for event "browser:instance:start:core-ready".
 type BrowserInstanceStartCoreReadyPayload struct {
 	ProfileId string `json:"profileId"`
-	CorePath string `json:"corePath"`
+	CorePath  string `json:"corePath"`
 }
 
 // BrowserInstanceStartCoreValidatingPayload is the payload for event "browser:instance:start:core-validating".
 type BrowserInstanceStartCoreValidatingPayload struct {
 	ProfileId string `json:"profileId"`
-	CoreId string `json:"coreId"`
+	CoreId    string `json:"coreId"`
 }
 
 // BrowserInstanceStartLauncherSpawnedPayload is the payload for event "browser:instance:start:launcher-spawned".
 type BrowserInstanceStartLauncherSpawnedPayload struct {
 	ProfileId string `json:"profileId"`
-	Pid int `json:"pid"`
+	Pid       int    `json:"pid"`
 }
 
 // BrowserInstanceStartLauncherSpawningPayload is the payload for event "browser:instance:start:launcher-spawning".
@@ -377,7 +377,7 @@ type BrowserInstanceStartLauncherSpawningPayload struct {
 // BrowserInstanceStartPortAllocatedPayload is the payload for event "browser:instance:start:port-allocated".
 type BrowserInstanceStartPortAllocatedPayload struct {
 	ProfileId string `json:"profileId"`
-	DebugPort int `json:"debugPort"`
+	DebugPort int    `json:"debugPort"`
 }
 
 // BrowserInstanceStartPortAllocatingPayload is the payload for event "browser:instance:start:port-allocating".
@@ -388,13 +388,13 @@ type BrowserInstanceStartPortAllocatingPayload struct {
 // BrowserInstanceStartProxyReadyPayload is the payload for event "browser:instance:start:proxy-ready".
 type BrowserInstanceStartProxyReadyPayload struct {
 	ProfileId string `json:"profileId"`
-	ProxyPort int `json:"proxyPort"`
+	ProxyPort int    `json:"proxyPort"`
 }
 
 // BrowserInstanceStartProxyStartingPayload is the payload for event "browser:instance:start:proxy-starting".
 type BrowserInstanceStartProxyStartingPayload struct {
 	ProfileId string `json:"profileId"`
-	ProxyId string `json:"proxyId"`
+	ProxyId   string `json:"proxyId"`
 }
 
 // BrowserInstanceStartWindowOpenedPayload is the payload for event "browser:instance:start:window-opened".
@@ -409,13 +409,13 @@ type BrowserInstanceStartWindowOpeningPayload struct {
 
 // BrowserInstanceStartedPayload is the payload for event "browser:instance:started".
 type BrowserInstanceStartedPayload struct {
-	ProfileId string `json:"profileId"`
-	ProfileName string `json:"profileName"`
-	DebugPort int `json:"debugPort"`
-	DebugReady bool `json:"debugReady"`
-	Pid int `json:"pid"`
-	Reused bool `json:"reused"`
-	Running bool `json:"running"`
+	ProfileId      string `json:"profileId"`
+	ProfileName    string `json:"profileName"`
+	DebugPort      int    `json:"debugPort"`
+	DebugReady     bool   `json:"debugReady"`
+	Pid            int    `json:"pid"`
+	Reused         bool   `json:"reused"`
+	Running        bool   `json:"running"`
 	RuntimeWarning string `json:"runtimeWarning"`
 }
 
@@ -442,7 +442,7 @@ type BrowserInstanceStopDispatchingPayload struct {
 // BrowserInstanceStopProcessKillingPayload is the payload for event "browser:instance:stop:process-killing".
 type BrowserInstanceStopProcessKillingPayload struct {
 	ProfileId string `json:"profileId"`
-	Pid int `json:"pid"`
+	Pid       int    `json:"pid"`
 }
 
 // BrowserInstanceStopProxyStoppingPayload is the payload for event "browser:instance:stop:proxy-stopping".
@@ -457,12 +457,12 @@ type BrowserInstanceStoppedPayload struct {
 
 // BrowserInstanceUpdatedPayload is the payload for event "browser:instance:updated".
 type BrowserInstanceUpdatedPayload struct {
-	ProfileId string `json:"profileId"`
-	ProfileName string `json:"profileName"`
-	DebugPort int `json:"debugPort"`
-	DebugReady bool `json:"debugReady"`
-	Pid int `json:"pid"`
-	Running bool `json:"running"`
+	ProfileId      string `json:"profileId"`
+	ProfileName    string `json:"profileName"`
+	DebugPort      int    `json:"debugPort"`
+	DebugReady     bool   `json:"debugReady"`
+	Pid            int    `json:"pid"`
+	Running        bool   `json:"running"`
 	RuntimeWarning string `json:"runtimeWarning"`
 }
 
@@ -475,14 +475,14 @@ type ContentCommentDeletePayload struct {
 // ContentCommentPostPayload is the payload for event "content:comment:post".
 type ContentCommentPostPayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	NoteId    string `json:"noteId"`
 	CommentId string `json:"commentId"`
 }
 
 // ContentCommentReplyPayload is the payload for event "content:comment:reply".
 type ContentCommentReplyPayload struct {
-	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	ProfileId       string `json:"profileId"`
+	NoteId          string `json:"noteId"`
 	ParentCommentId string `json:"parentCommentId"`
 }
 
@@ -490,107 +490,107 @@ type ContentCommentReplyPayload struct {
 type ContentCommentReportPayload struct {
 	ProfileId string `json:"profileId"`
 	CommentId string `json:"commentId"`
-	Reason string `json:"reason"`
+	Reason    string `json:"reason"`
 }
 
 // ContentImageDonePayload is the payload for event "content:image:done".
 type ContentImageDonePayload struct {
 	ProfileId string `json:"profileId"`
-	ImageUrl string `json:"imageUrl"`
-	ImageId string `json:"imageId"`
+	ImageUrl  string `json:"imageUrl"`
+	ImageId   string `json:"imageId"`
 }
 
 // ContentImageFailedPayload is the payload for event "content:image:failed".
 type ContentImageFailedPayload struct {
 	ProfileId string `json:"profileId"`
-	FileName string `json:"fileName"`
-	Reason string `json:"reason"`
+	FileName  string `json:"fileName"`
+	Reason    string `json:"reason"`
 }
 
 // ContentImageProgressPayload is the payload for event "content:image:progress".
 type ContentImageProgressPayload struct {
 	ProfileId string `json:"profileId"`
-	Progress int `json:"progress"`
-	FileName string `json:"fileName"`
+	Progress  int    `json:"progress"`
+	FileName  string `json:"fileName"`
 }
 
 // ContentImageUploadStartPayload is the payload for event "content:image:upload-start".
 type ContentImageUploadStartPayload struct {
 	ProfileId string `json:"profileId"`
-	FileName string `json:"fileName"`
-	FileSize int64 `json:"fileSize"`
+	FileName  string `json:"fileName"`
+	FileSize  int64  `json:"fileSize"`
 }
 
 // ContentLikeLikePayload is the payload for event "content:like:like".
 type ContentLikeLikePayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	NoteId    string `json:"noteId"`
 }
 
 // ContentLikeUnlikePayload is the payload for event "content:like:unlike".
 type ContentLikeUnlikePayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	NoteId    string `json:"noteId"`
 }
 
 // ContentPublishDeletedPayload is the payload for event "content:publish:deleted".
 type ContentPublishDeletedPayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	NoteId    string `json:"noteId"`
 }
 
 // ContentPublishDraftPayload is the payload for event "content:publish:draft".
 type ContentPublishDraftPayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
-	Title string `json:"title"`
+	NoteId    string `json:"noteId"`
+	Title     string `json:"title"`
 }
 
 // ContentPublishFailedPayload is the payload for event "content:publish:failed".
 type ContentPublishFailedPayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
-	Reason string `json:"reason"`
+	NoteId    string `json:"noteId"`
+	Reason    string `json:"reason"`
 }
 
 // ContentPublishProcessingPayload is the payload for event "content:publish:processing".
 type ContentPublishProcessingPayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	NoteId    string `json:"noteId"`
 }
 
 // ContentPublishPublishedPayload is the payload for event "content:publish:published".
 type ContentPublishPublishedPayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
-	NoteUrl string `json:"noteUrl"`
+	NoteId    string `json:"noteId"`
+	NoteUrl   string `json:"noteUrl"`
 }
 
 // ContentPublishReviewedPayload is the payload for event "content:publish:reviewed".
 type ContentPublishReviewedPayload struct {
-	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
-	Status string `json:"status"`
+	ProfileId  string `json:"profileId"`
+	NoteId     string `json:"noteId"`
+	Status     string `json:"status"`
 	ReviewNote string `json:"reviewNote"`
 }
 
 // ContentPublishScheduledPayload is the payload for event "content:publish:scheduled".
 type ContentPublishScheduledPayload struct {
-	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	ProfileId   string `json:"profileId"`
+	NoteId      string `json:"noteId"`
 	ScheduledAt string `json:"scheduledAt"`
 }
 
 // ContentPublishSubmittedPayload is the payload for event "content:publish:submitted".
 type ContentPublishSubmittedPayload struct {
 	ProfileId string `json:"profileId"`
-	NoteId string `json:"noteId"`
+	NoteId    string `json:"noteId"`
 }
 
 // CoreDownloadCompletedPayload is the payload for event "core:download:completed".
 type CoreDownloadCompletedPayload struct {
 	Version string `json:"version"`
-	Path string `json:"path"`
+	Path    string `json:"path"`
 }
 
 // CoreDownloadExtractingPayload is the payload for event "core:download:extracting".
@@ -600,27 +600,27 @@ type CoreDownloadExtractingPayload struct {
 
 // CoreDownloadFailedPayload is the payload for event "core:download:failed".
 type CoreDownloadFailedPayload struct {
-	Error string `json:"error"`
+	Error   string `json:"error"`
 	Version string `json:"version"`
 }
 
 // CoreDownloadProgressPayload is the payload for event "core:download:progress".
 type CoreDownloadProgressPayload struct {
-	Percent float64 `json:"percent"`
-	Downloaded int64 `json:"downloaded"`
-	Total int64 `json:"total"`
+	Percent    float64 `json:"percent"`
+	Downloaded int64   `json:"downloaded"`
+	Total      int64   `json:"total"`
 }
 
 // CoreDownloadStartedPayload is the payload for event "core:download:started".
 type CoreDownloadStartedPayload struct {
 	Version string `json:"version"`
-	Url string `json:"url"`
+	Url     string `json:"url"`
 }
 
 // DataExportCookiesCompletedPayload is the payload for event "data:export:cookies-completed".
 type DataExportCookiesCompletedPayload struct {
 	ProfileId string `json:"profileId"`
-	Count int `json:"count"`
+	Count     int    `json:"count"`
 }
 
 // DataExportCookiesStartedPayload is the payload for event "data:export:cookies-started".
@@ -635,8 +635,8 @@ type DataExportLogsCompletedPayload struct {
 
 // DataExportProfilesCompletedPayload is the payload for event "data:export:profiles-completed".
 type DataExportProfilesCompletedPayload struct {
-	Count int `json:"count"`
-	Path string `json:"path"`
+	Count int    `json:"count"`
+	Path  string `json:"path"`
 }
 
 // DataExportProfilesStartedPayload is the payload for event "data:export:profiles-started".
@@ -646,8 +646,8 @@ type DataExportProfilesStartedPayload struct {
 
 // DataExportProxiesCompletedPayload is the payload for event "data:export:proxies-completed".
 type DataExportProxiesCompletedPayload struct {
-	Count int `json:"count"`
-	Path string `json:"path"`
+	Count int    `json:"count"`
+	Path  string `json:"path"`
 }
 
 // DataExportProxiesStartedPayload is the payload for event "data:export:proxies-started".
@@ -657,52 +657,52 @@ type DataExportProxiesStartedPayload struct {
 
 // DataScrapeCompletedPayload is the payload for event "data:scrape:completed".
 type DataScrapeCompletedPayload struct {
-	ProfileId string `json:"profileId"`
-	TotalItems int `json:"totalItems"`
-	TotalPages int `json:"totalPages"`
-	Duration int64 `json:"duration"`
+	ProfileId  string `json:"profileId"`
+	TotalItems int    `json:"totalItems"`
+	TotalPages int    `json:"totalPages"`
+	Duration   int64  `json:"duration"`
 }
 
 // DataScrapeExportedPayload is the payload for event "data:scrape:exported".
 type DataScrapeExportedPayload struct {
 	ProfileId string `json:"profileId"`
-	Format string `json:"format"`
-	FilePath string `json:"filePath"`
-	ItemCount int `json:"itemCount"`
+	Format    string `json:"format"`
+	FilePath  string `json:"filePath"`
+	ItemCount int    `json:"itemCount"`
 }
 
 // DataScrapePageDonePayload is the payload for event "data:scrape:page-done".
 type DataScrapePageDonePayload struct {
-	ProfileId string `json:"profileId"`
-	PageUrl string `json:"pageUrl"`
-	ItemsOnPage int `json:"itemsOnPage"`
+	ProfileId   string `json:"profileId"`
+	PageUrl     string `json:"pageUrl"`
+	ItemsOnPage int    `json:"itemsOnPage"`
 }
 
 // DataScrapeProgressPayload is the payload for event "data:scrape:progress".
 type DataScrapeProgressPayload struct {
-	ProfileId string `json:"profileId"`
-	PagesScraped int `json:"pagesScraped"`
-	ItemsFound int `json:"itemsFound"`
+	ProfileId    string `json:"profileId"`
+	PagesScraped int    `json:"pagesScraped"`
+	ItemsFound   int    `json:"itemsFound"`
 }
 
 // DataScrapeRateLimitedPayload is the payload for event "data:scrape:rate-limited".
 type DataScrapeRateLimitedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId  string `json:"profileId"`
 	RetryAfter string `json:"retryAfter"`
 }
 
 // DataScrapeStartedPayload is the payload for event "data:scrape:started".
 type DataScrapeStartedPayload struct {
-	ProfileId string `json:"profileId"`
-	Target string `json:"target"`
-	ExpectedPages int `json:"expectedPages"`
+	ProfileId     string `json:"profileId"`
+	Target        string `json:"target"`
+	ExpectedPages int    `json:"expectedPages"`
 }
 
 // DownloadProgressPayload is the payload for event "download:progress".
 type DownloadProgressPayload struct {
-	Phase string `json:"phase"`
-	Progress int `json:"progress"`
-	Message string `json:"message"`
+	Phase    string `json:"phase"`
+	Progress int    `json:"progress"`
+	Message  string `json:"message"`
 }
 
 // LicenseActivatedPayload is the payload for event "license:activated".
@@ -733,7 +733,7 @@ type LicenseRenewedPayload struct {
 // ProxyBridgeClashStartedPayload is the payload for event "proxy:bridge:clash:started".
 type ProxyBridgeClashStartedPayload struct {
 	ProfileId string `json:"profileId"`
-	Port int `json:"port"`
+	Port      int    `json:"port"`
 }
 
 // ProxyBridgeClashStartingPayload is the payload for event "proxy:bridge:clash:starting".
@@ -744,34 +744,34 @@ type ProxyBridgeClashStartingPayload struct {
 // ProxyBridgeDiedPayload is the payload for event "proxy:bridge:died".
 type ProxyBridgeDiedPayload struct {
 	Engine string `json:"engine"`
-	Key string `json:"key"`
-	Error string `json:"error"`
+	Key    string `json:"key"`
+	Error  string `json:"error"`
 }
 
 // ProxyBridgeFailedPayload is the payload for event "proxy:bridge:failed".
 type ProxyBridgeFailedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	ProfileName string `json:"profileName"`
-	Error string `json:"error"`
+	Error       string `json:"error"`
 }
 
 // ProxyBridgeReconnectedPayload is the payload for event "proxy:bridge:reconnected".
 type ProxyBridgeReconnectedPayload struct {
 	ProfileId string `json:"profileId"`
-	Attempts int `json:"attempts"`
+	Attempts  int    `json:"attempts"`
 }
 
 // ProxyBridgeReconnectingPayload is the payload for event "proxy:bridge:reconnecting".
 type ProxyBridgeReconnectingPayload struct {
-	ProfileId string `json:"profileId"`
-	Attempt int `json:"attempt"`
+	ProfileId  string `json:"profileId"`
+	Attempt    int    `json:"attempt"`
 	BridgeType string `json:"bridgeType"`
 }
 
 // ProxyBridgeSingboxStartedPayload is the payload for event "proxy:bridge:singbox:started".
 type ProxyBridgeSingboxStartedPayload struct {
 	ProfileId string `json:"profileId"`
-	Port int `json:"port"`
+	Port      int    `json:"port"`
 }
 
 // ProxyBridgeSingboxStartingPayload is the payload for event "proxy:bridge:singbox:starting".
@@ -782,7 +782,7 @@ type ProxyBridgeSingboxStartingPayload struct {
 // ProxyBridgeXrayStartedPayload is the payload for event "proxy:bridge:xray:started".
 type ProxyBridgeXrayStartedPayload struct {
 	ProfileId string `json:"profileId"`
-	Port int `json:"port"`
+	Port      int    `json:"port"`
 }
 
 // ProxyBridgeXrayStartingPayload is the payload for event "proxy:bridge:xray:starting".
@@ -792,236 +792,236 @@ type ProxyBridgeXrayStartingPayload struct {
 
 // ProxyIphealthResultPayload is the payload for event "proxy:iphealth:result".
 type ProxyIphealthResultPayload struct {
-	ProxyId string `json:"proxyId"`
-	Ok bool `json:"ok"`
-	Ip string `json:"ip"`
-	FraudScore int64 `json:"fraudScore"`
-	IsResidential bool `json:"isResidential"`
-	Country string `json:"country"`
-	City string `json:"city"`
+	ProxyId       string `json:"proxyId"`
+	Ok            bool   `json:"ok"`
+	Ip            string `json:"ip"`
+	FraudScore    int64  `json:"fraudScore"`
+	IsResidential bool   `json:"isResidential"`
+	Country       string `json:"country"`
+	City          string `json:"city"`
 }
 
 // ProxyQualityBestNodePayload is the payload for event "proxy:quality:best-node".
 type ProxyQualityBestNodePayload struct {
-	ProxyId string `json:"proxyId"`
-	LatencyMs int64 `json:"latencyMs"`
+	ProxyId   string `json:"proxyId"`
+	LatencyMs int64  `json:"latencyMs"`
 }
 
 // ProxyQualityHealthDropPayload is the payload for event "proxy:quality:health-drop".
 type ProxyQualityHealthDropPayload struct {
-	ProxyId string `json:"proxyId"`
-	PreviousScore int64 `json:"previousScore"`
-	CurrentScore int64 `json:"currentScore"`
+	ProxyId       string `json:"proxyId"`
+	PreviousScore int64  `json:"previousScore"`
+	CurrentScore  int64  `json:"currentScore"`
 }
 
 // ProxyQualityLatencySpikePayload is the payload for event "proxy:quality:latency-spike".
 type ProxyQualityLatencySpikePayload struct {
-	ProxyId string `json:"proxyId"`
-	PreviousMs int64 `json:"previousMs"`
-	CurrentMs int64 `json:"currentMs"`
+	ProxyId    string `json:"proxyId"`
+	PreviousMs int64  `json:"previousMs"`
+	CurrentMs  int64  `json:"currentMs"`
 }
 
 // ProxyQualityNodeAddedPayload is the payload for event "proxy:quality:node-added".
 type ProxyQualityNodeAddedPayload struct {
 	ProxyId string `json:"proxyId"`
-	Ip string `json:"ip"`
+	Ip      string `json:"ip"`
 }
 
 // ProxyQualityNodeRemovedPayload is the payload for event "proxy:quality:node-removed".
 type ProxyQualityNodeRemovedPayload struct {
 	ProxyId string `json:"proxyId"`
-	Reason string `json:"reason"`
+	Reason  string `json:"reason"`
 }
 
 // ProxyQualityNodeRotatedPayload is the payload for event "proxy:quality:node-rotated".
 type ProxyQualityNodeRotatedPayload struct {
 	ProxyId string `json:"proxyId"`
-	OldIP string `json:"oldIP"`
-	NewIP string `json:"newIP"`
+	OldIP   string `json:"oldIP"`
+	NewIP   string `json:"newIP"`
 }
 
 // ProxyQualityPoolExhaustedPayload is the payload for event "proxy:quality:pool-exhausted".
 type ProxyQualityPoolExhaustedPayload struct {
-	SourceId string `json:"sourceId"`
-	AvailableNodes int `json:"availableNodes"`
+	SourceId       string `json:"sourceId"`
+	AvailableNodes int    `json:"availableNodes"`
 }
 
 // ProxyQualityScoreChangePayload is the payload for event "proxy:quality:score-change".
 type ProxyQualityScoreChangePayload struct {
-	ProxyId string `json:"proxyId"`
+	ProxyId       string  `json:"proxyId"`
 	PreviousScore float64 `json:"previousScore"`
-	CurrentScore float64 `json:"currentScore"`
+	CurrentScore  float64 `json:"currentScore"`
 }
 
 // ProxyRotationCompletedPayload is the payload for event "proxy:rotation:completed".
 type ProxyRotationCompletedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId  string `json:"profileId"`
 	NewProxyId string `json:"newProxyId"`
 }
 
 // ProxyRotationFailedPayload is the payload for event "proxy:rotation:failed".
 type ProxyRotationFailedPayload struct {
 	ProfileId string `json:"profileId"`
-	Error string `json:"error"`
+	Error     string `json:"error"`
 }
 
 // ProxyRotationSkippedPayload is the payload for event "proxy:rotation:skipped".
 type ProxyRotationSkippedPayload struct {
 	ProfileId string `json:"profileId"`
-	Reason string `json:"reason"`
+	Reason    string `json:"reason"`
 }
 
 // ProxyRotationTriggeredPayload is the payload for event "proxy:rotation:triggered".
 type ProxyRotationTriggeredPayload struct {
 	ProfileId string `json:"profileId"`
-	Reason string `json:"reason"`
+	Reason    string `json:"reason"`
 }
 
 // ProxySpeedResultPayload is the payload for event "proxy:speed:result".
 type ProxySpeedResultPayload struct {
-	ProxyId string `json:"proxyId"`
-	Ok bool `json:"ok"`
-	LatencyMs int64 `json:"latencyMs"`
-	Error string `json:"error"`
+	ProxyId   string `json:"proxyId"`
+	Ok        bool   `json:"ok"`
+	LatencyMs int64  `json:"latencyMs"`
+	Error     string `json:"error"`
 }
 
 // RiskBrowserCrashLoopPayload is the payload for event "risk:browser:crash-loop".
 type RiskBrowserCrashLoopPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	ProfileName string `json:"profileName"`
-	CrashCount int `json:"crashCount"`
-	Window string `json:"window"`
+	CrashCount  int    `json:"crashCount"`
+	Window      string `json:"window"`
 }
 
 // RiskCaptchaDetectedPayload is the payload for event "risk:captcha:detected".
 type RiskCaptchaDetectedPayload struct {
-	ProfileId string `json:"profileId"`
-	Url string `json:"url"`
+	ProfileId   string `json:"profileId"`
+	Url         string `json:"url"`
 	CaptchaType string `json:"captchaType"`
 }
 
 // RiskCaptchaFailedPayload is the payload for event "risk:captcha:failed".
 type RiskCaptchaFailedPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId   string `json:"profileId"`
 	CaptchaType string `json:"captchaType"`
-	Error string `json:"error"`
+	Error       string `json:"error"`
 }
 
 // RiskDnsLeakPayload is the payload for event "risk:dns:leak".
 type RiskDnsLeakPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId     string   `json:"profileId"`
 	LeakedDomains []string `json:"leakedDomains"`
 }
 
 // RiskFingerprintMismatchPayload is the payload for event "risk:fingerprint:mismatch".
 type RiskFingerprintMismatchPayload struct {
-	ProfileId string `json:"profileId"`
+	ProfileId  string   `json:"profileId"`
 	Mismatches []string `json:"mismatches"`
 }
 
 // RiskFingerprintTimezoneIpPayload is the payload for event "risk:fingerprint:timezone-ip".
 type RiskFingerprintTimezoneIpPayload struct {
-	ProfileId string `json:"profileId"`
-	IpCountry string `json:"ipCountry"`
-	IpCity string `json:"ipCity"`
-	TimezoneIana string `json:"timezoneIana"`
-	IsMismatch bool `json:"isMismatch"`
-	MismatchScore int `json:"mismatchScore"`
+	ProfileId     string `json:"profileId"`
+	IpCountry     string `json:"ipCountry"`
+	IpCity        string `json:"ipCity"`
+	TimezoneIana  string `json:"timezoneIana"`
+	IsMismatch    bool   `json:"isMismatch"`
+	MismatchScore int    `json:"mismatchScore"`
 }
 
 // RiskNodeBannedPayload is the payload for event "risk:node:banned".
 type RiskNodeBannedPayload struct {
 	ProxyId string `json:"proxyId"`
-	Ip string `json:"ip"`
-	Reason string `json:"reason"`
+	Ip      string `json:"ip"`
+	Reason  string `json:"reason"`
 }
 
 // RiskNodeGeoJumpPayload is the payload for event "risk:node:geo-jump".
 type RiskNodeGeoJumpPayload struct {
 	ProxyId string `json:"proxyId"`
-	OldIP string `json:"oldIP"`
-	NewIP string `json:"newIP"`
+	OldIP   string `json:"oldIP"`
+	NewIP   string `json:"newIP"`
 }
 
 // RiskNodeOfflinePayload is the payload for event "risk:node:offline".
 type RiskNodeOfflinePayload struct {
 	ProxyId string `json:"proxyId"`
-	Error string `json:"error"`
+	Error   string `json:"error"`
 }
 
 // RiskProfileCorruptedPayload is the payload for event "risk:profile:corrupted".
 type RiskProfileCorruptedPayload struct {
 	ProfileId string `json:"profileId"`
-	Error string `json:"error"`
+	Error     string `json:"error"`
 }
 
 // RiskProxyAuthFailurePayload is the payload for event "risk:proxy:auth-failure".
 type RiskProxyAuthFailurePayload struct {
 	ProxyId string `json:"proxyId"`
-	Error string `json:"error"`
+	Error   string `json:"error"`
 }
 
 // RiskProxyDatacenterPayload is the payload for event "risk:proxy:datacenter".
 type RiskProxyDatacenterPayload struct {
-	ProxyId string `json:"proxyId"`
-	Ip string `json:"ip"`
-	FraudScore int64 `json:"fraudScore"`
-	IsResidential bool `json:"isResidential"`
-	Country string `json:"country"`
+	ProxyId       string `json:"proxyId"`
+	Ip            string `json:"ip"`
+	FraudScore    int64  `json:"fraudScore"`
+	IsResidential bool   `json:"isResidential"`
+	Country       string `json:"country"`
 }
 
 // RiskProxyHealthDropPayload is the payload for event "risk:proxy:health-drop".
 type RiskProxyHealthDropPayload struct {
-	ProxyId string `json:"proxyId"`
-	Ip string `json:"ip"`
-	FraudScore int64 `json:"fraudScore"`
+	ProxyId    string `json:"proxyId"`
+	Ip         string `json:"ip"`
+	FraudScore int64  `json:"fraudScore"`
 }
 
 // RiskProxyHighLatencyPayload is the payload for event "risk:proxy:high-latency".
 type RiskProxyHighLatencyPayload struct {
-	ProxyId string `json:"proxyId"`
-	LatencyMs int64 `json:"latencyMs"`
+	ProxyId   string `json:"proxyId"`
+	LatencyMs int64  `json:"latencyMs"`
 }
 
 // RiskSessionCookieClearedPayload is the payload for event "risk:session:cookie-cleared".
 type RiskSessionCookieClearedPayload struct {
 	ProfileId string `json:"profileId"`
-	Domain string `json:"domain"`
+	Domain    string `json:"domain"`
 }
 
 // RiskSessionRateLimitPayload is the payload for event "risk:session:rate-limit".
 type RiskSessionRateLimitPayload struct {
-	ProfileId string `json:"profileId"`
-	Url string `json:"url"`
-	StatusCode int `json:"statusCode"`
+	ProfileId  string `json:"profileId"`
+	Url        string `json:"url"`
+	StatusCode int    `json:"statusCode"`
 }
 
 // RiskSessionSecurityChallengePayload is the payload for event "risk:session:security-challenge".
 type RiskSessionSecurityChallengePayload struct {
-	ProfileId string `json:"profileId"`
-	Url string `json:"url"`
+	ProfileId     string `json:"profileId"`
+	Url           string `json:"url"`
 	ChallengeType string `json:"challengeType"`
 }
 
 // RiskSystemLowDiskPayload is the payload for event "risk:system:low-disk".
 type RiskSystemLowDiskPayload struct {
-	DiskPath string `json:"diskPath"`
+	DiskPath    string  `json:"diskPath"`
 	FreePercent float64 `json:"freePercent"`
-	FreeGB float64 `json:"freeGB"`
+	FreeGB      float64 `json:"freeGB"`
 }
 
 // RiskSystemMemoryPressurePayload is the payload for event "risk:system:memory-pressure".
 type RiskSystemMemoryPressurePayload struct {
 	UsedPercent float64 `json:"usedPercent"`
-	UsedMB int64 `json:"usedMB"`
-	TotalMB int64 `json:"totalMB"`
+	UsedMB      int64   `json:"usedMB"`
+	TotalMB     int64   `json:"totalMB"`
 }
 
 // RiskWebrtcLeakPayload is the payload for event "risk:webrtc:leak".
 type RiskWebrtcLeakPayload struct {
 	ProfileId string `json:"profileId"`
-	LocalIP string `json:"localIP"`
-	PublicIP string `json:"publicIP"`
+	LocalIP   string `json:"localIP"`
+	PublicIP  string `json:"publicIP"`
 }
 
 // SettingsChangeAppConfigPayload is the payload for event "settings:change:app-config".
@@ -1057,7 +1057,7 @@ type SettingsChangeLaunchServerPayload struct {
 // SettingsChangeLogLevelPayload is the payload for event "settings:change:log-level".
 type SettingsChangeLogLevelPayload struct {
 	From string `json:"from"`
-	To string `json:"to"`
+	To   string `json:"to"`
 }
 
 // SystemHealthCpuHighPayload is the payload for event "system:health:cpu-high".
@@ -1073,7 +1073,7 @@ type SystemHealthDbSizePayload struct {
 // SystemHealthDbVacuumPayload is the payload for event "system:health:db-vacuum".
 type SystemHealthDbVacuumPayload struct {
 	BeforeMB float64 `json:"beforeMB"`
-	AfterMB float64 `json:"afterMB"`
+	AfterMB  float64 `json:"afterMB"`
 }
 
 // SystemHealthDiskCriticalPayload is the payload for event "system:health:disk-critical".
@@ -1083,14 +1083,14 @@ type SystemHealthDiskCriticalPayload struct {
 
 // SystemHealthDiskLowPayload is the payload for event "system:health:disk-low".
 type SystemHealthDiskLowPayload struct {
-	FreeMB int64 `json:"freeMB"`
-	Path string `json:"path"`
+	FreeMB int64  `json:"freeMB"`
+	Path   string `json:"path"`
 }
 
 // SystemHealthGcTriggeredPayload is the payload for event "system:health:gc-triggered".
 type SystemHealthGcTriggeredPayload struct {
 	BeforeMB int64 `json:"beforeMB"`
-	AfterMB int64 `json:"afterMB"`
+	AfterMB  int64 `json:"afterMB"`
 }
 
 // SystemHealthGoroutineCountPayload is the payload for event "system:health:goroutine-count".
@@ -1100,13 +1100,13 @@ type SystemHealthGoroutineCountPayload struct {
 
 // SystemHealthMemoryCriticalPayload is the payload for event "system:health:memory-critical".
 type SystemHealthMemoryCriticalPayload struct {
-	UsedMB int64 `json:"usedMB"`
+	UsedMB      int64 `json:"usedMB"`
 	AvailableMB int64 `json:"availableMB"`
 }
 
 // SystemHealthMemoryHighPayload is the payload for event "system:health:memory-high".
 type SystemHealthMemoryHighPayload struct {
-	UsedMB int64 `json:"usedMB"`
+	UsedMB  int64 `json:"usedMB"`
 	TotalMB int64 `json:"totalMB"`
 }
 
@@ -1143,13 +1143,13 @@ type SystemRecoveryAutoRestartPayload struct {
 // SystemRecoveryAutoStopPayload is the payload for event "system:recovery:auto-stop".
 type SystemRecoveryAutoStopPayload struct {
 	ProfileId string `json:"profileId"`
-	Reason string `json:"reason"`
+	Reason    string `json:"reason"`
 }
 
 // SystemRecoveryCrashLoopDetectedPayload is the payload for event "system:recovery:crash-loop-detected".
 type SystemRecoveryCrashLoopDetectedPayload struct {
 	ProfileId string `json:"profileId"`
-	Count int `json:"count"`
+	Count     int    `json:"count"`
 }
 
 // SystemRecoveryLockfileCleanedPayload is the payload for event "system:recovery:lockfile-cleaned".
@@ -2381,4 +2381,3 @@ func EmitSystemRecoveryPortReleased(ctx context.Context, data SystemRecoveryPort
 func EmitSystemRecoveryProfileRepaired(ctx context.Context, data SystemRecoveryProfileRepairedPayload) {
 	EmitAndLog(ctx, EventSystemRecoveryProfileRepaired, toMap(data))
 }
-

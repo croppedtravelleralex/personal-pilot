@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { Activity, AlertTriangle, Info, AlertCircle, XCircle, Search, Filter, Trash2, Pause, Play, Download, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Card, Button, toast } from '../../shared/components'
+import { Activity, AlertTriangle, Info, AlertCircle, XCircle, Search, Trash2, Pause, Play, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Card, Button, Table, toast } from '../../shared/components'
+import type { TableColumn } from '../../shared/components'
 import {
   EventLogQuery,
   EventLogCount,
@@ -147,14 +148,39 @@ function SeverityBadge({ severity }: { severity: Severity }) {
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 const MAX_EVENTS = 500
+const SEARCH_DEBOUNCE_MS = 300
+const EVENT_ROW_HEIGHT = 56
+const EVENT_TABLE_TINT_STYLE = `
+.event-monitor-table tbody tr:has([data-event-severity="critical"]) {
+  background-color: rgb(254 242 242 / 0.3);
+}
+.event-monitor-table tbody tr:has([data-event-severity="error"]) {
+  background-color: rgb(255 247 237 / 0.2);
+}
+.event-monitor-table tbody tr:hover {
+  background-color: var(--color-bg-hover);
+}
+`
 
 type MonitorTab = 'live' | 'history'
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs)
+    return () => window.clearTimeout(timer)
+  }, [value, delayMs])
+
+  return debounced
+}
 
 export function EventMonitorPage() {
   const [activeTab, setActiveTab] = useState<MonitorTab>('live')
   const [events, setEvents] = useState<EventEntry[]>([])
   const [paused, setPaused] = useState(false)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [filterNs, setFilterNs] = useState<string>('')
   const [filterSev, setFilterSev] = useState<Severity | ''>('')
   const nextId = useRef(0)
@@ -249,8 +275,8 @@ export function EventMonitorPage() {
   // Filtered events
   const filtered = useMemo(() => {
     let result = events
-    if (search) {
-      const q = search.toLowerCase()
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase()
       result = result.filter(e =>
         e.name.toLowerCase().includes(q) ||
         JSON.stringify(e.payload).toLowerCase().includes(q)
@@ -259,10 +285,61 @@ export function EventMonitorPage() {
     if (filterNs) result = result.filter(e => e.namespace === filterNs)
     if (filterSev) result = result.filter(e => e.severity === filterSev)
     return result
-  }, [events, search, filterNs, filterSev])
+  }, [events, debouncedSearch, filterNs, filterSev])
+
+  const liveColumns = useMemo<TableColumn<EventEntry>[]>(() => [
+    {
+      key: 'severity',
+      title: '级别',
+      width: 80,
+      render: (_value, entry) => (
+        <span data-event-severity={entry.severity}>
+          <SeverityBadge severity={entry.severity} />
+        </span>
+      ),
+    },
+    {
+      key: 'name',
+      title: '事件名',
+      render: (_value, entry) => (
+        <span className="font-mono text-xs text-[var(--color-text-primary)]">{entry.name}</span>
+      ),
+    },
+    {
+      key: 'namespace',
+      title: '命名空间',
+      width: 120,
+      render: (_value, entry) => (
+        <span className="rounded bg-[var(--color-bg-hover)] px-1.5 py-0.5 font-mono text-xs text-[var(--color-text-muted)]">
+          {entry.namespace}
+        </span>
+      ),
+    },
+    {
+      key: 'payload',
+      title: 'Payload',
+      render: (_value, entry) => (
+        <pre className="max-w-[300px] truncate text-xs text-[var(--color-text-muted)]">
+          {JSON.stringify(entry.payload)}
+        </pre>
+      ),
+    },
+    {
+      key: 'timestamp',
+      title: '时间',
+      width: 110,
+      align: 'right',
+      render: (_value, entry) => (
+        <span className="whitespace-nowrap text-xs text-[var(--color-text-muted)]">
+          {entry.timestamp.toLocaleTimeString('zh-CN', { hour12: false })}
+        </span>
+      ),
+    },
+  ], [])
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-hidden p-6">
+      <style>{EVENT_TABLE_TINT_STYLE}</style>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -390,65 +467,16 @@ export function EventMonitorPage() {
 
           {/* Event table */}
           <div className="flex-1 overflow-hidden rounded-lg border border-[var(--color-border-default)]">
-            <div className="h-full overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-[var(--color-bg-card)] border-b border-[var(--color-border-default)]">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)] w-[60px]">级别</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)]">事件名</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)] w-[100px]">命名空间</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)]">Payload</th>
-                    <th className="px-4 py-2.5 text-right font-medium text-[var(--color-text-muted)] w-[100px]">时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-12 text-center text-[var(--color-text-muted)]">
-                        {events.length === 0 ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <Filter className="h-8 w-8 opacity-40" />
-                            <p>等待事件...</p>
-                            <p className="text-xs">启动浏览器或触发操作以查看实时事件</p>
-                          </div>
-                        ) : (
-                          '没有匹配的事件'
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                  {filtered.map(entry => (
-                    <tr
-                      key={entry.id}
-                      className={`border-b border-[var(--color-border-default)] transition-colors hover:bg-[var(--color-bg-hover)] ${
-                        entry.severity === 'critical' ? 'bg-red-50/30' :
-                        entry.severity === 'error' ? 'bg-orange-50/20' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-2.5">
-                        <SeverityBadge severity={entry.severity} />
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-[var(--color-text-primary)]">
-                        {entry.name}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className="rounded bg-[var(--color-bg-hover)] px-1.5 py-0.5 text-xs font-mono text-[var(--color-text-muted)]">
-                          {entry.namespace}
-                        </span>
-                      </td>
-                      <td className="max-w-[300px] px-4 py-2.5">
-                        <pre className="truncate text-xs text-[var(--color-text-muted)]">
-                          {JSON.stringify(entry.payload)}
-                        </pre>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-xs text-[var(--color-text-muted)] whitespace-nowrap">
-                        {entry.timestamp.toLocaleTimeString('zh-CN', { hour12: false })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table
+              columns={liveColumns}
+              data={filtered}
+              rowKey={entry => String(entry.id)}
+              emptyText={events.length === 0 ? '等待事件...' : '没有匹配的事件'}
+              maxHeight="100%"
+              className="event-monitor-table h-full text-sm"
+              virtualized
+              virtualRowHeight={EVENT_ROW_HEIGHT}
+            />
           </div>
         </>
       )}
@@ -474,11 +502,13 @@ function HistoryTab() {
   const [filterNs, setFilterNs] = useState('')
   const [filterSev, setFilterSev] = useState('')
   const [filterName, setFilterName] = useState('')
+  const debouncedFilterName = useDebouncedValue(filterName, SEARCH_DEBOUNCE_MS)
   const [entries, setEntries] = useState<events.EventLogEntry[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(0)
   const [selectedNs, setSelectedNs] = useState<string[]>([])
+  const refreshRequestId = useRef(0)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
@@ -490,13 +520,14 @@ function HistoryTab() {
       before: '',
       namespace: filterNs,
       severity: filterSev,
-      eventName: filterName,
+      eventName: debouncedFilterName,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     }
-  }, [timeRange, filterNs, filterSev, filterName, page])
+  }, [timeRange, filterNs, filterSev, debouncedFilterName, page])
 
   const refresh = useCallback(async () => {
+    const requestId = ++refreshRequestId.current
     setLoading(true)
     try {
       const q = buildQuery()
@@ -504,13 +535,17 @@ function HistoryTab() {
         EventLogQuery(q),
         EventLogCount(q),
       ])
+      if (requestId !== refreshRequestId.current) return
       setEntries(result || [])
       setTotalCount(count || 0)
     } catch {
+      if (requestId !== refreshRequestId.current) return
       setEntries([])
       setTotalCount(0)
     } finally {
-      setLoading(false)
+      if (requestId === refreshRequestId.current) {
+        setLoading(false)
+      }
     }
   }, [buildQuery])
 
@@ -575,6 +610,56 @@ function HistoryTab() {
       toast.error(e?.message || '清理失败')
     }
   }
+
+  const historyColumns = useMemo<TableColumn<events.EventLogEntry>[]>(() => [
+    {
+      key: 'severity',
+      title: '级别',
+      width: 80,
+      render: (_value, entry) => (
+        <span data-event-severity={entry.severity}>
+          <SeverityBadge severity={entry.severity as Severity} />
+        </span>
+      ),
+    },
+    {
+      key: 'eventName',
+      title: '事件名',
+      render: (_value, entry) => (
+        <span className="font-mono text-xs text-[var(--color-text-primary)]">{entry.eventName}</span>
+      ),
+    },
+    {
+      key: 'namespace',
+      title: '命名空间',
+      width: 120,
+      render: (_value, entry) => (
+        <span className="rounded bg-[var(--color-bg-hover)] px-1.5 py-0.5 font-mono text-xs text-[var(--color-text-muted)]">
+          {entry.namespace}
+        </span>
+      ),
+    },
+    {
+      key: 'payload',
+      title: 'Payload',
+      render: (_value, entry) => (
+        <pre className="max-w-[300px] truncate text-xs text-[var(--color-text-muted)]">
+          {typeof entry.payload === 'string' ? entry.payload : JSON.stringify(entry.payload)}
+        </pre>
+      ),
+    },
+    {
+      key: 'createdAt',
+      title: '时间',
+      width: 180,
+      align: 'right',
+      render: (_value, entry) => (
+        <span className="whitespace-nowrap text-xs text-[var(--color-text-muted)]">
+          {new Date(entry.createdAt).toLocaleString('zh-CN', { hour12: false })}
+        </span>
+      ),
+    },
+  ], [])
 
   return (
     <div className="space-y-4">
@@ -670,65 +755,16 @@ function HistoryTab() {
 
       {/* Table */}
       <div className="rounded-lg border border-[var(--color-border-default)] overflow-hidden">
-        <div className="overflow-auto max-h-[500px]">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-[var(--color-bg-card)] border-b border-[var(--color-border-default)]">
-              <tr>
-                <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)] w-[60px]">级别</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)]">事件名</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)] w-[100px]">命名空间</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[var(--color-text-muted)]">Payload</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[var(--color-text-muted)] w-[160px]">时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-[var(--color-text-muted)]">
-                    <Clock className="h-6 w-6 mx-auto mb-2 animate-spin opacity-40" />
-                    <p>加载中...</p>
-                  </td>
-                </tr>
-              )}
-              {!loading && entries.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-[var(--color-text-muted)]">
-                    暂无历史记录
-                  </td>
-                </tr>
-              )}
-              {!loading && entries.map(entry => (
-                <tr
-                  key={entry.id}
-                  className={`border-b border-[var(--color-border-default)] transition-colors hover:bg-[var(--color-bg-hover)] ${
-                    entry.severity === 'critical' ? 'bg-red-50/30' :
-                    entry.severity === 'error' ? 'bg-orange-50/20' : ''
-                  }`}
-                >
-                  <td className="px-4 py-2.5">
-                    <SeverityBadge severity={entry.severity as Severity} />
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-[var(--color-text-primary)]">
-                    {entry.eventName}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span className="rounded bg-[var(--color-bg-hover)] px-1.5 py-0.5 text-xs font-mono text-[var(--color-text-muted)]">
-                      {entry.namespace}
-                    </span>
-                  </td>
-                  <td className="max-w-[300px] px-4 py-2.5">
-                    <pre className="truncate text-xs text-[var(--color-text-muted)]">
-                      {typeof entry.payload === 'string' ? entry.payload : JSON.stringify(entry.payload)}
-                    </pre>
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-xs text-[var(--color-text-muted)] whitespace-nowrap">
-                    {new Date(entry.createdAt).toLocaleString('zh-CN', { hour12: false })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          columns={historyColumns}
+          data={entries}
+          rowKey={entry => String(entry.id)}
+          loading={loading}
+          emptyText="暂无历史记录"
+          maxHeight="500px"
+          className="event-monitor-table text-sm"
+          virtualRowHeight={EVENT_ROW_HEIGHT}
+        />
       </div>
     </div>
   )

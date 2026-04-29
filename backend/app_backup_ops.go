@@ -4,6 +4,7 @@ import (
 	"ant-chrome/backend/internal/backup"
 	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/config"
+	"ant-chrome/backend/internal/events"
 	"ant-chrome/backend/internal/logger"
 	"ant-chrome/backend/internal/proxy"
 	"archive/zip"
@@ -40,6 +41,9 @@ func (a *App) BackupExportPackage() (map[string]interface{}, error) {
 	if a.ctx == nil {
 		return nil, fmt.Errorf("应用上下文未初始化")
 	}
+	if events.HasFrontendEmitter() {
+		return nil, fmt.Errorf("backup export requires a native file dialog bridge in Tauri mode")
+	}
 	a.backupEmitExportProgress("starting", 0, "等待选择导出路径...")
 
 	defaultName := fmt.Sprintf("ant-chrome-backup-%s.zip", time.Now().Format("20060102-150405"))
@@ -58,6 +62,30 @@ func (a *App) BackupExportPackage() (map[string]interface{}, error) {
 		return map[string]interface{}{
 			"cancelled": true,
 			"message":   "已取消导出",
+		}, nil
+	}
+	return a.backupExportPackageToPathLocked(savePath)
+}
+
+// BackupExportPackageToPath exports a backup to an explicit path. Tauri uses
+// this after selecting the file path through its native dialog bridge.
+func (a *App) BackupExportPackageToPath(savePath string) (map[string]interface{}, error) {
+	a.maintenanceMu.Lock()
+	defer a.maintenanceMu.Unlock()
+
+	if a.ctx == nil {
+		return nil, fmt.Errorf("application context is not initialized")
+	}
+	return a.backupExportPackageToPathLocked(savePath)
+}
+
+func (a *App) backupExportPackageToPathLocked(savePath string) (map[string]interface{}, error) {
+	savePath = strings.TrimSpace(savePath)
+	if savePath == "" {
+		a.backupEmitExportProgress("cancelled", 0, "export cancelled")
+		return map[string]interface{}{
+			"cancelled": true,
+			"message":   "export cancelled",
 		}, nil
 	}
 	savePath = backupEnsureZipSuffix(savePath)
@@ -97,6 +125,9 @@ func (a *App) BackupImportPackage(resetFirst bool) (map[string]interface{}, erro
 	if a.ctx == nil {
 		return nil, fmt.Errorf("应用上下文未初始化")
 	}
+	if events.HasFrontendEmitter() {
+		return nil, fmt.Errorf("backup import requires a native file dialog bridge in Tauri mode")
+	}
 	a.backupEmitImportProgress("starting", 0, "等待选择 ZIP 配置文件...")
 
 	zipPath, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
@@ -121,6 +152,33 @@ func (a *App) BackupImportPackage(resetFirst bool) (map[string]interface{}, erro
 	result, importErr := a.backupImportFromPathLocked(zipPath, resetFirst)
 	if importErr != nil {
 		a.backupEmitImportProgress("error", 100, fmt.Sprintf("加载失败: %v", importErr))
+		return nil, importErr
+	}
+	return result, nil
+}
+
+// BackupImportPackageFromPath imports a backup from an explicit ZIP path.
+// Tauri uses this after selecting the file through its native dialog bridge.
+func (a *App) BackupImportPackageFromPath(zipPath string, resetFirst bool) (map[string]interface{}, error) {
+	a.maintenanceMu.Lock()
+	defer a.maintenanceMu.Unlock()
+
+	if a.ctx == nil {
+		return nil, fmt.Errorf("application context is not initialized")
+	}
+	zipPath = strings.TrimSpace(zipPath)
+	if zipPath == "" {
+		a.backupEmitImportProgress("cancelled", 0, "import cancelled")
+		return map[string]interface{}{
+			"cancelled": true,
+			"message":   "import cancelled",
+		}, nil
+	}
+	a.backupEmitImportProgress("preparing", 5, "validating backup package...")
+
+	result, importErr := a.backupImportFromPathLocked(zipPath, resetFirst)
+	if importErr != nil {
+		a.backupEmitImportProgress("error", 100, fmt.Sprintf("import failed: %v", importErr))
 		return nil, importErr
 	}
 	return result, nil
@@ -194,7 +252,7 @@ func (a *App) backupEmitProgress(eventName, phase string, progress int, message 
 		evt.EntryIndex = meta.EntryIndex
 		evt.EntryTotal = meta.EntryTotal
 	}
-	wailsruntime.EventsEmit(a.ctx, eventName, backupProgressEvent{
+	a.emit(eventName, backupProgressEvent{
 		Phase:         evt.Phase,
 		Progress:      evt.Progress,
 		Message:       evt.Message,

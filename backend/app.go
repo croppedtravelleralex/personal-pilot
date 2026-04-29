@@ -24,8 +24,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type quitMode uint8
@@ -73,11 +71,12 @@ type App struct {
 	behaviorEngines   map[string]*behavior.Engine // profileId → engine
 	behaviorEnginesMu sync.Mutex
 
-	recorders      map[string]*behavior.Recorder       // profileId → recorder
-	playbacks      map[string]*behavior.PlaybackEngine // profileId → playback
-	recordingStore *behavior.FileRecordingStore
-	recMu          sync.Mutex
-	playMu         sync.Mutex
+	recorders           map[string]*behavior.Recorder       // profileId → recorder
+	playbacks           map[string]*behavior.PlaybackEngine // profileId → playback
+	recordingStore      *behavior.FileRecordingStore
+	recordingSessionDir string
+	recMu               sync.Mutex
+	playMu              sync.Mutex
 }
 
 // NewApp 创建新的应用实例
@@ -117,7 +116,7 @@ func (a *App) appVersion() string {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	if err := apppath.EnsureWritableLayout(a.appRoot); err != nil {
-		runtime.LogFatal(ctx, fmt.Sprintf("初始化 Linux 用户数据目录失败: %v", err))
+		a.logHostFatal(ctx, fmt.Sprintf("初始化 Linux 用户数据目录失败: %v", err))
 		return
 	}
 	cfg, err := LoadConfig(a.resolveAppPath("config.yaml"))
@@ -179,7 +178,7 @@ func (a *App) startup(ctx context.Context) {
 	db, err := database.NewDB(a.resolveAppPath(cfg.Database.SQLite.Path))
 	if err != nil {
 		log.Error("初始化数据库失败", logger.F("error", err))
-		runtime.LogFatal(ctx, fmt.Sprintf("初始化数据库失败: %v", err))
+		a.logHostFatal(ctx, fmt.Sprintf("初始化数据库失败: %v", err))
 		return
 	}
 	a.db = db
@@ -220,6 +219,11 @@ func (a *App) startup(ctx context.Context) {
 	} else {
 		a.recordingStore = recStore
 	}
+	if err := a.initRecordingSessionDir(recordingDir); err != nil {
+		log.Error("初始化录制会话目录失败", logger.F("error", err))
+	} else {
+		_ = a.CleanupStaleSessions()
+	}
 
 	// 初始化 LaunchCode 服务
 	launchCodeDAO := launchcode.NewSQLiteLaunchCodeDAO(a.db.GetConn())
@@ -231,7 +235,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// 启动 LaunchServer
 	port := a.config.LaunchServer.Port
-	a.launchServer = launchcode.NewLaunchServer(a.launchCodeSvc, a, a.browserMgr, port)
+	a.launchServer = launchcode.NewLaunchServer(a.launchCodeSvc, a, a, a.browserMgr, port)
 	a.launchServer.SetAPIAuthConfig(launchcode.APIAuthConfig{
 		Enabled: a.config.LaunchServer.Auth.Enabled,
 		APIKey:  a.config.LaunchServer.Auth.APIKey,
@@ -246,10 +250,12 @@ func (a *App) startup(ctx context.Context) {
 		)
 	}
 
+	a.InitLLMClient()
+
 	// 连接池失效通知
 	a.xrayMgr.OnBridgeDied = func(key string, err error) {
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, events.EventProxyBridgeDied, map[string]interface{}{
+			a.emit(events.EventProxyBridgeDied, map[string]interface{}{
 				"engine": "xray",
 				"key":    key[:8],
 				"error":  err.Error(),
@@ -258,7 +264,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.singboxMgr.OnBridgeDied = func(key string, err error) {
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, events.EventProxyBridgeDied, map[string]interface{}{
+			a.emit(events.EventProxyBridgeDied, map[string]interface{}{
 				"engine": "singbox",
 				"key":    key[:8],
 				"error":  err.Error(),
@@ -386,7 +392,7 @@ func (a *App) ForceQuit() {
 	a.setQuitMode(quitModeFull)
 	a.stopRuntimeServices()
 	if a.ctx != nil {
-		runtime.Quit(a.ctx)
+		a.quitHostRuntime()
 	}
 }
 
@@ -394,7 +400,7 @@ func (a *App) ForceQuit() {
 func (a *App) QuitAppOnly() {
 	a.setQuitMode(quitModeAppOnly)
 	if a.ctx != nil {
-		runtime.Quit(a.ctx)
+		a.quitHostRuntime()
 	}
 }
 
@@ -430,7 +436,7 @@ func ShouldBlockClose(a *App, ctx context.Context) bool {
 	if !platformSupportsTrayCloseFlow() {
 		return false
 	}
-	runtime.EventsEmit(ctx, events.EventAppRequestClose)
+	events.EmitFrontend(ctx, events.EventAppRequestClose)
 	return true
 }
 
@@ -525,6 +531,11 @@ func (a *App) GetLogLevel() string      { return logger.New("App").GetLevel().St
 // GetAppLogs 获取内存缓冲日志
 func (a *App) GetAppLogs() []logger.MemoryLogEntry {
 	return logger.GetMemoryWriter().GetEntries()
+}
+
+// GetAppLogsPage returns a filtered page from the in-memory log buffer.
+func (a *App) GetAppLogsPage(offset int, limit int, level string, keyword string) logger.MemoryLogPage {
+	return logger.GetMemoryWriter().GetPage(offset, limit, level, keyword)
 }
 
 // ClearAppLogs 清空内存缓冲日志
@@ -825,7 +836,7 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 
 				// 实时推送单个结果到前端
 				if a.ctx != nil {
-					runtime.EventsEmit(a.ctx, events.EventProxySpeedResult, result)
+					a.emit(events.EventProxySpeedResult, result)
 				}
 				// 风险信号：代理延迟 >3s
 				if r.Ok && r.LatencyMs > 3000 {
@@ -851,7 +862,7 @@ func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 	result := buildProxyIPHealthResult(proxyId, data, err)
 	a.persistProxyIPHealthResult(result)
 	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, events.EventProxyIPHealthResult, result)
+		a.emit(events.EventProxyIPHealthResult, result)
 	}
 	a.emitProxyIPHealthRisks(result)
 	return result
@@ -888,7 +899,7 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 				a.persistProxyIPHealthResult(result)
 				results[job.Idx] = result
 				if a.ctx != nil {
-					runtime.EventsEmit(a.ctx, events.EventProxyIPHealthResult, result)
+					a.emit(events.EventProxyIPHealthResult, result)
 				}
 				a.emitProxyIPHealthRisks(result)
 			}
@@ -954,7 +965,7 @@ func (a *App) emitProxyHighLatency(proxyId string, latencyMs int64) {
 	if a.ctx == nil {
 		return
 	}
-	runtime.EventsEmit(a.ctx, events.EventRiskProxyHighLatency, map[string]interface{}{
+	a.emit(events.EventRiskProxyHighLatency, map[string]interface{}{
 		"proxyId":   proxyId,
 		"latencyMs": latencyMs,
 	})
@@ -967,7 +978,7 @@ func (a *App) emitProxyIPHealthRisks(result ProxyIPHealthResult) {
 	}
 	// 机房 IP 检测
 	if !result.IsResidential && result.FraudScore >= 30 {
-		runtime.EventsEmit(a.ctx, events.EventRiskProxyDatacenter, map[string]interface{}{
+		a.emit(events.EventRiskProxyDatacenter, map[string]interface{}{
 			"proxyId":       result.ProxyId,
 			"ip":            result.IP,
 			"fraudScore":    result.FraudScore,
@@ -977,7 +988,7 @@ func (a *App) emitProxyIPHealthRisks(result ProxyIPHealthResult) {
 	}
 	// 欺诈分骤升
 	if result.FraudScore >= 70 {
-		runtime.EventsEmit(a.ctx, events.EventRiskProxyHealthDrop, map[string]interface{}{
+		a.emit(events.EventRiskProxyHealthDrop, map[string]interface{}{
 			"proxyId":    result.ProxyId,
 			"ip":         result.IP,
 			"fraudScore": result.FraudScore,

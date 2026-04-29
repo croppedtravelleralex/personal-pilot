@@ -5,8 +5,8 @@ type FingerprintFieldPriorityLayer int
 
 const (
 	FPLayerL1 FingerprintFieldPriorityLayer = iota // must be consumed first
-	FPLayerL2                                       // high-value next layer
-	FPLayerL3                                       // advanced fingerprint layer
+	FPLayerL2                                      // high-value next layer
+	FPLayerL3                                      // advanced fingerprint layer
 )
 
 // FingerprintPerfBudgetTag maps layers to performance budgets.

@@ -14,6 +14,50 @@ var (
 	eventLogStoreMu sync.RWMutex
 )
 
+type FrontendEmitter func(eventName string, data ...interface{})
+
+type wailsEventRuntime interface {
+	Emit(string, ...interface{})
+}
+
+var (
+	frontendEmitter   FrontendEmitter
+	frontendEmitterMu sync.RWMutex
+)
+
+func SetFrontendEmitter(emitter FrontendEmitter) {
+	frontendEmitterMu.Lock()
+	defer frontendEmitterMu.Unlock()
+	frontendEmitter = emitter
+}
+
+func HasFrontendEmitter() bool {
+	frontendEmitterMu.RLock()
+	defer frontendEmitterMu.RUnlock()
+	return frontendEmitter != nil
+}
+
+func EmitFrontend(ctx context.Context, eventName string, data ...interface{}) {
+	frontendEmitterMu.RLock()
+	emitter := frontendEmitter
+	frontendEmitterMu.RUnlock()
+	if emitter != nil {
+		emitter(eventName, data...)
+		return
+	}
+	if hasWailsEvents(ctx) {
+		runtime.EventsEmit(ctx, eventName, data...)
+	}
+}
+
+func hasWailsEvents(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	_, ok := ctx.Value("events").(wailsEventRuntime)
+	return ok
+}
+
 // RuleEvaluator is the interface for the automation rule engine.
 type RuleEvaluator interface {
 	Evaluate(eventName string, payload map[string]interface{})
@@ -43,7 +87,7 @@ func SetRuleEngine(re RuleEvaluator) {
 // This is the canonical function for all event emission throughout the app.
 func EmitAndLog(ctx context.Context, eventName string, data ...interface{}) {
 	// Emit to frontend
-	runtime.EventsEmit(ctx, eventName, data...)
+	EmitFrontend(ctx, eventName, data...)
 
 	// Extract payload for persistence and rule evaluation
 	payload := extractPayload(data)

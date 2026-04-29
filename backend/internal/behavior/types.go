@@ -18,11 +18,11 @@ type MouseProfile struct {
 	Enabled          bool    `json:"enabled"`
 	IdleMoveInterval string  `json:"idleMoveInterval"` // e.g. "3s-15s" random interval
 	CurveStyle       string  `json:"curveStyle"`       // "bezier2" | "bezier3" | "natural"
-	SpeedMean        float64 `json:"speedMean"`         // mean pixels per move step (200-800)
-	SpeedStdDev      float64 `json:"speedStdDev"`       // stddev for speed variation
-	JitterPx         int     `json:"jitterPx"`          // max random offset per step (1-5)
-	PauseProb        float64 `json:"pauseProb"`         // probability of micro-pause mid-path (0-0.3)
-	PauseMaxMs       int     `json:"pauseMaxMs"`        // max pause duration ms (50-300)
+	SpeedMean        float64 `json:"speedMean"`        // mean pixels per move step (200-800)
+	SpeedStdDev      float64 `json:"speedStdDev"`      // stddev for speed variation
+	JitterPx         int     `json:"jitterPx"`         // max random offset per step (1-5)
+	PauseProb        float64 `json:"pauseProb"`        // probability of micro-pause mid-path (0-0.3)
+	PauseMaxMs       int     `json:"pauseMaxMs"`       // max pause duration ms (50-300)
 }
 
 // KeyboardProfile controls typing rhythm simulation.
@@ -38,27 +38,27 @@ type KeyboardProfile struct {
 
 // ScrollProfile controls scroll behavior simulation.
 type ScrollProfile struct {
-	Enabled           bool    `json:"enabled"`
-	IdleScrollProb    float64 `json:"idleScrollProb"`    // prob of scroll while "reading" (0-0.3)
-	ScrollStepPx      int     `json:"scrollStepPx"`      // typical scroll step (50-200)
-	ScrollStepStdDev  int     `json:"scrollStepStdDev"`  // variation in step size
-	PauseBetweenMs    int     `json:"pauseBetweenMs"`    // delay between scroll steps (200-2000)
-	PauseStdDevMs     int     `json:"pauseStdDevMs"`     // variation in pause
-	OverscrollProb    float64 `json:"overscrollProb"`    // prob of overscroll+correction
-	ReverseProb       float64 `json:"reverseProb"`       // prob of brief reverse scroll
+	Enabled          bool    `json:"enabled"`
+	IdleScrollProb   float64 `json:"idleScrollProb"`   // prob of scroll while "reading" (0-0.3)
+	ScrollStepPx     int     `json:"scrollStepPx"`     // typical scroll step (50-200)
+	ScrollStepStdDev int     `json:"scrollStepStdDev"` // variation in step size
+	PauseBetweenMs   int     `json:"pauseBetweenMs"`   // delay between scroll steps (200-2000)
+	PauseStdDevMs    int     `json:"pauseStdDevMs"`    // variation in pause
+	OverscrollProb   float64 `json:"overscrollProb"`   // prob of overscroll+correction
+	ReverseProb      float64 `json:"reverseProb"`      // prob of brief reverse scroll
 }
 
 // IdleProfile controls idle-time behavior patterns.
 type IdleProfile struct {
-	MouseWander bool   `json:"mouseWander"` // move mouse to random position periodically
-	TabSwitch   bool   `json:"tabSwitch"`   // simulate tab switches (if multiple tabs)
-	FocusLoss   bool   `json:"focusLoss"`   // simulate brief focus loss (click outside)
+	MouseWander bool `json:"mouseWander"` // move mouse to random position periodically
+	TabSwitch   bool `json:"tabSwitch"`   // simulate tab switches (if multiple tabs)
+	FocusLoss   bool `json:"focusLoss"`   // simulate brief focus loss (click outside)
 }
 
 // Config is the runtime behavior configuration (serializable subset).
 type Config struct {
-	ProfileID string `json:"profileId"`
-	Enabled   bool   `json:"enabled"`
+	ProfileID string  `json:"profileId"`
+	Enabled   bool    `json:"enabled"`
 	Intensity float64 `json:"intensity"` // 0.0 (subtle) to 1.0 (aggressive)
 }
 

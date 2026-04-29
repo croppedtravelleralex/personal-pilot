@@ -10,7 +10,7 @@ import (
 )
 
 func buildAuthProtectedTestHandler() http.Handler {
-	srv := launchcode.NewLaunchServer(newInMemoryService(), newMockStarter(), nil, 0)
+	srv := launchcode.NewLaunchServer(newInMemoryService(), newMockStarter(), nil, nil, 0)
 	srv.SetAPIAuthConfig(launchcode.APIAuthConfig{
 		Enabled: true,
 		APIKey:  "secret-key",

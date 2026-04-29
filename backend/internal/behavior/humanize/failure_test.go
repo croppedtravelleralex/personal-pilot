@@ -43,6 +43,7 @@ func TestHumanizedRetryDecision_ProxyDeadRetry(t *testing.T) {
 
 func TestHumanizedRetryDecision_HumanHesitation(t *testing.T) {
 	cfg := ConfigForLevel(LevelMedium)
+	cfg.Failure.GiveUpChance = 0
 
 	// Should get a RetryAfter with wait time
 	d := HumanizedRetryDecision(ErrElementNotFound, 0, &cfg)
@@ -57,6 +58,7 @@ func TestHumanizedRetryDecision_HumanHesitation(t *testing.T) {
 
 func TestHumanizedRetryDecision_LaterAttemptsWaitLonger(t *testing.T) {
 	cfg := ConfigForLevel(LevelMedium)
+	cfg.Failure.GiveUpChance = 0
 
 	// Run multiple times to get average wait times at different attempts
 	// (statistical test, use larger sample)

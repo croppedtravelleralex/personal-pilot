@@ -21,7 +21,7 @@ const (
 // ─── Proxy Quality ─────────────────────────────────────────────────────────────
 
 const (
-	EventProxySpeedResult   = "proxy:speed:result"
+	EventProxySpeedResult    = "proxy:speed:result"
 	EventProxyIPHealthResult = "proxy:iphealth:result"
 )
 
@@ -40,10 +40,10 @@ const (
 // ─── Risk: Proxy ───────────────────────────────────────────────────────────────
 
 const (
-	EventRiskProxyHighLatency  = "risk:proxy:high-latency"
-	EventRiskProxyHealthDrop   = "risk:proxy:health-drop"
-	EventRiskProxyDatacenter   = "risk:proxy:datacenter"
-	EventRiskProxyAuthFailure  = "risk:proxy:auth-failure"
+	EventRiskProxyHighLatency = "risk:proxy:high-latency"
+	EventRiskProxyHealthDrop  = "risk:proxy:health-drop"
+	EventRiskProxyDatacenter  = "risk:proxy:datacenter"
+	EventRiskProxyAuthFailure = "risk:proxy:auth-failure"
 )
 
 // ─── Risk: Network ─────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ const (
 // ─── Risk: System ──────────────────────────────────────────────────────────────
 
 const (
-	EventRiskSystemLowDisk       = "risk:system:low-disk"
+	EventRiskSystemLowDisk        = "risk:system:low-disk"
 	EventRiskSystemMemoryPressure = "risk:system:memory-pressure"
 )
 
@@ -105,6 +105,22 @@ const (
 
 	EventAutomationPlaybackCompleted = "automation:playback:completed"
 	EventAutomationPlaybackFailed    = "automation:playback:failed"
+	EventAutomationPlaybackProgress  = "automation:playback:progress"
+
+	// ─── LLM Tasks ──────────────────────────────────────────────────────────────
+
+	EventLLMTaskPlanning  = "llm:task:planning"
+	EventLLMTaskPlanReady = "llm:task:plan-ready"
+	EventLLMTaskExecuting = "llm:task:executing"
+	EventLLMTaskStepDone  = "llm:task:step-done"
+	EventLLMTaskComplete  = "llm:task:complete"
+
+	// ─── Embedded Browser ──────────────────────────────────────────────────────
+
+	EventEmbeddedFailed = "embedded:failed"
+	EventEmbeddedExited = "embedded:exited"
+	EventEmbeddedFocus  = "embedded:focus"
+	EventEmbeddedFrame  = "embedded:frame"
 )
 
 // ─── Download ──────────────────────────────────────────────────────────────────
@@ -149,5 +165,15 @@ func AllEventNames() []string {
 		EventDownloadProgress,
 		EventAutomationPlaybackCompleted,
 		EventAutomationPlaybackFailed,
+		EventAutomationPlaybackProgress,
+		EventLLMTaskPlanning,
+		EventLLMTaskPlanReady,
+		EventLLMTaskExecuting,
+		EventLLMTaskStepDone,
+		EventLLMTaskComplete,
+		EventEmbeddedFailed,
+		EventEmbeddedExited,
+		EventEmbeddedFocus,
+		EventEmbeddedFrame,
 	}
 }

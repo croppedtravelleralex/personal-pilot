@@ -21,20 +21,20 @@ func (l HumanizationLevel) IsActive() bool { return l != LevelNone }
 type TimeDistributionType int
 
 const (
-	DistUniform      TimeDistributionType = 0
-	DistNormal       TimeDistributionType = 1
-	DistRightSkewed  TimeDistributionType = 2
+	DistUniform     TimeDistributionType = 0
+	DistNormal      TimeDistributionType = 1
+	DistRightSkewed TimeDistributionType = 2
 )
 
 // TimeDistribution is a tagged union for delay sampling.
 // Only the fields matching Type are meaningful.
 type TimeDistribution struct {
-	Type    TimeDistributionType
-	MinMs   uint32
-	MaxMs   uint32
-	MeanMs  uint32
+	Type     TimeDistributionType
+	MinMs    uint32
+	MaxMs    uint32
+	MeanMs   uint32
 	StddevMs uint32
-	ModeMs  uint32
+	ModeMs   uint32
 }
 
 // ScrollSpeed controls the speed of scroll operations.
@@ -81,18 +81,18 @@ type ClickOffset struct {
 
 // TypingPattern configures keyboard typing behavior.
 type TypingPattern struct {
-	BaseWPM             uint32  // base words per minute
-	SpeedVariancePercent uint32 // 0-100, per-keystroke speed fluctuation
-	ErrorRetryChance    float64 // 0.0-1.0, probability of typo+backspace per character
-	PauseChance         float64 // 0.0-1.0, probability of mid-text "thinking" pause
-	PauseDurationMs     uint32  // duration of a thinking pause in ms
+	BaseWPM              uint32  // base words per minute
+	SpeedVariancePercent uint32  // 0-100, per-keystroke speed fluctuation
+	ErrorRetryChance     float64 // 0.0-1.0, probability of typo+backspace per character
+	PauseChance          float64 // 0.0-1.0, probability of mid-text "thinking" pause
+	PauseDurationMs      uint32  // duration of a thinking pause in ms
 }
 
 // ScrollBehavior configures scroll humanization.
 type ScrollBehavior struct {
-	OvershootRatio      *float64   // nil = no overshoot; e.g. 0.3 = 30% past target
+	OvershootRatio      *float64 // nil = no overshoot; e.g. 0.3 = 30% past target
 	Speed               ScrollSpeed
-	HoverBeforeScrollMs *uint32    // nil = no hover; value = hover duration before scroll
+	HoverBeforeScrollMs *uint32 // nil = no hover; value = hover duration before scroll
 }
 
 // TimingConfig configures delay/jitter injection.

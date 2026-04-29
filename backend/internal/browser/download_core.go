@@ -16,7 +16,6 @@ import (
 	"ant-chrome/backend/internal/events"
 	"ant-chrome/backend/internal/logger"
 	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // DownloadProgress 进度信息载体
@@ -46,7 +45,7 @@ func (m *Manager) DownloadAndExtractCore(ctx context.Context, coreName string, t
 	t := time.Now()
 
 	sendEvent := func(phase string, progress int, msg string) {
-		runtime.EventsEmit(ctx, events.EventDownloadProgress, DownloadProgress{
+		events.EmitFrontend(ctx, events.EventDownloadProgress, DownloadProgress{
 			Phase:    phase,
 			Progress: progress,
 			Message:  msg,

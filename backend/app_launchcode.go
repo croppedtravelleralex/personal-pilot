@@ -16,6 +16,64 @@ func (a *App) StartInstanceWithParams(profileId string, params launchcode.Launch
 	return a.BrowserInstanceStartWithParams(profileId, params.LaunchArgs, params.StartURLs, params.SkipDefaultStartURLs)
 }
 
+// StopInstance implements launchcode.BrowserStopper for the local HTTP API.
+func (a *App) StopInstance(profileId string) (*browser.Profile, error) {
+	return a.BrowserInstanceStop(profileId)
+}
+
+func (a *App) WorkbenchNavigateProfile(profileId string, rawURL string) error {
+	return a.SynchronizerNavigateProfile(profileId, rawURL)
+}
+
+func (a *App) WorkbenchRefreshProfile(profileId string) error {
+	return a.SynchronizerRefreshProfile(profileId)
+}
+
+func (a *App) WorkbenchCaptureScreenshot(profileId string) (string, error) {
+	return a.SynchronizerCaptureScreenshot(profileId)
+}
+
+func (a *App) WorkbenchFingerprintProfile(profileId string) (*browser.FingerprintSnapshot, error) {
+	a.browserMgr.Mutex.Lock()
+	profile, ok := a.browserMgr.Profiles[profileId]
+	if !ok || profile == nil {
+		a.browserMgr.Mutex.Unlock()
+		return nil, fmt.Errorf("profile not found: %s", profileId)
+	}
+	debugPort := profile.DebugPort
+	debugReady := profile.DebugReady
+	running := profile.Running
+	a.browserMgr.Mutex.Unlock()
+
+	if !running || !debugReady || debugPort <= 0 {
+		return nil, fmt.Errorf("profile is not running with a ready debug port: %s", profileId)
+	}
+	return browser.ExtractFingerprint(debugPort)
+}
+
+func (a *App) WorkbenchActivateProfile(profileId string) error {
+	return a.SynchronizerActivateProfile(profileId)
+}
+
+func (a *App) WorkbenchArrangeProfiles(profileIds []string, layout string) ([]launchcode.WorkbenchWindowPlacement, error) {
+	placements, err := a.SynchronizerArrangeProfiles(profileIds, layout)
+	result := make([]launchcode.WorkbenchWindowPlacement, 0, len(placements))
+	for _, placement := range placements {
+		result = append(result, launchcode.WorkbenchWindowPlacement{
+			ProfileID:   placement.ProfileID,
+			ProfileName: placement.ProfileName,
+			Pid:         placement.Pid,
+			Found:       placement.Found,
+			X:           placement.X,
+			Y:           placement.Y,
+			Width:       placement.Width,
+			Height:      placement.Height,
+			Error:       placement.Error,
+		})
+	}
+	return result, err
+}
+
 // BrowserProfileGetCode 获取实例的 LaunchCode（Wails 绑定）
 func (a *App) BrowserProfileGetCode(profileId string) (string, error) {
 	if a.launchCodeSvc == nil {
@@ -106,3 +164,5 @@ func (a *App) GetLaunchServerInfo() map[string]interface{} {
 // 确保编译器检查 App 实现了 BrowserStarter 接口
 var _ launchcode.BrowserStarter = (*App)(nil)
 var _ launchcode.BrowserStarterWithParams = (*App)(nil)
+var _ launchcode.BrowserStopper = (*App)(nil)
+var _ launchcode.WorkbenchOperator = (*App)(nil)

@@ -10,14 +10,14 @@ func TestTrustScoreWithSpeedTestResults(t *testing.T) {
 
 	// 模拟一系列测速结果
 	scenarios := []struct {
-		name     string
-		results  []TestResult
-		latencyMs int64
+		name       string
+		results    []TestResult
+		latencyMs  int64
 		fraudScore int64
-		isDC     bool
-		regionOk bool
-		wantMin  float64 // 最低期望分
-		wantMax  float64 // 最高期望分
+		isDC       bool
+		regionOk   bool
+		wantMin    float64 // 最低期望分
+		wantMax    float64 // 最高期望分
 	}{
 		{
 			name:       "全部成功_低延迟_住宅IP_区域匹配",
@@ -94,17 +94,17 @@ func TestTrustScoreWithSpeedTestResults(t *testing.T) {
 // TestTrustScoreLevelsConsistency 测试分数等级的边界一致性。
 func TestTrustScoreLevelsConsistency(t *testing.T) {
 	tests := []struct {
-		score    float64
+		score     float64
 		wantLevel string
 	}{
 		{95, "excellent"},
 		{80, "excellent"}, // 边界值
 		{79, "good"},
 		{65, "good"},
-		{60, "good"},      // 边界值
+		{60, "good"}, // 边界值
 		{59, "fair"},
 		{45, "fair"},
-		{40, "fair"},      // 边界值
+		{40, "fair"}, // 边界值
 		{39, "poor"},
 		{10, "poor"},
 		{0, "poor"},

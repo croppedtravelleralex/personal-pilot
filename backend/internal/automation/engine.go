@@ -17,15 +17,15 @@ type TaskRunner func(taskID string)
 
 // RuleEngine evaluates automation rules in response to events.
 type RuleEngine struct {
-	store      RuleStore
-	emitFn     EmitFn
-	runTaskFn  TaskRunner
+	store     RuleStore
+	emitFn    EmitFn
+	runTaskFn TaskRunner
 
-	mu          sync.RWMutex
-	ctx         context.Context
-	cancel      context.CancelFunc
-	eventCh     chan eventMsg
-	done        chan struct{}
+	mu      sync.RWMutex
+	ctx     context.Context
+	cancel  context.CancelFunc
+	eventCh chan eventMsg
+	done    chan struct{}
 }
 
 type eventMsg struct {

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // ─── Wails-bound types ─────────────────────────────────────────────────────────
@@ -113,7 +111,7 @@ func (a *App) EmitAndLogEvent(eventName string, payload map[string]interface{}) 
 	if a.ctx == nil {
 		return
 	}
-	runtime.EventsEmit(a.ctx, eventName, payload)
+	a.emit(eventName, payload)
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────

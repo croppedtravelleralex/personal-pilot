@@ -4,21 +4,21 @@ import "testing"
 
 func TestAssessFingerprintConsistency_Coherent(t *testing.T) {
 	input := &FingerprintConsistencyInput{
-		TargetRegion:     "US",
-		ProxyRegion:      "US",
-		Timezone:         "America/New_York",
-		Locale:           "en-US",
-		AcceptLanguage:   "en-US,en;q=0.9",
-		ScreenWidth:      1920,
-		ScreenHeight:     1080,
-		AvailWidth:       1920,
-		AvailHeight:      1040,
-		GPUVendor:        "Google",
-		WebGLVendor:      "Google Inc.",
-		WebGLRenderer:    "ANGLE",
-		SupportsTouch:    false,
+		TargetRegion:        "US",
+		ProxyRegion:         "US",
+		Timezone:            "America/New_York",
+		Locale:              "en-US",
+		AcceptLanguage:      "en-US,en;q=0.9",
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		AvailWidth:          1920,
+		AvailHeight:         1040,
+		GPUVendor:           "Google",
+		WebGLVendor:         "Google Inc.",
+		WebGLRenderer:       "ANGLE",
+		SupportsTouch:       false,
 		HardwareConcurrency: 8,
-		Platform:         "Win32",
+		Platform:            "Win32",
 	}
 	result := AssessFingerprintConsistency(input)
 	if result.CoherenceScore < 80 {
@@ -170,14 +170,14 @@ func TestAssessFingerprintConsistency_ScreenViewportMismatch(t *testing.T) {
 
 func TestAssessFingerprintConsistency_StatusInconsistent(t *testing.T) {
 	input := &FingerprintConsistencyInput{
-		TargetRegion:     "US",
-		ProxyRegion:      "JP",
-		Locale:           "ja-JP",
-		AcceptLanguage:   "en-US",
-		GPUVendor:        "NVIDIA",
-		WebGLVendor:      "Intel",
-		SupportsTouch:    true,
-		MaxTouchPoints:   0,
+		TargetRegion:   "US",
+		ProxyRegion:    "JP",
+		Locale:         "ja-JP",
+		AcceptLanguage: "en-US",
+		GPUVendor:      "NVIDIA",
+		WebGLVendor:    "Intel",
+		SupportsTouch:  true,
+		MaxTouchPoints: 0,
 	}
 	result := AssessFingerprintConsistency(input)
 	if result.Status != "inconsistent" {

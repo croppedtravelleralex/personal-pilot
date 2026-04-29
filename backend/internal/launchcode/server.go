@@ -23,6 +23,12 @@ type BrowserStarter interface {
 	StartInstance(profileId string) (*browser.Profile, error)
 }
 
+// BrowserStopper is an optional capability exposed by the app layer for safe
+// local API shutdown of a real browser instance.
+type BrowserStopper interface {
+	StopInstance(profileId string) (*browser.Profile, error)
+}
+
 // LaunchRequestParams 支持外部自动化透传的一次性启动参数
 type LaunchRequestParams struct {
 	LaunchArgs           []string `json:"launchArgs"`
@@ -51,6 +57,31 @@ type BrowserStarterWithParams interface {
 	StartInstanceWithParams(profileId string, params LaunchRequestParams) (*browser.Profile, error)
 }
 
+// WorkbenchWindowPlacement mirrors the app workbench placement result without
+// importing the top-level backend package into launchcode.
+type WorkbenchWindowPlacement struct {
+	ProfileID   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	Pid         int    `json:"pid"`
+	Found       bool   `json:"found"`
+	X           int    `json:"x"`
+	Y           int    `json:"y"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Error       string `json:"error,omitempty"`
+}
+
+// WorkbenchOperator is an optional bridge to the non-embedded instance
+// workbench. It keeps HTTP automation on the same backend methods used by UI.
+type WorkbenchOperator interface {
+	WorkbenchNavigateProfile(profileId string, rawURL string) error
+	WorkbenchRefreshProfile(profileId string) error
+	WorkbenchCaptureScreenshot(profileId string) (string, error)
+	WorkbenchFingerprintProfile(profileId string) (*browser.FingerprintSnapshot, error)
+	WorkbenchActivateProfile(profileId string) error
+	WorkbenchArrangeProfiles(profileIds []string, layout string) ([]WorkbenchWindowPlacement, error)
+}
+
 // LaunchCallRecord 接口调用记录
 type LaunchCallRecord struct {
 	Timestamp   string              `json:"timestamp"`
@@ -72,6 +103,7 @@ type LaunchCallRecord struct {
 type LaunchServer struct {
 	service    *LaunchCodeService
 	starter    BrowserStarter
+	recording  RecordingAPI
 	browserMgr *browser.Manager
 	port       int
 	server     *http.Server
@@ -87,10 +119,11 @@ type LaunchServer struct {
 }
 
 // NewLaunchServer 创建 LaunchServer
-func NewLaunchServer(service *LaunchCodeService, starter BrowserStarter, mgr *browser.Manager, port int) *LaunchServer {
+func NewLaunchServer(service *LaunchCodeService, starter BrowserStarter, recording RecordingAPI, mgr *browser.Manager, port int) *LaunchServer {
 	srv := &LaunchServer{
 		service:    service,
 		starter:    starter,
+		recording:  recording,
 		browserMgr: mgr,
 		port:       port,
 	}
@@ -144,9 +177,30 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/profiles", s.handleProfiles)
 	mux.HandleFunc("/api/profiles/", s.handleProfileByID)
+	mux.HandleFunc("/api/instances/stop", s.handleInstanceStop)
 	mux.HandleFunc("/api/launch", s.handleLaunchWithBody)
 	mux.HandleFunc("/api/launch/logs", s.handleLaunchLogs)
 	mux.HandleFunc("/api/launch/", s.handleLaunch)
+	mux.HandleFunc("/api/workbench/navigate", s.handleWorkbenchNavigate)
+	mux.HandleFunc("/api/workbench/refresh", s.handleWorkbenchRefresh)
+	mux.HandleFunc("/api/workbench/screenshot", s.handleWorkbenchScreenshot)
+	mux.HandleFunc("/api/workbench/fingerprint", s.handleWorkbenchFingerprint)
+	mux.HandleFunc("/api/workbench/activate", s.handleWorkbenchActivate)
+	mux.HandleFunc("/api/workbench/arrange", s.handleWorkbenchArrange)
+	// Recording & behavior endpoints
+	mux.HandleFunc("/api/recording/start", s.handleRecordingStart)
+	mux.HandleFunc("/api/recording/stop", s.handleRecordingStop)
+	mux.HandleFunc("/api/recording/list", s.handleRecordingList)
+	mux.HandleFunc("/api/recording/status", s.handleRecordingStatus)
+	mux.HandleFunc("/api/recording/play", s.handleRecordingPlay)
+	if s.recording != nil {
+		mux.HandleFunc("/api/recording/play/stop", s.handleRecordingStopPlay)
+	}
+	mux.HandleFunc("/api/recording/quick", s.handleRecordingQuick)
+	mux.HandleFunc("/api/recording/sessions/cleanup", s.handleRecordingCleanup)
+	mux.HandleFunc("/api/recording/", s.handleRecordingByID)
+	mux.HandleFunc("/api/behavior/presets", s.handleBehaviorPresets)
+	mux.HandleFunc("/api/behavior/presets/", s.handleBehaviorPresetByID)
 	mux.HandleFunc("/", s.handleCDPProxy)
 	return mux
 }

@@ -13,7 +13,7 @@ import (
 )
 
 func buildTestHandlerWithManager(svc *launchcode.LaunchCodeService, starter launchcode.BrowserStarter, mgr *browser.Manager) http.Handler {
-	srv := launchcode.NewLaunchServer(svc, starter, mgr, 0)
+	srv := launchcode.NewLaunchServer(svc, starter, nil, mgr, 0)
 	return launchcode.NewTestHandler(srv)
 }
 

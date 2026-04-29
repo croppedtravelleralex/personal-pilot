@@ -7,9 +7,9 @@ import (
 
 // ClickTarget describes where and with what trajectory a click should land.
 type ClickTarget struct {
-	X             int32     // absolute X on page
-	Y             int32     // absolute Y on page
-	HoverBeforeMs *uint32   // nil = no hover; value = hover duration before click
+	X             int32      // absolute X on page
+	Y             int32      // absolute Y on page
+	HoverBeforeMs *uint32    // nil = no hover; value = hover duration before click
 	Trajectory    [][2]int32 // waypoints: [(hoverX, hoverY), (targetX, targetY)]
 }
 

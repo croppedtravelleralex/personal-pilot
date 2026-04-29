@@ -1,5 +1,5 @@
-export namespace backend {
-	
+﻿export namespace backend {
+
 	export class AutomationRuleInfo {
 	    id: string;
 	    name: string;
@@ -11,11 +11,11 @@ export namespace backend {
 	    enabled: boolean;
 	    createdAt: string;
 	    updatedAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AutomationRuleInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -38,11 +38,11 @@ export namespace backend {
 	    actionParams?: Record<string, any>;
 	    cooldown: string;
 	    enabled: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AutomationRuleInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -58,11 +58,11 @@ export namespace backend {
 	    id: string;
 	    name: string;
 	    description: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BehaviorPresetInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -79,11 +79,11 @@ export namespace backend {
 	    httpOnly: boolean;
 	    secure: boolean;
 	    sameSite: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CookieInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -104,11 +104,11 @@ export namespace backend {
 	    eventName: string;
 	    limit: number;
 	    offset: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new EventLogQueryInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.after = source["after"];
@@ -124,11 +124,11 @@ export namespace backend {
 	    maxLimit: number;
 	    usedCount: number;
 	    usedKeys: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LicenseStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.maxLimit = source["maxLimit"];
@@ -151,11 +151,11 @@ export namespace backend {
 	    asOrganization: string;
 	    rawData: Record<string, any>;
 	    updatedAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProxyIPHealthResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.proxyId = source["proxyId"];
@@ -179,11 +179,11 @@ export namespace backend {
 	    ok: boolean;
 	    latencyMs: number;
 	    error: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProxyTestResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.proxyId = source["proxyId"];
@@ -195,11 +195,11 @@ export namespace backend {
 	export class ProxyValidationResult {
 	    supported: boolean;
 	    errorMsg: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProxyValidationResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.supported = source["supported"];
@@ -211,11 +211,11 @@ export namespace backend {
 	    target: string;
 	    value: string;
 	    timeout: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SchedulerTaskAction(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
@@ -229,11 +229,11 @@ export namespace backend {
 	    cron?: string;
 	    interval?: string;
 	    event?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SchedulerTaskTrigger(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
@@ -257,11 +257,11 @@ export namespace backend {
 	    lastRunAt: string;
 	    lastError: string;
 	    retryCount: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SchedulerTaskInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -279,7 +279,7 @@ export namespace backend {
 	        this.lastError = source["lastError"];
 	        this.retryCount = source["retryCount"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -307,11 +307,11 @@ export namespace backend {
 	    dependsOn: string[];
 	    profileId: string;
 	    enabled: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SchedulerTaskInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -323,7 +323,7 @@ export namespace backend {
 	        this.profileId = source["profileId"];
 	        this.enabled = source["enabled"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -342,7 +342,7 @@ export namespace backend {
 		    return a;
 		}
 	}
-	
+
 	export class SnapshotInfo {
 	    snapshotId: string;
 	    profileId: string;
@@ -350,11 +350,11 @@ export namespace backend {
 	    sizeMB: number;
 	    createdAt: string;
 	    filePath?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SnapshotInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshotId = source["snapshotId"];
@@ -365,11 +365,152 @@ export namespace backend {
 	        this.filePath = source["filePath"];
 	    }
 	}
+	export class SyncWindow {
+	    profileId: string;
+	    profileName: string;
+	    url: string;
+	    title: string;
+	    debugPort: number;
+	    pid: number;
+	    status: string;
+	    groupId: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SyncWindow(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.url = source["url"];
+	        this.title = source["title"];
+	        this.debugPort = source["debugPort"];
+	        this.pid = source["pid"];
+	        this.status = source["status"];
+	        this.groupId = source["groupId"];
+	    }
+	}
+	export class SyncGroup {
+	    id: string;
+	    name: string;
+	    windows: SyncWindow[];
+
+	    static createFrom(source: any = {}) {
+	        return new SyncGroup(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.windows = this.convertValues(source["windows"], SyncWindow);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SyncOperation {
+	    id: string;
+	    type: string;
+	    groupId: string;
+	    payload?: Record<string, any>;
+	    timestamp: string;
+	    status: string;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SyncOperation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.groupId = source["groupId"];
+	        this.payload = source["payload"];
+	        this.timestamp = source["timestamp"];
+	        this.status = source["status"];
+	        this.error = source["error"];
+	    }
+	}
+
+	export class SyncWindowPlacement {
+	    profileId: string;
+	    profileName: string;
+	    pid: number;
+	    found: boolean;
+	    x: number;
+	    y: number;
+	    width: number;
+	    height: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SyncWindowPlacement(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.pid = source["pid"];
+	        this.found = source["found"];
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.error = source["error"];
+	    }
+	}
+	export class WorkbenchTask {
+	    id: string;
+	    type: string;
+	    profileId: string;
+	    profileName: string;
+	    detail: string;
+	    status: string;
+	    createdAt: string;
+	    updatedAt: string;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WorkbenchTask(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.detail = source["detail"];
+	        this.status = source["status"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.error = source["error"];
+	    }
+	}
 
 }
 
 export namespace backup {
-	
+
 	export class ManifestEntry {
 	    id: string;
 	    category: string;
@@ -377,11 +518,11 @@ export namespace backup {
 	    required: boolean;
 	    archivePath: string;
 	    description?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ManifestEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -395,11 +536,11 @@ export namespace backup {
 	export class ManifestAppInfo {
 	    name: string;
 	    version: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ManifestAppInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -412,11 +553,11 @@ export namespace backup {
 	    createdAt: string;
 	    app: ManifestAppInfo;
 	    entries: ManifestEntry[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Manifest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.format = source["format"];
@@ -425,7 +566,7 @@ export namespace backup {
 	        this.app = this.convertValues(source["app"], ManifestAppInfo);
 	        this.entries = this.convertValues(source["entries"], ManifestEntry);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -444,8 +585,8 @@ export namespace backup {
 		    return a;
 		}
 	}
-	
-	
+
+
 	export class ScopeEntry {
 	    id: string;
 	    category: string;
@@ -455,11 +596,11 @@ export namespace backup {
 	    archivePath: string;
 	    exists: boolean;
 	    description?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ScopeEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -477,11 +618,11 @@ export namespace backup {
 	    manifestVersion: number;
 	    appRoot: string;
 	    entries: ScopeEntry[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Scope(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.format = source["format"];
@@ -489,7 +630,7 @@ export namespace backup {
 	        this.appRoot = source["appRoot"];
 	        this.entries = this.convertValues(source["entries"], ScopeEntry);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -512,61 +653,145 @@ export namespace backup {
 }
 
 export namespace behavior {
-	
-	export class RecordedEvent {
-	    t: number;
-	    type: string;
-	    x?: number;
-	    y?: number;
-	    btn?: number;
-	    key?: string;
-	    text?: string;
-	    dx?: number;
-	    dy?: number;
-	
+
+	export class ActiveRecordingStatus {
+	    active: boolean;
+	    count: number;
+	    profileId?: string;
+	    profileIds: string[];
+	    inMemoryProfileIds?: string[];
+	    recoverableProfileIds?: string[];
+
 	    static createFrom(source: any = {}) {
-	        return new RecordedEvent(source);
+	        return new ActiveRecordingStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.t = source["t"];
-	        this.type = source["type"];
-	        this.x = source["x"];
-	        this.y = source["y"];
-	        this.btn = source["btn"];
-	        this.key = source["key"];
-	        this.text = source["text"];
-	        this.dx = source["dx"];
-	        this.dy = source["dy"];
+	        this.active = source["active"];
+	        this.count = source["count"];
+	        this.profileId = source["profileId"];
+	        this.profileIds = source["profileIds"];
+	        this.inMemoryProfileIds = source["inMemoryProfileIds"];
+	        this.recoverableProfileIds = source["recoverableProfileIds"];
 	    }
 	}
-	export class Recording {
+	export class IdleProfile {
+	    mouseWander: boolean;
+	    tabSwitch: boolean;
+	    focusLoss: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new IdleProfile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mouseWander = source["mouseWander"];
+	        this.tabSwitch = source["tabSwitch"];
+	        this.focusLoss = source["focusLoss"];
+	    }
+	}
+	export class KeyboardProfile {
+	    enabled: boolean;
+	    baseDelayMs: number;
+	    delayStdDevMs: number;
+	    burstProb: number;
+	    burstKeys: number;
+	    typoProb: number;
+	    bigramDelays: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new KeyboardProfile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.baseDelayMs = source["baseDelayMs"];
+	        this.delayStdDevMs = source["delayStdDevMs"];
+	        this.burstProb = source["burstProb"];
+	        this.burstKeys = source["burstKeys"];
+	        this.typoProb = source["typoProb"];
+	        this.bigramDelays = source["bigramDelays"];
+	    }
+	}
+	export class MouseProfile {
+	    enabled: boolean;
+	    idleMoveInterval: string;
+	    curveStyle: string;
+	    speedMean: number;
+	    speedStdDev: number;
+	    jitterPx: number;
+	    pauseProb: number;
+	    pauseMaxMs: number;
+
+	    static createFrom(source: any = {}) {
+	        return new MouseProfile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.idleMoveInterval = source["idleMoveInterval"];
+	        this.curveStyle = source["curveStyle"];
+	        this.speedMean = source["speedMean"];
+	        this.speedStdDev = source["speedStdDev"];
+	        this.jitterPx = source["jitterPx"];
+	        this.pauseProb = source["pauseProb"];
+	        this.pauseMaxMs = source["pauseMaxMs"];
+	    }
+	}
+	export class ScrollProfile {
+	    enabled: boolean;
+	    idleScrollProb: number;
+	    scrollStepPx: number;
+	    scrollStepStdDev: number;
+	    pauseBetweenMs: number;
+	    pauseStdDevMs: number;
+	    overscrollProb: number;
+	    reverseProb: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ScrollProfile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.idleScrollProb = source["idleScrollProb"];
+	        this.scrollStepPx = source["scrollStepPx"];
+	        this.scrollStepStdDev = source["scrollStepStdDev"];
+	        this.pauseBetweenMs = source["pauseBetweenMs"];
+	        this.pauseStdDevMs = source["pauseStdDevMs"];
+	        this.overscrollProb = source["overscrollProb"];
+	        this.reverseProb = source["reverseProb"];
+	    }
+	}
+	export class Profile {
 	    id: string;
 	    name: string;
 	    description: string;
-	    events: RecordedEvent[];
-	    durationMs: number;
-	    viewportW: number;
-	    viewportH: number;
-	    createdAt: string;
-	
+	    mouse: MouseProfile;
+	    keyboard: KeyboardProfile;
+	    scroll: ScrollProfile;
+	    idle: IdleProfile;
+
 	    static createFrom(source: any = {}) {
-	        return new Recording(source);
+	        return new Profile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.description = source["description"];
-	        this.events = this.convertValues(source["events"], RecordedEvent);
-	        this.durationMs = source["durationMs"];
-	        this.viewportW = source["viewportW"];
-	        this.viewportH = source["viewportH"];
-	        this.createdAt = source["createdAt"];
+	        this.mouse = this.convertValues(source["mouse"], MouseProfile);
+	        this.keyboard = this.convertValues(source["keyboard"], KeyboardProfile);
+	        this.scroll = this.convertValues(source["scroll"], ScrollProfile);
+	        this.idle = this.convertValues(source["idle"], IdleProfile);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -585,6 +810,229 @@ export namespace behavior {
 		    return a;
 		}
 	}
+	export class RecordedEvent {
+	    t: number;
+	    type: string;
+	    x?: number;
+	    y?: number;
+	    btn?: number;
+	    key?: string;
+	    text?: string;
+	    dx?: number;
+	    dy?: number;
+	    inputType?: string;
+	    targetPath?: string;
+	    sensitive?: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new RecordedEvent(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.t = source["t"];
+	        this.type = source["type"];
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.btn = source["btn"];
+	        this.key = source["key"];
+	        this.text = source["text"];
+	        this.dx = source["dx"];
+	        this.dy = source["dy"];
+	        this.inputType = source["inputType"];
+	        this.targetPath = source["targetPath"];
+	        this.sensitive = source["sensitive"];
+	    }
+	}
+	export class Recording {
+	    id: string;
+	    name: string;
+	    description: string;
+	    events: RecordedEvent[];
+	    eventCount?: number;
+	    durationMs: number;
+	    viewportW: number;
+	    viewportH: number;
+	    startUrl?: string;
+	    currentUrl?: string;
+	    title?: string;
+	    devicePixelRatio?: number;
+	    scale?: number;
+	    createdAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Recording(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.events = this.convertValues(source["events"], RecordedEvent);
+	        this.eventCount = source["eventCount"];
+	        this.durationMs = source["durationMs"];
+	        this.viewportW = source["viewportW"];
+	        this.viewportH = source["viewportH"];
+	        this.startUrl = source["startUrl"];
+	        this.currentUrl = source["currentUrl"];
+	        this.title = source["title"];
+	        this.devicePixelRatio = source["devicePixelRatio"];
+	        this.scale = source["scale"];
+	        this.createdAt = source["createdAt"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class RecordingEventStats {
+	    total: number;
+	    move: number;
+	    click: number;
+	    key: number;
+	    scroll: number;
+
+	    static createFrom(source: any = {}) {
+	        return new RecordingEventStats(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.total = source["total"];
+	        this.move = source["move"];
+	        this.click = source["click"];
+	        this.key = source["key"];
+	        this.scroll = source["scroll"];
+	    }
+	}
+	export class RecordingSummary {
+	    id: string;
+	    name: string;
+	    description: string;
+	    eventCount: number;
+	    durationMs: number;
+	    viewportW: number;
+	    viewportH: number;
+	    startUrl?: string;
+	    currentUrl?: string;
+	    title?: string;
+	    devicePixelRatio?: number;
+	    scale?: number;
+	    createdAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RecordingSummary(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.eventCount = source["eventCount"];
+	        this.durationMs = source["durationMs"];
+	        this.viewportW = source["viewportW"];
+	        this.viewportH = source["viewportH"];
+	        this.startUrl = source["startUrl"];
+	        this.currentUrl = source["currentUrl"];
+	        this.title = source["title"];
+	        this.devicePixelRatio = source["devicePixelRatio"];
+	        this.scale = source["scale"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class RecordingDetailPage {
+	    recording?: RecordingSummary;
+	    events: RecordedEvent[];
+	    eventOffset: number;
+	    eventLimit: number;
+	    eventTotal: number;
+	    stats: RecordingEventStats;
+
+	    static createFrom(source: any = {}) {
+	        return new RecordingDetailPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.recording = this.convertValues(source["recording"], RecordingSummary);
+	        this.events = this.convertValues(source["events"], RecordedEvent);
+	        this.eventOffset = source["eventOffset"];
+	        this.eventLimit = source["eventLimit"];
+	        this.eventTotal = source["eventTotal"];
+	        this.stats = this.convertValues(source["stats"], RecordingEventStats);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class RecordingExportBundle {
+	    version: number;
+	    exportedAt: string;
+	    recording?: Recording;
+
+	    static createFrom(source: any = {}) {
+	        return new RecordingExportBundle(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.exportedAt = source["exportedAt"];
+	        this.recording = this.convertValues(source["recording"], Recording);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+
 	export class VariationConfig {
 	    intensity: number;
 	    timingJitter: number;
@@ -592,11 +1040,11 @@ export namespace behavior {
 	    speedVariation: number;
 	    microCorrections: boolean;
 	    extraPauses: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new VariationConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.intensity = source["intensity"];
@@ -611,16 +1059,16 @@ export namespace behavior {
 }
 
 export namespace browser {
-	
+
 	export class CoreExtendedInfo {
 	    coreId: string;
 	    chromeVersion: string;
 	    instanceCount: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CoreExtendedInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.coreId = source["coreId"];
@@ -633,11 +1081,11 @@ export namespace browser {
 	    coreName: string;
 	    corePath: string;
 	    isDefault: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CoreInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.coreId = source["coreId"];
@@ -649,15 +1097,65 @@ export namespace browser {
 	export class CoreValidateResult {
 	    valid: boolean;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CoreValidateResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.valid = source["valid"];
 	        this.message = source["message"];
+	    }
+	}
+	export class FingerprintSnapshot {
+	    userAgent: string;
+	    platform: string;
+	    hardwareConcurrency: number;
+	    deviceMemory: number;
+	    colorDepth: number;
+	    pixelDepth: number;
+	    screenWidth: number;
+	    screenHeight: number;
+	    availWidth: number;
+	    availHeight: number;
+	    devicePixelRatio: number;
+	    maxTouchPoints: number;
+	    vendor: string;
+	    timezone: string;
+	    language: string;
+	    languages: string[];
+	    canvasHash: string;
+	    webglVendor: string;
+	    webglRenderer: string;
+	    fontHash: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FingerprintSnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.userAgent = source["userAgent"];
+	        this.platform = source["platform"];
+	        this.hardwareConcurrency = source["hardwareConcurrency"];
+	        this.deviceMemory = source["deviceMemory"];
+	        this.colorDepth = source["colorDepth"];
+	        this.pixelDepth = source["pixelDepth"];
+	        this.screenWidth = source["screenWidth"];
+	        this.screenHeight = source["screenHeight"];
+	        this.availWidth = source["availWidth"];
+	        this.availHeight = source["availHeight"];
+	        this.devicePixelRatio = source["devicePixelRatio"];
+	        this.maxTouchPoints = source["maxTouchPoints"];
+	        this.vendor = source["vendor"];
+	        this.timezone = source["timezone"];
+	        this.language = source["language"];
+	        this.languages = source["languages"];
+	        this.canvasHash = source["canvasHash"];
+	        this.webglVendor = source["webglVendor"];
+	        this.webglRenderer = source["webglRenderer"];
+	        this.fontHash = source["fontHash"];
 	    }
 	}
 	export class Group {
@@ -667,11 +1165,11 @@ export namespace browser {
 	    sortOrder: number;
 	    createdAt: string;
 	    updatedAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Group(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.groupId = source["groupId"];
@@ -686,11 +1184,11 @@ export namespace browser {
 	    groupName: string;
 	    parentId: string;
 	    sortOrder: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new GroupInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.groupName = source["groupName"];
@@ -706,11 +1204,11 @@ export namespace browser {
 	    createdAt: string;
 	    updatedAt: string;
 	    instanceCount: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new GroupWithCount(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.groupId = source["groupId"];
@@ -751,11 +1249,11 @@ export namespace browser {
 	    updatedAt: string;
 	    lastStartAt: string;
 	    lastStopAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.profileId = source["profileId"];
@@ -801,11 +1299,11 @@ export namespace browser {
 	    keywords: string[];
 	    groupId: string;
 	    behaviorProfileId: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProfileInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.profileName = source["profileName"];
@@ -829,11 +1327,11 @@ export namespace browser {
 	    defaultProxy: string;
 	    startReadyTimeoutMs: number;
 	    startStableWindowMs: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.userDataRoot = source["userDataRoot"];
@@ -849,11 +1347,11 @@ export namespace browser {
 	    title: string;
 	    url: string;
 	    active: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Tab(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tabId = source["tabId"];
@@ -866,15 +1364,15 @@ export namespace browser {
 }
 
 export namespace config {
-	
+
 	export class BrowserBookmark {
 	    name: string;
 	    url: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BrowserBookmark(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -885,17 +1383,19 @@ export namespace config {
 	    coreId: string;
 	    coreName: string;
 	    corePath: string;
+	    kind?: string;
 	    isDefault: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BrowserCore(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.coreId = source["coreId"];
 	        this.coreName = source["coreName"];
 	        this.corePath = source["corePath"];
+	        this.kind = source["kind"];
 	        this.isDefault = source["isDefault"];
 	    }
 	}
@@ -916,11 +1416,11 @@ export namespace config {
 	    lastTestOk: boolean;
 	    lastTestedAt: string;
 	    lastIPHealthJson?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BrowserProxy(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.proxyId = source["proxyId"];
@@ -945,7 +1445,7 @@ export namespace config {
 }
 
 export namespace events {
-	
+
 	export class EventLogEntry {
 	    id: number;
 	    eventName: string;
@@ -953,11 +1453,11 @@ export namespace events {
 	    severity: string;
 	    payload: Record<string, any>;
 	    createdAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new EventLogEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -972,16 +1472,16 @@ export namespace events {
 }
 
 export namespace launchcode {
-	
+
 	export class LaunchRequestParams {
 	    launchArgs: string[];
 	    startUrls: string[];
 	    skipDefaultStartUrls: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LaunchRequestParams(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.launchArgs = source["launchArgs"];
@@ -989,22 +1489,50 @@ export namespace launchcode {
 	        this.skipDefaultStartUrls = source["skipDefaultStartUrls"];
 	    }
 	}
+	export class WorkbenchWindowPlacement {
+	    profileId: string;
+	    profileName: string;
+	    pid: number;
+	    found: boolean;
+	    x: number;
+	    y: number;
+	    width: number;
+	    height: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WorkbenchWindowPlacement(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.pid = source["pid"];
+	        this.found = source["found"];
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.error = source["error"];
+	    }
+	}
 
 }
 
 export namespace logger {
-	
+
 	export class MemoryLogEntry {
 	    time: string;
 	    level: string;
 	    component: string;
 	    message: string;
 	    fields?: Record<string, any>;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new MemoryLogEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.time = source["time"];
@@ -1014,16 +1542,54 @@ export namespace logger {
 	        this.fields = source["fields"];
 	    }
 	}
+	export class MemoryLogPage {
+	    entries: MemoryLogEntry[];
+	    total: number;
+	    offset: number;
+	    limit: number;
+	    hasMore: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new MemoryLogPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entries = this.convertValues(source["entries"], MemoryLogEntry);
+	        this.total = source["total"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	        this.hasMore = source["hasMore"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class MethodInterceptor {
-	
-	
+
+
 	    static createFrom(source: any = {}) {
 	        return new MethodInterceptor(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	
+
 	    }
 	}
 

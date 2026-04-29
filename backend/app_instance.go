@@ -14,8 +14,6 @@ import (
 	stdruntime "runtime"
 	"strings"
 	"time"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // ============================================================================
@@ -152,7 +150,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			log.Error("代理桥接失败(sing-box)", logger.F("error", bridgeErr.Error()), logger.F("reason", startErr.Error()))
 			profile.LastError = startErr.Error()
 			if a.ctx != nil {
-				runtime.EventsEmit(a.ctx, events.EventProxyBridgeFailed, map[string]interface{}{
+				a.emit(events.EventProxyBridgeFailed, map[string]interface{}{
 					"profileId":   profileId,
 					"profileName": profile.ProfileName,
 					"error":       startErr.Error(),
@@ -170,7 +168,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			log.Error("代理桥接失败(xray)", logger.F("error", bridgeErr.Error()), logger.F("reason", startErr.Error()))
 			profile.LastError = startErr.Error()
 			if a.ctx != nil {
-				runtime.EventsEmit(a.ctx, events.EventProxyBridgeFailed, map[string]interface{}{
+				a.emit(events.EventProxyBridgeFailed, map[string]interface{}{
 					"profileId":   profileId,
 					"profileName": profile.ProfileName,
 					"error":       startErr.Error(),
@@ -610,7 +608,7 @@ func (a *App) waitBrowserProcess(profileId string, monitor *browserProcessMonito
 			profile.LastError = fmt.Sprintf("实例运行异常退出：%s", err.Error())
 		}
 		log.Error("浏览器进程异常退出", logger.F("profile_id", profileId), logger.F("profile_name", profileName), logger.F("error", err))
-		runtime.EventsEmit(a.ctx, events.EventBrowserInstanceCrashed, map[string]interface{}{
+		a.emit(events.EventBrowserInstanceCrashed, map[string]interface{}{
 			"profileId":   profileId,
 			"profileName": profileName,
 			"error":       err.Error(),
@@ -634,7 +632,7 @@ func (a *App) waitBrowserProcess(profileId string, monitor *browserProcessMonito
 
 		if crashCount >= 3 {
 			log.Error("检测到崩溃回路", logger.F("profile_id", profileId), logger.F("crash_count", crashCount), logger.F("window", "5m"))
-			runtime.EventsEmit(a.ctx, events.EventRiskBrowserCrashLoop, map[string]interface{}{
+			a.emit(events.EventRiskBrowserCrashLoop, map[string]interface{}{
 				"profileId":   profileId,
 				"profileName": profileName,
 				"crashCount":  crashCount,
@@ -642,7 +640,7 @@ func (a *App) waitBrowserProcess(profileId string, monitor *browserProcessMonito
 			})
 		}
 	} else {
-		runtime.EventsEmit(a.ctx, events.EventBrowserInstanceStopped, profileId)
+		a.emit(events.EventBrowserInstanceStopped, profileId)
 	}
 }
 
@@ -684,7 +682,7 @@ func (a *App) waitDetachedBrowser(profileId string, debugPort int) {
 			logger.F("debug_port", debugPort),
 		)
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, events.EventBrowserInstanceStopped, profileId)
+			a.emit(events.EventBrowserInstanceStopped, profileId)
 		}
 		return
 	}
@@ -895,7 +893,7 @@ func (a *App) verifyFingerprintAndGeo(profileId string, profile *BrowserProfile,
 	}
 
 	emitFn := func(event string, data ...interface{}) {
-		runtime.EventsEmit(a.ctx, event, data...)
+		a.emit(event, data...)
 	}
 
 	// 1. CDP 指纹验证

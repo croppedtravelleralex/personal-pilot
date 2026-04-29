@@ -66,3 +66,10 @@ launch_server:
         enabled: false
         api_key: ""
         header: X-Ant-Api-Key
+
+llm:
+    provider: "openai"
+    endpoint: "https://api.openai.com/v1"
+    api_key: ""
+    model: "gpt-4o"
+    timeout: 60s

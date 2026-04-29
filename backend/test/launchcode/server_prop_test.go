@@ -52,7 +52,7 @@ func (m *mockStarter) StartInstance(profileId string) (*browser.Profile, error) 
 // buildTestHandler 构建一个可直接用于 httptest 的 handler（绕过 localhost 中间件）
 // 通过直接调用 server 内部 handler 的方式，使用 httptest.NewRecorder 测试路由逻辑
 func buildTestHandler(svc *launchcode.LaunchCodeService, starter launchcode.BrowserStarter) http.Handler {
-	srv := launchcode.NewLaunchServer(svc, starter, nil, 0)
+	srv := launchcode.NewLaunchServer(svc, starter, nil, nil, 0)
 	return launchcode.NewTestHandler(srv)
 }
 

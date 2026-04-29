@@ -2,10 +2,10 @@ package proxy
 
 // TrustScoreComponents holds the weighted dimensions of proxy trust.
 type TrustScoreComponents struct {
-	LatencyScore      float64 // 0-1, based on latency percentile
-	IPHealthScore     float64 // 0-1, based on IP fraud score / datacenter detection
-	HistoryScore      float64 // 0-1, based on historical success rate
-	RegionMatchScore  float64 // 0-1, based on proxy region matching target region
+	LatencyScore     float64 // 0-1, based on latency percentile
+	IPHealthScore    float64 // 0-1, based on IP fraud score / datacenter detection
+	HistoryScore     float64 // 0-1, based on historical success rate
+	RegionMatchScore float64 // 0-1, based on proxy region matching target region
 }
 
 // TrustScoreResult is the composite trust score for a proxy.

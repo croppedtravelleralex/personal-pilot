@@ -14,8 +14,8 @@ const (
 // ScrollStep is one step in a scroll plan.
 type ScrollStep struct {
 	Type       ScrollStepType
-	DeltaPx    int32  // positive=down, negative=up (for ScrollBy)
-	Y          int32  // absolute position (for ScrollTo)
+	DeltaPx    int32 // positive=down, negative=up (for ScrollBy)
+	Y          int32 // absolute position (for ScrollTo)
 	Speed      ScrollSpeed
 	DurationMs uint32 // for Pause
 }

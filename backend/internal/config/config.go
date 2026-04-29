@@ -52,6 +52,7 @@ type Config struct {
 	Logging      LoggingConfig      `yaml:"logging"`
 	Browser      BrowserConfig      `yaml:"browser"`
 	LaunchServer LaunchServerConfig `yaml:"launch_server"`
+	LLM          LLMConfig          `yaml:"llm"`
 }
 
 // DatabaseConfig 数据库配置
@@ -425,6 +426,7 @@ func DefaultConfig() *Config {
 				Header:  DefaultLaunchServerAPIKeyHeader,
 			},
 		},
+		LLM: DefaultLLMConfig(),
 	}
 }
 

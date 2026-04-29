@@ -2,6 +2,7 @@ package backend
 
 import (
 	"ant-chrome/backend/internal/config"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,53 @@ func TestBackupEnsureZipSuffix(t *testing.T) {
 	}
 	if got := backupEnsureZipSuffix("c:/tmp/a"); got != "c:/tmp/a.zip" {
 		t.Fatalf("zip 后缀追加失败: %s", got)
+	}
+}
+
+func TestBackupExportPackageToPathWritesZip(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "config.yaml"), []byte("app:\n  name: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "data"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "data", "app.db"), []byte("test-db"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp(root, "test")
+	app.ctx = context.Background()
+	app.config = config.DefaultConfig()
+
+	zipPath := filepath.Join(root, "export")
+	result, err := app.BackupExportPackageToPath(zipPath)
+	if err != nil {
+		t.Fatalf("export to explicit path failed: %v", err)
+	}
+	if result["cancelled"] == true {
+		t.Fatalf("export should not be cancelled: %+v", result)
+	}
+	expectedPath := zipPath + ".zip"
+	if result["zipPath"] != expectedPath {
+		t.Fatalf("zip path mismatch: got=%v want=%s", result["zipPath"], expectedPath)
+	}
+	if info, err := os.Stat(expectedPath); err != nil || info.Size() == 0 {
+		t.Fatalf("backup zip was not written: info=%v err=%v", info, err)
+	}
+}
+
+func TestBackupImportPackageFromPathRejectsEmptyPath(t *testing.T) {
+	app := NewApp(t.TempDir(), "test")
+	app.ctx = context.Background()
+	app.config = config.DefaultConfig()
+
+	result, err := app.BackupImportPackageFromPath("  ", false)
+	if err != nil {
+		t.Fatalf("empty import path should be a cancellation, got error: %v", err)
+	}
+	if result["cancelled"] != true {
+		t.Fatalf("empty import path should return cancelled result: %+v", result)
 	}
 }
 

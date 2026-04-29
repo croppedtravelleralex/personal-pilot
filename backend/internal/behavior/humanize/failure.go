@@ -6,15 +6,15 @@ import "math/rand/v2"
 type ActionErrorCode int
 
 const (
-	ErrElementNotFound    ActionErrorCode = 0
-	ErrClickFailed        ActionErrorCode = 1
-	ErrNavigationTimeout  ActionErrorCode = 2
-	ErrProxyDead          ActionErrorCode = 3
+	ErrElementNotFound     ActionErrorCode = 0
+	ErrClickFailed         ActionErrorCode = 1
+	ErrNavigationTimeout   ActionErrorCode = 2
+	ErrProxyDead           ActionErrorCode = 3
 	ErrFingerprintRejected ActionErrorCode = 4
-	ErrSessionCrashed     ActionErrorCode = 5
-	ErrRateLimited        ActionErrorCode = 6
-	ErrContentBlinded     ActionErrorCode = 7
-	ErrUnknown            ActionErrorCode = 8
+	ErrSessionCrashed      ActionErrorCode = 5
+	ErrRateLimited         ActionErrorCode = 6
+	ErrContentBlinded      ActionErrorCode = 7
+	ErrUnknown             ActionErrorCode = 8
 )
 
 func (e ActionErrorCode) String() string {
@@ -44,11 +44,11 @@ func (e ActionErrorCode) String() string {
 type RecoveryActionType int
 
 const (
-	RecoveryRetry           RecoveryActionType = 0
-	RecoveryRetryAfter      RecoveryActionType = 1 // wait, then retry
-	RecoveryGiveUp          RecoveryActionType = 2
-	RecoverySwitchApproach  RecoveryActionType = 3
-	RecoverySkip            RecoveryActionType = 4
+	RecoveryRetry          RecoveryActionType = 0
+	RecoveryRetryAfter     RecoveryActionType = 1 // wait, then retry
+	RecoveryGiveUp         RecoveryActionType = 2
+	RecoverySwitchApproach RecoveryActionType = 3
+	RecoverySkip           RecoveryActionType = 4
 )
 
 // RecoveryAction describes the recovery strategy after a failure.
@@ -59,20 +59,26 @@ type RecoveryAction struct {
 
 // RetryDecision combines a recovery action with an estimated success probability.
 type RetryDecision struct {
-	Action                     RecoveryAction
+	Action                      RecoveryAction
 	EstimatedSuccessProbability float64
 }
 
 // Convenience constructors
-func retryNow() RetryDecision    { return RetryDecision{Action: RecoveryAction{Type: RecoveryRetry}, EstimatedSuccessProbability: 0.6} }
+func retryNow() RetryDecision {
+	return RetryDecision{Action: RecoveryAction{Type: RecoveryRetry}, EstimatedSuccessProbability: 0.6}
+}
 func retryAfter(ms uint32) RetryDecision {
 	return RetryDecision{Action: RecoveryAction{Type: RecoveryRetryAfter, WaitMs: ms}, EstimatedSuccessProbability: 0.75}
 }
-func giveUp() RetryDecision  { return RetryDecision{Action: RecoveryAction{Type: RecoveryGiveUp}, EstimatedSuccessProbability: 0.0} }
+func giveUp() RetryDecision {
+	return RetryDecision{Action: RecoveryAction{Type: RecoveryGiveUp}, EstimatedSuccessProbability: 0.0}
+}
 func switchApproach() RetryDecision {
 	return RetryDecision{Action: RecoveryAction{Type: RecoverySwitchApproach}, EstimatedSuccessProbability: 0.5}
 }
-func skipRetry() RetryDecision { return RetryDecision{Action: RecoveryAction{Type: RecoverySkip}, EstimatedSuccessProbability: 0.0} }
+func skipRetry() RetryDecision {
+	return RetryDecision{Action: RecoveryAction{Type: RecoverySkip}, EstimatedSuccessProbability: 0.0}
+}
 
 // HumanizedRetryDecision decides what to do after an action fails.
 // Incorporates human-like hesitation, fatal error recognition, and early give-up.

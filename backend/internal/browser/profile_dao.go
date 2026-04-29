@@ -34,7 +34,7 @@ func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
-		       tags, keywords, group_id, created_at, updated_at
+		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''), created_at, updated_at
 		FROM browser_profiles ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("查询实例列表失败: %w", err)
@@ -60,7 +60,7 @@ func (d *SQLiteProfileDAO) GetById(profileId string) (*Profile, error) {
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
-		       tags, keywords, group_id, created_at, updated_at
+		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''), created_at, updated_at
 		FROM browser_profiles WHERE profile_id = ?`, profileId)
 	p, err := scanProfile(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -88,7 +88,7 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		INSERT INTO browser_profiles
 		  (profile_id, profile_name, user_data_dir, core_id, fingerprint_args,
 		   proxy_id, proxy_config, proxy_bind_source_id, proxy_bind_source_url, proxy_bind_name, proxy_bind_updated_at,
-		   launch_args, tags, keywords, group_id, COALESCE(behavior_profile_id, ''), created_at, updated_at)
+		   launch_args, tags, keywords, group_id, behavior_profile_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(profile_id) DO UPDATE SET
 		  profile_name     = excluded.profile_name,
@@ -105,11 +105,13 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		  tags             = excluded.tags,
 		  keywords         = excluded.keywords,
 		  group_id         = excluded.group_id,
+		  behavior_profile_id = excluded.behavior_profile_id,
 		  updated_at       = excluded.updated_at`,
 		profile.ProfileId, profile.ProfileName, profile.UserDataDir, profile.CoreId,
 		string(fingerprintArgs), profile.ProxyId, profile.ProxyConfig,
 		profile.ProxyBindSourceID, profile.ProxyBindSourceURL, profile.ProxyBindName, profile.ProxyBindUpdatedAt,
 		string(launchArgs), string(tags), string(keywords), profile.GroupId,
+		profile.BehaviorProfileID,
 		profile.CreatedAt, profile.UpdatedAt,
 	)
 	if err != nil {
@@ -219,6 +221,7 @@ func scanProfile(s scanner) (*Profile, error) {
 		&fingerprintArgsJSON, &p.ProxyId, &p.ProxyConfig,
 		&p.ProxyBindSourceID, &p.ProxyBindSourceURL, &p.ProxyBindName, &p.ProxyBindUpdatedAt,
 		&launchArgsJSON, &tagsJSON, &keywordsJSON, &p.GroupId,
+		&p.BehaviorProfileID,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {

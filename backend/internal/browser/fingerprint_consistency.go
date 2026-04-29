@@ -21,22 +21,22 @@ type ConsistencyCheckItem struct {
 
 // FingerprintConsistencyAssessment is the result of cross-checking fingerprint parameters.
 type FingerprintConsistencyAssessment struct {
-	CoherenceScore  int                    // 0-100, higher = more consistent
-	Status          string                 // "coherent", "suspicious", "inconsistent"
-	HardFailures    int
-	SoftFailures    int
-	RiskReasons     []string
-	CheckItems      []ConsistencyCheckItem
+	CoherenceScore int    // 0-100, higher = more consistent
+	Status         string // "coherent", "suspicious", "inconsistent"
+	HardFailures   int
+	SoftFailures   int
+	RiskReasons    []string
+	CheckItems     []ConsistencyCheckItem
 }
 
 // FingerprintConsistencyInput provides all the data needed for a consistency assessment.
 type FingerprintConsistencyInput struct {
 	// Region / locale
-	TargetRegion     string // e.g. "US", "JP", "DE"
-	ProxyRegion      string // detected proxy exit region
-	Timezone         string // e.g. "America/New_York"
-	Locale           string // e.g. "en-US"
-	AcceptLanguage   string // e.g. "en-US,en;q=0.9"
+	TargetRegion   string // e.g. "US", "JP", "DE"
+	ProxyRegion    string // detected proxy exit region
+	Timezone       string // e.g. "America/New_York"
+	Locale         string // e.g. "en-US"
+	AcceptLanguage string // e.g. "en-US,en;q=0.9"
 	// Display
 	ScreenWidth  int
 	ScreenHeight int
@@ -48,8 +48,8 @@ type FingerprintConsistencyInput struct {
 	WebGLVendor   string // actual GPU vendor detected in browser
 	WebGLRenderer string // actual GPU renderer detected in browser
 	// Touch
-	SupportsTouch   bool
-	MaxTouchPoints  int
+	SupportsTouch  bool
+	MaxTouchPoints int
 	// Hardware
 	HardwareConcurrency int
 	DeviceMemory        int

@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -22,6 +23,16 @@ var (
 	behaviorHTTPClient = &http.Client{Timeout: 5 * time.Second}
 	behaviorWSDialer   = &websocket.Dialer{HandshakeTimeout: 5 * time.Second}
 )
+
+type cdpTarget struct {
+	ID                   string `json:"id,omitempty"`
+	Type                 string `json:"type"`
+	URL                  string `json:"url"`
+	Title                string `json:"title,omitempty"`
+	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	Active               bool   `json:"active,omitempty"`
+	Attached             bool   `json:"attached,omitempty"`
+}
 
 // connectCDP dials the browser's CDP endpoint and returns a connection.
 func connectCDP(debugPort int) (*cdpConn, error) {
@@ -49,6 +60,103 @@ func connectCDP(debugPort int) (*cdpConn, error) {
 	return &cdpConn{ws: ws}, nil
 }
 
+// ConnectPageCDP connects to the best available page target's CDP WebSocket.
+// This is needed for Runtime.evaluate, Input.*, and other page-level domains.
+func ConnectPageCDP(debugPort int) (*websocket.Conn, error) {
+	conn, _, _, err := connectPageCDPWithTarget(debugPort)
+	return conn, err
+}
+
+func connectPageCDPWithTarget(debugPort int) (*websocket.Conn, cdpTarget, []cdpTarget, error) {
+	targets, err := listCDPTargets(debugPort)
+	if err != nil {
+		return nil, cdpTarget{}, nil, err
+	}
+
+	target, ok := selectPageTarget(targets)
+	if !ok {
+		return nil, cdpTarget{}, targets, fmt.Errorf("no page target found on port %d", debugPort)
+	}
+
+	ws, _, err := behaviorWSDialer.Dial(target.WebSocketDebuggerURL, nil)
+	if err != nil {
+		return nil, cdpTarget{}, targets, fmt.Errorf("ws dial page: %w", err)
+	}
+	return ws, target, targets, nil
+}
+
+func listCDPTargets(debugPort int) ([]cdpTarget, error) {
+	resp, err := behaviorHTTPClient.Get(fmt.Sprintf("http://127.0.0.1:%d/json", debugPort))
+	if err != nil {
+		return nil, fmt.Errorf("fetch /json: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var targets []cdpTarget
+	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
+		return nil, fmt.Errorf("decode /json: %w", err)
+	}
+	return targets, nil
+}
+
+func selectPageTarget(targets []cdpTarget) (cdpTarget, bool) {
+	bestIndex := -1
+	bestScore := -1 << 30
+
+	for i, target := range targets {
+		if !strings.EqualFold(target.Type, "page") || target.WebSocketDebuggerURL == "" {
+			continue
+		}
+
+		score := 0
+		if !isInternalBrowserURL(target.URL) {
+			score += 1000
+		}
+		if target.Active {
+			score += 100
+		}
+		if target.Attached {
+			score += 50
+		}
+		if strings.TrimSpace(target.URL) != "" {
+			score += 10
+		}
+		if strings.TrimSpace(target.Title) != "" {
+			score += 5
+		}
+
+		if score > bestScore {
+			bestScore = score
+			bestIndex = i
+		}
+	}
+
+	if bestIndex < 0 {
+		return cdpTarget{}, false
+	}
+	return targets[bestIndex], true
+}
+
+func isInternalBrowserURL(rawURL string) bool {
+	u := strings.ToLower(strings.TrimSpace(rawURL))
+	if u == "" {
+		return true
+	}
+	internalPrefixes := []string{
+		"chrome://",
+		"chrome-extension://",
+		"devtools://",
+		"edge://",
+		"about:",
+	}
+	for _, prefix := range internalPrefixes {
+		if strings.HasPrefix(u, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *cdpConn) Close() {
 	if !c.closed {
 		c.closed = true
@@ -59,32 +167,62 @@ func (c *cdpConn) Close() {
 // sendCommand sends a CDP command and returns the raw result.
 func (c *cdpConn) sendCommand(method string, params interface{}) (json.RawMessage, error) {
 	c.msgID++
+	return sendCDPCommandWS(c.ws, c.msgID, method, params, 5*time.Second)
+}
+
+func sendCDPCommandWS(conn *websocket.Conn, id int, method string, params interface{}, timeout time.Duration) (json.RawMessage, error) {
+	if conn == nil {
+		return nil, fmt.Errorf("websocket not connected")
+	}
 	type req struct {
 		ID     int         `json:"id"`
 		Method string      `json:"method"`
 		Params interface{} `json:"params,omitempty"`
 	}
-	type resp struct {
-		ID     int             `json:"id"`
-		Result json.RawMessage `json:"result"`
-		Error  *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-
-	if err := c.ws.WriteJSON(req{ID: c.msgID, Method: method, Params: params}); err != nil {
+	if err := conn.WriteJSON(req{ID: id, Method: method, Params: params}); err != nil {
 		return nil, fmt.Errorf("write %s: %w", method, err)
 	}
+	return readCDPCommandResult(conn, id, method, timeout)
+}
 
-	c.ws.SetReadDeadline(time.Now().Add(5 * time.Second))
-	var r resp
-	if err := c.ws.ReadJSON(&r); err != nil {
-		return nil, fmt.Errorf("read %s resp: %w", method, err)
+func readCDPCommandResult(conn *websocket.Conn, expectedID int, method string, timeout time.Duration) (json.RawMessage, error) {
+	deadline := time.Now().Add(timeout)
+	defer conn.SetReadDeadline(time.Time{})
+
+	for time.Now().Before(deadline) {
+		conn.SetReadDeadline(deadline)
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			return nil, fmt.Errorf("read %s response id=%d: %w", method, expectedID, err)
+		}
+
+		var response struct {
+			ID     int             `json:"id"`
+			Result json.RawMessage `json:"result"`
+			Error  *struct {
+				Code    int             `json:"code"`
+				Message string          `json:"message"`
+				Data    json.RawMessage `json:"data,omitempty"`
+			} `json:"error,omitempty"`
+		}
+		if err := json.Unmarshal(msg, &response); err != nil {
+			continue
+		}
+		if response.ID != expectedID {
+			continue
+		}
+		if response.Error != nil {
+			if response.Error.Code != 0 {
+				return nil, fmt.Errorf("cdp error %s id=%d code=%d: %s", method, expectedID, response.Error.Code, response.Error.Message)
+			}
+			return nil, fmt.Errorf("cdp error %s id=%d: %s", method, expectedID, response.Error.Message)
+		}
+		if response.Result == nil {
+			return json.RawMessage(`{}`), nil
+		}
+		return response.Result, nil
 	}
-	if r.Error != nil {
-		return nil, fmt.Errorf("cdp error %s: %s", method, r.Error.Message)
-	}
-	return r.Result, nil
+	return nil, fmt.Errorf("timeout waiting for %s response id=%d", method, expectedID)
 }
 
 // mouseMove generates a sequence of mouse move events along a bezier path.

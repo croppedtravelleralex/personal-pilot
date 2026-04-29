@@ -21,9 +21,9 @@ const (
 type ScrollDirection int
 
 const (
-	ScrollUp          ScrollDirection = 0
-	ScrollDown        ScrollDirection = 1
-	ScrollToElement   ScrollDirection = 2
+	ScrollUp        ScrollDirection = 0
+	ScrollDown      ScrollDirection = 1
+	ScrollToElement ScrollDirection = 2
 )
 
 // OffsetOverride allows explicit click position override.
@@ -66,10 +66,10 @@ const (
 
 // MutatedAction is an execution-ready action with humanized parameters.
 type MutatedAction struct {
-	Type         MutatedActionType
-	URL          string
-	Selector     string
-	PreGapMs     uint32 // pre-action delay, present on ALL variants
+	Type     MutatedActionType
+	URL      string
+	Selector string
+	PreGapMs uint32 // pre-action delay, present on ALL variants
 
 	// Click
 	ClickTarget *ClickTarget
@@ -114,7 +114,7 @@ func ActionResultFailure(code ActionErrorCode, msg string) ActionResult {
 // ElementBounds describes an element's bounding box on the page.
 type ElementBounds struct {
 	X1, Y1, X2, Y2 int32
-	Width, Height   uint32
+	Width, Height  uint32
 }
 
 // CenterX returns the horizontal center of the element.

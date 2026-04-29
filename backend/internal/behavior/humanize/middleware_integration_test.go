@@ -86,10 +86,10 @@ func TestMiddlewareRetryLifecycle(t *testing.T) {
 		wantGive bool
 		wantWait bool
 	}{
-		{ErrNavigationTimeout, 1, false, true},     // 超时可重试
-		{ErrNavigationTimeout, 2, false, true},     // 再次超时仍可重试
-		{ErrNavigationTimeout, 3, false, true},     // 第三次超时仍可重试
-		{ErrSessionCrashed, 1, true, false},        // 会话崩溃应立即放弃
+		{ErrNavigationTimeout, 1, false, true}, // 超时可重试
+		{ErrNavigationTimeout, 2, false, true}, // 再次超时仍可重试
+		{ErrNavigationTimeout, 3, false, true}, // 第三次超时仍可重试
+		{ErrSessionCrashed, 1, true, false},    // 会话崩溃应立即放弃
 	}
 
 	for i, tc := range tests {
@@ -112,10 +112,10 @@ func TestMiddlewareWithLevels(t *testing.T) {
 		level      HumanizationLevel
 		expectGaps bool
 	}{
-		{LevelNone, false},     // None: 无延迟
-		{LevelMinimal, true},   // Minimal: 有延迟
-		{LevelMedium, true},    // Medium: 有延迟和输入计划
-		{LevelHigh, true},      // High: 完整的延迟和计划
+		{LevelNone, false},   // None: 无延迟
+		{LevelMinimal, true}, // Minimal: 有延迟
+		{LevelMedium, true},  // Medium: 有延迟和输入计划
+		{LevelHigh, true},    // High: 完整的延迟和计划
 	}
 
 	action := LlmAction{Type: ActionTypeText, Selector: "#input", Text: "hello world"}
