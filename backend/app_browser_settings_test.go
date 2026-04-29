@@ -66,3 +66,22 @@ func TestSaveBrowserSettingsAppliesExplicitStartTiming(t *testing.T) {
 		t.Fatalf("expected stable window 3000ms, got %d", app.config.Browser.StartStableWindowMs)
 	}
 }
+
+func TestSaveBrowserSettingsRejectsUnsafeUserDataRoot(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.config = config.DefaultConfig()
+	app.config.Browser.UserDataRoot = "data"
+
+	err := app.SaveBrowserSettings(BrowserSettings{
+		UserDataRoot:           "../outside",
+		DefaultFingerprintArgs: append([]string{}, app.config.Browser.DefaultFingerprintArgs...),
+		DefaultLaunchArgs:      append([]string{}, app.config.Browser.DefaultLaunchArgs...),
+		DefaultProxy:           app.config.Browser.DefaultProxy,
+	})
+	if err == nil {
+		t.Fatal("expected unsafe user-data root to be rejected")
+	}
+	if app.config.Browser.UserDataRoot != "data" {
+		t.Fatalf("unsafe root should not mutate config, got %q", app.config.Browser.UserDataRoot)
+	}
+}

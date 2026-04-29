@@ -51,3 +51,10 @@
 
 - MTN-005 / Done：实例工作台真实 2 实例自动验收入口已补齐。证据：`POST /api/instances/stop`、`/api/workbench/*`、`scripts/verify-workbench-two-instances.ps1`，以及脚本真实运行通过。
 - 后续仍保留：多屏指定、最小化其他窗口、布局恢复、预览节流和 debugPort 未就绪时的窗口截图降级。
+
+## 2026-04-29 Identity Asset Safety Gate V1 Backlog Entry
+
+- MTN-006 / In Progress: Identity Asset Safety Gate V1 scripted acceptance.
+- Problem: profile identity assets can only be trusted if release scripts prove user-data-dir uniqueness, Cookie persistence, path mismatch blocking, profile isolation, fingerprint stability, and no residual verification processes.
+- Direction: keep the checks in `scripts/verify-workbench-two-instances.ps1` and `scripts/verify-tauri-fingerprint-regression.ps1`; do not move this into Go/Tauri UI until the acceptance surface is stable.
+- Evidence required for Done: release script JSON showing duplicate/path mismatch blocked, Cookie marker persisted after restart, profile markers did not cross, stop-one-keep-one passed, no residual processes remained, and all listed fingerprint fields matched baseline/candidate.

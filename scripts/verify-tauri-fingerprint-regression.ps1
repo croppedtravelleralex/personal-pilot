@@ -129,7 +129,7 @@ function Wait-ProfileReady {
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSec)
     while ((Get-Date) -lt $deadline) {
         $profile = Get-AntProfiles | Where-Object { $_.profileId -eq $TargetProfileId } | Select-Object -First 1
-        if ($null -ne $profile -and $profile.running -and $profile.debugReady -and [int]$profile.debugPort -gt 0) {
+        if ($null -ne $profile -and $profile.running -and $profile.debugReady -and [int]$profile.debugPort -gt 0 -and [int]$profile.pid -gt 0) {
             return $profile
         }
         Start-Sleep -Milliseconds 750
@@ -204,11 +204,239 @@ function Get-CommandLine {
     }
 }
 
+function Get-CanonicalUserDataDir {
+    param([Parameter(Mandatory = $true)][string]$UserDataDir)
+    $trimmed = $UserDataDir.Trim()
+    if ([System.IO.Path]::IsPathRooted($trimmed)) {
+        return [System.IO.Path]::GetFullPath($trimmed)
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path (Join-Path $ProjectRoot "data") $trimmed))
+}
+
+function Get-Sha256Text {
+    param([string]$Text)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes([string]$Text)
+        $hash = $sha.ComputeHash($bytes)
+        return ([BitConverter]::ToString($hash) -replace "-", "").ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-ValueHash {
+    param($Value)
+    return Get-Sha256Text -Text (StableJson $Value)
+}
+
+function Get-CommandLineUserDataDir {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) {
+        return ""
+    }
+    if ($CommandLine -match '--user-data-dir=(?:"([^"]+)"|([^\s]+))') {
+        $value = if (-not [string]::IsNullOrWhiteSpace($Matches[1])) { $Matches[1] } else { $Matches[2] }
+        return [System.IO.Path]::GetFullPath($value)
+    }
+    return ""
+}
+
+function Get-CDPPageWebSocketUrl {
+    param([Parameter(Mandatory = $true)][int]$DebugPort)
+
+    $targets = Invoke-RestMethod -Method "GET" -Uri "http://127.0.0.1:$DebugPort/json" -TimeoutSec 5
+    $target = @($targets | Where-Object {
+        $_.type -eq "page" -and
+        -not [string]::IsNullOrWhiteSpace([string]$_.webSocketDebuggerUrl) -and
+        -not ([string]$_.url).StartsWith("devtools://")
+    } | Select-Object -First 1)
+    if ($target.Count -eq 0) {
+        throw "No page CDP target found on debugPort $DebugPort"
+    }
+    return [string]$target[0].webSocketDebuggerUrl
+}
+
+function Invoke-CDPCommand {
+    param(
+        [Parameter(Mandatory = $true)][int]$DebugPort,
+        [Parameter(Mandatory = $true)][string]$Method,
+        [object]$Params = @{},
+        [int]$TimeoutSec = 10
+    )
+
+    $wsUrl = Get-CDPPageWebSocketUrl -DebugPort $DebugPort
+    $socket = [System.Net.WebSockets.ClientWebSocket]::new()
+    $cts = [System.Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds($TimeoutSec))
+    $messageId = [Math]::Abs([Guid]::NewGuid().GetHashCode())
+    try {
+        $socket.ConnectAsync([Uri]$wsUrl, $cts.Token).GetAwaiter().GetResult()
+        $payload = @{ id = $messageId; method = $Method; params = $Params } | ConvertTo-Json -Depth 30 -Compress
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+        $socket.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $cts.Token).GetAwaiter().GetResult()
+
+        while ($true) {
+            $buffer = New-Object byte[] 65536
+            $memory = [System.IO.MemoryStream]::new()
+            do {
+                $result = $socket.ReceiveAsync([ArraySegment[byte]]::new($buffer), $cts.Token).GetAwaiter().GetResult()
+                if ($result.Count -gt 0) {
+                    $memory.Write($buffer, 0, $result.Count)
+                }
+            } while (-not $result.EndOfMessage)
+
+            $text = [System.Text.Encoding]::UTF8.GetString($memory.ToArray())
+            $resp = $text | ConvertFrom-Json
+            if (-not ($resp.PSObject.Properties.Name -contains "id") -or [int]$resp.id -ne $messageId) {
+                continue
+            }
+            if ($null -ne $resp.error) {
+                throw "CDP $Method failed: $($resp.error.message)"
+            }
+            return $resp.result
+        }
+    } finally {
+        if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
+            $socket.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "done", [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
+        }
+        $socket.Dispose()
+        $cts.Dispose()
+    }
+}
+
+function Invoke-CDPEvaluateJson {
+    param(
+        [Parameter(Mandatory = $true)][int]$DebugPort,
+        [Parameter(Mandatory = $true)][string]$Expression,
+        [int]$TimeoutSec = 10
+    )
+    $result = Invoke-CDPCommand -DebugPort $DebugPort -Method "Runtime.evaluate" -Params @{
+        expression = $Expression
+        returnByValue = $true
+        awaitPromise = $true
+    } -TimeoutSec $TimeoutSec
+    if ($null -ne $result.exceptionDetails) {
+        throw "CDP Runtime.evaluate exception: $($result.exceptionDetails.text)"
+    }
+    $value = [string]$result.result.value
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        throw "CDP Runtime.evaluate returned empty value"
+    }
+    return ($value | ConvertFrom-Json)
+}
+
+function Set-CookieMarker {
+    param(
+        [Parameter(Mandatory = $true)][int]$DebugPort,
+        [Parameter(Mandatory = $true)][string]$MarkerValue
+    )
+    [void](Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.enable")
+    $result = Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.setCookie" -Params @{
+        name = "antbrowser_fingerprint_marker"
+        value = $MarkerValue
+        url = "https://fingerprint-gate.invalid/"
+        path = "/"
+        expires = [double]([DateTimeOffset]::UtcNow.AddDays(2).ToUnixTimeSeconds())
+        sameSite = "Lax"
+    }
+    if (-not [bool]$result.success) {
+        throw "CDP Network.setCookie did not accept fingerprint marker"
+    }
+}
+
+function Get-CookieMarkerValues {
+    param([Parameter(Mandatory = $true)][int]$DebugPort)
+    [void](Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.enable")
+    $result = Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.getAllCookies"
+    return @($result.cookies | Where-Object {
+        $_.name -eq "antbrowser_fingerprint_marker" -and ([string]$_.domain).TrimStart(".") -eq "fingerprint-gate.invalid"
+    } | ForEach-Object { [string]$_.value })
+}
+
+function Get-AdvancedFingerprint {
+    param([Parameter(Mandatory = $true)][int]$DebugPort)
+
+    $script = @'
+(async function() {
+  function hashString(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+    }
+    return (h >>> 0).toString(16);
+  }
+  var info = {
+    webRTC: { supported: false, candidateTypes: [], hasHostCandidate: false, hasSrflxCandidate: false, hasRelayCandidate: false, error: '' },
+    audioHash: '',
+    audioError: ''
+  };
+  try {
+    var Ctor = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+    info.webRTC.supported = !!Ctor;
+    if (Ctor) {
+      var pc = new Ctor({ iceServers: [] });
+      var candidates = [];
+      pc.onicecandidate = function(e) {
+        if (e && e.candidate && e.candidate.candidate) candidates.push(e.candidate.candidate);
+      };
+      pc.createDataChannel('antbrowser');
+      await pc.setLocalDescription(await pc.createOffer());
+      await new Promise(function(resolve) { setTimeout(resolve, 900); });
+      pc.close();
+      var types = {};
+      candidates.forEach(function(c) {
+        var m = c.match(/ typ ([a-zA-Z0-9]+)/);
+        if (m) types[m[1]] = true;
+      });
+      info.webRTC.candidateTypes = Object.keys(types).sort();
+      info.webRTC.hasHostCandidate = !!types.host;
+      info.webRTC.hasSrflxCandidate = !!types.srflx;
+      info.webRTC.hasRelayCandidate = !!types.relay;
+    }
+  } catch (e) {
+    info.webRTC.error = String(e && e.message ? e.message : e);
+  }
+  try {
+    var AudioCtor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AudioCtor) {
+      info.audioError = 'OfflineAudioContext unavailable';
+    } else {
+      var ctx = new AudioCtor(1, 44100, 44100);
+      var osc = ctx.createOscillator();
+      var comp = ctx.createDynamicsCompressor();
+      osc.type = 'triangle';
+      osc.frequency.value = 10000;
+      comp.threshold.value = -50;
+      comp.knee.value = 40;
+      comp.ratio.value = 12;
+      comp.attack.value = 0;
+      comp.release.value = 0.25;
+      osc.connect(comp);
+      comp.connect(ctx.destination);
+      osc.start(0);
+      var buffer = await ctx.startRendering();
+      var data = buffer.getChannelData(0);
+      var sample = '';
+      for (var i = 0; i < data.length; i += 97) sample += data[i].toFixed(6) + ',';
+      info.audioHash = hashString(sample);
+    }
+  } catch (e) {
+    info.audioError = String(e && e.message ? e.message : e);
+  }
+  return JSON.stringify(info);
+})()
+'@
+    return Invoke-CDPEvaluateJson -DebugPort $DebugPort -Expression $script -TimeoutSec 15
+}
+
 function Collect-FingerprintRun {
     param(
         [Parameter(Mandatory = $true)][string]$Label,
         [Parameter(Mandatory = $true)][string]$AppPath,
-        [Parameter(Mandatory = $true)][string]$TargetProfileId
+        [Parameter(Mandatory = $true)][string]$TargetProfileId,
+        [Parameter(Mandatory = $true)][string]$CookieMarkerValue,
+        [switch]$RequireExistingCookieMarker
     )
     if (-not (Test-Path -LiteralPath $AppPath)) {
         throw "$Label app executable not found: $AppPath"
@@ -237,12 +465,79 @@ function Collect-FingerprintRun {
             url = $navURL
         } -TimeoutSec 30)
         Start-Sleep -Milliseconds 750
+        $existingCookieMarkers = @(Get-CookieMarkerValues -DebugPort ([int]$profile.debugPort))
+        if ($RequireExistingCookieMarker -and $existingCookieMarkers -notcontains $CookieMarkerValue) {
+            throw "$Label did not find persisted Cookie marker $CookieMarkerValue before writing; got $($existingCookieMarkers -join ',')"
+        }
+        if (-not $RequireExistingCookieMarker) {
+            Set-CookieMarker -DebugPort ([int]$profile.debugPort) -MarkerValue $CookieMarkerValue
+        }
+        $cookieMarkers = @(Get-CookieMarkerValues -DebugPort ([int]$profile.debugPort))
+        if ($cookieMarkers -notcontains $CookieMarkerValue) {
+            throw "$Label Cookie marker verification failed; got $($cookieMarkers -join ',')"
+        }
         $fingerprintResp = Invoke-AntApi -Method "POST" -Path "/api/workbench/fingerprint" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30
         if (-not $fingerprintResp.ok) {
             throw "$Label fingerprint capture returned ok=false"
         }
+        $advancedFingerprint = Get-AdvancedFingerprint -DebugPort ([int]$profile.debugPort)
         $shot = Invoke-AntApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30
         $browserCommandLine = Get-CommandLine -TargetProcessId ([int]$profile.pid)
+        $canonicalUserDataDir = Get-CanonicalUserDataDir -UserDataDir ([string]$profile.userDataDir)
+        $browserUserDataDir = Get-CommandLineUserDataDir -CommandLine $browserCommandLine
+        if ([string]::IsNullOrWhiteSpace($browserUserDataDir)) {
+            throw "$Label command line is missing --user-data-dir"
+        }
+        if (-not [string]::Equals($canonicalUserDataDir, $browserUserDataDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "$Label command line user-data-dir mismatch: profile=$canonicalUserDataDir browser=$browserUserDataDir"
+        }
+        $launchArgs = @($profile.launchArgs | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        $fingerprintArgs = @($profile.fingerprintArgs | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        $launchArgsHash = Get-ValueHash -Value $launchArgs
+        $fingerprintArgsHash = Get-ValueHash -Value $fingerprintArgs
+        $stableFields = [ordered]@{
+            userAgent = $fingerprintResp.fingerprint.userAgent
+            webRTC = $advancedFingerprint.webRTC
+            canvas = $fingerprintResp.fingerprint.canvasHash
+            audio = $advancedFingerprint.audioHash
+            webGL = [ordered]@{
+                vendor = $fingerprintResp.fingerprint.webglVendor
+                renderer = $fingerprintResp.fingerprint.webglRenderer
+            }
+            fonts = $fingerprintResp.fingerprint.fontHash
+            timezone = $fingerprintResp.fingerprint.timezone
+            language = [ordered]@{
+                language = $fingerprintResp.fingerprint.language
+                languages = @($fingerprintResp.fingerprint.languages)
+            }
+            screen = [ordered]@{
+                width = $fingerprintResp.fingerprint.screenWidth
+                height = $fingerprintResp.fingerprint.screenHeight
+                availWidth = $fingerprintResp.fingerprint.availWidth
+                availHeight = $fingerprintResp.fingerprint.availHeight
+                colorDepth = $fingerprintResp.fingerprint.colorDepth
+                pixelDepth = $fingerprintResp.fingerprint.pixelDepth
+                devicePixelRatio = $fingerprintResp.fingerprint.devicePixelRatio
+            }
+            hardwareConcurrency = $fingerprintResp.fingerprint.hardwareConcurrency
+            deviceMemory = $fingerprintResp.fingerprint.deviceMemory
+            proxy = [ordered]@{
+                proxyId = $profile.proxyId
+                proxyConfig = $profile.proxyConfig
+                proxyBindSourceId = $profile.proxyBindSourceId
+                proxyBindSourceUrl = $profile.proxyBindSourceUrl
+                proxyBindName = $profile.proxyBindName
+            }
+            cookieMarker = [ordered]@{
+                name = "antbrowser_fingerprint_marker"
+                value = $CookieMarkerValue
+                present = ($cookieMarkers -contains $CookieMarkerValue)
+            }
+            userDataDir = $canonicalUserDataDir
+            browserUserDataDir = $browserUserDataDir
+            launchArgsHash = $launchArgsHash
+            fingerprintArgsHash = $fingerprintArgsHash
+        }
         Stop-Profile -TargetProfileId $TargetProfileId
         return [pscustomobject]@{
             label = $Label
@@ -250,13 +545,26 @@ function Collect-FingerprintRun {
             profileId = $TargetProfileId
             profileName = $profile.profileName
             userDataDir = $profile.userDataDir
+            canonicalUserDataDir = $canonicalUserDataDir
+            browserUserDataDir = $browserUserDataDir
             proxyConfig = $profile.proxyConfig
-            fingerprintArgs = @($profile.fingerprintArgs)
-            launchArgs = @($profile.launchArgs)
+            fingerprintArgs = $fingerprintArgs
+            launchArgs = $launchArgs
+            fingerprintArgsHash = $fingerprintArgsHash
+            launchArgsHash = $launchArgsHash
             debugPort = [int]$profile.debugPort
             pid = [int]$profile.pid
             commandLine = $browserCommandLine
+            commandLineHash = Get-Sha256Text -Text $browserCommandLine
+            cookieMarker = [pscustomobject]@{
+                name = "antbrowser_fingerprint_marker"
+                value = $CookieMarkerValue
+                observedValues = $cookieMarkers
+                requiredExisting = [bool]$RequireExistingCookieMarker
+            }
             fingerprint = $fingerprintResp.fingerprint
+            advancedFingerprint = $advancedFingerprint
+            stableFields = [pscustomobject]$stableFields
             screenshotLength = if ($shot.ok -and $shot.screenshot) { [string]$shot.screenshot.Length } else { "0" }
         }
     } finally {
@@ -274,19 +582,19 @@ function StableJson {
 function Compare-FingerprintRuns {
     param($Baseline, $Candidate)
     $mismatches = New-Object System.Collections.Generic.List[string]
-    foreach ($field in @("userDataDir", "proxyConfig", "fingerprintArgs", "launchArgs")) {
+    foreach ($field in @("canonicalUserDataDir", "browserUserDataDir", "proxyConfig", "fingerprintArgsHash", "launchArgsHash")) {
         if ((StableJson $Baseline.$field) -ne (StableJson $Candidate.$field)) {
             $mismatches.Add($field)
         }
     }
     foreach ($field in @(
-        "userAgent", "platform", "hardwareConcurrency", "deviceMemory", "colorDepth",
-        "pixelDepth", "screenWidth", "screenHeight", "availWidth", "availHeight",
-        "devicePixelRatio", "maxTouchPoints", "vendor", "timezone", "language",
-        "languages", "canvasHash", "webglVendor", "webglRenderer", "fontHash"
+        "userAgent", "webRTC", "canvas", "audio", "webGL", "fonts", "timezone",
+        "language", "screen", "hardwareConcurrency", "deviceMemory", "proxy",
+        "cookieMarker", "userDataDir", "browserUserDataDir", "launchArgsHash",
+        "fingerprintArgsHash"
     )) {
-        if ((StableJson $Baseline.fingerprint.$field) -ne (StableJson $Candidate.fingerprint.$field)) {
-            $mismatches.Add("fingerprint.$field")
+        if ((StableJson $Baseline.stableFields.$field) -ne (StableJson $Candidate.stableFields.$field)) {
+            $mismatches.Add("stableFields.$field")
         }
     }
     return @($mismatches)
@@ -297,6 +605,7 @@ $targetProfileId = $ProfileId.Trim()
 $baseline = $null
 $candidate = $null
 $failure = $null
+$cookieMarkerValue = "$RunId-cookie-marker"
 
 try {
     if ([string]::IsNullOrWhiteSpace($targetProfileId)) {
@@ -319,12 +628,12 @@ try {
 
     if (-not $SkipBaseline) {
         if (Test-Path -LiteralPath $BaselineAppPath) {
-            $baseline = Collect-FingerprintRun -Label "baseline" -AppPath $BaselineAppPath -TargetProfileId $targetProfileId
+            $baseline = Collect-FingerprintRun -Label "baseline" -AppPath $BaselineAppPath -TargetProfileId $targetProfileId -CookieMarkerValue $cookieMarkerValue
         } else {
             Write-Warning "Baseline app not found; candidate-only verification will run."
         }
     }
-    $candidate = Collect-FingerprintRun -Label "candidate" -AppPath $CandidateAppPath -TargetProfileId $targetProfileId
+    $candidate = Collect-FingerprintRun -Label "candidate" -AppPath $CandidateAppPath -TargetProfileId $targetProfileId -CookieMarkerValue $cookieMarkerValue -RequireExistingCookieMarker:($null -ne $baseline)
 
     $mismatches = @()
     if ($null -ne $baseline) {
@@ -335,6 +644,11 @@ try {
         compared = ($null -ne $baseline)
         runId = $RunId
         profileId = $targetProfileId
+        coveredFields = @(
+            "UA", "WebRTC", "Canvas", "Audio", "WebGL", "Fonts", "timezone",
+            "language", "screen", "hardwareConcurrency", "deviceMemory", "proxy",
+            "Cookie marker", "user-data-dir", "launch args hash", "fingerprint args hash"
+        )
         mismatches = $mismatches
         baseline = $baseline
         candidate = $candidate

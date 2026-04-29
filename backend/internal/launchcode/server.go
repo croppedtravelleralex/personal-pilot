@@ -101,21 +101,22 @@ type LaunchCallRecord struct {
 
 // LaunchServer 本地 HTTP 唤起服务
 type LaunchServer struct {
-	service    *LaunchCodeService
-	starter    BrowserStarter
-	recording  RecordingAPI
-	browserMgr *browser.Manager
-	port       int
-	server     *http.Server
-	mu         sync.Mutex
-	authMu     sync.RWMutex
-	logMu      sync.Mutex
-	callLogs   []LaunchCallRecord
-	activeMu   sync.RWMutex
-	activePort int
-	activeID   string
-	activeName string
-	apiAuth    APIAuthConfig
+	service     *LaunchCodeService
+	starter     BrowserStarter
+	recording   RecordingAPI
+	browserMgr  *browser.Manager
+	port        int
+	server      *http.Server
+	mu          sync.Mutex
+	authMu      sync.RWMutex
+	logMu       sync.Mutex
+	callLogs    []LaunchCallRecord
+	activeMu    sync.RWMutex
+	activePort  int
+	activeID    string
+	activeName  string
+	activeAudit *browser.LaunchAuditSnapshot
+	apiAuth     APIAuthConfig
 }
 
 // NewLaunchServer 创建 LaunchServer
@@ -303,6 +304,12 @@ func (s *LaunchServer) SetActiveProfile(profile *browser.Profile) {
 	s.activePort = profile.DebugPort
 	s.activeID = profile.ProfileId
 	s.activeName = profile.ProfileName
+	if profile.LaunchAudit != nil {
+		audit := *profile.LaunchAudit
+		s.activeAudit = &audit
+	} else {
+		s.activeAudit = nil
+	}
 	s.activeMu.Unlock()
 }
 
@@ -318,14 +325,20 @@ func (s *LaunchServer) ClearActiveProfile(profileID string) {
 		s.activePort = 0
 		s.activeID = ""
 		s.activeName = ""
+		s.activeAudit = nil
 	}
 	s.activeMu.Unlock()
 }
 
-func (s *LaunchServer) activeTarget() (int, string, string) {
+func (s *LaunchServer) activeTarget() (int, string, string, *browser.LaunchAuditSnapshot) {
 	s.activeMu.RLock()
 	defer s.activeMu.RUnlock()
-	return s.activePort, s.activeID, s.activeName
+	var audit *browser.LaunchAuditSnapshot
+	if s.activeAudit != nil {
+		copied := *s.activeAudit
+		audit = &copied
+	}
+	return s.activePort, s.activeID, s.activeName, audit
 }
 
 // localhostMiddleware 只允许 127.0.0.1 访问
@@ -350,11 +363,20 @@ func (s *LaunchServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleCDPProxy 将统一端口上的非 /api 请求转发到当前活动实例的 CDP 端口。
 func (s *LaunchServer) handleCDPProxy(w http.ResponseWriter, r *http.Request) {
-	debugPort, profileID, profileName := s.activeTarget()
+	debugPort, profileID, profileName, audit := s.activeTarget()
 	if debugPort <= 0 {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
 			"ok":          false,
 			"error":       "no active browser debug target",
+			"profileId":   profileID,
+			"profileName": profileName,
+		})
+		return
+	}
+	if err := s.validateActiveCDPOwnership(profileID, debugPort, audit); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"ok":          false,
+			"error":       err.Error(),
 			"profileId":   profileID,
 			"profileName": profileName,
 		})

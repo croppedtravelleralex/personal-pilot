@@ -59,3 +59,10 @@
 
 - “非容器化实例工作台产品化”的可自动验收闭环已补齐：本地 stop API、workbench HTTP API 和 2 实例真实验收脚本均已落地并跑通。
 - 下一阶段重点不再是基础闭环，而是多屏/最小化/布局恢复、预览节流，以及 debugPort 未就绪时的降级预览。
+
+## 2026-04-29 Identity Asset Safety Gate V1 Roadmap Entry
+
+- Status: In Progress. The V1 policy lives in [09-identity-asset-safety-gate.md](./09-identity-asset-safety-gate.md).
+- Now: release acceptance must prove two real external instances, stable profile/user-data-dir binding, Cookie marker persistence, no profile mix, duplicate user-data-dir/path mismatch fail-closed behavior, stop-one-keep-one, clean shutdown, and no residual verification processes.
+- Now: fingerprint regression must compare UA, WebRTC, Canvas, Audio, WebGL, Fonts, timezone, language, screen, hardwareConcurrency, deviceMemory, proxy, Cookie marker, user-data-dir, launch args hash, and fingerprint args hash.
+- Completion gate: do not mark V1 done until the release scripts and normal project gates pass on release artifacts.

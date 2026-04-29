@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"ant-chrome/backend/internal/backup"
 	"archive/zip"
 	"encoding/json"
 	"fmt"
@@ -134,6 +135,13 @@ func (a *App) getProfileForSnapshot(profileId string) (*BrowserProfile, error) {
 	return profile, nil
 }
 
+func (a *App) snapshotUserDataDir(profile *BrowserProfile) (string, error) {
+	if a == nil || a.browserMgr == nil {
+		return "", fmt.Errorf("identity safety gate: browser manager is required")
+	}
+	return a.browserMgr.ResolveCanonicalUserDataDir(profile)
+}
+
 // BrowserSnapshotCreate 创建快照
 func (a *App) BrowserSnapshotCreate(profileId, name string) (SnapshotInfo, error) {
 	profile, err := a.getProfileForSnapshot(profileId)
@@ -144,7 +152,10 @@ func (a *App) BrowserSnapshotCreate(profileId, name string) (SnapshotInfo, error
 		return SnapshotInfo{}, fmt.Errorf("请先停止实例再创建快照")
 	}
 
-	userDataDir := a.browserMgr.ResolveUserDataDir(profile)
+	userDataDir, err := a.snapshotUserDataDir(profile)
+	if err != nil {
+		return SnapshotInfo{}, err
+	}
 	if _, err := os.Stat(userDataDir); os.IsNotExist(err) {
 		return SnapshotInfo{}, fmt.Errorf("用户数据目录不存在，无法创建快照")
 	}
@@ -228,27 +239,91 @@ func (a *App) BrowserSnapshotList(profileId string) ([]SnapshotInfo, error) {
 
 // BrowserSnapshotRestore 恢复快照
 func (a *App) BrowserSnapshotRestore(profileId, snapshotId string) error {
+	if _, err := a.BrowserSnapshotRestorePreflight(profileId, snapshotId); err != nil {
+		return err
+	}
+	return backupDestructiveConfirmationRequired("snapshot restore")
+}
+
+func (a *App) BrowserSnapshotRestorePreflight(profileId, snapshotId string) (backup.DestructivePreflight, error) {
+	profile, err := a.getProfileForSnapshot(profileId)
+	if err != nil {
+		return backup.DestructivePreflight{}, err
+	}
+
+	snapDir, err := a.snapshotDir(profileId)
+	if err != nil {
+		return backup.DestructivePreflight{}, err
+	}
+
+	metaPath, zipPath, err := findSnapshotFiles(snapDir, snapshotId)
+	if err != nil {
+		return backup.DestructivePreflight{}, err
+	}
+
+	userDataDir, err := a.snapshotUserDataDir(profile)
+	if err != nil {
+		return backup.DestructivePreflight{}, err
+	}
+	preflight := backup.DestructivePreflight{
+		Operation:            "snapshot_restore",
+		TargetProfileId:      profileId,
+		TargetUserDataDir:    userDataDir,
+		RequiresConfirmation: true,
+		Overwrites:           []string{userDataDir},
+		DestructivePaths:     []string{userDataDir},
+		WritesCookie:         snapshotZipContainsCookie(zipPath),
+		ConfirmationPrompt:   "Restore snapshot only after confirming the profile directory replacement.",
+	}
+	if profile.Running {
+		preflight.RequiresStop = true
+		preflight.AddBlocker("profile_running", "running profile must be stopped before snapshot restore: "+profileId)
+	}
+	if meta, err := readSnapshotInfo(metaPath); err != nil {
+		preflight.AddBlocker("snapshot_meta_read_failed", "snapshot metadata could not be read: "+err.Error())
+	} else if strings.TrimSpace(meta.ProfileId) != "" && !strings.EqualFold(strings.TrimSpace(meta.ProfileId), strings.TrimSpace(profileId)) {
+		preflight.AddBlocker("snapshot_profile_mismatch", fmt.Sprintf("snapshot profile mismatch: got %s want %s", meta.ProfileId, profileId))
+	}
+	if !preflight.WritesCookie {
+		preflight.Skips = append(preflight.Skips, "cookie_assets")
+	}
+	preflight.Finalize()
+	return preflight, nil
+}
+
+func (a *App) BrowserSnapshotRestoreConfirmed(profileId, snapshotId string, confirmation backup.DestructiveConfirmation) error {
+	preflight, err := a.BrowserSnapshotRestorePreflight(profileId, snapshotId)
+	if err != nil {
+		return err
+	}
+	if err := preflight.ValidateConfirmation(confirmation); err != nil {
+		return err
+	}
+	return a.browserSnapshotRestoreApply(profileId, snapshotId)
+}
+
+func (a *App) browserSnapshotRestoreApply(profileId, snapshotId string) error {
 	profile, err := a.getProfileForSnapshot(profileId)
 	if err != nil {
 		return err
 	}
 	if profile.Running {
-		return fmt.Errorf("请先停止实例再恢复快照")
+		return fmt.Errorf("running profile must be stopped before snapshot restore: %s", profileId)
 	}
 
 	snapDir, err := a.snapshotDir(profileId)
 	if err != nil {
 		return err
 	}
-
-	// 找到对应 meta.json
-	metaPath, zipPath, err := findSnapshotFiles(snapDir, snapshotId)
+	_, zipPath, err := findSnapshotFiles(snapDir, snapshotId)
 	if err != nil {
 		return err
 	}
-	_ = metaPath
 
-	userDataDir := a.browserMgr.ResolveUserDataDir(profile)
+	userDataDir, err := a.snapshotUserDataDir(profile)
+	if err != nil {
+		return err
+	}
 	if err := os.RemoveAll(userDataDir); err != nil {
 		return fmt.Errorf("清空用户数据目录失败: %w", err)
 	}
@@ -271,6 +346,32 @@ func (a *App) BrowserSnapshotDelete(profileId, snapshotId string) error {
 	_ = os.Remove(zipPath)
 	_ = os.Remove(metaPath)
 	return nil
+}
+
+func readSnapshotInfo(metaPath string) (SnapshotInfo, error) {
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return SnapshotInfo{}, err
+	}
+	var info SnapshotInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return SnapshotInfo{}, err
+	}
+	return info, nil
+}
+
+func snapshotZipContainsCookie(zipPath string) bool {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return false
+	}
+	defer r.Close()
+	for _, f := range r.File {
+		if backupIsCookieAssetPath(f.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 // findSnapshotFiles 在快照目录中找到指定 snapshotId 的 meta 和 zip 路径

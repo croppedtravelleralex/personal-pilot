@@ -275,19 +275,25 @@ func normalizeWorkbenchURL(raw string) (string, error) {
 
 func (a *App) runningProfileForWorkbench(profileID string) (*BrowserProfile, error) {
 	a.browserMgr.Mutex.Lock()
-	defer a.browserMgr.Mutex.Unlock()
 
 	profile, exists := a.browserMgr.Profiles[profileID]
 	if !exists || profile == nil {
+		a.browserMgr.Mutex.Unlock()
 		return nil, fmt.Errorf("实例不存在: %s", profileID)
 	}
 	if !profile.Running {
+		a.browserMgr.Mutex.Unlock()
 		return nil, fmt.Errorf("实例未运行: %s", profile.ProfileName)
 	}
 	if profile.DebugPort <= 0 || !profile.DebugReady {
+		a.browserMgr.Mutex.Unlock()
 		return nil, fmt.Errorf("实例调试接口未就绪: %s", profile.ProfileName)
 	}
 	snapshot := *profile
+	a.browserMgr.Mutex.Unlock()
+	if err := a.validateProfileCDPOwnership(&snapshot); err != nil {
+		return nil, err
+	}
 	return &snapshot, nil
 }
 
@@ -343,7 +349,7 @@ func (a *App) SynchronizerListGroups() ([]SyncGroup, error) {
 
 		// 尝试获取当前 URL（best effort，避免阻塞）
 		url, title := "", ""
-		if inst.DebugReady && inst.DebugPort > 0 {
+		if inst.DebugReady && inst.DebugPort > 0 && a.validateProfileCDPOwnership(&inst) == nil {
 			url, title = cdpFetchURL(inst.DebugPort)
 		}
 
@@ -396,6 +402,11 @@ func (a *App) SynchronizerBroadcastNavigate(groupID, url string) error {
 		}
 		if inst.DebugPort == 0 || !inst.DebugReady {
 			recordSyncOp("navigate", targetGroup, map[string]interface{}{"url": url, "profileId": inst.ProfileId}, "failed", "debug port not ready")
+			failCount++
+			continue
+		}
+		if err := a.validateProfileCDPOwnership(&inst); err != nil {
+			recordSyncOp("navigate", targetGroup, map[string]interface{}{"url": targetURL, "profileId": inst.ProfileId}, "failed", err.Error())
 			failCount++
 			continue
 		}
@@ -574,6 +585,11 @@ func (a *App) SynchronizerBroadcastRefresh(groupID string) error {
 		}
 		if inst.DebugPort == 0 || !inst.DebugReady {
 			recordSyncOp("refresh", targetGroup, map[string]interface{}{"profileId": inst.ProfileId}, "failed", "debug port not ready")
+			failCount++
+			continue
+		}
+		if err := a.validateProfileCDPOwnership(&inst); err != nil {
+			recordSyncOp("refresh", targetGroup, map[string]interface{}{"profileId": inst.ProfileId}, "failed", err.Error())
 			failCount++
 			continue
 		}

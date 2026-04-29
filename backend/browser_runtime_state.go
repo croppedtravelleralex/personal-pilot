@@ -175,6 +175,13 @@ func (a *App) waitBrowserDebugReadyAsync(profileId string, debugPort int, timeou
 	a.emitBrowserInstanceUpdated(snapshot)
 }
 
+func (a *App) validateProfileCDPOwnership(profile *BrowserProfile) error {
+	if a == nil || a.browserMgr == nil {
+		return fmt.Errorf("CDP ownership rejected: browser manager unavailable")
+	}
+	return a.browserMgr.ValidateProfileLaunchAudit(profile)
+}
+
 func shouldKeepBrowserRunningPendingDebugReady(debugPort int, monitor *browserProcessMonitor) bool {
 	return debugPort > 0 && monitor != nil && !monitor.HasExited()
 }

@@ -95,6 +95,7 @@ func mapInstanceOperationErrorStatus(err error) int {
 		return http.StatusNotFound
 	case strings.Contains(msg, "not running"),
 		strings.Contains(msg, "debug port not ready"),
+		strings.Contains(msg, "cdp ownership rejected"),
 		strings.Contains(msg, "not ready"),
 		strings.Contains(msg, "未运行"),
 		strings.Contains(msg, "未就绪"):

@@ -1,10 +1,16 @@
 package backend
 
 import (
+	"ant-chrome/backend/internal/backup"
+	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/config"
+	"ant-chrome/backend/internal/database"
+	"archive/zip"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +67,125 @@ func TestBackupImportPackageFromPathRejectsEmptyPath(t *testing.T) {
 	}
 	if result["cancelled"] != true {
 		t.Fatalf("empty import path should return cancelled result: %+v", result)
+	}
+}
+
+func TestBackupInitializeSystemRequiresPreflightConfirmation(t *testing.T) {
+	app, cleanup := newBackupTestApp(t)
+	defer cleanup()
+
+	sentinel := filepath.Join(app.appRoot, "data", "profile-1", "Default", "Network", "Cookies")
+	if err := os.MkdirAll(filepath.Dir(sentinel), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sentinel, []byte("existing-cookie-db"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := app.BackupInitializeSystem()
+	if err == nil || !strings.Contains(err.Error(), "confirmation") {
+		t.Fatalf("unconfirmed initialize should require confirmation, got err=%v", err)
+	}
+	got, readErr := os.ReadFile(sentinel)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != "existing-cookie-db" {
+		t.Fatalf("unconfirmed initialize modified cookie file: %s", string(got))
+	}
+}
+
+func TestBackupImportPackageFromPathRequiresPreflightConfirmation(t *testing.T) {
+	app, cleanup := newBackupTestApp(t)
+	defer cleanup()
+
+	zipPath := writeBackupPackage(t, filepath.Join(t.TempDir(), "import.zip"), map[string]string{
+		"payload/browser/user-data/profile-1/Default/Network/Cookies": "incoming-cookie-db",
+	})
+	existingCookie := filepath.Join(app.appRoot, "data", "profile-1", "Default", "Network", "Cookies")
+	if err := os.MkdirAll(filepath.Dir(existingCookie), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(existingCookie, []byte("existing-cookie-db"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := app.BackupImportPackageFromPath(zipPath, false)
+	if err == nil || !strings.Contains(err.Error(), "confirmation") {
+		t.Fatalf("unconfirmed import should require confirmation, got err=%v", err)
+	}
+	got, readErr := os.ReadFile(existingCookie)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != "existing-cookie-db" {
+		t.Fatalf("unconfirmed import modified cookie file: %s", string(got))
+	}
+}
+
+func TestBackupImportPackageFromPathConfirmedAllowsAfterPreflight(t *testing.T) {
+	app, cleanup := newBackupTestApp(t)
+	defer cleanup()
+
+	zipPath := writeBackupPackage(t, filepath.Join(t.TempDir(), "import.zip"), map[string]string{
+		"payload/browser/user-data/profile-1/Default/Network/Cookies": "incoming-cookie-db",
+	})
+
+	preflight, err := app.BackupImportPackagePreflightFromPath(zipPath, false)
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if !preflight.WritesCookie {
+		t.Fatalf("preflight should report cookie writes: %+v", preflight)
+	}
+
+	result, err := app.BackupImportPackageFromPathConfirmed(zipPath, false, backup.DestructiveConfirmation{
+		Confirmed:         true,
+		ConfirmationToken: preflight.ConfirmationToken,
+	})
+	if err != nil {
+		t.Fatalf("confirmed import failed: %v", err)
+	}
+	if result["cancelled"] == true {
+		t.Fatalf("confirmed import should not be cancelled: %+v", result)
+	}
+	importedCookie := filepath.Join(app.appRoot, "data", "profile-1", "Default", "Network", "Cookies")
+	got, readErr := os.ReadFile(importedCookie)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != "incoming-cookie-db" {
+		t.Fatalf("confirmed import did not copy cookie file: %s", string(got))
+	}
+}
+
+func TestBackupImportPackageConfirmedRejectsRunningProfile(t *testing.T) {
+	app, cleanup := newBackupTestApp(t)
+	defer cleanup()
+	app.browserMgr.Profiles["profile-1"] = &BrowserProfile{
+		ProfileId:   "profile-1",
+		ProfileName: "Profile 1",
+		UserDataDir: "profile-1",
+		Running:     true,
+	}
+
+	zipPath := writeBackupPackage(t, filepath.Join(t.TempDir(), "import.zip"), map[string]string{
+		"payload/browser/user-data/profile-1/Default/Network/Cookies": "incoming-cookie-db",
+	})
+	preflight, err := app.BackupImportPackagePreflightFromPath(zipPath, false)
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if len(preflight.Blockers) == 0 {
+		t.Fatalf("running profile should be a preflight blocker: %+v", preflight)
+	}
+
+	_, err = app.BackupImportPackageFromPathConfirmed(zipPath, false, backup.DestructiveConfirmation{
+		Confirmed:         true,
+		ConfirmationToken: preflight.ConfirmationToken,
+	})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "running") {
+		t.Fatalf("confirmed import should still reject running profile, got err=%v", err)
 	}
 }
 
@@ -173,4 +298,95 @@ func TestBackupSyncDirConflictAndOverwrite(t *testing.T) {
 	if string(got2) != "new-content" {
 		t.Fatalf("覆盖模式应改写目标文件: %s", string(got2))
 	}
+}
+
+func newBackupTestApp(t *testing.T) (*App, func()) {
+	t.Helper()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "data"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultConfig()
+	if err := cfg.Save(filepath.Join(root, "config.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.NewDB(filepath.Join(root, "data", "app.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+
+	app := NewApp(root, "test")
+	app.ctx = context.Background()
+	app.config = cfg
+	app.db = db
+	app.browserMgr = browser.NewManager(cfg, root)
+	conn := db.GetConn()
+	app.browserMgr.ProfileDAO = browser.NewSQLiteProfileDAO(conn)
+	app.browserMgr.ProxyDAO = browser.NewSQLiteProxyDAO(conn)
+	app.browserMgr.CoreDAO = browser.NewSQLiteCoreDAO(conn)
+	app.browserMgr.BookmarkDAO = browser.NewSQLiteBookmarkDAO(conn)
+	app.browserMgr.GroupDAO = browser.NewSQLiteGroupDAO(conn)
+
+	return app, func() {
+		_ = db.Close()
+	}
+}
+
+func writeBackupPackage(t *testing.T, zipPath string, files map[string]string) string {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(zipPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+
+	manifest := backup.Manifest{
+		Format:          backup.PackageFormat,
+		ManifestVersion: backup.ManifestVersion,
+		Entries: []backup.ManifestEntry{
+			{
+				ID:          "browser_user_data_root",
+				Category:    backup.CategoryBrowserData,
+				EntryType:   backup.EntryTypeDir,
+				Required:    true,
+				ArchivePath: "payload/browser/user-data/",
+			},
+		},
+	}
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw, err := zw.Create("manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mw.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return zipPath
 }

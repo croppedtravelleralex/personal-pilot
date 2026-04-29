@@ -44,3 +44,10 @@
 - 实例工作台专项问题同步更新 [07-instance-workbench-technical-guidance.md](./07-instance-workbench-technical-guidance.md)
 - 每轮工作摘要追加到 `logs/YYYY/YYYY-MM.md`
 - 历史日志只追加，不回写旧条目
+
+## 2026-04-29 Identity Asset Safety Gate V1
+
+- V1 source: [09-identity-asset-safety-gate.md](./09-identity-asset-safety-gate.md)
+- Scope: external real fingerprint Chromium windows, profile identity ownership, user-data-dir binding, Cookie marker persistence, fingerprint regression fields, and release acceptance evidence.
+- Verification entrypoints: `scripts/verify-workbench-two-instances.ps1` and `scripts/verify-tauri-fingerprint-regression.ps1`.
+- Rule: V1 is not complete until scripted release acceptance proves profile isolation, Cookie persistence, duplicate/path mismatch blocking, stop-one-keep-one, no residual verification processes, and stable fingerprint fields.

@@ -289,14 +289,22 @@ func (a *App) startup(ctx context.Context) {
 	cdpRunner := scheduler.NewCDPTaskRunner(func(profileID string) (int, error) {
 		a.browserMgr.Mutex.Lock()
 		profile, exists := a.browserMgr.Profiles[profileID]
+		var snapshot *BrowserProfile
+		if profile != nil {
+			copied := *profile
+			snapshot = &copied
+		}
 		a.browserMgr.Mutex.Unlock()
-		if !exists || profile == nil {
+		if !exists || snapshot == nil {
 			return 0, fmt.Errorf("profile not found: %s", profileID)
 		}
-		if !profile.Running || !profile.DebugReady {
+		if !snapshot.Running || !snapshot.DebugReady {
 			return 0, fmt.Errorf("browser not running or debug not ready for profile %s", profileID)
 		}
-		return profile.DebugPort, nil
+		if err := a.validateProfileCDPOwnership(snapshot); err != nil {
+			return 0, err
+		}
+		return snapshot.DebugPort, nil
 	})
 	a.scheduler = scheduler.New(a.taskStore, cdpRunner, func(eventName string, data ...interface{}) {
 		if a.ctx != nil {
@@ -623,7 +631,14 @@ func (a *App) GetBrowserSettings() BrowserSettings {
 
 func (a *App) SaveBrowserSettings(settings BrowserSettings) error {
 	log := logger.New("Browser")
-	a.config.Browser.UserDataRoot = strings.TrimSpace(settings.UserDataRoot)
+	if a.config == nil {
+		a.config = config.DefaultConfig()
+	}
+	userDataRoot := strings.TrimSpace(settings.UserDataRoot)
+	if err := a.validateBrowserUserDataRoot(userDataRoot); err != nil {
+		return err
+	}
+	a.config.Browser.UserDataRoot = userDataRoot
 	a.config.Browser.DefaultFingerprintArgs = append([]string{}, settings.DefaultFingerprintArgs...)
 	a.config.Browser.DefaultLaunchArgs = append([]string{}, settings.DefaultLaunchArgs...)
 	a.config.Browser.DefaultProxy = strings.TrimSpace(settings.DefaultProxy)
@@ -640,6 +655,29 @@ func (a *App) SaveBrowserSettings(settings BrowserSettings) error {
 	if err := a.config.Save(a.resolveAppPath("config.yaml")); err != nil {
 		log.Error("浏览器配置保存失败", logger.F("error", err))
 		return err
+	}
+	return nil
+}
+
+func (a *App) validateBrowserUserDataRoot(userDataRoot string) error {
+	cfg := config.DefaultConfig()
+	if a != nil && a.config != nil {
+		cloned := *a.config
+		cfg = &cloned
+	}
+	cfg.Browser.UserDataRoot = strings.TrimSpace(userDataRoot)
+
+	appRoot := ""
+	if a != nil {
+		appRoot = a.appRoot
+	}
+	mgr := browser.NewManager(cfg, appRoot)
+	_, err := mgr.ResolveCanonicalUserDataDir(&browser.Profile{
+		ProfileId:   "__settings_validation__",
+		UserDataDir: "__settings_validation__",
+	})
+	if err != nil {
+		return fmt.Errorf("identity safety gate: invalid user-data root: %w", err)
 	}
 	return nil
 }

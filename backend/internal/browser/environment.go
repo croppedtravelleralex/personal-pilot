@@ -16,6 +16,10 @@ func (m *Manager) GetProxyConfigById(proxyId string) (string, bool) {
 
 // ResolveUserDataDir 解析用户数据目录
 func (m *Manager) ResolveUserDataDir(profile *Profile) string {
+	if canonical, err := m.ResolveCanonicalUserDataDir(profile); err == nil {
+		return canonical
+	}
+
 	userDataDir := strings.TrimSpace(profile.UserDataDir)
 	if userDataDir == "" {
 		userDataDir = profile.ProfileId

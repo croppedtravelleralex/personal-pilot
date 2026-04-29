@@ -154,7 +154,6 @@ func TestUpdateProfileAPIUpdatesFieldsAndAutoLaunches(t *testing.T) {
 	payload := bytes.NewBufferString(`{
 		"profile": {
 			"profileName": "buyer-new",
-			"userDataDir": "buyers/buyer-new",
 			"proxyId": "proxy-us",
 			"launchArgs": ["--lang=en-US"],
 			"tags": ["电商", "北美"],

@@ -144,6 +144,9 @@ func (m *Manager) loadProfiles() {
 // SaveProfiles 保存所有实例配置（DAO 模式：逐条 upsert）
 func (m *Manager) SaveProfiles() error {
 	log := logger.New("Browser")
+	if err := m.NormalizeProfileIdentityBindings(); err != nil {
+		return err
+	}
 	if m.ProfileDAO != nil {
 		for _, profile := range m.Profiles {
 			profile.CoreId = normalizeProfileCoreID(profile.CoreId)
@@ -316,6 +319,9 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 	if hasSelectedProxy {
 		_ = BindProfileToProxy(profile, selectedProxy, true)
 	}
+	if err := m.NormalizeProfileIdentityBinding(profile); err != nil {
+		return nil, err
+	}
 	m.Profiles[profileId] = profile
 	if warnings := ValidateFingerprintArgs(profile.FingerprintArgs); len(warnings) > 0 {
 		log.Warn("实例包含无效指纹标志",
@@ -346,8 +352,13 @@ func (m *Manager) Update(profileId string, input ProfileInput) (*Profile, error)
 		log.Error("浏览器配置不存在", logger.F("profile_id", profileId))
 		return nil, fmt.Errorf("profile not found")
 	}
+	canonicalUserDataDir, err := m.StableCanonicalUserDataDir(profile, input.UserDataDir)
+	if err != nil {
+		return nil, err
+	}
+
 	profile.ProfileName = input.ProfileName
-	profile.UserDataDir = input.UserDataDir
+	profile.UserDataDir = canonicalUserDataDir
 	profile.CoreId = normalizeProfileCoreID(input.CoreId)
 	profile.FingerprintArgs = input.FingerprintArgs
 	if warnings := ValidateFingerprintArgs(profile.FingerprintArgs); len(warnings) > 0 {

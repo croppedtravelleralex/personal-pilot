@@ -251,15 +251,25 @@ func (a *App) profileDebugPort(profileId string) (int, error) {
 		return 0, recordingError(http.StatusServiceUnavailable, "browser manager unavailable", nil)
 	}
 	a.browserMgr.Mutex.Lock()
-	defer a.browserMgr.Mutex.Unlock()
 	profile := a.browserMgr.Profiles[profileId]
 	if profile == nil {
+		a.browserMgr.Mutex.Unlock()
 		return 0, recordingError(http.StatusNotFound, "profile not found", nil)
 	}
 	if !profile.Running {
+		a.browserMgr.Mutex.Unlock()
 		return 0, recordingError(http.StatusConflict, "browser not running", nil)
 	}
-	return profile.DebugPort, nil
+	if !profile.DebugReady || profile.DebugPort <= 0 {
+		a.browserMgr.Mutex.Unlock()
+		return 0, recordingError(http.StatusConflict, "debug port not ready", nil)
+	}
+	snapshot := *profile
+	a.browserMgr.Mutex.Unlock()
+	if err := a.validateProfileCDPOwnership(&snapshot); err != nil {
+		return 0, recordingError(http.StatusConflict, err.Error(), nil)
+	}
+	return snapshot.DebugPort, nil
 }
 
 func (a *App) runningRecordingProfile(profileId string) (*BrowserProfile, error) {

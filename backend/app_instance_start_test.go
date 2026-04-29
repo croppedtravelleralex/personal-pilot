@@ -77,6 +77,38 @@ func TestIsBrowserProfileLiveKeepsPendingDebugProcessAlive(t *testing.T) {
 	}
 }
 
+func TestBrowserInstanceStartRejectsAlreadyRunningProfile(t *testing.T) {
+	t.Parallel()
+
+	ln := mustListenLoopback(t)
+	defer ln.Close()
+
+	app := NewApp("")
+	app.browserMgr = browser.NewManager(config.DefaultConfig(), t.TempDir())
+	app.browserMgr.Profiles = map[string]*BrowserProfile{
+		"profile-running": {
+			ProfileId:   "profile-running",
+			ProfileName: "Running Browser",
+			UserDataDir: "profile-running",
+			Running:     true,
+			DebugPort:   listenerPort(t, ln),
+			DebugReady:  true,
+		},
+	}
+	app.browserMgr.BrowserProcesses = make(map[string]*exec.Cmd)
+
+	profile, err := app.BrowserInstanceStart("profile-running")
+	if err == nil {
+		t.Fatal("expected duplicate start for running profile to be rejected")
+	}
+	if profile == nil || profile.ProfileId != "profile-running" {
+		t.Fatalf("expected existing profile snapshot, got %+v", profile)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "already has a running instance") {
+		t.Fatalf("expected running-instance safety error, got %v", err)
+	}
+}
+
 func TestWaitBrowserDebugPortStableKeepsListeningPort(t *testing.T) {
 	t.Parallel()
 

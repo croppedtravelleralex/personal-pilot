@@ -31,6 +31,12 @@ func (a *App) BrowserInstanceStartWithParams(profileId string, extraLaunchArgs [
 
 func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []string, startURLs []string, skipDefaultStartURLs bool, preferVisibleWindow bool) (*BrowserProfile, error) {
 	log := logger.New("Browser")
+	releaseStartLock, err := a.browserMgr.AcquireProfileStartLock(profileId)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseStartLock()
+
 	a.browserMgr.Mutex.Lock()
 	defer a.browserMgr.Mutex.Unlock()
 
@@ -46,6 +52,21 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		log.Error("实例不存在", logger.F("profile_id", profileId), logger.F("reason", err.Error()))
 		return nil, err
 	}
+	userDataDirBeforeIdentityCheck := profile.UserDataDir
+	if err := a.browserMgr.NormalizeProfileIdentityBindings(); err != nil {
+		startErr := fmt.Errorf("实例启动失败：%w", err)
+		log.Error("实例身份路径校验失败", logger.F("profile_id", profileId), logger.F("error", err.Error()), logger.F("reason", startErr.Error()))
+		profile.LastError = startErr.Error()
+		return profile, startErr
+	}
+	if profile.UserDataDir != userDataDirBeforeIdentityCheck {
+		if err := a.browserMgr.SaveProfiles(); err != nil {
+			startErr := fmt.Errorf("实例启动失败：保存 canonical user-data-dir 绑定失败：%w", err)
+			log.Error("实例身份路径绑定保存失败", logger.F("profile_id", profileId), logger.F("error", err.Error()), logger.F("reason", startErr.Error()))
+			profile.LastError = startErr.Error()
+			return profile, startErr
+		}
+	}
 	if profile.Running {
 		if !isBrowserProfileLive(profile, a.browserMgr.BrowserProcesses[profileId]) {
 			log.Info("检测到实例运行状态已失效，准备重新启动",
@@ -55,24 +76,15 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			)
 			a.markProfileStoppedLocked(profileId, profile)
 		} else {
-			if preferVisibleWindow {
-				if err := a.openBrowserWindowForRunningProfile(profile, normalizedExtraLaunchArgs, normalizedStartURLs); err != nil {
-					startErr := fmt.Errorf("实例已在运行，但窗口唤起失败：%w", err)
-					log.Error("运行中实例窗口唤起失败",
-						logger.F("profile_id", profileId),
-						logger.F("debug_port", profile.DebugPort),
-						logger.F("error", err.Error()),
-						logger.F("reason", startErr.Error()),
-					)
-					profile.LastError = startErr.Error()
-					return profile, startErr
-				}
-			}
-			if a.launchServer != nil && profile.DebugReady {
-				a.launchServer.SetActiveProfile(profile)
-			}
-			a.emitBrowserInstanceStarted(profile, true)
-			return profile, nil
+			startErr := fmt.Errorf("identity safety gate: profile %s already has a running instance; duplicate start is refused", profileId)
+			log.Error("实例重复启动被拦截",
+				logger.F("profile_id", profileId),
+				logger.F("pid", profile.Pid),
+				logger.F("debug_port", profile.DebugPort),
+				logger.F("reason", startErr.Error()),
+			)
+			profile.LastError = startErr.Error()
+			return profile, startErr
 		}
 	}
 	sanitizedProfileLaunchArgs, managedProfileArgs := sanitizeManagedLaunchArgs(profile.LaunchArgs)
@@ -93,7 +105,14 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		return profile, startErr
 	}
 
-	userDataDir := a.browserMgr.ResolveUserDataDir(profile)
+	userDataDir, err := a.browserMgr.ResolveCanonicalUserDataDir(profile)
+	if err != nil {
+		startErr := fmt.Errorf("实例启动失败：%w", err)
+		log.Error("用户数据目录身份校验失败", logger.F("profile_id", profileId), logger.F("error", err.Error()), logger.F("reason", startErr.Error()))
+		profile.LastError = startErr.Error()
+		return profile, startErr
+	}
+	profile.UserDataDir = userDataDir
 	if err := os.MkdirAll(userDataDir, 0755); err != nil {
 		startErr := fmt.Errorf("实例启动失败：无法创建用户数据目录 %s。原因：%w。请检查目录权限或路径配置。", userDataDir, err)
 		log.Error("用户数据目录创建失败", logger.F("profile_id", profileId), logger.F("dir", userDataDir), logger.F("error", err.Error()), logger.F("reason", startErr.Error()))
@@ -101,6 +120,27 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		return profile, startErr
 	}
 	// 每次启动时合并默认书签（已存在的 URL 不重复添加）
+	cookieCheck := browser.VerifyCookieAssetReadOnly(profileId, userDataDir)
+	for _, warning := range cookieCheck.Warnings {
+		log.Warn("Cookie asset read-only verification warning",
+			logger.F("profile_id", profileId),
+			logger.F("code", warning.Code),
+			logger.F("path", warning.Path),
+			logger.F("message", warning.Message),
+		)
+	}
+	if len(cookieCheck.Blockers) > 0 {
+		blocker := cookieCheck.Blockers[0]
+		startErr := fmt.Errorf("instance start blocked by Cookie asset verification: %s", blocker.Message)
+		log.Error("Cookie asset verification blocked instance start",
+			logger.F("profile_id", profileId),
+			logger.F("code", blocker.Code),
+			logger.F("path", blocker.Path),
+			logger.F("reason", startErr.Error()),
+		)
+		profile.LastError = startErr.Error()
+		return profile, startErr
+	}
 	if err := browser.EnsureDefaultBookmarks(userDataDir, a.BookmarkList()); err != nil {
 		log.Error("默认书签写入失败", logger.F("error", err.Error()))
 	}
@@ -245,10 +285,23 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		return profile, startErr
 	}
 	monitor.Start()
+	launchAudit := browser.NewLaunchAuditSnapshot(browser.LaunchAuditInput{
+		BrowserExe:      chromeBinaryPath,
+		ProfileID:       profileId,
+		UserDataDir:     userDataDir,
+		ProxyHash:       browser.ProfileProxyAuditHash(profile, resolvedProxyConfig),
+		FingerprintArgs: profile.FingerprintArgs,
+		LaunchArgs:      args,
+		DebugPort:       assignedDebugPort,
+		PID:             cmd.Process.Pid,
+		AppMode:         browser.ProcessAppMode(),
+	})
 
 	for attempt := 1; attempt <= maxStartAttempts; attempt++ {
 		stableDebugPort, readyErr := waitBrowserDebugPortStable(assignedDebugPort, userDataDir, startReadyTimeout, startStableWindow, monitor)
 		if readyErr == nil {
+			launchAudit.DebugPort = stableDebugPort
+			profile.LaunchAudit = launchAudit
 			a.markProfileRunningLocked(profileId, profile, cmd, cmd.Process.Pid, stableDebugPort, true, "")
 			if acquiredXrayBridgeKey != "" {
 				a.bindProfileXrayBridge(profileId, acquiredXrayBridgeKey)
@@ -307,6 +360,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 	if shouldKeepBrowserRunningPendingDebugReady(assignedDebugPort, monitor) {
 		runtimeWarning := browserDebugPendingWarning(totalReadyTimeout)
 		pendingStartNotice = browserDebugPendingStartNotice(totalReadyTimeout)
+		profile.LaunchAudit = launchAudit
 		a.markProfileRunningLocked(profileId, profile, cmd, cmd.Process.Pid, assignedDebugPort, false, runtimeWarning)
 		if acquiredXrayBridgeKey != "" {
 			a.bindProfileXrayBridge(profileId, acquiredXrayBridgeKey)
@@ -349,10 +403,19 @@ func (a *App) BrowserInstanceStop(profileId string) (*BrowserProfile, error) {
 
 	cmd := a.browserMgr.BrowserProcesses[profileId]
 	debugPort := profile.DebugPort
-	if tryCloseBrowserViaCDP(debugPort, 5*time.Second) {
+	cdpOwnershipErr := a.validateProfileCDPOwnership(profile)
+	if cdpOwnershipErr == nil && tryCloseBrowserViaCDP(debugPort, 5*time.Second) {
 		a.markProfileStoppedLocked(profileId, profile)
 		log.Info("实例停止", logger.F("profile_id", profileId), logger.F("method", "cdp"), logger.F("debug_port", debugPort))
 		return profile, nil
+	}
+
+	if cdpOwnershipErr != nil {
+		log.Warn("Skip CDP close because ownership is not proven",
+			logger.F("profile_id", profileId),
+			logger.F("debug_port", debugPort),
+			logger.F("error", cdpOwnershipErr.Error()),
+		)
 	}
 
 	if cmd != nil && cmd.Process != nil {
@@ -746,6 +809,7 @@ func (a *App) markProfileStoppedLocked(profileId string, profile *BrowserProfile
 	profile.Pid = 0
 	profile.DebugPort = 0
 	profile.RuntimeWarning = ""
+	profile.LaunchAudit = nil
 	profile.LastStopAt = time.Now().Format(time.RFC3339)
 	delete(a.browserMgr.BrowserProcesses, profileId)
 	a.releaseProfileXrayBridge(profileId)
@@ -761,7 +825,10 @@ func (a *App) openBrowserWindowForRunningProfile(profile *BrowserProfile, extraL
 		return err
 	}
 
-	userDataDir := a.browserMgr.ResolveUserDataDir(profile)
+	userDataDir, err := a.browserMgr.ResolveCanonicalUserDataDir(profile)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(userDataDir, 0755); err != nil {
 		return fmt.Errorf("无法创建用户数据目录 %s：%w", userDataDir, err)
 	}
@@ -897,6 +964,14 @@ func (a *App) verifyFingerprintAndGeo(profileId string, profile *BrowserProfile,
 	}
 
 	// 1. CDP 指纹验证
+	if err := a.validateProfileCDPOwnership(profile); err != nil {
+		logger.New("Browser").Error("Skip fingerprint verification because CDP ownership is not proven",
+			logger.F("profile_id", profileId),
+			logger.F("debug_port", debugPort),
+			logger.F("error", err.Error()),
+		)
+		return
+	}
 	browser.VerifyFingerprint(debugPort, profileId, profile.FingerprintArgs, emitFn)
 
 	// 2. 时区-IP 地理不匹配检测
@@ -937,6 +1012,30 @@ func (a *App) getProxyCachedGeo(proxyId string) (country, city string) {
 
 // startBehaviorEngine 启动行为模拟引擎
 func (a *App) startBehaviorEngine(profileId, behaviorProfileID string, debugPort int) {
+	if a == nil || a.browserMgr == nil {
+		logger.New("Behavior").Error("Skip behavior engine because browser manager is unavailable",
+			logger.F("profile_id", profileId),
+			logger.F("debug_port", debugPort),
+		)
+		return
+	}
+	a.browserMgr.Mutex.Lock()
+	profile := a.browserMgr.Profiles[profileId]
+	var snapshot *BrowserProfile
+	if profile != nil {
+		copied := *profile
+		snapshot = &copied
+	}
+	a.browserMgr.Mutex.Unlock()
+	if err := a.validateProfileCDPOwnership(snapshot); err != nil {
+		logger.New("Behavior").Error("Skip behavior engine because CDP ownership is not proven",
+			logger.F("profile_id", profileId),
+			logger.F("debug_port", debugPort),
+			logger.F("error", err.Error()),
+		)
+		return
+	}
+
 	preset := behavior.GetPreset(behaviorProfileID)
 	if preset == nil {
 		log := logger.New("Behavior")

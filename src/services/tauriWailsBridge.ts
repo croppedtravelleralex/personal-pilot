@@ -52,6 +52,19 @@ interface SidecarEventPayload {
   data?: unknown[]
 }
 
+interface DestructivePreflight {
+  operation?: string
+  targetProfileId?: string
+  targetUserDataDir?: string
+  requiresStop?: boolean
+  writesCookie?: boolean
+  destructivePaths?: string[]
+  warnings?: Array<{ code?: string; message?: string }>
+  blockers?: Array<{ code?: string; message?: string }>
+  confirmationToken?: string
+  confirmationPrompt?: string
+}
+
 const bridgeWindow = window as BridgeWindow
 const listeners = new Map<string, ListenerSet>()
 
@@ -87,8 +100,10 @@ function createAppProxy(): Record<string, (...args: unknown[]) => Promise<unknow
     {
       get(_target, property) {
         if (typeof property !== 'string') return undefined
+        if (property === 'BackupInitializeSystem') return initializeSystemData
         if (property === 'BackupExportPackage') return exportBackupPackage
         if (property === 'BackupImportPackage') return importBackupPackage
+        if (property === 'BrowserSnapshotRestore') return restoreBrowserSnapshot
         return (...args: unknown[]) => desktopRpc(property, args)
       },
     },
@@ -110,10 +125,45 @@ function backupDefaultFilename() {
   return `ant-chrome-backup-${stamp}.zip`
 }
 
+function describePreflight(preflight: DestructivePreflight): string {
+  const lines = [
+    preflight.confirmationPrompt || 'Confirm this destructive operation before continuing.',
+  ]
+  if (preflight.targetProfileId) lines.push(`Profile: ${preflight.targetProfileId}`)
+  if (preflight.targetUserDataDir) lines.push(`Target: ${preflight.targetUserDataDir}`)
+  if (preflight.writesCookie) lines.push('Cookie assets will be written.')
+  if (preflight.requiresStop) lines.push('Affected running profiles must be stopped first.')
+  if (preflight.destructivePaths?.length) {
+    lines.push('Paths:')
+    lines.push(...preflight.destructivePaths.slice(0, 8).map(path => `- ${path}`))
+  }
+  if (preflight.warnings?.length) {
+    lines.push('Warnings:')
+    lines.push(...preflight.warnings.slice(0, 5).map(item => `- ${item.message || item.code || 'warning'}`))
+  }
+  return lines.join('\n')
+}
+
+function assertPreflightCanContinue(preflight: DestructivePreflight) {
+  const blockers = preflight.blockers || []
+  if (blockers.length > 0) {
+    const first = blockers[0]
+    throw new Error(first.message || first.code || 'destructive preflight blocked')
+  }
+  if (!preflight.confirmationToken) {
+    throw new Error('destructive preflight did not return a confirmation token')
+  }
+}
+
+function confirmPreflight(preflight: DestructivePreflight): boolean {
+  assertPreflightCanContinue(preflight)
+  return window.confirm(describePreflight(preflight))
+}
+
 async function exportBackupPackage() {
   const savePath = await desktopSaveBackupPath(backupDefaultFilename())
   if (!savePath) {
-    return { cancelled: true, message: '已取消导出' }
+    return { cancelled: true, message: 'export cancelled' }
   }
   return desktopRpc('BackupExportPackageToPath', [savePath], { timeoutMs: 120000 })
 }
@@ -121,9 +171,42 @@ async function exportBackupPackage() {
 async function importBackupPackage(resetFirst?: unknown) {
   const zipPath = await desktopOpenBackupPath()
   if (!zipPath) {
-    return { cancelled: true, message: '已取消加载' }
+    return { cancelled: true, message: 'import cancelled' }
   }
-  return desktopRpc('BackupImportPackageFromPath', [zipPath, Boolean(resetFirst)], { timeoutMs: 120000 })
+  const shouldReset = Boolean(resetFirst)
+  const preflight = await desktopRpc<DestructivePreflight>('BackupImportPackagePreflightFromPath', [zipPath, shouldReset], { timeoutMs: 120000 })
+  if (!confirmPreflight(preflight)) {
+    return { cancelled: true, message: 'import cancelled' }
+  }
+  return desktopRpc('BackupImportPackageFromPathConfirmed', [
+    zipPath,
+    shouldReset,
+    { confirmed: true, confirmationToken: preflight.confirmationToken },
+  ], { timeoutMs: 120000 })
+}
+
+async function initializeSystemData() {
+  const preflight = await desktopRpc<DestructivePreflight>('BackupInitializeSystemPreflight', [], { timeoutMs: 120000 })
+  if (!confirmPreflight(preflight)) {
+    return { cancelled: true, message: 'initialize cancelled' }
+  }
+  return desktopRpc('BackupInitializeSystemConfirmed', [
+    { confirmed: true, confirmationToken: preflight.confirmationToken },
+  ], { timeoutMs: 120000 })
+}
+
+async function restoreBrowserSnapshot(profileId?: unknown, snapshotId?: unknown) {
+  const pid = String(profileId || '')
+  const sid = String(snapshotId || '')
+  const preflight = await desktopRpc<DestructivePreflight>('BrowserSnapshotRestorePreflight', [pid, sid], { timeoutMs: 120000 })
+  if (!confirmPreflight(preflight)) {
+    return undefined
+  }
+  return desktopRpc('BrowserSnapshotRestoreConfirmed', [
+    pid,
+    sid,
+    { confirmed: true, confirmationToken: preflight.confirmationToken },
+  ], { timeoutMs: 120000 })
 }
 
 function installRuntimeShim() {

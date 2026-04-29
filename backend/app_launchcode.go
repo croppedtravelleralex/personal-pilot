@@ -34,21 +34,11 @@ func (a *App) WorkbenchCaptureScreenshot(profileId string) (string, error) {
 }
 
 func (a *App) WorkbenchFingerprintProfile(profileId string) (*browser.FingerprintSnapshot, error) {
-	a.browserMgr.Mutex.Lock()
-	profile, ok := a.browserMgr.Profiles[profileId]
-	if !ok || profile == nil {
-		a.browserMgr.Mutex.Unlock()
-		return nil, fmt.Errorf("profile not found: %s", profileId)
+	profile, err := a.runningProfileForWorkbench(profileId)
+	if err != nil {
+		return nil, err
 	}
-	debugPort := profile.DebugPort
-	debugReady := profile.DebugReady
-	running := profile.Running
-	a.browserMgr.Mutex.Unlock()
-
-	if !running || !debugReady || debugPort <= 0 {
-		return nil, fmt.Errorf("profile is not running with a ready debug port: %s", profileId)
-	}
-	return browser.ExtractFingerprint(debugPort)
+	return browser.ExtractFingerprint(profile.DebugPort)
 }
 
 func (a *App) WorkbenchActivateProfile(profileId string) error {

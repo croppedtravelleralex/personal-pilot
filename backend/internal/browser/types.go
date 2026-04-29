@@ -33,6 +33,7 @@ type Profile struct {
 	Pid                  int                    `json:"pid"`
 	RuntimeWarning       string                 `json:"runtimeWarning"`
 	LastError            string                 `json:"lastError"`
+	LaunchAudit          *LaunchAuditSnapshot   `json:"launchAudit,omitempty"`
 	CreatedAt            string                 `json:"createdAt"`
 	UpdatedAt            string                 `json:"updatedAt"`
 	LastStartAt          string                 `json:"lastStartAt"`

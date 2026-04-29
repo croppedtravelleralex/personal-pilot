@@ -569,6 +569,11 @@ func mapProfileWriteErrorStatus(err error) int {
 		return http.StatusBadRequest
 	case strings.Contains(msg, "实例数量已达上限"):
 		return http.StatusConflict
+	case strings.Contains(msg, "identity safety gate") &&
+		(strings.Contains(msg, "path traversal") || strings.Contains(msg, "ambiguous user-data-dir path") || strings.Contains(msg, "profileid is required")):
+		return http.StatusBadRequest
+	case strings.Contains(msg, "identity safety gate"):
+		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError
 	}

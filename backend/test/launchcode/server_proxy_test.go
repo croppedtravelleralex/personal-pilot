@@ -12,6 +12,21 @@ import (
 	"ant-chrome/backend/internal/browser"
 )
 
+func launchAuditForProxyTest(profileID string, debugPort int) *browser.LaunchAuditSnapshot {
+	return &browser.LaunchAuditSnapshot{
+		BrowserExe:           `C:\test\chrome.exe`,
+		ProfileID:            profileID,
+		CanonicalUserDataDir: `C:\test\profiles\` + profileID,
+		ProxyHash:            "proxy-hash",
+		FingerprintArgsHash:  "fingerprint-hash",
+		LaunchArgsHash:       "launch-args-hash",
+		DebugPort:            debugPort,
+		PID:                  1000 + debugPort,
+		Timestamp:            "2026-04-29T00:00:00Z",
+		AppMode:              "test",
+	}
+}
+
 func mustDebugPortFromURL(t *testing.T, rawURL string) int {
 	t.Helper()
 
@@ -77,12 +92,14 @@ func TestCDPProxySwitchesToLatestLaunchedProfile(t *testing.T) {
 		Pid:         1001,
 		DebugPort:   mustDebugPortFromURL(t, serverA.URL),
 	}
+	profileA.LaunchAudit = launchAuditForProxyTest(profileA.ProfileId, profileA.DebugPort)
 	profileB := &browser.Profile{
 		ProfileId:   "profile-b",
 		ProfileName: "Profile B",
 		Pid:         1002,
 		DebugPort:   mustDebugPortFromURL(t, serverB.URL),
 	}
+	profileB.LaunchAudit = launchAuditForProxyTest(profileB.ProfileId, profileB.DebugPort)
 	starter.addProfile(profileA)
 	starter.addProfile(profileB)
 
@@ -120,6 +137,103 @@ func TestCDPProxySwitchesToLatestLaunchedProfile(t *testing.T) {
 		if !strings.Contains(proxyResp.Body.String(), tc.wantMarker) {
 			t.Fatalf("代理未切换到最新实例: want=%s body=%s", tc.wantMarker, proxyResp.Body.String())
 		}
+	}
+}
+
+func TestCDPProxyRejectsReachableTargetWithoutLaunchAudit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/json/version" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"Browser":"Mock"}`))
+	}))
+	defer server.Close()
+
+	svc := newInMemoryService()
+	starter := newMockStarter()
+	profile := &browser.Profile{
+		ProfileId:   "profile-missing-audit",
+		ProfileName: "Missing Audit",
+		Pid:         3001,
+		DebugPort:   mustDebugPortFromURL(t, server.URL),
+	}
+	starter.addProfile(profile)
+
+	code, err := svc.EnsureCode(profile.ProfileId)
+	if err != nil {
+		t.Fatalf("EnsureCode 失败: %v", err)
+	}
+	handler := buildTestHandler(svc, starter)
+
+	launchReq := httptest.NewRequest(http.MethodGet, "/api/launch/"+code, nil)
+	launchResp := httptest.NewRecorder()
+	handler.ServeHTTP(launchResp, launchReq)
+	if launchResp.Code != http.StatusOK {
+		t.Fatalf("启动请求失败: status=%d body=%s", launchResp.Code, launchResp.Body.String())
+	}
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "/json/version", nil)
+	proxyResp := httptest.NewRecorder()
+	handler.ServeHTTP(proxyResp, proxyReq)
+	if proxyResp.Code != http.StatusConflict {
+		t.Fatalf("缺少审计快照应拒绝 CDP proxy: status=%d body=%s", proxyResp.Code, proxyResp.Body.String())
+	}
+	if !strings.Contains(proxyResp.Body.String(), "launch audit snapshot") {
+		t.Fatalf("错误信息应说明缺少启动审计快照: %s", proxyResp.Body.String())
+	}
+}
+
+func TestCDPProxyRejectsReachableTargetWithAuditPortMismatch(t *testing.T) {
+	serverA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/json/version" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"Browser":"Mock-A"}`))
+	}))
+	defer serverA.Close()
+	serverB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/json/version" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"Browser":"Mock-B"}`))
+	}))
+	defer serverB.Close()
+
+	svc := newInMemoryService()
+	starter := newMockStarter()
+	profile := &browser.Profile{
+		ProfileId:   "profile-wrong-port",
+		ProfileName: "Wrong Port",
+		Pid:         3002,
+		DebugPort:   mustDebugPortFromURL(t, serverA.URL),
+	}
+	profile.LaunchAudit = launchAuditForProxyTest(profile.ProfileId, mustDebugPortFromURL(t, serverB.URL))
+	starter.addProfile(profile)
+
+	code, err := svc.EnsureCode(profile.ProfileId)
+	if err != nil {
+		t.Fatalf("EnsureCode 失败: %v", err)
+	}
+	handler := buildTestHandler(svc, starter)
+
+	launchReq := httptest.NewRequest(http.MethodGet, "/api/launch/"+code, nil)
+	launchResp := httptest.NewRecorder()
+	handler.ServeHTTP(launchResp, launchReq)
+	if launchResp.Code != http.StatusOK {
+		t.Fatalf("启动请求失败: status=%d body=%s", launchResp.Code, launchResp.Body.String())
+	}
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "/json/version", nil)
+	proxyResp := httptest.NewRecorder()
+	handler.ServeHTTP(proxyResp, proxyReq)
+	if proxyResp.Code != http.StatusConflict {
+		t.Fatalf("审计端口不匹配应拒绝 CDP proxy: status=%d body=%s", proxyResp.Code, proxyResp.Body.String())
+	}
+	if !strings.Contains(proxyResp.Body.String(), "debugPort mismatch") {
+		t.Fatalf("错误信息应说明 debugPort mismatch: %s", proxyResp.Body.String())
 	}
 }
 

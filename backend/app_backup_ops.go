@@ -30,6 +30,24 @@ func (a *App) BackupInitializeSystem() (map[string]interface{}, error) {
 	a.maintenanceMu.Lock()
 	defer a.maintenanceMu.Unlock()
 
+	return nil, backupDestructiveConfirmationRequired("backup initialize")
+}
+
+func (a *App) BackupInitializeSystemPreflight() (backup.DestructivePreflight, error) {
+	a.maintenanceMu.Lock()
+	defer a.maintenanceMu.Unlock()
+
+	return a.backupInitializePreflightLocked(), nil
+}
+
+func (a *App) BackupInitializeSystemConfirmed(confirmation backup.DestructiveConfirmation) (map[string]interface{}, error) {
+	a.maintenanceMu.Lock()
+	defer a.maintenanceMu.Unlock()
+
+	preflight := a.backupInitializePreflightLocked()
+	if err := preflight.ValidateConfirmation(confirmation); err != nil {
+		return nil, err
+	}
 	return a.backupInitializeLocked(true)
 }
 
@@ -149,12 +167,7 @@ func (a *App) BackupImportPackage(resetFirst bool) (map[string]interface{}, erro
 	}
 	a.backupEmitImportProgress("preparing", 5, "正在校验备份包...")
 
-	result, importErr := a.backupImportFromPathLocked(zipPath, resetFirst)
-	if importErr != nil {
-		a.backupEmitImportProgress("error", 100, fmt.Sprintf("加载失败: %v", importErr))
-		return nil, importErr
-	}
-	return result, nil
+	return nil, backupDestructiveConfirmationRequired("backup import")
 }
 
 // BackupImportPackageFromPath imports a backup from an explicit ZIP path.
@@ -173,6 +186,44 @@ func (a *App) BackupImportPackageFromPath(zipPath string, resetFirst bool) (map[
 			"cancelled": true,
 			"message":   "import cancelled",
 		}, nil
+	}
+	a.backupEmitImportProgress("preparing", 5, "validating backup package...")
+
+	return nil, backupDestructiveConfirmationRequired("backup import")
+}
+
+func (a *App) BackupImportPackagePreflightFromPath(zipPath string, resetFirst bool) (backup.DestructivePreflight, error) {
+	a.maintenanceMu.Lock()
+	defer a.maintenanceMu.Unlock()
+
+	zipPath = strings.TrimSpace(zipPath)
+	if zipPath == "" {
+		return backup.DestructivePreflight{}, fmt.Errorf("import path is empty")
+	}
+	return a.backupImportPreflightFromPathLocked(zipPath, resetFirst)
+}
+
+func (a *App) BackupImportPackageFromPathConfirmed(zipPath string, resetFirst bool, confirmation backup.DestructiveConfirmation) (map[string]interface{}, error) {
+	a.maintenanceMu.Lock()
+	defer a.maintenanceMu.Unlock()
+
+	if a.ctx == nil {
+		return nil, fmt.Errorf("application context is not initialized")
+	}
+	zipPath = strings.TrimSpace(zipPath)
+	if zipPath == "" {
+		a.backupEmitImportProgress("cancelled", 0, "import cancelled")
+		return map[string]interface{}{
+			"cancelled": true,
+			"message":   "import cancelled",
+		}, nil
+	}
+	preflight, err := a.backupImportPreflightFromPathLocked(zipPath, resetFirst)
+	if err != nil {
+		return nil, err
+	}
+	if err := preflight.ValidateConfirmation(confirmation); err != nil {
+		return nil, err
 	}
 	a.backupEmitImportProgress("preparing", 5, "validating backup package...")
 
@@ -262,6 +313,222 @@ func (a *App) backupEmitProgress(eventName, phase string, progress int, message 
 		EntryTotal:    evt.EntryTotal,
 		Timestamp:     evt.Timestamp,
 	})
+}
+
+func backupDestructiveConfirmationRequired(operation string) error {
+	return fmt.Errorf("%s requires destructive preflight confirmation", operation)
+}
+
+func (a *App) backupRunningProfileIDsLocked() []string {
+	if a == nil || a.browserMgr == nil {
+		return nil
+	}
+	a.browserMgr.Mutex.Lock()
+	defer a.browserMgr.Mutex.Unlock()
+
+	ids := make([]string, 0)
+	for profileID, profile := range a.browserMgr.Profiles {
+		if profile == nil || !profile.Running {
+			continue
+		}
+		id := strings.TrimSpace(profile.ProfileId)
+		if id == "" {
+			id = strings.TrimSpace(profileID)
+		}
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (a *App) backupInitializePreflightLocked() backup.DestructivePreflight {
+	oldCfg := a.config
+	if oldCfg == nil {
+		oldCfg = config.DefaultConfig()
+	}
+	defaultCfg := config.DefaultConfig()
+	dataRoot := a.resolveAppPath("data")
+	oldUserRoot := a.backupResolveUserDataRoot(oldCfg)
+	newUserRoot := a.backupResolveUserDataRoot(defaultCfg)
+
+	preflight := backup.DestructivePreflight{
+		Operation:            "backup_initialize",
+		RequiresConfirmation: true,
+		Overwrites:           []string{a.resolveAppPath("config.yaml"), a.resolveAppPath("proxies.yaml"), dataRoot},
+		DestructivePaths:     []string{dataRoot},
+		ConfirmationPrompt:   "Reset application data to defaults. This may delete profile data and Cookie assets.",
+	}
+	for _, p := range backupUniqueNonEmpty([]string{oldUserRoot, newUserRoot}) {
+		if backupSamePath(p, dataRoot) {
+			continue
+		}
+		preflight.Overwrites = append(preflight.Overwrites, p)
+		preflight.DestructivePaths = append(preflight.DestructivePaths, p)
+	}
+	if running := a.backupRunningProfileIDsLocked(); len(running) > 0 {
+		preflight.RequiresStop = true
+		preflight.AddBlocker("profile_running", "running profiles must be stopped before backup initialize: "+strings.Join(running, ","))
+	}
+	preflight.Finalize()
+	return preflight
+}
+
+func backupPayloadContainsCookie(payloadRoot string) bool {
+	payloadRoot = strings.TrimSpace(payloadRoot)
+	if payloadRoot == "" {
+		return false
+	}
+	found := false
+	_ = filepath.WalkDir(payloadRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(payloadRoot, path)
+		if relErr != nil {
+			return nil
+		}
+		if backupIsCookieAssetPath(rel) {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+func backupIsCookieAssetPath(path string) bool {
+	rel := strings.ToLower(strings.Trim(filepath.ToSlash(strings.TrimSpace(path)), "/"))
+	if rel == "" {
+		return false
+	}
+	parts := strings.Split(rel, "/")
+	name := parts[len(parts)-1]
+	if name != "cookies" && name != "cookies-journal" && name != "cookies-wal" && name != "cookies-shm" {
+		return false
+	}
+	for _, part := range parts {
+		if part == "default" || part == "network" {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) backupCheckCookieCrossProfileRisk(preflight *backup.DestructivePreflight, incomingCfg *config.Config) {
+	if a == nil || a.browserMgr == nil || preflight == nil || incomingCfg == nil {
+		return
+	}
+
+	a.browserMgr.Mutex.Lock()
+	existingProfiles := make([]*BrowserProfile, 0, len(a.browserMgr.Profiles))
+	for _, profile := range a.browserMgr.Profiles {
+		if profile == nil {
+			continue
+		}
+		snapshot := *profile
+		existingProfiles = append(existingProfiles, &snapshot)
+	}
+	a.browserMgr.Mutex.Unlock()
+
+	for _, incoming := range incomingCfg.Browser.Profiles {
+		incomingProfile := &BrowserProfile{
+			ProfileId:   strings.TrimSpace(incoming.ProfileId),
+			ProfileName: strings.TrimSpace(incoming.ProfileName),
+			UserDataDir: strings.TrimSpace(incoming.UserDataDir),
+		}
+		if incomingProfile.ProfileId == "" {
+			continue
+		}
+		incomingDir, err := a.browserMgr.ResolveCanonicalUserDataDir(incomingProfile)
+		if err != nil {
+			preflight.AddBlocker("incoming_profile_path_ambiguous", err.Error())
+			continue
+		}
+		for _, existing := range existingProfiles {
+			if existing == nil || strings.TrimSpace(existing.ProfileId) == "" || existing.ProfileId == incomingProfile.ProfileId {
+				continue
+			}
+			existingDir, err := a.browserMgr.ResolveCanonicalUserDataDir(existing)
+			if err != nil {
+				preflight.AddBlocker("existing_profile_path_ambiguous", err.Error())
+				continue
+			}
+			if backupSamePath(existingDir, incomingDir) {
+				preflight.AddBlocker(
+					"cookie_cross_profile",
+					fmt.Sprintf("incoming profile %s would write Cookie assets into user-data-dir owned by existing profile %s", incomingProfile.ProfileId, existing.ProfileId),
+				)
+			}
+		}
+	}
+}
+
+func (a *App) backupImportPreflightFromPathLocked(zipPath string, resetFirst bool) (backup.DestructivePreflight, error) {
+	extractRoot, manifest, err := backupExtractAndValidate(zipPath)
+	if err != nil {
+		return backup.DestructivePreflight{}, err
+	}
+	defer os.RemoveAll(extractRoot)
+
+	payloadRoot := filepath.Join(extractRoot, "payload")
+	componentEntries := backupDetectPresentManifestEntries(extractRoot, manifest)
+	incomingCfg, hasIncomingCfg, cfgErr := backupLoadIncomingConfig(payloadRoot)
+
+	userDataRoot := a.backupResolveUserDataRoot(a.config)
+	dataRoot := a.resolveAppPath("data")
+	preflight := backup.DestructivePreflight{
+		Operation:            "backup_import",
+		TargetUserDataDir:    userDataRoot,
+		RequiresConfirmation: true,
+		WritesCookie:         backupPayloadContainsCookie(payloadRoot),
+		ConfirmationPrompt:   "Import backup data only after confirming target profile data and Cookie writes.",
+	}
+	if cfgErr != nil {
+		preflight.AddBlocker("backup_config_parse_failed", "backup config parse failed: "+cfgErr.Error())
+	}
+	if resetFirst {
+		preflight.Overwrites = append(preflight.Overwrites, a.resolveAppPath("config.yaml"), a.resolveAppPath("proxies.yaml"), dataRoot, userDataRoot)
+		preflight.DestructivePaths = append(preflight.DestructivePaths, dataRoot, userDataRoot)
+	} else {
+		preflight.Adds = append(preflight.Adds, dataRoot, userDataRoot)
+		if hasIncomingCfg {
+			preflight.Overwrites = append(preflight.Overwrites, a.resolveAppPath("config.yaml"))
+		}
+	}
+	if _, ok := componentEntries["browser_core_root"]; ok {
+		if resetFirst {
+			preflight.Overwrites = append(preflight.Overwrites, a.resolveAppPath("chrome"))
+			preflight.DestructivePaths = append(preflight.DestructivePaths, a.resolveAppPath("chrome"))
+		} else {
+			preflight.Adds = append(preflight.Adds, a.resolveAppPath("chrome"))
+		}
+	}
+	if incomingCfg != nil {
+		for _, p := range a.backupCollectExternalCorePaths(incomingCfg) {
+			if resetFirst {
+				preflight.Overwrites = append(preflight.Overwrites, p)
+				preflight.DestructivePaths = append(preflight.DestructivePaths, p)
+			} else {
+				preflight.Adds = append(preflight.Adds, p)
+			}
+		}
+	}
+	if running := a.backupRunningProfileIDsLocked(); len(running) > 0 {
+		preflight.RequiresStop = true
+		preflight.AddBlocker("profile_running", "running profiles must be stopped before backup import: "+strings.Join(running, ","))
+	}
+	if preflight.WritesCookie && incomingCfg != nil && !resetFirst {
+		a.backupCheckCookieCrossProfileRisk(&preflight, incomingCfg)
+	}
+	if !preflight.WritesCookie {
+		preflight.Skips = append(preflight.Skips, "cookie_assets")
+	}
+	preflight.Finalize()
+	return preflight, nil
 }
 
 func (a *App) backupInitializeLocked(applyReload bool) (map[string]interface{}, error) {
