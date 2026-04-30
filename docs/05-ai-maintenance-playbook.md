@@ -74,3 +74,12 @@
 - 做实例工作台回归时，优先运行 `scripts/verify-workbench-two-instances.ps1`，它会用本地 LaunchServer 和 workbench HTTP API 覆盖 2 实例真实启动、导航、刷新、截图、排列、停止隔离和清理。
 - 脚本默认只选未运行 profile，避免误停用户已有浏览器；需要验收已运行实例时，显式传 `-ProfileIds <id1>,<id2> -StopPreExisting`。
 - 若脚本失败，先看失败阶段：health/profile 代表 App 或实例数据问题；launch/debugReady 代表浏览器核心/profile 启动问题；workbench/screenshot/arrange 代表 CDP 或 Win32 窗口辅助层问题；cleanup stop 代表受控停止链路问题。
+
+## 2026-04-30 persona-pilot selective asset merge 接手规则
+
+- 后续不要整仓合并 `D:\SelfMadeTool\persona-pilot`。该 sibling repo 只能作为样板库使用。
+- 已吸收的通用资产记录在 [10-persona-pilot-valuable-assets.md](./10-persona-pilot-valuable-assets.md)。
+- 新工作台页面优先复用 `src/components/workbench/*`，能力边界提示优先用 `TruthBoundaryBanner`，长文本预览优先用 `InlineContentPreview`。
+- 新业务域优先在 `src/features/<domain>/` 下采用 `model/adapters/store/selectors/hooks` 结构。
+- 搜索/筛选/排序的异步请求必须使用 request id 或 abort 策略；可直接用 `createRequestGate()`。
+- React 19、pnpm、TypeScript 6、Vite 8、Rust 后端原型和内嵌浏览器 M1 路线不属于当前主线，除非另开设计决策。

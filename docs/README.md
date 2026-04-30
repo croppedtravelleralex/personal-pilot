@@ -51,3 +51,9 @@
 - Scope: external real fingerprint Chromium windows, profile identity ownership, user-data-dir binding, Cookie marker persistence, fingerprint regression fields, and release acceptance evidence.
 - Verification entrypoints: `scripts/verify-workbench-two-instances.ps1` and `scripts/verify-tauri-fingerprint-regression.ps1`.
 - Rule: V1 is not complete until scripted release acceptance proves profile isolation, Cookie persistence, duplicate/path mismatch blocking, stop-one-keep-one, no residual verification processes, and stable fingerprint fields.
+
+## 2026-04-30 persona-pilot 高价值资产选择性合入
+
+- Source: [10-persona-pilot-valuable-assets.md](./10-persona-pilot-valuable-assets.md)
+- Scope: workbench UI primitives, truth-boundary banner, inline content preview, generic virtual list, debounced search input, selector-friendly store helper, request gate, and Windows UI debug entry.
+- Rule: keep this as a selective asset merge. Do not merge the sibling repo toolchain, Rust backend prototype, generated artifacts, or embedded-browser M1 path into the mainline without a separate design decision.
