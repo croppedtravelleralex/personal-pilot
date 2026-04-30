@@ -1,15 +1,15 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/backup"
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/database"
 	"archive/zip"
 	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/backup"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/database"
 	"strings"
 	"testing"
 )

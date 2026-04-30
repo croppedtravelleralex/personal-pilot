@@ -271,11 +271,11 @@ try {
     Write-Host "  Linux 架构: $linuxArch"
     Write-Host ""
 
-    $builderImage = "ant-browser-linux-builder:local"
+    $builderImage = "personal-pilot-linux-builder:local"
     $dockerfilePath = Join-Path $RepoRoot "publish/linux/linux-builder.Dockerfile"
     $resolvedBuilderBaseImage = $BuilderBaseImage
     if (-not $resolvedBuilderBaseImage -or $resolvedBuilderBaseImage.Trim() -eq "") {
-        $resolvedBuilderBaseImage = $env:ANT_BROWSER_LINUX_BUILDER_BASE_IMAGE
+        $resolvedBuilderBaseImage = $env:PERSONAL_PILOT_LINUX_BUILDER_BASE_IMAGE
     }
     if (-not $resolvedBuilderBaseImage -or $resolvedBuilderBaseImage.Trim() -eq "") {
         $resolvedBuilderBaseImage = "swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/golang:1.25-bookworm"
@@ -338,17 +338,17 @@ try {
         Write-Host ""
     }
 
-    $npmCacheVolume = "ant-browser-linux-npm-cache"
-    $nodeModulesVolume = "ant-browser-linux-node-modules-$linuxArch"
-    $goModCacheVolume = "ant-browser-linux-go-mod-cache"
-    $goBuildCacheVolume = "ant-browser-linux-go-build-cache"
-    $runtimeCpuLimit = Get-EnvOrDefault -Name "ANT_BROWSER_LINUX_DOCKER_CPUS" -DefaultValue "2"
-    $runtimeMemoryLimit = Get-EnvOrDefault -Name "ANT_BROWSER_LINUX_DOCKER_MEMORY" -DefaultValue "1408m"
-    $runtimeMemorySwapLimit = Get-EnvOrDefault -Name "ANT_BROWSER_LINUX_DOCKER_MEMORY_SWAP" -DefaultValue "1792m"
-    $runtimeShmSize = Get-EnvOrDefault -Name "ANT_BROWSER_LINUX_DOCKER_SHM_SIZE" -DefaultValue "256m"
-    $nodeMaxOldSpace = Get-EnvOrDefault -Name "ANT_BROWSER_LINUX_NODE_MAX_OLD_SPACE" -DefaultValue "384"
-    $goMaxProcs = Get-EnvOrDefault -Name "ANT_BROWSER_LINUX_GOMAXPROCS" -DefaultValue "2"
-    $npmJobs = Get-EnvOrDefault -Name "ANT_BROWSER_LINUX_NPM_JOBS" -DefaultValue "1"
+    $npmCacheVolume = "personal-pilot-linux-npm-cache"
+    $nodeModulesVolume = "personal-pilot-linux-node-modules-$linuxArch"
+    $goModCacheVolume = "personal-pilot-linux-go-mod-cache"
+    $goBuildCacheVolume = "personal-pilot-linux-go-build-cache"
+    $runtimeCpuLimit = Get-EnvOrDefault -Name "PERSONAL_PILOT_LINUX_DOCKER_CPUS" -DefaultValue "2"
+    $runtimeMemoryLimit = Get-EnvOrDefault -Name "PERSONAL_PILOT_LINUX_DOCKER_MEMORY" -DefaultValue "1408m"
+    $runtimeMemorySwapLimit = Get-EnvOrDefault -Name "PERSONAL_PILOT_LINUX_DOCKER_MEMORY_SWAP" -DefaultValue "1792m"
+    $runtimeShmSize = Get-EnvOrDefault -Name "PERSONAL_PILOT_LINUX_DOCKER_SHM_SIZE" -DefaultValue "256m"
+    $nodeMaxOldSpace = Get-EnvOrDefault -Name "PERSONAL_PILOT_LINUX_NODE_MAX_OLD_SPACE" -DefaultValue "384"
+    $goMaxProcs = Get-EnvOrDefault -Name "PERSONAL_PILOT_LINUX_GOMAXPROCS" -DefaultValue "2"
+    $npmJobs = Get-EnvOrDefault -Name "PERSONAL_PILOT_LINUX_NPM_JOBS" -DefaultValue "1"
     $versionArgText = ""
     if ($Version -and $Version.Trim() -ne "") {
         $versionArgText = " --version $Version"

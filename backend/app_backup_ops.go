@@ -1,12 +1,6 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/backup"
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/logger"
-	"ant-chrome/backend/internal/proxy"
 	"archive/zip"
 	"crypto/sha256"
 	"database/sql"
@@ -18,6 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"personal-pilot/backend/internal/backup"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/proxy"
 	"sort"
 	"strings"
 	"time"
@@ -64,7 +64,7 @@ func (a *App) BackupExportPackage() (map[string]interface{}, error) {
 	}
 	a.backupEmitExportProgress("starting", 0, "等待选择导出路径...")
 
-	defaultName := fmt.Sprintf("ant-chrome-backup-%s.zip", time.Now().Format("20060102-150405"))
+	defaultName := fmt.Sprintf("personal-pilot-backup-%s.zip", time.Now().Format("20060102-150405"))
 	savePath, err := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{
 		Title:           "导出配置",
 		DefaultFilename: defaultName,
@@ -1046,7 +1046,7 @@ func backupZipAddFile(w *zip.Writer, srcFile, archivePath string) error {
 }
 
 func backupExtractAndValidate(zipPath string) (string, backup.Manifest, error) {
-	tmpDir, err := os.MkdirTemp("", "ant-chrome-import-*")
+	tmpDir, err := os.MkdirTemp("", "personal-pilot-import-*")
 	if err != nil {
 		return "", backup.Manifest{}, err
 	}

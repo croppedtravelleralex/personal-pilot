@@ -1,4 +1,4 @@
-﻿; Ant Browser NSIS Installer Script
+﻿; Personal Pilot NSIS Installer Script
 ; Usage: makensis /DVERSION=1.1.0 /DSTAGINGDIR=C:\path\to\staging installer.nsi
 
 Unicode True

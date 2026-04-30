@@ -1,10 +1,6 @@
 package main
 
 import (
-	"ant-chrome/backend/internal/apppath"
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/database"
 	"database/sql"
 	"encoding/binary"
 	"encoding/json"
@@ -14,6 +10,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/apppath"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/database"
 	"sort"
 	"strings"
 	"time"

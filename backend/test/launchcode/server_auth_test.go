@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"ant-chrome/backend/internal/launchcode"
+	"personal-pilot/backend/internal/launchcode"
 )
 
 func buildAuthProtectedTestHandler() http.Handler {

@@ -16,24 +16,24 @@ if ([string]::IsNullOrWhiteSpace($BaselineAppPath)) {
     $BaselineAppPath = Join-Path $ProjectRoot "build\bin\personal-pilot.exe"
 }
 if ([string]::IsNullOrWhiteSpace($CandidateAppPath)) {
-    $CandidateAppPath = Join-Path $ProjectRoot "src-tauri\target\release\antbrowser-tauri.exe"
+    $CandidateAppPath = Join-Path $ProjectRoot "src-tauri\target\release\personal-pilot-tauri.exe"
 }
 $BaselineAppPath = [System.IO.Path]::GetFullPath($BaselineAppPath)
 $CandidateAppPath = [System.IO.Path]::GetFullPath($CandidateAppPath)
 $BaseUrl = $BaseUrl.TrimEnd("/")
 $RunId = "fp-{0}-{1}" -f ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()), ([Guid]::NewGuid().ToString("N").Substring(0, 8))
-$ApiKey = $env:ANTBROWSER_API_KEY
-$ApiKeyHeader = if ([string]::IsNullOrWhiteSpace($env:ANTBROWSER_API_KEY_HEADER)) { "X-Ant-Api-Key" } else { $env:ANTBROWSER_API_KEY_HEADER }
+$ApiKey = $env:PERSONAL_PILOT_API_KEY
+$ApiKeyHeader = if ([string]::IsNullOrWhiteSpace($env:PERSONAL_PILOT_API_KEY_HEADER)) { "X-Personal-Pilot-Api-Key" } else { $env:PERSONAL_PILOT_API_KEY_HEADER }
 $ExpectedProcessPaths = @(
     $BaselineAppPath,
     $CandidateAppPath,
-    (Join-Path (Split-Path -Parent $BaselineAppPath) "antbrowser-core.exe"),
-    (Join-Path (Split-Path -Parent $CandidateAppPath) "antbrowser-core.exe"),
-    (Join-Path $ProjectRoot "bin\antbrowser-core.exe"),
-    (Join-Path $ProjectRoot "bin\antbrowser-core-x86_64-pc-windows-msvc.exe")
+    (Join-Path (Split-Path -Parent $BaselineAppPath) "personal-pilot-core.exe"),
+    (Join-Path (Split-Path -Parent $CandidateAppPath) "personal-pilot-core.exe"),
+    (Join-Path $ProjectRoot "bin\personal-pilot-core.exe"),
+    (Join-Path $ProjectRoot "bin\personal-pilot-core-x86_64-pc-windows-msvc.exe")
 ) | ForEach-Object { [System.IO.Path]::GetFullPath($_) } | Select-Object -Unique
-$PreviousAppRootEnv = $env:ANTBROWSER_APP_ROOT
-$env:ANTBROWSER_APP_ROOT = $ProjectRoot
+$PreviousAppRootEnv = $env:PERSONAL_PILOT_APP_ROOT
+$env:PERSONAL_PILOT_APP_ROOT = $ProjectRoot
 
 function Get-MatchingProcessIds {
     param([string[]]$Paths)
@@ -80,7 +80,7 @@ function Stop-NewResidualProcesses {
 }
 $PreExistingProcessIds = Get-MatchingProcessIds -Paths $ExpectedProcessPaths
 
-function Invoke-AntApi {
+function Invoke-PersonalPilotApi {
     param(
         [Parameter(Mandatory = $true)][string]$Method,
         [Parameter(Mandatory = $true)][string]$Path,
@@ -99,27 +99,27 @@ function Invoke-AntApi {
     return Invoke-RestMethod -Method $Method -Uri $uri -Headers $headers -ContentType "application/json" -Body $json -TimeoutSec $TimeoutSec
 }
 
-function Test-AntHealth {
+function Test-PersonalPilotHealth {
     try {
-        $health = Invoke-AntApi -Method "GET" -Path "/api/health" -TimeoutSec 3
+        $health = Invoke-PersonalPilotApi -Method "GET" -Path "/api/health" -TimeoutSec 3
         return [bool]$health.ok
     } catch {
         return $false
     }
 }
 
-function Wait-AntHealth {
+function Wait-PersonalPilotHealth {
     param([int]$TimeoutSec)
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
-        if (Test-AntHealth) { return }
+        if (Test-PersonalPilotHealth) { return }
         Start-Sleep -Milliseconds 500
     }
     throw "LaunchServer health check timed out at $BaseUrl/api/health"
 }
 
-function Get-AntProfiles {
-    $resp = Invoke-AntApi -Method "GET" -Path "/api/profiles" -TimeoutSec 20
+function Get-PersonalPilotProfiles {
+    $resp = Invoke-PersonalPilotApi -Method "GET" -Path "/api/profiles" -TimeoutSec 20
     if (-not $resp.ok) { throw "GET /api/profiles returned ok=false" }
     return @($resp.items)
 }
@@ -128,7 +128,7 @@ function Wait-ProfileReady {
     param([Parameter(Mandatory = $true)][string]$TargetProfileId)
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSec)
     while ((Get-Date) -lt $deadline) {
-        $profile = Get-AntProfiles | Where-Object { $_.profileId -eq $TargetProfileId } | Select-Object -First 1
+        $profile = Get-PersonalPilotProfiles | Where-Object { $_.profileId -eq $TargetProfileId } | Select-Object -First 1
         if ($null -ne $profile -and $profile.running -and $profile.debugReady -and [int]$profile.debugPort -gt 0 -and [int]$profile.pid -gt 0) {
             return $profile
         }
@@ -139,12 +139,12 @@ function Wait-ProfileReady {
 
 function New-TemporaryProfile {
     $relativeUserData = "verification/$RunId/profile"
-    $resp = Invoke-AntApi -Method "POST" -Path "/api/profiles" -Body @{
+    $resp = Invoke-PersonalPilotApi -Method "POST" -Path "/api/profiles" -Body @{
         profile = @{
             profileName = "fingerprint-$RunId"
             userDataDir = $relativeUserData
             launchArgs = @("--window-size=1200,800")
-            tags = @("antbrowser-fingerprint-verify", $RunId)
+            tags = @("personal-pilot-fingerprint-verify", $RunId)
             keywords = @($RunId)
         }
     } -TimeoutSec 30
@@ -157,14 +157,14 @@ function New-TemporaryProfile {
 function Stop-Profile {
     param([Parameter(Mandatory = $true)][string]$TargetProfileId)
     try {
-        [void](Invoke-AntApi -Method "POST" -Path "/api/instances/stop" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30)
+        [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/instances/stop" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30)
     } catch {}
 }
 
 function Remove-Profile {
     param([Parameter(Mandatory = $true)][string]$TargetProfileId)
     try {
-        [void](Invoke-AntApi -Method "DELETE" -Path "/api/profiles/$TargetProfileId" -TimeoutSec 30)
+        [void](Invoke-PersonalPilotApi -Method "DELETE" -Path "/api/profiles/$TargetProfileId" -TimeoutSec 30)
     } catch {
         Write-Warning "Failed to delete temporary profile ${TargetProfileId}: $($_.Exception.Message)"
     }
@@ -332,7 +332,7 @@ function Set-CookieMarker {
     )
     [void](Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.enable")
     $result = Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.setCookie" -Params @{
-        name = "antbrowser_fingerprint_marker"
+        name = "personal_pilot_fingerprint_marker"
         value = $MarkerValue
         url = "https://fingerprint-gate.invalid/"
         path = "/"
@@ -349,7 +349,7 @@ function Get-CookieMarkerValues {
     [void](Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.enable")
     $result = Invoke-CDPCommand -DebugPort $DebugPort -Method "Network.getAllCookies"
     return @($result.cookies | Where-Object {
-        $_.name -eq "antbrowser_fingerprint_marker" -and ([string]$_.domain).TrimStart(".") -eq "fingerprint-gate.invalid"
+        $_.name -eq "personal_pilot_fingerprint_marker" -and ([string]$_.domain).TrimStart(".") -eq "fingerprint-gate.invalid"
     } | ForEach-Object { [string]$_.value })
 }
 
@@ -417,7 +417,7 @@ function Get-AdvancedFingerprint {
       pc.onicecandidate = function(e) {
         if (e && e.candidate && e.candidate.candidate) candidates.push(e.candidate.candidate);
       };
-      pc.createDataChannel('antbrowser');
+      pc.createDataChannel('personal-pilot');
       await pc.setLocalDescription(await pc.createOffer());
       await new Promise(function(resolve) { setTimeout(resolve, 900); });
       pc.close();
@@ -478,14 +478,14 @@ function Collect-FingerprintRun {
     if (-not (Test-Path -LiteralPath $AppPath)) {
         throw "$Label app executable not found: $AppPath"
     }
-    if (Test-AntHealth) {
+    if (Test-PersonalPilotHealth) {
         throw "LaunchServer is already running before $Label run; stop the app first to avoid mixing processes."
     }
 
     $appProcess = Start-Process -FilePath $AppPath -WorkingDirectory $ProjectRoot -PassThru
     try {
-        Wait-AntHealth -TimeoutSec $ReadyTimeoutSec
-        [void](Invoke-AntApi -Method "POST" -Path "/api/launch" -Body @{
+        Wait-PersonalPilotHealth -TimeoutSec $ReadyTimeoutSec
+        [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/launch" -Body @{
             profileId = $TargetProfileId
             startUrls = @("about:blank")
             skipDefaultStartUrls = $true
@@ -495,9 +495,9 @@ function Collect-FingerprintRun {
         $navRoot = [System.IO.Path]::GetFullPath((Join-Path $verificationRoot $RunId))
         New-Item -ItemType Directory -Path $navRoot -Force | Out-Null
         $navPagePath = Join-Path $navRoot "fingerprint.html"
-        Set-Content -LiteralPath $navPagePath -Value "<!doctype html><title>antbrowser-fingerprint</title><body>antbrowser-fingerprint-$RunId</body>" -Encoding UTF8
+        Set-Content -LiteralPath $navPagePath -Value "<!doctype html><title>personal-pilot-fingerprint</title><body>personal-pilot-fingerprint-$RunId</body>" -Encoding UTF8
         $navURL = "file:///" + ([System.IO.Path]::GetFullPath($navPagePath) -replace "\\", "/")
-        [void](Invoke-AntApi -Method "POST" -Path "/api/workbench/navigate" -Body @{
+        [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/navigate" -Body @{
             profileId = $TargetProfileId
             url = $navURL
         } -TimeoutSec 30)
@@ -513,12 +513,12 @@ function Collect-FingerprintRun {
         if ($cookieMarkers -notcontains $CookieMarkerValue) {
             throw "$Label Cookie marker verification failed; got $($cookieMarkers -join ',')"
         }
-        $fingerprintResp = Invoke-AntApi -Method "POST" -Path "/api/workbench/fingerprint" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30
+        $fingerprintResp = Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/fingerprint" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30
         if (-not $fingerprintResp.ok) {
             throw "$Label fingerprint capture returned ok=false"
         }
         $advancedFingerprint = Get-AdvancedFingerprint -DebugPort ([int]$profile.debugPort)
-        $shot = Invoke-AntApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30
+        $shot = Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $TargetProfileId } -TimeoutSec 30
         $browserCommandLine = Get-CommandLine -TargetProcessId ([int]$profile.pid)
         $canonicalUserDataDir = Get-CanonicalUserDataDir -UserDataDir ([string]$profile.userDataDir)
         $browserUserDataDir = Get-CommandLineUserDataDir -CommandLine $browserCommandLine
@@ -566,7 +566,7 @@ function Collect-FingerprintRun {
                 proxyBindName = $profile.proxyBindName
             }
             cookieMarker = [ordered]@{
-                name = "antbrowser_fingerprint_marker"
+                name = "personal_pilot_fingerprint_marker"
                 value = $CookieMarkerValue
                 present = ($cookieMarkers -contains $CookieMarkerValue)
             }
@@ -594,7 +594,7 @@ function Collect-FingerprintRun {
             commandLine = $browserCommandLine
             commandLineHash = Get-Sha256Text -Text $browserCommandLine
             cookieMarker = [pscustomobject]@{
-                name = "antbrowser_fingerprint_marker"
+                name = "personal_pilot_fingerprint_marker"
                 value = $CookieMarkerValue
                 observedValues = $cookieMarkers
                 requiredExisting = [bool]$RequireExistingCookieMarker
@@ -646,7 +646,7 @@ $cookieMarkerValue = "$RunId-cookie-marker"
 
 try {
     if ([string]::IsNullOrWhiteSpace($targetProfileId)) {
-        if (Test-AntHealth) {
+        if (Test-PersonalPilotHealth) {
             throw "LaunchServer is already running; stop the app before temporary profile setup."
         }
         if (-not (Test-Path -LiteralPath $CandidateAppPath)) {
@@ -654,7 +654,7 @@ try {
         }
         $setupProcess = Start-Process -FilePath $CandidateAppPath -WorkingDirectory $ProjectRoot -PassThru
         try {
-            Wait-AntHealth -TimeoutSec $ReadyTimeoutSec
+            Wait-PersonalPilotHealth -TimeoutSec $ReadyTimeoutSec
             $targetProfileId = New-TemporaryProfile
             $createdProfile = $true
         } finally {
@@ -699,10 +699,10 @@ try {
     exit 1
 } finally {
     if ($createdProfile -and -not [string]::IsNullOrWhiteSpace($targetProfileId)) {
-        if (-not (Test-AntHealth)) {
+        if (-not (Test-PersonalPilotHealth)) {
             $cleanupProcess = Start-Process -FilePath $CandidateAppPath -WorkingDirectory $ProjectRoot -PassThru
             try {
-                Wait-AntHealth -TimeoutSec $ReadyTimeoutSec
+                Wait-PersonalPilotHealth -TimeoutSec $ReadyTimeoutSec
                 Stop-Profile -TargetProfileId $targetProfileId
                 Remove-Profile -TargetProfileId $targetProfileId
             } finally {
@@ -715,5 +715,5 @@ try {
         Remove-TemporaryUserData
     }
     Remove-TemporaryUserData
-    $env:ANTBROWSER_APP_ROOT = $PreviousAppRootEnv
+    $env:PERSONAL_PILOT_APP_ROOT = $PreviousAppRootEnv
 }

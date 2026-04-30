@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/logger"
 	"github.com/google/uuid"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/logger"
 )
 
 // DownloadProgress 进度信息载体

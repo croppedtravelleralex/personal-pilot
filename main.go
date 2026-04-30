@@ -1,13 +1,13 @@
 package main
 
 import (
-	"ant-chrome/backend"
 	"context"
 	"embed"
 	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend"
 	goruntime "runtime"
 	"strings"
 	"time"
@@ -65,7 +65,7 @@ func normalizeWindowTitle(name string) string {
 	}
 
 	switch strings.ToLower(trimmed) {
-	case "ant browser", "ant chrome":
+	case "personal pilot", "personal-pilot":
 		return appBrandName
 	default:
 		return trimmed
@@ -146,7 +146,7 @@ func main() {
 		}
 	}
 
-	startupDebugEnabled := envFlagEnabled("PERSONAL_PILOT_DEBUG_STARTUP") || envFlagEnabled("ANT_BROWSER_DEBUG_STARTUP")
+	startupDebugEnabled := envFlagEnabled("PERSONAL_PILOT_DEBUG_STARTUP") || envFlagEnabled("PERSONAL_PILOT_DEBUG_STARTUP")
 	if startupDebugEnabled {
 		log.Printf("应用根目录: %s (dev=%v)", appRoot, isDevMode)
 	}

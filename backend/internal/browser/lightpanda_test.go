@@ -1,9 +1,9 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/config"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	"testing"
 )
 

@@ -121,7 +121,7 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
 
 const DEFAULT_LAUNCH_BASE_URL = 'http://127.0.0.1:19876'
 const DEFAULT_API_AUTH: LaunchServerInfo['apiAuth'] = {
-  requested: false, configured: false, enabled: false, header: 'X-Ant-Api-Key',
+  requested: false, configured: false, enabled: false, header: 'X-Personal-Pilot-Api-Key',
 }
 
 type AutomationTabKey = 'tasks' | 'guide' | 'profiles' | 'launch' | 'logs' | 'rules'

@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/config"
 )
 
 // BookmarkDAO 默认书签持久化接口

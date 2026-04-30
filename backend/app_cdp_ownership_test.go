@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
 )
 
 func TestWorkbenchRejectsReachableDebugPortWithoutLaunchAudit(t *testing.T) {

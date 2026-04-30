@@ -1,9 +1,9 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/apppath"
-	"ant-chrome/backend/internal/config"
 	"os/exec"
+	"personal-pilot/backend/internal/apppath"
+	"personal-pilot/backend/internal/config"
 	"sync"
 )
 

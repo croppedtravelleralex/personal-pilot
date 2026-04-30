@@ -122,7 +122,7 @@ function backupDefaultFilename() {
     pad(now.getMinutes()),
     pad(now.getSeconds()),
   ].join('')
-  return `ant-chrome-backup-${stamp}.zip`
+  return `personal-pilot-backup-${stamp}.zip`
 }
 
 function describePreflight(preflight: DestructivePreflight): string {
@@ -276,7 +276,7 @@ async function attachSidecarEvents() {
       }, 1500)
     }
   } catch (error) {
-    console.error('failed to start antbrowser core', error)
+    console.error('failed to start personal-pilot core', error)
   }
 }
 

@@ -1,6 +1,6 @@
-# antbrowser AI 维护接手手册
+# personal-pilot AI 维护接手手册
 
-本文件定义后续 AI 接手 antbrowser 时的阅读顺序、更新纪律和判断规则。
+本文件定义后续 AI 接手 personal-pilot 时的阅读顺序、更新纪律和判断规则。
 
 ## AI 接手阅读顺序
 
@@ -36,7 +36,7 @@
 - 行为录制 P0/P1/P2 和 P3 基础性能/产品工具切片已在 2026-04-29 落地；后续不要重复做大范围基础重构，优先围绕真实业务页回归、target discovery 兜底提示和发布前性能基线收口。
 - 2026-04-29 P2/P3 收口核验结论：错误码、cleanup POST、前端 API 收口、事件释放、active recording 状态统一、list/detail 拆分、搜索 debounce、详情分页、敏感输入脱敏、裁剪、导入导出、复制模板、回放进度、失败重试和真实浏览器基础 E2E 均可标 Done。
 - 2026-04-29 剩余问题收口结论：same-page iframe 聚合与可连接 OOPIF/CDP iframe target 同步已完成；新 tab/多 page target 已改为浏览器级 `Target.targetCreated/targetInfoChanged` 事件驱动同步，并保留 100ms 轮询兜底；manifest/index 已完成，detail page 已走索引；EventMonitor 表格虚拟滚动、BrowserLogs 分页增量加载和 Table 虚拟滚动 warning 已消除。后续 AI 不应再把这些写成未完成主线，但必须保留 target discovery 兜底提示和真实业务页回归边界。
-- 真实浏览器验收只有在实际启动浏览器并跑完录制/回放后才能写通过；本轮可引用 `ANT_RECORDING_E2E=1 go test -run TestRealFingerprintBrowserRecordPlayback`，不要用 `TestAutoRecordNurturing` 的 SKIP 当通过证据。
+- 真实浏览器验收只有在实际启动浏览器并跑完录制/回放后才能写通过；本轮可引用 `PERSONAL_PILOT_RECORDING_E2E=1 go test -run TestRealFingerprintBrowserRecordPlayback`，不要用 `TestAutoRecordNurturing` 的 SKIP 当通过证据。
 - 每个阶段必须有对应验证：行为包测试、后端全量测试、前端构建，涉及真实交互时补真实浏览器录制回放验收；本轮最新 `go test -count=1 ./backend/...` 已通过，后续若代码再变更必须重新跑，不得沿用旧结果。
 - 涉及敏感输入、验证码、密码、账号数据的录制策略，默认保守处理；未获得明确确认前不要明文保存。
 - 修改录制/回放事件语义时，同步更新后端类型、前端类型、详情展示和测试。

@@ -65,7 +65,7 @@ launch_server:
     auth:
         enabled: false
         api_key: ""
-        header: X-Ant-Api-Key
+        header: X-Personal-Pilot-Api-Key
 
 llm:
     provider: "openai"

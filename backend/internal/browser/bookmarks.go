@@ -1,11 +1,11 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/config"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	"time"
 )
 

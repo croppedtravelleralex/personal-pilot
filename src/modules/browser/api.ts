@@ -479,7 +479,7 @@ export async function browserProxyTestSpeed(proxyId: string): Promise<{ proxyId:
   return { proxyId, ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }
 }
 
-export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency: number = 20): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
+export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency: number = 8): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProxyBatchTestSpeed) {
     return (await bindings.BrowserProxyBatchTestSpeed(proxyIds, concurrency)) || []
@@ -528,7 +528,7 @@ export async function browserProxyCheckIPHealth(proxyId: string): Promise<ProxyI
   }
 }
 
-export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurrency: number = 10): Promise<ProxyIPHealthResult[]> {
+export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurrency: number = 6): Promise<ProxyIPHealthResult[]> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProxyBatchCheckIPHealth) {
     return (await bindings.BrowserProxyBatchCheckIPHealth(proxyIds, concurrency)) || []
@@ -733,7 +733,7 @@ function normalizeLaunchServerInfo(payload: any): LaunchServerInfo {
     requested: !!apiAuthPayload?.requested,
     configured: !!apiAuthPayload?.configured,
     enabled: !!apiAuthPayload?.enabled,
-    header: String(apiAuthPayload?.header || 'X-Ant-Api-Key'),
+    header: String(apiAuthPayload?.header || 'X-Personal-Pilot-Api-Key'),
   }
 
   return {
@@ -771,7 +771,7 @@ export async function fetchLaunchServerInfo(): Promise<LaunchServerInfo> {
       requested: false,
       configured: false,
       enabled: false,
-      header: 'X-Ant-Api-Key',
+      header: 'X-Personal-Pilot-Api-Key',
     },
   }
 }

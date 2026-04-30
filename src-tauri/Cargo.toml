@@ -1,12 +1,12 @@
 [package]
-name = "antbrowser-tauri"
+name = "personal-pilot-tauri"
 version = "1.1.0"
 description = "personal-pilot Tauri shell"
 authors = ["personal-pilot"]
 edition = "2021"
 
 [lib]
-name = "antbrowser_tauri"
+name = "personal_pilot_tauri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

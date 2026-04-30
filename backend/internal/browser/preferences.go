@@ -1,10 +1,10 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/logger"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/logger"
 )
 
 // EnsurePreferences deep-merges overrides into the Chrome Default/Preferences JSON file.

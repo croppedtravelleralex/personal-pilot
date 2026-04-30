@@ -1,8 +1,8 @@
 package scheduler
 
 import (
-	"ant-chrome/backend/internal/logger"
 	"context"
+	"personal-pilot/backend/internal/logger"
 	"sync"
 	"time"
 )

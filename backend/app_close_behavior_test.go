@@ -1,9 +1,9 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
 	"context"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
 	goruntime "runtime"
 	"testing"
 )
@@ -85,5 +85,39 @@ func TestForceQuitStopsTrackedBrowsers(t *testing.T) {
 	}
 	if app.browserMgr.Profiles["profile-1"].Running {
 		t.Fatal("expected ForceQuit to mark the profile as stopped")
+	}
+}
+
+func TestPrepareQuitModeDoesNotTouchTrackedBrowsers(t *testing.T) {
+	app := NewApp("")
+	app.browserMgr = browser.NewManager(config.DefaultConfig(), "")
+	app.browserMgr.Profiles = map[string]*BrowserProfile{
+		"profile-1": {
+			ProfileId: "profile-1",
+			Running:   true,
+		},
+	}
+	app.browserMgr.BrowserProcesses["profile-1"] = nil
+
+	app.PrepareQuitAppOnly()
+	if app.quitMode != quitModeAppOnly {
+		t.Fatalf("expected quitModeAppOnly, got %v", app.quitMode)
+	}
+	if app.shouldStopRuntimeServicesOnShutdown() {
+		t.Fatal("expected app-only prepared quit to skip runtime service shutdown")
+	}
+
+	app.PrepareQuitFull()
+	if app.quitMode != quitModeFull {
+		t.Fatalf("expected quitModeFull, got %v", app.quitMode)
+	}
+	if !app.shouldStopRuntimeServicesOnShutdown() {
+		t.Fatal("expected full prepared quit to stop runtime services on shutdown")
+	}
+	if _, ok := app.browserMgr.BrowserProcesses["profile-1"]; !ok {
+		t.Fatal("expected prepare quit to leave tracked browser untouched")
+	}
+	if !app.browserMgr.Profiles["profile-1"].Running {
+		t.Fatal("expected prepare quit to keep running profile state intact")
 	}
 }

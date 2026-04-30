@@ -1,8 +1,6 @@
 package main
 
 import (
-	"ant-chrome/backend"
-	"ant-chrome/backend/internal/events"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -15,6 +13,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"personal-pilot/backend"
+	"personal-pilot/backend/internal/events"
 	"reflect"
 	"strconv"
 	"strings"
@@ -24,13 +24,17 @@ import (
 )
 
 const (
-	bridgeTokenHeader = "X-Antbrowser-Bridge-Token"
-	eventTokenHeader  = "X-Antbrowser-Event-Token"
+	bridgeTokenHeader = "X-Personal-Pilot-Bridge-Token"
+	eventTokenHeader  = "X-Personal-Pilot-Event-Token"
 )
 
 type eventPayload struct {
 	EventName string        `json:"eventName"`
 	Data      []interface{} `json:"data"`
+}
+
+type shutdownRequest struct {
+	Mode string `json:"mode"`
 }
 
 type eventHub struct {
@@ -306,7 +310,7 @@ func main() {
 		"pid":          os.Getpid(),
 	}
 	readyJSON, _ := json.Marshal(ready)
-	fmt.Printf("ANTBROWSER_CORE_READY %s\n", readyJSON)
+	fmt.Printf("PERSONAL_PILOT_CORE_READY %s\n", readyJSON)
 
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -397,7 +401,15 @@ func startBridgeServer(app *backend.App, hub *eventHub, bridgeToken string, even
 			}
 		}
 	})
-	mux.HandleFunc("/shutdown", withCORS(requireBridgeToken(bridgeToken, func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/shutdown", withCORS(requireBridgeToken(bridgeToken, func(w http.ResponseWriter, r *http.Request) {
+		var req shutdownRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		switch strings.ToLower(strings.TrimSpace(req.Mode)) {
+		case "app-only":
+			app.PrepareQuitAppOnly()
+		case "full":
+			app.PrepareQuitFull()
+		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		go cancel()
 	})))

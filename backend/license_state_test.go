@@ -1,8 +1,8 @@
 package backend
 
 import (
-	appconfig "ant-chrome/backend/internal/config"
 	"path/filepath"
+	appconfig "personal-pilot/backend/internal/config"
 	"testing"
 )
 

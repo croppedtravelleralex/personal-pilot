@@ -495,8 +495,8 @@ function Invoke-WindowsPackaging {
     [System.IO.File]::WriteAllText($installerPath, $installerContent, [System.Text.UTF8Encoding]::new($true))
 
     $stagingAbs = (Resolve-Path $StagingDir).Path
-    $compressionMode = if (($env:PERSONAL_PILOT_PUBLISH_BEST_COMPRESSION -eq "1") -or ($env:ANT_BROWSER_PUBLISH_BEST_COMPRESSION -eq "1")) { "best" } else { "fast" }
-    $useNsisConfig = (($env:PERSONAL_PILOT_NSIS_USE_CONFIG -eq "1") -or ($env:ANT_BROWSER_NSIS_USE_CONFIG -eq "1"))
+    $compressionMode = if ($env:PERSONAL_PILOT_PUBLISH_BEST_COMPRESSION -eq "1") { "best" } else { "fast" }
+    $useNsisConfig = ($env:PERSONAL_PILOT_NSIS_USE_CONFIG -eq "1")
     Write-Host "  压缩模式: $compressionMode"
     if ($useNsisConfig) {
         Write-Host "  NSIS 全局配置: enabled"

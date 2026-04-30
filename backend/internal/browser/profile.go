@@ -1,11 +1,11 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/logger"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os/exec"
+	"personal-pilot/backend/internal/logger"
 	"sort"
 	"strings"
 	"time"
@@ -54,7 +54,7 @@ func ValidateFingerprintArgs(args []string) []string {
 }
 
 // InitData 初始化浏览器数据
-const humanizeSeedSalt = "antbrowser-humanize-seed-v1:"
+const humanizeSeedSalt = "personal-pilot-humanize-seed-v1:"
 
 func generateHumanizeSeed(profileId string) string {
 	id := strings.TrimSpace(profileId)

@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/apppath"
+	"personal-pilot/backend/internal/apppath"
 )
 
 // appRootAbs 返回应用根目录的绝对路径，优先使用 App 注入的 appRoot。

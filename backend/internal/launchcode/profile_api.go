@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/logger"
 )
 
 // ProfileWriteRequest 用于创建/更新实例配置。

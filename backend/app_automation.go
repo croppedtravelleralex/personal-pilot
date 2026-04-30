@@ -1,8 +1,8 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/automation"
 	"fmt"
+	"personal-pilot/backend/internal/automation"
 	"time"
 )
 

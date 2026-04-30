@@ -1,16 +1,16 @@
 package apppath
 
 import (
-	"ant-chrome/backend/internal/fsutil"
 	"io"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/fsutil"
 	goruntime "runtime"
 	"strings"
 	"sync"
 )
 
-const appStateDirName = "ant-browser"
+const appStateDirName = "personal-pilot"
 
 type roots struct {
 	installRoot string
@@ -188,7 +188,7 @@ func isMacAppBundleRoot(dir string) bool {
 }
 
 func dirWritable(dir string) bool {
-	file, err := os.CreateTemp(dir, ".ant-browser-write-test-*")
+	file, err := os.CreateTemp(dir, ".personal-pilot-write-test-*")
 	if err != nil {
 		return false
 	}

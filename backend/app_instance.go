@@ -1,16 +1,16 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/behavior"
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/logger"
-	"ant-chrome/backend/internal/proxy"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/proxy"
 	stdruntime "runtime"
 	"strings"
 	"time"

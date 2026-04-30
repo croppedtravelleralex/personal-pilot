@@ -1,9 +1,9 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/scheduler"
 	"fmt"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/scheduler"
 	"time"
 )
 

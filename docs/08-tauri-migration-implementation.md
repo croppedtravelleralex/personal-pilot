@@ -17,7 +17,7 @@
   - `core_stop`
   - `app_window_hide/show/minimize`
   - `app_quit`
-- `backend/cmd/antbrowser-core/`：Go sidecar 入口，启动原后端并暴露本地 bridge：
+- `backend/cmd/personal-pilot-core/`：Go sidecar 入口，启动原后端并暴露本地 bridge：
   - `/health`
   - `/rpc`
   - `/events`
@@ -38,7 +38,7 @@
 
 需要记录的变化：
 
-- Chrome 父进程可能从 Wails exe 变为 `antbrowser-core.exe` 或 Tauri 启动的 sidecar。
+- Chrome 父进程可能从 Wails exe 变为 `personal-pilot-core.exe` 或 Tauri 启动的 sidecar。
 - Tauri 壳层启动 sidecar 后，启动时序和焦点轨迹需要真实 profile 回归。
 
 ## 验收记录
@@ -62,7 +62,7 @@
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\verify-workbench-two-instances.ps1 `
-  -AppPath "D:\SelfMadeTool\antbrowser\src-tauri\target\release\antbrowser-tauri.exe" `
+  -AppPath "D:\SelfMadeTool\personal-pilot\src-tauri\target\release\personal-pilot-tauri.exe" `
   -ReadyTimeoutSec 90
 ```
 

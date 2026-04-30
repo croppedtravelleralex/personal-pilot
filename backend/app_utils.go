@@ -1,14 +1,14 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/apppath"
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/logger"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/apppath"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/logger"
 	"strings"
 	"time"
 
@@ -64,7 +64,7 @@ func normalizeBrandName(name string) string {
 	}
 
 	switch strings.ToLower(trimmed) {
-	case "ant browser", "ant chrome":
+	case "personal pilot", "personal-pilot":
 		return personalPilotBrandName
 	default:
 		return trimmed

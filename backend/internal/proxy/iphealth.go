@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/config"
 )
 
 const defaultIPPureInfoURL = "https://my.ippure.com/v1/info"
@@ -39,7 +39,7 @@ func FetchIPPureInfo(
 
 	req, _ := http.NewRequest(http.MethodGet, defaultIPPureInfoURL, nil)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "AntChrome/1.0")
+	req.Header.Set("User-Agent", "PersonalPilot/1.0")
 
 	resp, err := client.Do(req)
 	if err != nil {

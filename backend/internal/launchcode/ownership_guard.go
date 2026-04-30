@@ -3,7 +3,7 @@ package launchcode
 import (
 	"fmt"
 
-	"ant-chrome/backend/internal/browser"
+	"personal-pilot/backend/internal/browser"
 )
 
 func (s *LaunchServer) validateActiveCDPOwnership(profileID string, debugPort int, audit *browser.LaunchAuditSnapshot) error {

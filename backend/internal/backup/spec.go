@@ -1,10 +1,10 @@
 package backup
 
 import (
-	"ant-chrome/backend/internal/config"
 	"fmt"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	"runtime"
 	"sort"
 	"strings"
@@ -13,7 +13,7 @@ import (
 
 const (
 	// PackageFormat 标识导出包格式类型。
-	PackageFormat = "ant-chrome-full-backup"
+	PackageFormat = "personal-pilot-full-backup"
 	// ManifestVersion 标识 manifest.json 的结构版本。
 	ManifestVersion = 1
 )

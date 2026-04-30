@@ -1,23 +1,23 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/apppath"
-	"ant-chrome/backend/internal/automation"
-	"ant-chrome/backend/internal/behavior"
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/database"
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/launchcode"
-	"ant-chrome/backend/internal/logger"
-	"ant-chrome/backend/internal/proxy"
-	"ant-chrome/backend/internal/scheduler"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"personal-pilot/backend/internal/apppath"
+	"personal-pilot/backend/internal/automation"
+	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/database"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/launchcode"
+	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/proxy"
+	"personal-pilot/backend/internal/scheduler"
 	goruntime "runtime"
 	"runtime/debug"
 	"strconv"
@@ -402,6 +402,14 @@ func (a *App) ForceQuit() {
 	if a.ctx != nil {
 		a.quitHostRuntime()
 	}
+}
+
+func (a *App) PrepareQuitFull() {
+	a.setQuitMode(quitModeFull)
+}
+
+func (a *App) PrepareQuitAppOnly() {
+	a.setQuitMode(quitModeAppOnly)
 }
 
 // QuitAppOnly 仅退出应用本身，保留当前已打开的浏览器实例。
@@ -866,7 +874,10 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 		return []ProxyTestResult{}
 	}
 	if concurrency <= 0 {
-		concurrency = 20
+		concurrency = 8
+	}
+	if concurrency > 50 {
+		concurrency = 50
 	}
 	if concurrency > len(proxyIds) {
 		concurrency = len(proxyIds)
@@ -920,6 +931,7 @@ func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 	proxies := a.getLatestProxies()
 	data, err := proxy.FetchIPPureInfo(proxyId, proxies, a.xrayMgr, a.singboxMgr)
 	result := buildProxyIPHealthResult(proxyId, data, err)
+	result = a.withProxyHTTPSConnectivity(result, proxies)
 	a.persistProxyIPHealthResult(result)
 	if a.ctx != nil {
 		a.emit(events.EventProxyIPHealthResult, result)
@@ -934,7 +946,10 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 		return []ProxyIPHealthResult{}
 	}
 	if concurrency <= 0 {
-		concurrency = 10
+		concurrency = 6
+	}
+	if concurrency > 30 {
+		concurrency = 30
 	}
 	if concurrency > len(proxyIds) {
 		concurrency = len(proxyIds)
@@ -956,6 +971,7 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 			for job := range jobs {
 				data, err := proxy.FetchIPPureInfo(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr)
 				result := buildProxyIPHealthResult(job.ProxyId, data, err)
+				result = a.withProxyHTTPSConnectivity(result, proxies)
 				a.persistProxyIPHealthResult(result)
 				results[job.Idx] = result
 				if a.ctx != nil {
@@ -973,6 +989,26 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 
 	wg.Wait()
 	return results
+}
+
+func (a *App) withProxyHTTPSConnectivity(result ProxyIPHealthResult, proxies []BrowserProxy) ProxyIPHealthResult {
+	if result.RawData == nil {
+		result.RawData = map[string]interface{}{}
+	}
+	connectivity := proxy.CheckProxyHTTPSConnectivity(result.ProxyId, proxies, a.xrayMgr, a.singboxMgr, 8*time.Second)
+	result.RawData["realHttpsCheck"] = map[string]interface{}{
+		"ok":        connectivity.Ok,
+		"latencyMs": connectivity.LatencyMs,
+		"error":     connectivity.Error,
+	}
+	if connectivity.LatencyMs > 0 {
+		result.LatencyMs = connectivity.LatencyMs
+	}
+	if result.Ok && !connectivity.Ok {
+		result.Ok = false
+		result.Error = "真实 HTTPS 可用性检测失败: " + connectivity.Error
+	}
+	return result
 }
 
 func (a *App) BrowserProxyImportFreeDirectProxies(input FreeProxyImportInput) (FreeProxyImportResult, error) {

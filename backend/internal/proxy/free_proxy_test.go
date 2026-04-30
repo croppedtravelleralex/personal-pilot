@@ -58,11 +58,11 @@ func TestFetchFreeProxyCandidatesKeepsSourceErrors(t *testing.T) {
 }
 
 func TestNormalizeFreeProxyBounds(t *testing.T) {
-	if got := NormalizeFreeProxyConcurrency(0); got != 20 {
-		t.Fatalf("expected default concurrency 20, got %d", got)
+	if got := NormalizeFreeProxyConcurrency(0); got != 8 {
+		t.Fatalf("expected default concurrency 8, got %d", got)
 	}
-	if got := NormalizeFreeProxyConcurrency(1000); got != 100 {
-		t.Fatalf("expected max concurrency 100, got %d", got)
+	if got := NormalizeFreeProxyConcurrency(1000); got != 50 {
+		t.Fatalf("expected max concurrency 50, got %d", got)
 	}
 	if got := NormalizeFreeProxyLimit(0); got != defaultFreeProxyLimit {
 		t.Fatalf("expected default limit, got %d", got)

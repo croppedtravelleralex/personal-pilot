@@ -7,8 +7,8 @@
 
 Output artifacts:
 
-- `publish/output/AntBrowser-<version>-linux-<arch>.tar.gz`
-- `publish/output/ant-browser_<version>_<arch>.deb`
+- `publish/output/PersonalPilot-<version>-linux-<arch>.tar.gz`
+- `publish/output/personal-pilot_<version>_<arch>.deb`
 
 ## Runtime policy
 
@@ -68,11 +68,11 @@ bash publish/linux/publish-linux-all.sh
 
 - Linux packages do **not** include browser cores (`chrome/` is not bundled).
 - Build on native architecture runner for stability.
-- `.deb` installs app files under `/opt/ant-browser`.
-- `.deb` bundles `xray` and `sing-box` under `/opt/ant-browser/bin`.
+- `.deb` installs app files under `/opt/personal-pilot`.
+- `.deb` bundles `xray` and `sing-box` under `/opt/personal-pilot/bin`.
 - Linux packages keep an empty `chrome/` placeholder with `README.md`, but do **not** bundle browser core binaries.
-- `.deb` registers an application launcher at `/usr/share/applications/ant-browser.desktop`.
-- `.deb` installs standard Linux desktop icons under `/usr/share/icons/hicolor/*/apps/ant-browser.png` and `/usr/share/pixmaps/ant-browser.png`, so menus and launchers are more likely to pick up the app icon correctly.
-- `.deb` bundles AppStream metadata under `/usr/share/metainfo/ant-browser.metainfo.xml`, which improves recognition in software centers and GUI `.deb` installers.
-- On Debian/Ubuntu desktop environments that already support local `.deb` GUI installers, the package can usually be installed by double-clicking it; if the host has no GUI installer association, use `sudo apt install ./ant-browser_<version>_<arch>.deb`.
+- `.deb` registers an application launcher at `/usr/share/applications/personal-pilot.desktop`.
+- `.deb` installs standard Linux desktop icons under `/usr/share/icons/hicolor/*/apps/personal-pilot.png` and `/usr/share/pixmaps/personal-pilot.png`, so menus and launchers are more likely to pick up the app icon correctly.
+- `.deb` bundles AppStream metadata under `/usr/share/metainfo/personal-pilot.metainfo.xml`, which improves recognition in software centers and GUI `.deb` installers.
+- On Debian/Ubuntu desktop environments that already support local `.deb` GUI installers, the package can usually be installed by double-clicking it; if the host has no GUI installer association, use `sudo apt install ./personal-pilot_<version>_<arch>.deb`.
 - Linux packages currently register the app in the desktop launcher/menu; they do not force-create a shortcut file on each user's desktop.

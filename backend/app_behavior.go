@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"ant-chrome/backend/internal/behavior"
-	"ant-chrome/backend/internal/events"
+	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/events"
 )
 
 type recordingAppError struct {

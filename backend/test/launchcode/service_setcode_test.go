@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend/internal/launchcode"
+	"personal-pilot/backend/internal/launchcode"
 )
 
 func TestSetCodeAndResolveCaseInsensitive(t *testing.T) {

@@ -1,9 +1,9 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/browser"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/browser"
 	"testing"
 	"time"
 )

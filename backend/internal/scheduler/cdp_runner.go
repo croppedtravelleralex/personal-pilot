@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"ant-chrome/backend/internal/logger"
 	"github.com/gorilla/websocket"
+	"personal-pilot/backend/internal/logger"
 )
 
 // DebugPortResolver resolves a profile ID to a CDP debug port.

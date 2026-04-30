@@ -1,10 +1,10 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/config"
 	"fmt"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	goruntime "runtime"
 	"strings"
 )

@@ -4,24 +4,24 @@
 
 ## 用途
 
-- `..\antbrowserDev.bat`：根目录统一本地开发入口
+- `..\personal-pilot-dev.bat`：根目录统一本地开发入口
 - `build.bat`：本地构建可执行文件
 - `publish.bat`：发布打包入口（Windows / Linux / 两者）
 - `recover-profiles.ps1`：从现有 `user_data_root` 目录补回丢失的实例配置
 
 ## 用法
 
-### `..\antbrowserDev.bat`
+### `..\personal-pilot-dev.bat`
 
 统一入口已迁移到仓库根目录，旧 Wails 开发入口已移除，避免继续使用过期启动链路。
 
 ```bat
-antbrowserDev.bat
+personal-pilot-dev.bat
 ```
 
 说明：
 
-- `antbrowserDev.bat` 调用 `npm run tauri:dev`
+- `personal-pilot-dev.bat` 调用 `npm run tauri:dev`
 - Tauri `beforeDevCommand` 负责执行 `npm run build:sidecar && npm run dev`
 - 不再通过旧 Wails 开发模式、`frontend/dist` 静态模式或旧 live/limited 参数启动开发环境
 
@@ -63,12 +63,12 @@ DEV_GOPROXY     -> 覆盖 GOPROXY；未设置时默认使用 https://goproxy.cn,
 
 FAQ：
 
-- 开发入口在哪里：使用仓库根目录 `antbrowserDev.bat`
+- 开发入口在哪里：使用仓库根目录 `personal-pilot-dev.bat`
 - 是否还使用 Wails dev：不使用。当前开发入口走 Tauri 2 dev 链路
 
 ### `build.bat`
 
-构建 `build\bin\ant-chrome.exe`。
+构建 `build\bin\personal-pilot.exe`。
 
 ```bat
 bat\build.bat
@@ -126,7 +126,7 @@ Windows 分支使用的项目路径：
 
 ```text
 输入：
-- build\bin\ant-chrome.exe
+- build\bin\personal-pilot.exe
 - publish\config.init.yaml
 - bin\xray.exe
 - bin\sing-box.exe
@@ -135,7 +135,7 @@ Windows 分支使用的项目路径：
 - publish\staging\
 
 输出：
-- publish\output\AntBrowser-Setup-<version>.exe
+- publish\output\PersonalPilot-Setup-<version>.exe
 ```
 
 说明：
@@ -147,8 +147,8 @@ Windows 分支使用的项目路径：
 Linux 分支会通过 Docker Desktop 调用：
 
 ```text
-docker build -f publish/linux/linux-builder.Dockerfile -t ant-browser-linux-builder:local publish/linux
-docker run --rm -v <repo>:/workspace -w /workspace ant-browser-linux-builder:local ^
+docker build -f publish/linux/linux-builder.Dockerfile -t personal-pilot-linux-builder:local publish/linux
+docker run --rm -v <repo>:/workspace -w /workspace personal-pilot-linux-builder:local ^
   bash -c "bash publish/linux/publish-linux.sh --arch <Docker当前架构>"
 ```
 
@@ -170,7 +170,7 @@ CI=1        -> 同样不 pause
 Windows 产物：
 
 ```text
-publish\output\AntBrowser-Setup-<version>.exe
+publish\output\PersonalPilot-Setup-<version>.exe
 ```
 
 ### `recover-profiles.ps1`
@@ -180,19 +180,19 @@ publish\output\AntBrowser-Setup-<version>.exe
 默认只预览，不写数据库：
 
 ```powershell
-pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Ant Browser'
+pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Personal Pilot'
 ```
 
 确认结果后再写回 `app.db`：
 
 ```powershell
-pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Ant Browser' -Apply
+pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Personal Pilot' -Apply
 ```
 
 如果旧目录来自备份恢复，且怀疑存在跨内核残留状态，可同时为“风险目录”创建一份 `__repair_时间戳` 副本，再将新配置指向副本：
 
 ```powershell
-pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Ant Browser' -Apply -RepairRisky
+pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Personal Pilot' -Apply -RepairRisky
 ```
 
 说明：
@@ -200,7 +200,7 @@ pwsh -File bat/recover-profiles.ps1 -AppRoot 'E:\software\Ant Browser' -Apply -R
 - 脚本会调用 `go run ./backend/cmd/profile-recover`
 - `-Apply` 模式会先在 `data\recovery-backups\` 下备份当前数据库文件
 - 默认不会删除旧目录，也不会主动清理登录态文件
-- 运行 `-Apply` 前应先关闭 Ant Browser，避免并发写库
+- 运行 `-Apply` 前应先关闭 Personal Pilot，避免并发写库
 
 ## 备注
 

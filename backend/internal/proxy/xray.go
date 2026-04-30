@@ -1,10 +1,6 @@
 package proxy
 
 import (
-	"ant-chrome/backend/internal/apppath"
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/fsutil"
-	"ant-chrome/backend/internal/logger"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"personal-pilot/backend/internal/apppath"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/fsutil"
+	"personal-pilot/backend/internal/logger"
 	goruntime "runtime"
 	"strconv"
 	"strings"

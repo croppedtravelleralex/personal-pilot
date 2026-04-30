@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"ant-chrome/backend/internal/config"
 	xproxy "golang.org/x/net/proxy"
 	"gopkg.in/yaml.v3"
+	"personal-pilot/backend/internal/config"
 )
 
 // TestResult 代理测试结果

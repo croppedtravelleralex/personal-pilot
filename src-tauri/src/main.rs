@@ -1,3 +1,3 @@
 fn main() {
-    antbrowser_tauri::run()
+    personal_pilot_tauri_lib::run()
 }

@@ -1,7 +1,7 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/config"
 	"testing"
 )
 

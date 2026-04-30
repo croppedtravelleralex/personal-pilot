@@ -1,10 +1,10 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/config"
 	"database/sql"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -43,7 +43,7 @@ func createProfileTableForTest(t *testing.T, db *sql.DB, includeHumanizeSeed boo
 }
 
 func TestSQLiteProfileDAO_UpsertAndList(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-profile-dao")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-profile-dao")
 	defer os.RemoveAll(dir)
 	os.MkdirAll(dir, 0755)
 

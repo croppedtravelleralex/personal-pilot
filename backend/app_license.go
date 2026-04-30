@@ -1,8 +1,8 @@
 package backend
 
 import (
-	appconfig "ant-chrome/backend/internal/config"
 	"fmt"
+	appconfig "personal-pilot/backend/internal/config"
 )
 
 const localUnlimitedCDKeyPrefix = "LOCAL-UNLIMITED"

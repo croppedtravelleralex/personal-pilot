@@ -16,7 +16,7 @@ const (
 	GithubStarProfileBonus          = 0
 	GithubStarProfileTotal          = DefaultMaxProfileLimit + GithubStarProfileBonus
 	DefaultLaunchServerPort         = 19876
-	DefaultLaunchServerAPIKeyHeader = "X-Ant-Api-Key"
+	DefaultLaunchServerAPIKeyHeader = "X-Personal-Pilot-Api-Key"
 )
 
 // RewardForUsedKey 返回指定兑换记录对应的永久额度奖励。

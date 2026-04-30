@@ -1,10 +1,10 @@
 package behavior
 
 import (
-	"ant-chrome/backend/internal/logger"
 	"context"
 	"fmt"
 	"math/rand"
+	"personal-pilot/backend/internal/logger"
 	"strings"
 	"sync"
 	"time"

@@ -16,19 +16,19 @@ if ([string]::IsNullOrWhiteSpace($AppPath)) {
 }
 $AppPath = [System.IO.Path]::GetFullPath($AppPath)
 $BaseUrl = $BaseUrl.TrimEnd("/")
-$ApiKey = $env:ANTBROWSER_API_KEY
-$ApiKeyHeader = if ([string]::IsNullOrWhiteSpace($env:ANTBROWSER_API_KEY_HEADER)) { "X-Ant-Api-Key" } else { $env:ANTBROWSER_API_KEY_HEADER }
+$ApiKey = $env:PERSONAL_PILOT_API_KEY
+$ApiKeyHeader = if ([string]::IsNullOrWhiteSpace($env:PERSONAL_PILOT_API_KEY_HEADER)) { "X-Personal-Pilot-Api-Key" } else { $env:PERSONAL_PILOT_API_KEY_HEADER }
 $RunId = "verify-{0}-{1}" -f ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()), ([Guid]::NewGuid().ToString("N").Substring(0, 8))
 $VerificationRoot = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "data\verification"))
 $TempUserDataRoot = [System.IO.Path]::GetFullPath((Join-Path $VerificationRoot $RunId))
 $ExpectedProcessPaths = @(
     $AppPath,
-    (Join-Path (Split-Path -Parent $AppPath) "antbrowser-core.exe"),
-    (Join-Path $ProjectRoot "bin\antbrowser-core.exe"),
-    (Join-Path $ProjectRoot "bin\antbrowser-core-x86_64-pc-windows-msvc.exe")
+    (Join-Path (Split-Path -Parent $AppPath) "personal-pilot-core.exe"),
+    (Join-Path $ProjectRoot "bin\personal-pilot-core.exe"),
+    (Join-Path $ProjectRoot "bin\personal-pilot-core-x86_64-pc-windows-msvc.exe")
 ) | ForEach-Object { [System.IO.Path]::GetFullPath($_) } | Select-Object -Unique
-$PreviousAppRootEnv = $env:ANTBROWSER_APP_ROOT
-$env:ANTBROWSER_APP_ROOT = $ProjectRoot
+$PreviousAppRootEnv = $env:PERSONAL_PILOT_APP_ROOT
+$env:PERSONAL_PILOT_APP_ROOT = $ProjectRoot
 
 function Get-MatchingProcessIds {
     param([string[]]$Paths)
@@ -186,7 +186,7 @@ function Get-VerificationResidualProcesses {
     return @($items.ToArray())
 }
 
-function Invoke-AntApi {
+function Invoke-PersonalPilotApi {
     param(
         [Parameter(Mandatory = $true)][string]$Method,
         [Parameter(Mandatory = $true)][string]$Path,
@@ -208,7 +208,7 @@ function Invoke-AntApi {
     return Invoke-RestMethod -Method $Method -Uri $uri -Headers $headers -ContentType "application/json" -Body $json -TimeoutSec $TimeoutSec
 }
 
-function Invoke-AntApiRaw {
+function Invoke-PersonalPilotApiRaw {
     param(
         [Parameter(Mandatory = $true)][string]$Method,
         [Parameter(Mandatory = $true)][string]$Path,
@@ -266,14 +266,14 @@ function Invoke-AntApiRaw {
     return [pscustomobject]@{ statusCode = [int]$response.StatusCode; body = $bodyText; json = $parsed; error = "" }
 }
 
-function Assert-AntApiBlocked {
+function Assert-PersonalPilotApiBlocked {
     param(
         [Parameter(Mandatory = $true)][string]$Method,
         [Parameter(Mandatory = $true)][string]$Path,
         [object]$Body = $null
     )
 
-    $resp = Invoke-AntApiRaw -Method $Method -Path $Path -Body $Body -TimeoutSec 30
+    $resp = Invoke-PersonalPilotApiRaw -Method $Method -Path $Path -Body $Body -TimeoutSec 30
     $ok = $false
     if ($null -ne $resp.json -and ($resp.json.PSObject.Properties.Name -contains "ok")) {
         $ok = [bool]$resp.json.ok
@@ -287,21 +287,21 @@ function Assert-AntApiBlocked {
     return [pscustomobject]@{ blocked = $true; statusCode = $resp.statusCode; error = $errText; json = $resp.json }
 }
 
-function Test-AntHealth {
+function Test-PersonalPilotHealth {
     try {
-        $health = Invoke-AntApi -Method "GET" -Path "/api/health" -TimeoutSec 3
+        $health = Invoke-PersonalPilotApi -Method "GET" -Path "/api/health" -TimeoutSec 3
         return [bool]$health.ok
     } catch {
         return $false
     }
 }
 
-function Wait-AntHealth {
+function Wait-PersonalPilotHealth {
     param([int]$TimeoutSec)
 
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
-        if (Test-AntHealth) {
+        if (Test-PersonalPilotHealth) {
             return
         }
         Start-Sleep -Milliseconds 500
@@ -309,8 +309,8 @@ function Wait-AntHealth {
     throw "LaunchServer health check timed out at $BaseUrl/api/health"
 }
 
-function Get-AntProfiles {
-    $resp = Invoke-AntApi -Method "GET" -Path "/api/profiles"
+function Get-PersonalPilotProfiles {
+    $resp = Invoke-PersonalPilotApi -Method "GET" -Path "/api/profiles"
     if (-not $resp.ok) {
         throw "GET /api/profiles returned ok=false"
     }
@@ -325,7 +325,7 @@ function Wait-ProfileReady {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
-        $profiles = Get-AntProfiles
+        $profiles = Get-PersonalPilotProfiles
         $profile = $profiles | Where-Object { $_.profileId -eq $ProfileId } | Select-Object -First 1
         if ($null -ne $profile -and $profile.running -and $profile.debugReady -and [int]$profile.debugPort -gt 0) {
             return $profile
@@ -343,7 +343,7 @@ function Wait-ProfileStopped {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
-        $profile = Get-AntProfiles | Where-Object { $_.profileId -eq $ProfileId } | Select-Object -First 1
+        $profile = Get-PersonalPilotProfiles | Where-Object { $_.profileId -eq $ProfileId } | Select-Object -First 1
         if ($null -ne $profile -and -not [bool]$profile.running) {
             return $profile
         }
@@ -352,10 +352,10 @@ function Wait-ProfileStopped {
     throw "Profile $ProfileId did not stop within $TimeoutSec seconds"
 }
 
-function Get-AntProfileById {
+function Get-PersonalPilotProfileById {
     param([Parameter(Mandatory = $true)][string]$ProfileId)
 
-    $profile = Get-AntProfiles | Where-Object { $_.profileId -eq $ProfileId } | Select-Object -First 1
+    $profile = Get-PersonalPilotProfiles | Where-Object { $_.profileId -eq $ProfileId } | Select-Object -First 1
     if ($null -eq $profile) {
         throw "Profile not found: $ProfileId"
     }
@@ -509,7 +509,7 @@ function Set-CookieMarker {
 
     [void](Invoke-CDPCommand -DebugPort ([int]$Profile.debugPort) -Method "Network.enable")
     $result = Invoke-CDPCommand -DebugPort ([int]$Profile.debugPort) -Method "Network.setCookie" -Params @{
-        name = "antbrowser_identity_gate"
+        name = "personal_pilot_identity_gate"
         value = $MarkerValue
         url = "https://identity-gate.invalid/"
         path = "/"
@@ -527,7 +527,7 @@ function Get-CookieMarkerValues {
     [void](Invoke-CDPCommand -DebugPort ([int]$Profile.debugPort) -Method "Network.enable")
     $result = Invoke-CDPCommand -DebugPort ([int]$Profile.debugPort) -Method "Network.getAllCookies"
     return @($result.cookies | Where-Object {
-        $_.name -eq "antbrowser_identity_gate" -and ([string]$_.domain).TrimStart(".") -eq "identity-gate.invalid"
+        $_.name -eq "personal_pilot_identity_gate" -and ([string]$_.domain).TrimStart(".") -eq "identity-gate.invalid"
     } | ForEach-Object { [string]$_.value })
 }
 
@@ -553,12 +553,12 @@ function New-VerificationProfile {
     param([Parameter(Mandatory = $true)][int]$Index)
 
     $relativeUserData = "verification/$RunId/profile-$Index"
-    $resp = Invoke-AntApi -Method "POST" -Path "/api/profiles" -Body @{
+    $resp = Invoke-PersonalPilotApi -Method "POST" -Path "/api/profiles" -Body @{
         profile = @{
             profileName = "verify-$RunId-$Index"
             userDataDir = $relativeUserData
             launchArgs = @("--window-size=1200,800")
-            tags = @("antbrowser-verify", $RunId)
+            tags = @("personal-pilot-verify", $RunId)
             keywords = @($RunId)
         }
     } -TimeoutSec 30
@@ -575,7 +575,7 @@ function Remove-VerificationProfile {
     param([Parameter(Mandatory = $true)][string]$ProfileId)
 
     try {
-        [void](Invoke-AntApi -Method "DELETE" -Path "/api/profiles/$ProfileId" -TimeoutSec 30)
+        [void](Invoke-PersonalPilotApi -Method "DELETE" -Path "/api/profiles/$ProfileId" -TimeoutSec 30)
     } catch {
         Write-Warning "Cleanup delete profile failed for ${ProfileId}: $($_.Exception.Message)"
     }
@@ -584,12 +584,12 @@ function Remove-VerificationProfile {
 function Assert-DuplicateUserDataDirBlocked {
     param([Parameter(Mandatory = $true)][object]$ReferenceProfile)
 
-    $resp = Assert-AntApiBlocked -Method "POST" -Path "/api/profiles" -Body @{
+    $resp = Assert-PersonalPilotApiBlocked -Method "POST" -Path "/api/profiles" -Body @{
         profile = @{
             profileName = "verify-$RunId-duplicate-user-data-dir"
             userDataDir = [string]$ReferenceProfile.userDataDir
             launchArgs = @("--window-size=1200,800")
-            tags = @("antbrowser-verify", $RunId, "negative")
+            tags = @("personal-pilot-verify", $RunId, "negative")
             keywords = @($RunId, "duplicate-user-data-dir")
         }
     }
@@ -608,7 +608,7 @@ function Assert-PathMismatchBlocked {
 
     $originalDir = [string]$ReferenceProfile.userDataDir
     $mismatchDir = "verification/$RunId/path-mismatch-$($ReferenceProfile.profileId)"
-    $resp = Assert-AntApiBlocked -Method "PUT" -Path "/api/profiles/$($ReferenceProfile.profileId)" -Body @{
+    $resp = Assert-PersonalPilotApiBlocked -Method "PUT" -Path "/api/profiles/$($ReferenceProfile.profileId)" -Body @{
         profile = @{
             profileName = [string]$ReferenceProfile.profileName
             userDataDir = $mismatchDir
@@ -626,7 +626,7 @@ function Assert-PathMismatchBlocked {
         throw "Running profile path mismatch update was accepted for $($ReferenceProfile.profileId)"
     }
 
-    $after = Get-AntProfileById -ProfileId ([string]$ReferenceProfile.profileId)
+    $after = Get-PersonalPilotProfileById -ProfileId ([string]$ReferenceProfile.profileId)
     $beforeCanonical = Get-CanonicalUserDataDir -UserDataDir $originalDir
     $afterCanonical = Get-CanonicalUserDataDir -UserDataDir ([string]$after.userDataDir)
     if (-not [string]::Equals($beforeCanonical, $afterCanonical, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -663,7 +663,7 @@ function Stop-SelectedProfile {
         return $false
     }
     try {
-        [void](Invoke-AntApi -Method "POST" -Path "/api/instances/stop" -Body @{ profileId = $ProfileId } -TimeoutSec 30)
+        [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/instances/stop" -Body @{ profileId = $ProfileId } -TimeoutSec 30)
         [void]$Stopped.Add($ProfileId)
         return $true
     } catch {
@@ -685,7 +685,7 @@ $summary = $null
 $preExistingProcessIds = Get-MatchingProcessIds -Paths $ExpectedProcessPaths
 
 try {
-    if (-not (Test-AntHealth)) {
+    if (-not (Test-PersonalPilotHealth)) {
         if (-not (Test-Path -LiteralPath $AppPath)) {
             throw "App executable not found: $AppPath. Build release first."
         }
@@ -693,9 +693,9 @@ try {
         $startedApp = $true
     }
 
-    Wait-AntHealth -TimeoutSec $ReadyTimeoutSec
+    Wait-PersonalPilotHealth -TimeoutSec $ReadyTimeoutSec
 
-    $profiles = Get-AntProfiles
+    $profiles = Get-PersonalPilotProfiles
     $selected = Select-TwoProfiles -Profiles $profiles
     if ($selected.Count -lt 2) {
         $temporaryProfiles = @(
@@ -703,7 +703,7 @@ try {
             New-VerificationProfile -Index 2
         )
         $selected = @($temporaryProfiles[0].ProfileId, $temporaryProfiles[1].ProfileId)
-        $profiles = Get-AntProfiles
+        $profiles = Get-PersonalPilotProfiles
     }
     $expectedDirsByProfile = @{}
     foreach ($temp in $temporaryProfiles) {
@@ -727,7 +727,7 @@ try {
 
     $readyProfiles = @{}
     foreach ($id in $selected) {
-        [void](Invoke-AntApi -Method "POST" -Path "/api/launch" -Body @{
+        [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/launch" -Body @{
             profileId = $id
             startUrls = @("about:blank")
             skipDefaultStartUrls = $true
@@ -762,22 +762,22 @@ try {
 
     New-Item -ItemType Directory -Path $TempUserDataRoot -Force | Out-Null
     $navPagePath = Join-Path $TempUserDataRoot "workbench.html"
-    Set-Content -LiteralPath $navPagePath -Value "<!doctype html><title>antbrowser-workbench</title><body>antbrowser-workbench-$RunId</body>" -Encoding UTF8
+    Set-Content -LiteralPath $navPagePath -Value "<!doctype html><title>personal-pilot-workbench</title><body>personal-pilot-workbench-$RunId</body>" -Encoding UTF8
     $testUrl = "file:///" + ([System.IO.Path]::GetFullPath($navPagePath) -replace "\\", "/")
     $screenshots = @{}
     foreach ($id in $selected) {
-        [void](Invoke-AntApi -Method "POST" -Path "/api/workbench/navigate" -Body @{ profileId = $id; url = $testUrl } -TimeoutSec 30)
+        [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/navigate" -Body @{ profileId = $id; url = $testUrl } -TimeoutSec 30)
         Start-Sleep -Milliseconds 750
-        [void](Invoke-AntApi -Method "POST" -Path "/api/workbench/refresh" -Body @{ profileId = $id } -TimeoutSec 30)
+        [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/refresh" -Body @{ profileId = $id } -TimeoutSec 30)
         Start-Sleep -Milliseconds 750
-        $shot = Invoke-AntApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $id } -TimeoutSec 30
+        $shot = Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $id } -TimeoutSec 30
         if (-not $shot.ok -or [string]::IsNullOrWhiteSpace($shot.screenshot) -or -not $shot.screenshot.StartsWith("data:image/")) {
             throw "Workbench screenshot failed for $id"
         }
         $screenshots[$id] = $shot.screenshot.Length
     }
 
-    $arrange = Invoke-AntApi -Method "POST" -Path "/api/workbench/arrange" -Body @{ profileIds = $selected; layout = "grid" } -TimeoutSec 30
+    $arrange = Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/arrange" -Body @{ profileIds = $selected; layout = "grid" } -TimeoutSec 30
     if (-not $arrange.ok) {
         throw "Workbench arrange returned ok=false"
     }
@@ -790,17 +790,17 @@ try {
     }
     [void](Wait-ProfileStopped -ProfileId $first)
 
-    [void](Invoke-AntApi -Method "POST" -Path "/api/workbench/refresh" -Body @{ profileId = $second } -TimeoutSec 30)
-    $secondShot = Invoke-AntApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $second } -TimeoutSec 30
+    [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/refresh" -Body @{ profileId = $second } -TimeoutSec 30)
+    $secondShot = Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $second } -TimeoutSec 30
     if (-not $secondShot.ok -or [string]::IsNullOrWhiteSpace($secondShot.screenshot)) {
         throw "Second profile did not remain controllable after stopping first profile"
     }
     if ($temporaryProfiles.Count -ge 2) {
-        Assert-CookieMarker -Profile (Get-AntProfileById -ProfileId $second) -ExpectedValue $cookieMarkers[$second] -ForbiddenValues @($cookieMarkers[$first])
+        Assert-CookieMarker -Profile (Get-PersonalPilotProfileById -ProfileId $second) -ExpectedValue $cookieMarkers[$second] -ForbiddenValues @($cookieMarkers[$first])
     }
 
     [void]$stopped.Remove($first)
-    [void](Invoke-AntApi -Method "POST" -Path "/api/launch" -Body @{
+    [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/launch" -Body @{
         profileId = $first
         startUrls = @("about:blank")
         skipDefaultStartUrls = $true
@@ -819,14 +819,14 @@ try {
     }
     [void](Wait-ProfileStopped -ProfileId $second)
 
-    [void](Invoke-AntApi -Method "POST" -Path "/api/workbench/refresh" -Body @{ profileId = $first } -TimeoutSec 30)
-    $firstShot = Invoke-AntApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $first } -TimeoutSec 30
+    [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/refresh" -Body @{ profileId = $first } -TimeoutSec 30)
+    $firstShot = Invoke-PersonalPilotApi -Method "POST" -Path "/api/workbench/screenshot" -Body @{ profileId = $first } -TimeoutSec 30
     if (-not $firstShot.ok -or [string]::IsNullOrWhiteSpace($firstShot.screenshot)) {
         throw "First profile did not remain controllable after stopping second profile"
     }
 
     [void]$stopped.Remove($second)
-    [void](Invoke-AntApi -Method "POST" -Path "/api/launch" -Body @{
+    [void](Invoke-PersonalPilotApi -Method "POST" -Path "/api/launch" -Body @{
         profileId = $second
         startUrls = @("about:blank")
         skipDefaultStartUrls = $true
@@ -840,8 +840,8 @@ try {
         Assert-CookieMarker -Profile $readyProfiles[$second] -ExpectedValue $cookieMarkers[$second] -ForbiddenValues @($cookieMarkers[$first])
         $assetSafetyChecks.cookieMarker = "set-isolated-and-persisted-after-restart"
 
-        $dupResp = Assert-DuplicateUserDataDirBlocked -ReferenceProfile (Get-AntProfileById -ProfileId $first)
-        $pathResp = Assert-PathMismatchBlocked -ReferenceProfile (Get-AntProfileById -ProfileId $first)
+        $dupResp = Assert-DuplicateUserDataDirBlocked -ReferenceProfile (Get-PersonalPilotProfileById -ProfileId $first)
+        $pathResp = Assert-PathMismatchBlocked -ReferenceProfile (Get-PersonalPilotProfileById -ProfileId $first)
         $assetSafetyChecks.duplicateUserDataDirBlocked = "status:$($dupResp.statusCode)"
         $assetSafetyChecks.pathMismatchBlocked = "status:$($pathResp.statusCode)"
     }
@@ -853,7 +853,7 @@ try {
         selectedProfileIds = $selected
         temporaryProfileIds = @($temporaryProfiles | ForEach-Object { $_.ProfileId })
         userDataDirs = @($selected | ForEach-Object {
-            $p = Get-AntProfileById -ProfileId $_
+            $p = Get-PersonalPilotProfileById -ProfileId $_
             [pscustomobject]@{
                 profileId = $_
                 userDataDir = [string]$p.userDataDir
@@ -911,7 +911,7 @@ try {
             $cleanupFailure = "Residual verification processes remain: verification=$($verificationResiduals.Count), app=$($appResiduals.Count)"
         }
     }
-    $env:ANTBROWSER_APP_ROOT = $PreviousAppRootEnv
+    $env:PERSONAL_PILOT_APP_ROOT = $PreviousAppRootEnv
 }
 
 if ($null -ne $failure) {

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"ant-chrome/backend/internal/behavior"
-	"ant-chrome/backend/internal/behavior/offsets"
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/llm"
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/behavior/offsets"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/llm"
+	"personal-pilot/backend/internal/logger"
 
 	"github.com/gorilla/websocket"
 )

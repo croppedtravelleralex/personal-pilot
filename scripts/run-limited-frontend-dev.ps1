@@ -16,12 +16,12 @@ function Remove-PidFile {
     }
 }
 
-if (-not ("AntChrome.JobObjectNative" -as [type])) {
+if (-not ("PersonalPilot.JobObjectNative" -as [type])) {
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
-namespace AntChrome {
+namespace PersonalPilot {
     public static class JobObjectNative {
         [StructLayout(LayoutKind.Sequential)]
         public struct JOBOBJECT_BASIC_LIMIT_INFORMATION {
@@ -79,25 +79,25 @@ namespace AntChrome {
 "@
 }
 
-$jobName = "ant-chrome-node-$PID"
-$jobHandle = [AntChrome.JobObjectNative]::CreateJobObject([IntPtr]::Zero, $jobName)
+$jobName = "personal-pilot-node-$PID"
+$jobHandle = [PersonalPilot.JobObjectNative]::CreateJobObject([IntPtr]::Zero, $jobName)
 if ($jobHandle -eq [IntPtr]::Zero) {
     throw "CreateJobObject failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
 }
 
 $memoryLimitBytes = [UInt64]$MemoryLimitMB * 1MB
-$limits = New-Object AntChrome.JobObjectNative+JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+$limits = New-Object PersonalPilot.JobObjectNative+JOBOBJECT_EXTENDED_LIMIT_INFORMATION
 $limits.BasicLimitInformation.LimitFlags = `
-    [AntChrome.JobObjectNative]::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE -bor `
-    [AntChrome.JobObjectNative]::JOB_OBJECT_LIMIT_JOB_MEMORY -bor `
-    [AntChrome.JobObjectNative]::JOB_OBJECT_LIMIT_PROCESS_MEMORY
+    [PersonalPilot.JobObjectNative]::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE -bor `
+    [PersonalPilot.JobObjectNative]::JOB_OBJECT_LIMIT_JOB_MEMORY -bor `
+    [PersonalPilot.JobObjectNative]::JOB_OBJECT_LIMIT_PROCESS_MEMORY
 $limits.ProcessMemoryLimit = [UIntPtr]::new($memoryLimitBytes)
 $limits.JobMemoryLimit = [UIntPtr]::new($memoryLimitBytes)
 
 $limitStructSize = [Runtime.InteropServices.Marshal]::SizeOf($limits)
-if (-not [AntChrome.JobObjectNative]::SetInformationJobObject(
+if (-not [PersonalPilot.JobObjectNative]::SetInformationJobObject(
     $jobHandle,
-    [AntChrome.JobObjectNative]::JobObjectExtendedLimitInformation,
+    [PersonalPilot.JobObjectNative]::JobObjectExtendedLimitInformation,
     [ref]$limits,
     $limitStructSize
 )) {
@@ -105,7 +105,7 @@ if (-not [AntChrome.JobObjectNative]::SetInformationJobObject(
 }
 
 $currentProcessHandle = [System.Diagnostics.Process]::GetCurrentProcess().Handle
-if (-not [AntChrome.JobObjectNative]::AssignProcessToJobObject($jobHandle, $currentProcessHandle)) {
+if (-not [PersonalPilot.JobObjectNative]::AssignProcessToJobObject($jobHandle, $currentProcessHandle)) {
     throw "AssignProcessToJobObject failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
 }
 

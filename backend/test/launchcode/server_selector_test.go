@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/launchcode"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/launchcode"
 )
 
 func buildTestHandlerWithManager(svc *launchcode.LaunchCodeService, starter launchcode.BrowserStarter, mgr *browser.Manager) http.Handler {

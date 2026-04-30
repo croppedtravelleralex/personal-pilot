@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/launchcode"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/launchcode"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"

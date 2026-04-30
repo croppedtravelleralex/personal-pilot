@@ -10,7 +10,7 @@ const DEFAULT_API_AUTH: LaunchServerInfo['apiAuth'] = {
   requested: false,
   configured: false,
   enabled: false,
-  header: 'X-Ant-Api-Key',
+  header: 'X-Personal-Pilot-Api-Key',
 }
 
 function StepCard({

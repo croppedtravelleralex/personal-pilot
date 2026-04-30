@@ -44,7 +44,7 @@ func TestResolveDarwinAppBundleUsesApplicationSupportStateRoot(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	installRoot := filepath.Join(t.TempDir(), "Ant Browser.app", "Contents", "MacOS")
+	installRoot := filepath.Join(t.TempDir(), "Personal Pilot.app", "Contents", "MacOS")
 	if err := os.MkdirAll(filepath.Join(installRoot, "bin"), 0755); err != nil {
 		t.Fatalf("创建 installRoot 失败: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestEnsureWritableLayoutSeedsDarwinBundleStateRoot(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	installRoot := filepath.Join(t.TempDir(), "Ant Browser.app", "Contents", "MacOS")
+	installRoot := filepath.Join(t.TempDir(), "Personal Pilot.app", "Contents", "MacOS")
 	if err := os.MkdirAll(filepath.Join(installRoot, "chrome"), 0755); err != nil {
 		t.Fatalf("创建 chrome 目录失败: %v", err)
 	}

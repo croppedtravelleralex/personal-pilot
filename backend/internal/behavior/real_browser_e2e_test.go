@@ -17,8 +17,8 @@ import (
 )
 
 func TestRealFingerprintBrowserRecordPlayback(t *testing.T) {
-	if os.Getenv("ANT_RECORDING_E2E") != "1" {
-		t.Skip("set ANT_RECORDING_E2E=1 to run the real fingerprint browser recording E2E test")
+	if os.Getenv("PERSONAL_PILOT_RECORDING_E2E") != "1" {
+		t.Skip("set PERSONAL_PILOT_RECORDING_E2E=1 to run the real fingerprint browser recording E2E test")
 	}
 
 	chromePath := fingerprintChromePath(t)
@@ -99,9 +99,9 @@ func TestRealFingerprintBrowserRecordPlayback(t *testing.T) {
 
 func fingerprintChromePath(t *testing.T) string {
 	t.Helper()
-	if explicit := strings.TrimSpace(os.Getenv("ANT_RECORDING_E2E_CHROME")); explicit != "" {
+	if explicit := strings.TrimSpace(os.Getenv("PERSONAL_PILOT_RECORDING_E2E_CHROME")); explicit != "" {
 		if _, err := os.Stat(explicit); err != nil {
-			t.Fatalf("ANT_RECORDING_E2E_CHROME not usable: %v", err)
+			t.Fatalf("PERSONAL_PILOT_RECORDING_E2E_CHROME not usable: %v", err)
 		}
 		return explicit
 	}
@@ -119,7 +119,7 @@ func fingerprintChromePath(t *testing.T) string {
 			}
 		}
 	}
-	t.Fatal("no fingerprint chromium chrome.exe found; set ANT_RECORDING_E2E_CHROME")
+	t.Fatal("no fingerprint chromium chrome.exe found; set PERSONAL_PILOT_RECORDING_E2E_CHROME")
 	return ""
 }
 
@@ -372,7 +372,7 @@ func recordingE2EPage(w http.ResponseWriter, r *http.Request) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Ant Recording E2E</title>
+  <title>Personal Pilot Recording E2E</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 32px; }
     button, input { font-size: 16px; padding: 8px 12px; margin: 8px 0; display: block; }

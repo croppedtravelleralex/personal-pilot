@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/logger"
 	"strings"
 )
 

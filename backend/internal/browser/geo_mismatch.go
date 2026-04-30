@@ -1,9 +1,9 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/logger"
 	"fmt"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/logger"
 	"strings"
 )
 

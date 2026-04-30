@@ -37,7 +37,7 @@ func (a *App) BrowserProxyFetchClashByURL(rawURL string) (map[string]interface{}
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
-	req.Header.Set("User-Agent", "clash-verge/2.0 ant-chrome/1.0")
+	req.Header.Set("User-Agent", "clash-verge/2.0 personal-pilot/1.0")
 	req.Header.Set("Accept", "application/yaml,text/yaml,text/plain,*/*")
 	req.Header.Set("Cache-Control", "no-cache")
 

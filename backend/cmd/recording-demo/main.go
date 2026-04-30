@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"ant-chrome/backend/internal/behavior"
+	"personal-pilot/backend/internal/behavior"
 )
 
 func main() {

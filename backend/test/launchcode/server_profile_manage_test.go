@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
 )
 
 func TestListProfilesAPIIncludesLaunchCodes(t *testing.T) {

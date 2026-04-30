@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/logger"
 )
 
 // BrowserStarter 浏览器启动接口（由 App 层实现并注入）

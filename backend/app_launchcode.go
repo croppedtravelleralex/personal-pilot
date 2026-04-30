@@ -1,9 +1,9 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/launchcode"
 	"fmt"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/launchcode"
 	"time"
 )
 

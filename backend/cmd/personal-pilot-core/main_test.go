@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend"
+	"personal-pilot/backend"
 )
 
 func TestAllowedRPCMethodsIncludesFingerprintHealth(t *testing.T) {

@@ -1,12 +1,12 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/fsutil"
-	"ant-chrome/backend/internal/logger"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/fsutil"
+	"personal-pilot/backend/internal/logger"
 	"strings"
 
 	"github.com/google/uuid"

@@ -1,4 +1,4 @@
-# antbrowser 当前状态主档
+# personal-pilot 当前状态主档
 
 ## 最后更新时间
 
@@ -45,9 +45,9 @@
 - `go test -count=1 ./backend/...` 已通过。
 - `npm --prefix frontend run build` 已通过。
 - `npm run build` 已通过。
-- `$env:ANT_RECORDING_E2E='1'; go test -count=1 ./backend/internal/behavior -run TestRealFingerprintBrowserRecordPlayback -v` 已通过，覆盖真实指纹 Chromium 录制/回放闭环。
+- `$env:PERSONAL_PILOT_RECORDING_E2E='1'; go test -count=1 ./backend/internal/behavior -run TestRealFingerprintBrowserRecordPlayback -v` 已通过，覆盖真实指纹 Chromium 录制/回放闭环。
 - `git diff --check` 已通过。
-- `powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\antbrowser` 最新已通过；Table 虚拟滚动 warning 已消除。
+- `powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\personal-pilot` 最新已通过；Table 虚拟滚动 warning 已消除。
 - 行为录制专项待办已沉淀到维护文档。
 - 实例工作台改动已通过前端生产构建、后端顶层包测试和相关后端包测试。
 - 窗口控制自动 E2E 已用 Notepad 验证 PID 顶层窗口查找、移动和激活路径。
@@ -95,7 +95,9 @@
 - 已完成：新增 HTTP/HTTPS/SOCKS5 直连并发检测，只通过候选代理访问轻量 IP 信息接口，不走 Clash/Xray/sing-box 桥接，不启动浏览器或额外常驻服务。
 - 已完成：检测通过的代理才进入正式代理池；每个导入代理同步写入最新 `ProxyIPHealthResult`，再次检测或保存代理列表时覆盖 `browser_proxies.last_ip_health_json`，不追加历史流水。
 - 已完成：修复 `SaveBrowserProxies` 先清表再写入导致测速/IP 健康运行时字段丢失的问题；保存列表时会保留并写回已有 `last_latency_ms`、`last_test_*` 和 `last_ip_health_json`。
-- 已验证：`go test -count=1 ./backend/internal/proxy ./backend/cmd/antbrowser-core ./backend`、`go test -count=1 ./backend/...`、`npm run build`、`npm run tauri:build`、`git diff --check`、`powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\antbrowser` 均通过。
+- 已加固：Tauri `core_rpc` 的阻塞 sidecar HTTP 调用改为后台线程执行，避免抓取、测速、IP 健康检测这类长任务卡住前端；批量测速/IP 健康检测结果改为 120ms 合并刷新，默认并发降为测速 8、IP 健康 6、免费代理抓取 8。
+- 已加固：免费代理导入不再只看出口 IP 接口，候选还必须通过真实 HTTPS 可用性探针；普通 IP 健康检测也会叠加真实 HTTPS 可用性结果，避免“IP 查询通过但浏览器不可用”的误判。
+- 已验证：`go test -count=1 ./backend/internal/proxy ./backend/cmd/personal-pilot-core ./backend`、`go test -count=1 ./backend/...`、`npm run build`、`npm run tauri:build`、`git diff --check`、`powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\personal-pilot` 均通过。
 
 ## 2026-04-29 行为录制 P2/P3 后端切片
 
@@ -120,3 +122,8 @@
 - 已验证：`go test ./backend/...`、`npm --prefix frontend run build`、`wails build`、`wails build -skipbindings`、`git diff --check` 均通过。
 - 已验证：2 实例脚本实际启动并停止两个指纹 Chromium 实例；停第一个后第二个仍可刷新和截图；脚本结束后 `personal-pilot` 进程和 `19876/api/health` 未残留。
 - 说明：此前“用至少 2 个真实运行实例手工验收工作台导航/刷新/截图/排列/停止”的缺口，已由 `scripts/verify-workbench-two-instances.ps1` 自动验收覆盖；后续重点转为多屏、最小化、布局恢复和预览节流。
+
+## 2026-04-30 项目命名迁移为 personal-pilot
+- 已完成：仓库内品牌名、包名、Go module、Tauri crate、Tauri identifier、sidecar 目录与二进制名、开发脚本、发布脚本、API header、环境变量、README 和维护文档均迁移到 `personal-pilot` / `Personal Pilot` / `PERSONAL_PILOT` 命名。
+- 已清理：旧品牌日志和旧 sidecar 生成物已移除；构建脚本会生成 `bin/personal-pilot-core.exe` 与 `bin/personal-pilot-core-x86_64-pc-windows-msvc.exe`。
+- 已验证：`go test -count=1 -timeout 8m ./backend/...`、`npm run build`、`npm --prefix frontend run build`、`npm run tauri:build`、`cargo test`、`git diff --check`、Win11 Tauri baseline 均通过；旧名搜索无命中。

@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
-	"ant-chrome/backend/internal/behavior"
-	"ant-chrome/backend/internal/behavior/offsets"
+	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/behavior/offsets"
 )
 
 func main() {

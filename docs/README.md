@@ -1,6 +1,6 @@
-# antbrowser 内部维护文档
+# personal-pilot 内部维护文档
 
-本目录是 antbrowser 的长期内部维护入口，服务对象是项目 Owner 和后续接手的 AI。
+本目录是 personal-pilot 的长期内部维护入口，服务对象是项目 Owner 和后续接手的 AI。
 涉及当前状态、后续计划和维护判断时，优先以本目录为准。
 
 ## 阅读顺序

@@ -31,9 +31,9 @@
 - `go test -count=1 ./backend/...`：通过
 - `npm --prefix frontend run build`：通过
 - `npm run build`：通过
-- `$env:ANT_RECORDING_E2E='1'; go test -count=1 ./backend/internal/behavior -run TestRealFingerprintBrowserRecordPlayback -v`：通过；覆盖真实指纹 Chromium 启动、录制、点击/输入/滚动、刷新后继续点击、停止、回放和重复点击断言
+- `$env:PERSONAL_PILOT_RECORDING_E2E='1'; go test -count=1 ./backend/internal/behavior -run TestRealFingerprintBrowserRecordPlayback -v`：通过；覆盖真实指纹 Chromium 启动、录制、点击/输入/滚动、刷新后继续点击、停止、回放和重复点击断言
 - `git diff --check`：通过
-- `powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\antbrowser`：通过；Table 虚拟滚动 warning 已消除。
+- `powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\personal-pilot`：通过；Table 虚拟滚动 warning 已消除。
 
 ## 2026-04-29 P0/P1 执行结果
 
@@ -137,7 +137,7 @@
 | BR-P3-002 | P3 | Done | `RecordingPanel.tsx` 搜索使用 300ms debounce；录制列表使用 25/50/100 分页；`RecordingDetailModal.tsx` 事件列表使用 50/100/200 分页 | 未新增虚拟滚动库；本切片选择分页满足大量数据渲染约束 |
 | BR-P3-003 | P3 | Done | `inject_script.go` 识别 password/otp/captcha/token 等敏感字段并标记 `sensitive`；`recorder_model_test.go` 验证敏感 text 被清空 | 真实敏感值不会回放，这是安全边界 |
 | BR-P3-004 | P3 | Done | 后端新增 `BehaviorRecordingExport/Import/Copy/Trim` 与 `RecordingExportBundle`；前端新增 JSON 文本导入/导出、复制模板、详情裁剪、回放进度条和失败重试 | 当前是最小可用入口；文件选择器、批量导入和更强预览可作为后续增强 |
-| BR-P3-005 | P3 | Done | 新增 `TestRealFingerprintBrowserRecordPlayback`，在 `ANT_RECORDING_E2E=1` 时启动真实指纹 Chromium 并验证录制/回放闭环 | 基础 E2E 不单独覆盖所有复杂上下文；后续收口已补 iframe 聚合与新 tab/多 page target 事件驱动同步，browser websocket 不可用时保留 100ms 轮询兜底 |
+| BR-P3-005 | P3 | Done | 新增 `TestRealFingerprintBrowserRecordPlayback`，在 `PERSONAL_PILOT_RECORDING_E2E=1` 时启动真实指纹 Chromium 并验证录制/回放闭环 | 基础 E2E 不单独覆盖所有复杂上下文；后续收口已补 iframe 聚合与新 tab/多 page target 事件驱动同步，browser websocket 不可用时保留 100ms 轮询兜底 |
 
 ## 推荐执行顺序
 
@@ -258,7 +258,7 @@
 | BR-P2-005 | Done | 录制/播放/LLM 事件监听使用 `EventsOn` 返回的 off 函数逐个释放 | `npm --prefix frontend run build` |
 | BR-P3-002 | Done | 录制搜索 300ms debounce，列表和详情事件分页 | `npm --prefix frontend run build` |
 | BR-P3-004 | Done | JSON 文本导入/导出、复制模板、详情裁剪、回放进度显示和失败重试已接入 `RecordingPanel.tsx` / `RecordingDetailModal.tsx`，Wails 绑定同步更新 | `go test -count=1 ./backend -run "TestBehaviorRecording|TestBehaviorPlayback|TestBehaviorGetRecordingDetail"`、`npm --prefix frontend run build` |
-| BR-P3-005 | Done | 真实指纹 Chromium 录制/回放 E2E 通过，事件计数包含 `change/down/input/key/move/scroll/up` | `ANT_RECORDING_E2E=1 go test -count=1 ./backend/internal/behavior -run TestRealFingerprintBrowserRecordPlayback -v` |
+| BR-P3-005 | Done | 真实指纹 Chromium 录制/回放 E2E 通过，事件计数包含 `change/down/input/key/move/scroll/up` | `PERSONAL_PILOT_RECORDING_E2E=1 go test -count=1 ./backend/internal/behavior -run TestRealFingerprintBrowserRecordPlayback -v` |
 
 验证命令：
 

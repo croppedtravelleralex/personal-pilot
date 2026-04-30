@@ -1,22 +1,22 @@
-# Ant Browser
+# Personal Pilot
 
 > 面向多账号隔离、代理绑定和本地环境管理的桌面浏览器工具（Windows / Linux）。
 
-[![Release](https://img.shields.io/github/v/release/black-ant/Ant-Browser?sort=semver)](https://github.com/black-ant/Ant-Browser/releases)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-blue)](https://github.com/black-ant/Ant-Browser/releases)
-[![Issues](https://img.shields.io/github/issues/black-ant/Ant-Browser)](https://github.com/black-ant/Ant-Browser/issues)
+[![Release](https://img.shields.io/github/v/release/croppedtravelleralex/personal-pilot?sort=semver)](https://github.com/croppedtravelleralex/personal-pilot/releases)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-blue)](https://github.com/croppedtravelleralex/personal-pilot/releases)
+[![Issues](https://img.shields.io/github/issues/croppedtravelleralex/personal-pilot)](https://github.com/croppedtravelleralex/personal-pilot/issues)
 
 ## 推荐内核项目
 
-Ant Browser 当前推荐配套使用的浏览器内核，来源于开源项目 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium)。
+Personal Pilot 当前推荐配套使用的浏览器内核，来源于开源项目 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium)。
 
 如果你正在寻找可直接下载和维护的指纹内核版本，建议先查看它的 Releases 页面：
 
 - <https://github.com/adryfish/fingerprint-chromium/releases>
 
-这个项目为 Ant Browser 的内核准备提供了直接可用的基础来源，这里先对原项目做明确推荐与致谢。
+这个项目为 Personal Pilot 的内核准备提供了直接可用的基础来源，这里先对原项目做明确推荐与致谢。
 
-Ant Browser 的目标很明确：在一台桌面设备上，帮助用户稳定管理多个彼此隔离的浏览器实例，并配合代理池、浏览器内核和快捷启动能力完成日常运营或测试工作。
+Personal Pilot 的目标很明确：在一台桌面设备上，帮助用户稳定管理多个彼此隔离的浏览器实例，并配合代理池、浏览器内核和快捷启动能力完成日常运营或测试工作。
 
 ## 目录
 
@@ -35,7 +35,7 @@ Ant Browser 的目标很明确：在一台桌面设备上，帮助用户稳定�
 
 ## 项目简介
 
-Ant Browser 适合以下场景：
+Personal Pilot 适合以下场景：
 
 - 多账号环境隔离
 - 跨境电商与社媒账号运营
@@ -131,24 +131,24 @@ Ant Browser 适合以下场景：
 
 ### 下载与运行
 
-1. 前往 Releases 页面下载最新版本：<https://github.com/black-ant/Ant-Browser/releases>
-2. 安装版直接运行 `AntBrowser-Setup-*.exe`
-3. 便携版解压后运行 `ant-chrome.exe`
-4. Linux 包下载后可直接安装 `ant-browser_<version>_<arch>.deb`，或解压 `tar.gz` 后运行 `ant-chrome`
+1. 前往 Releases 页面下载最新版本：<https://github.com/croppedtravelleralex/personal-pilot/releases>
+2. 安装版直接运行 `PersonalPilot-Setup-*.exe`
+3. 便携版解压后运行 `personal-pilot.exe`
+4. Linux 包下载后可直接安装 `personal-pilot_<version>_<arch>.deb`，或解压 `tar.gz` 后运行 `personal-pilot`
 
 ### 从源码运行
 
 1. 开发默认使用 `master` 分支；该分支不带测试用户数据，适合作为日常开发基线。
 2. 如需带测试库的演示环境，请切换到 `user_data` 分支。
-3. Windows 统一执行根目录 `antbrowserDev.bat`；该入口启动 Tauri 2 dev 模式，并由 Tauri `beforeDevCommand` 构建 Go sidecar、启动 Vite。
+3. Windows 统一执行根目录 `personal-pilot-dev.bat`；该入口启动 Tauri 2 dev 模式，并由 Tauri `beforeDevCommand` 构建 Go sidecar、启动 Vite。
 4. Windows 运行时使用 `bin/xray.exe`、`bin/sing-box.exe`；Linux 运行时使用 `bin/linux-<arch>/xray`、`bin/linux-<arch>/sing-box`。
 5. 运行时文件采用“仓库固定 + 哈希校验”，校验清单在 `publish/runtime-manifest.json`，固定来源清单在 `publish/runtime-sources.json`。
 6. 如需刷新 Linux 运行时，执行 `python3 tools/runtime/sync-runtime.py`（会按固定来源下载、校验归档并更新 manifest）。
 
 开发模式说明：
 
-- `antbrowserDev.bat`：根目录唯一开发入口，调用 `npm run tauri:dev` 启动 Tauri 2 + Vite + Go sidecar
-- `antbrowserDev.bat -- <tauri-dev-args>`：如需透传 Tauri dev 参数，可在命令后追加参数
+- `personal-pilot-dev.bat`：根目录唯一开发入口，调用 `npm run tauri:dev` 启动 Tauri 2 + Vite + Go sidecar
+- `personal-pilot-dev.bat -- <tauri-dev-args>`：如需透传 Tauri dev 参数，可在命令后追加参数
 - 如需为依赖下载配置代理，可在启动前设置 `DEV_PROXY_URL`、`DEV_NO_PROXY`、`DEV_GOPROXY`
 
 ### Linux 发布打包（源码）
@@ -235,8 +235,8 @@ chrome/
 
 ## 支持与反馈
 
-- Releases：<https://github.com/black-ant/Ant-Browser/releases>
-- Issues：<https://github.com/black-ant/Ant-Browser/issues>
+- Releases：<https://github.com/croppedtravelleralex/personal-pilot/releases>
+- Issues：<https://github.com/croppedtravelleralex/personal-pilot/issues>
 
 ## License
 

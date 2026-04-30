@@ -14,7 +14,7 @@ import (
 
 const cdpOwnershipRejected = "CDP ownership rejected"
 
-// LaunchAuditSnapshot is the runtime evidence captured when Antbrowser starts a
+// LaunchAuditSnapshot is the runtime evidence captured when PersonalPilot starts a
 // browser process. It is intentionally hash-based for launch inputs so CDP
 // checks can compare ownership without exposing full args in API payloads.
 type LaunchAuditSnapshot struct {
@@ -286,10 +286,10 @@ func ProcessAppMode() string {
 	}
 	if strings.TrimSpace(os.Getenv("TAURI_DEV_HOST")) != "" ||
 		strings.EqualFold(strings.TrimSpace(os.Getenv("TAURI_ENV")), "development") ||
-		strings.EqualFold(strings.TrimSpace(os.Getenv("ANTBROWSER_APP_MODE")), "dev") {
+		strings.EqualFold(strings.TrimSpace(os.Getenv("PERSONAL_PILOT_APP_MODE")), "dev") {
 		return "dev"
 	}
-	if mode := strings.TrimSpace(os.Getenv("ANTBROWSER_APP_MODE")); mode != "" {
+	if mode := strings.TrimSpace(os.Getenv("PERSONAL_PILOT_APP_MODE")); mode != "" {
 		return mode
 	}
 	return "desktop"

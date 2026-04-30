@@ -1,8 +1,8 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/logger"
 )
 
 type BrowserBookmark = config.BrowserBookmark

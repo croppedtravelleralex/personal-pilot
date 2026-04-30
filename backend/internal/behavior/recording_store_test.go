@@ -9,7 +9,7 @@ import (
 )
 
 func TestFileRecordingStore_SaveAndGet(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-save-get")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-save-get")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -67,7 +67,7 @@ func TestFileRecordingStore_SaveAndGet(t *testing.T) {
 }
 
 func TestFileRecordingStore_Get_NotFound(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-get-notfound")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-get-notfound")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -82,7 +82,7 @@ func TestFileRecordingStore_Get_NotFound(t *testing.T) {
 }
 
 func TestFileRecordingStore_List(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-list")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-list")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -128,7 +128,7 @@ func TestFileRecordingStore_List(t *testing.T) {
 }
 
 func TestFileRecordingStore_ListSummariesOmitsEventsAndKeepsEventCount(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-list-summaries")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-list-summaries")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -341,7 +341,7 @@ func TestFileRecordingStore_GetDetailPageFallsBackForLegacyJSON(t *testing.T) {
 }
 
 func TestFileRecordingStore_Delete(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-delete")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-delete")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -371,7 +371,7 @@ func TestFileRecordingStore_Delete(t *testing.T) {
 }
 
 func TestFileRecordingStore_Delete_NotFound(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-delete-notfound")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-delete-notfound")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -386,7 +386,7 @@ func TestFileRecordingStore_Delete_NotFound(t *testing.T) {
 }
 
 func TestFileRecordingStore_List_SkipsDirectoriesAndNonJSON(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-list-filter")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-list-filter")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -409,7 +409,7 @@ func TestFileRecordingStore_List_SkipsDirectoriesAndNonJSON(t *testing.T) {
 }
 
 func TestFileRecordingStore_Rename(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-rename")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-rename")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)
@@ -469,7 +469,7 @@ func TestFileRecordingStore_RenameRefreshesManifest(t *testing.T) {
 }
 
 func TestFileRecordingStore_Rename_NotFound(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "ant-test-recordings-rename-notfound")
+	dir := filepath.Join(os.TempDir(), "personal-pilot-test-recordings-rename-notfound")
 	defer os.RemoveAll(dir)
 
 	store, err := NewFileRecordingStore(dir)

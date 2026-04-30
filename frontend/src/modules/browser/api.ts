@@ -694,7 +694,7 @@ function normalizeLaunchServerInfo(payload: any): LaunchServerInfo {
     requested: !!apiAuthPayload?.requested,
     configured: !!apiAuthPayload?.configured,
     enabled: !!apiAuthPayload?.enabled,
-    header: String(apiAuthPayload?.header || 'X-Ant-Api-Key'),
+    header: String(apiAuthPayload?.header || 'X-Personal-Pilot-Api-Key'),
   }
 
   return {
@@ -732,7 +732,7 @@ export async function fetchLaunchServerInfo(): Promise<LaunchServerInfo> {
       requested: false,
       configured: false,
       enabled: false,
-      header: 'X-Ant-Api-Key',
+      header: 'X-Personal-Pilot-Api-Key',
     },
   }
 }

@@ -20,7 +20,7 @@ const (
 	defaultFreeProxyLimit       = 200
 	maxFreeProxySourceBytes     = 4 * 1024 * 1024
 	defaultFreeProxyCheckURL    = "http://ip-api.com/json/?fields=status,message,query,country,countryCode,regionName,city,as,isp,org,hosting,proxy"
-	defaultFreeProxyUserAgent   = "AntBrowser-FreeProxyCheck/1.0"
+	defaultFreeProxyUserAgent   = "PersonalPilot-FreeProxyCheck/1.0"
 	defaultFreeProxyHTTPTimeout = 8 * time.Second
 )
 
@@ -73,10 +73,10 @@ func NormalizeFreeProxyLimit(limit int) int {
 
 func NormalizeFreeProxyConcurrency(concurrency int) int {
 	if concurrency <= 0 {
-		return 20
+		return 8
 	}
-	if concurrency > 100 {
-		return 100
+	if concurrency > 50 {
+		return 50
 	}
 	return concurrency
 }
@@ -245,6 +245,34 @@ func CheckFreeDirectProxy(ctx context.Context, candidate FreeProxyCandidate, tim
 	}
 
 	rawData := enrichFreeProxyRawData(candidate, payload)
+	realLatency, realStatusCode, realErr := checkHTTPClientGET(ctx, client, defaultProxyHTTPSCanaryURL, defaultFreeProxyUserAgent)
+	rawData["realCheckUrl"] = defaultProxyHTTPSCanaryURL
+	rawData["realCheckLatencyMs"] = realLatency
+	rawData["realCheckStatusCode"] = realStatusCode
+	if realErr != nil {
+		rawData["realCheckOk"] = false
+		rawData["realCheckError"] = realErr.Error()
+		return FreeProxyCheckResult{
+			Candidate: candidate,
+			Ok:        false,
+			Error:     fmt.Sprintf("真实 HTTPS 可用性检测失败: %v", realErr),
+			LatencyMs: latency,
+			RawData:   rawData,
+			CheckedAt: checkedAt,
+		}
+	}
+	if !isUsableHTTPStatus(realStatusCode) {
+		rawData["realCheckOk"] = false
+		return FreeProxyCheckResult{
+			Candidate: candidate,
+			Ok:        false,
+			Error:     fmt.Sprintf("真实 HTTPS 可用性检测失败: HTTP %d", realStatusCode),
+			LatencyMs: latency,
+			RawData:   rawData,
+			CheckedAt: checkedAt,
+		}
+	}
+	rawData["realCheckOk"] = true
 	return FreeProxyCheckResult{
 		Candidate:      candidate,
 		Ok:             true,

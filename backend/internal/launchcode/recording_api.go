@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"ant-chrome/backend/internal/behavior"
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/logger"
 )
 
 var recAPILog = logger.New("RecordingAPI")

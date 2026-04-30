@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend/internal/behavior"
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
 )
 
 type httpStatusError interface {

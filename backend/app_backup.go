@@ -1,8 +1,8 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/apppath"
-	"ant-chrome/backend/internal/backup"
+	"personal-pilot/backend/internal/apppath"
+	"personal-pilot/backend/internal/backup"
 	"time"
 )
 

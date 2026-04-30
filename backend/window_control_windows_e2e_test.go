@@ -11,8 +11,8 @@ import (
 )
 
 func TestWindowControlE2EWithNotepad(t *testing.T) {
-	if os.Getenv("ANTBROWSER_WINDOW_CONTROL_E2E") != "1" {
-		t.Skip("set ANTBROWSER_WINDOW_CONTROL_E2E=1 to run visible Windows window-control E2E")
+	if os.Getenv("PERSONAL_PILOT_WINDOW_CONTROL_E2E") != "1" {
+		t.Skip("set PERSONAL_PILOT_WINDOW_CONTROL_E2E=1 to run visible Windows window-control E2E")
 	}
 
 	cmd := exec.Command("notepad.exe")

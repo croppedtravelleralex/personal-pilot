@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend/internal/browser"
+	"personal-pilot/backend/internal/browser"
 )
 
 func launchAuditForProxyTest(profileID string, debugPort int) *browser.LaunchAuditSnapshot {

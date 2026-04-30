@@ -1,9 +1,9 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/logger"
 	"context"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/logger"
 )
 
 func (a *App) emit(eventName string, data ...interface{}) {

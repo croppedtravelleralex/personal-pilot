@@ -1,4 +1,4 @@
-// Package events provides the event name registry for the Ant Browser Wails event system.
+// Package events provides the event name registry for the Personal Pilot Wails event system.
 // All event names follow the convention: <namespace>:<subdomain>:<action>
 package events
 

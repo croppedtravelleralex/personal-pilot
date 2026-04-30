@@ -1,11 +1,11 @@
 package backend
 
 import (
-	appconfig "ant-chrome/backend/internal/config"
-	apptray "ant-chrome/backend/internal/tray"
 	"fmt"
 	"os"
 	"path/filepath"
+	appconfig "personal-pilot/backend/internal/config"
+	apptray "personal-pilot/backend/internal/tray"
 	"time"
 )
 

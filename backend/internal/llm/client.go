@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/config"
 )
 
 // Client 执行 LLM API 调用

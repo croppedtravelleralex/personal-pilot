@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/proxy"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/proxy"
 )
 
 // 模拟数据库中实际存储的 Clash YAML 格式代理配置

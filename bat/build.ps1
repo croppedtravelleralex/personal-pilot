@@ -49,7 +49,7 @@ try {
 
     $proxyValue = $env:PERSONAL_PILOT_PROXY
     if ([string]::IsNullOrWhiteSpace($proxyValue)) {
-        $proxyValue = $env:ANT_BROWSER_PROXY
+        $proxyValue = $env:PERSONAL_PILOT_PROXY
     }
     $useProxy = -not [string]::IsNullOrWhiteSpace($proxyValue)
 

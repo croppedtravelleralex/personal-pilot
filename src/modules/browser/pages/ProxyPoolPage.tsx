@@ -76,7 +76,7 @@ const INITIAL_FREE_PROXY_IMPORT_FORM: FreeProxyImportForm = {
   sourceUrls: '',
   groupName: '免费代理',
   limit: '200',
-  concurrency: '20',
+  concurrency: '8',
 }
 
 interface ImportCandidate {
@@ -810,10 +810,55 @@ export function ProxyPoolPage() {
   const proxiesRef = useRef<BrowserProxy[]>([])
   const refreshingSourceIdsRef = useRef<Set<string>>(new Set())
   const autoRefreshRunningRef = useRef(false)
+  const pendingLatencyPatchRef = useRef<Record<string, number>>({})
+  const latencyPatchTimerRef = useRef<number | null>(null)
+  const pendingIPHealthPatchRef = useRef<Record<string, ProxyIPHealthResult>>({})
+  const pendingIPHealthDoneIdsRef = useRef<Set<string>>(new Set())
+  const ipHealthPatchTimerRef = useRef<number | null>(null)
   const globalRefreshInterval = useMemo(() => {
     const interval = normalizeRefreshIntervalM(Number(globalRefreshIntervalM || 0))
     return interval > 0 ? interval : 60
   }, [globalRefreshIntervalM])
+
+  const flushLatencyPatch = useCallback(() => {
+    latencyPatchTimerRef.current = null
+    const patch = pendingLatencyPatchRef.current
+    pendingLatencyPatchRef.current = {}
+    if (Object.keys(patch).length === 0) return
+    setLatencyMap(prev => ({ ...prev, ...patch }))
+  }, [])
+
+  const queueLatencyPatch = useCallback((proxyId: string, value: number) => {
+    pendingLatencyPatchRef.current[proxyId] = value
+    if (latencyPatchTimerRef.current !== null) return
+    latencyPatchTimerRef.current = window.setTimeout(flushLatencyPatch, 120)
+  }, [flushLatencyPatch])
+
+  const flushIPHealthPatch = useCallback(() => {
+    ipHealthPatchTimerRef.current = null
+    const patch = pendingIPHealthPatchRef.current
+    const doneIds = pendingIPHealthDoneIdsRef.current
+    pendingIPHealthPatchRef.current = {}
+    pendingIPHealthDoneIdsRef.current = new Set()
+    if (Object.keys(patch).length > 0) {
+      setIPHealthMap(prev => ({ ...prev, ...patch }))
+    }
+    if (doneIds.size > 0) {
+      setCheckingIPHealthIds(prev => {
+        const next = new Set(prev)
+        doneIds.forEach(id => next.delete(id))
+        return next
+      })
+    }
+  }, [])
+
+  const queueIPHealthPatch = useCallback((result: ProxyIPHealthResult) => {
+    if (!result?.proxyId) return
+    pendingIPHealthPatchRef.current[result.proxyId] = result
+    pendingIPHealthDoneIdsRef.current.add(result.proxyId)
+    if (ipHealthPatchTimerRef.current !== null) return
+    ipHealthPatchTimerRef.current = window.setTimeout(flushIPHealthPatch, 120)
+  }, [flushIPHealthPatch])
 
   useEffect(() => {
     const cfg = readGlobalRefreshConfig()
@@ -822,6 +867,17 @@ export function ProxyPoolPage() {
     setLatencyMap(readLatencyCache())
     setIPHealthMap(readIPHealthCache())
     loadProxies()
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (latencyPatchTimerRef.current !== null) {
+        window.clearTimeout(latencyPatchTimerRef.current)
+      }
+      if (ipHealthPatchTimerRef.current !== null) {
+        window.clearTimeout(ipHealthPatchTimerRef.current)
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -1153,12 +1209,12 @@ export function ProxyPoolPage() {
     // 监听后端实时推送的单个测速结果
     const off = EventsOn('proxy:speed:result', (data: { proxyId: string; ok: boolean; latencyMs: number; error: string }) => {
       const val = toLatencyValue(data.ok, data.latencyMs, data.error)
-      setLatencyMap(prev => ({ ...prev, [data.proxyId]: val }))
+      queueLatencyPatch(data.proxyId, val)
     })
 
     try {
       const proxyIds = testable.map(p => p.proxyId)
-      const results = await browserProxyBatchTestSpeed(proxyIds, 20)
+      const results = await browserProxyBatchTestSpeed(proxyIds, 8)
       setLatencyMap(prev => {
         const next = { ...prev }
         results.forEach(result => {
@@ -1206,16 +1262,11 @@ export function ProxyPoolPage() {
 
     const off = EventsOn('proxy:iphealth:result', (data: ProxyIPHealthResult) => {
       if (!data?.proxyId || !idSet.has(data.proxyId)) return
-      setIPHealthMap(prev => ({ ...prev, [data.proxyId]: data }))
-      setCheckingIPHealthIds(prev => {
-        const next = new Set(prev)
-        next.delete(data.proxyId)
-        return next
-      })
+      queueIPHealthPatch(data)
     })
 
     try {
-      const results = await browserProxyBatchCheckIPHealth(ids, 10)
+      const results = await browserProxyBatchCheckIPHealth(ids, 6)
       setIPHealthMap(prev => {
         const next = { ...prev }
         results.forEach(result => {
@@ -1601,7 +1652,7 @@ export function ProxyPoolPage() {
         sourceUrls: sourceUrls.length > 0 ? sourceUrls : undefined,
         groupName: freeProxyForm.groupName.trim() || INITIAL_FREE_PROXY_IMPORT_FORM.groupName,
         limit: normalizePositiveIntInput(freeProxyForm.limit, 200, 1, 5000),
-        concurrency: normalizePositiveIntInput(freeProxyForm.concurrency, 20, 1, 100),
+        concurrency: normalizePositiveIntInput(freeProxyForm.concurrency, 8, 1, 50),
       })
 
       const nextProxies = ensureBuiltinProxies(result.allProxies)
@@ -1799,7 +1850,7 @@ export function ProxyPoolPage() {
               <Input
                 type="number"
                 min={1}
-                max={100}
+                max={50}
                 value={freeProxyForm.concurrency}
                 onChange={e => setFreeProxyForm(prev => ({ ...prev, concurrency: e.target.value }))}
               />

@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 
 const require = createRequire(import.meta.url)
-const SKIP_ENV = 'ANT_SKIP_ROLLUP_NATIVE_INSTALL'
+const SKIP_ENV = 'PERSONAL_PILOT_SKIP_ROLLUP_NATIVE_INSTALL'
 
 function isMusl() {
   try {

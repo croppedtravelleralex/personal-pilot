@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"ant-chrome/backend/internal/events"
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/logger"
 )
 
 const (

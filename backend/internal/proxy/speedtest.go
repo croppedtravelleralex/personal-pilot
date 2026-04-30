@@ -13,8 +13,8 @@ import (
 	C "github.com/metacubex/mihomo/constant"
 	"gopkg.in/yaml.v3"
 
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/logger"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/logger"
 )
 
 // ─── Clash 标准测速 URL ───

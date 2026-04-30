@@ -57,7 +57,7 @@ const DOC_OVERVIEW = `# 自动化接口文档（重构版）
 
 - personal-pilot 应用已启动
 - Launch 服务监听本机（地址见本页顶部）
-- 如启用了 API 认证，请准备好请求头 \`X-Ant-Api-Key: <your-api-key>\`
+- 如启用了 API 认证，请准备好请求头 \`X-Personal-Pilot-Api-Key: <your-api-key>\`
 - 如果你要用 \`key / keyword / tags\` 选择实例，需要先在实例配置里维护这些字段
 - 如果你要用 \`groupId\`，请保证脚本拿到的是分组 ID，不是分组展示名
 
@@ -104,7 +104,7 @@ const DOC_QUICKSTART = `# 快速接入（3 分钟）
 所有 \`/api/*\` 请求都需要追加认证头：
 
 \`\`\`bash
-curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
+curl -H "X-Personal-Pilot-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 \`\`\`
 
 ## 第二步：选择创建触发方式
@@ -283,7 +283,7 @@ const DOC_API_INDEX = `# 接口总览
 
 说明：
 
-- 如已启用 API 认证，所有 \`/api/*\` 请求都需要追加 \`X-Ant-Api-Key: <your-api-key>\`
+- 如已启用 API 认证，所有 \`/api/*\` 请求都需要追加 \`X-Personal-Pilot-Api-Key: <your-api-key>\`
 - CDP 统一入口仍只受 localhost 限制，不额外读取 API Key
 `
 
@@ -985,7 +985,7 @@ const DOC_ERRORS = `# 错误码与重试策略
 | 状态码 | 场景 | 建议处理 |
 |--------|------|----------|
 | 400 | 请求体非法 / 含未知字段 / selector 缺失 / matchMode 非法 / launchCode 格式错误 | 修复参数后重试 |
-| 401 | 已启用 API 认证，但缺少或写错 API Key | 补上正确的 \`X-Ant-Api-Key\` 请求头后重试 |
+| 401 | 已启用 API 认证，但缺少或写错 API Key | 补上正确的 \`X-Personal-Pilot-Api-Key\` 请求头后重试 |
 | 403 | 非 localhost 访问 | 改为本机请求 |
 | 404 | GET 的 Code 不存在 / POST 的 code 关键字兜底后仍未命中 / selector 没命中实例 | 检查 code、keywords、tags、groupId |
 | 405 | 方法错误 | 使用正确 HTTP 方法 |
@@ -1005,7 +1005,7 @@ const DOC_EXAMPLES = `# 多语言调用示例（同一协议）
 
 下面这些示例调用的是同一组 HTTP 接口，只是客户端语法不同。你可以直接替换成自己的语言或框架实现。
 
-如果你启用了 API 认证，请记得在各语言客户端里补上 \`X-Ant-Api-Key\` 请求头。
+如果你启用了 API 认证，请记得在各语言客户端里补上 \`X-Personal-Pilot-Api-Key\` 请求头。
 
 ## Python：触发创建并立即启动
 
@@ -1204,7 +1204,7 @@ const DOC_TROUBLESHOOT = `# 常见问题
 
 - 说明当前已经启用 API 认证
 - 你没有传认证头，或传错了 API Key
-- 请检查请求头 \`X-Ant-Api-Key: <your-api-key>\` 是否正确
+- 请检查请求头 \`X-Personal-Pilot-Api-Key: <your-api-key>\` 是否正确
 
 ## Q6：返回 \`forbidden: only localhost is allowed\`
 
@@ -1301,7 +1301,7 @@ const DEFAULT_API_AUTH: LaunchServerInfo['apiAuth'] = {
   requested: false,
   configured: false,
   enabled: false,
-  header: 'X-Ant-Api-Key',
+  header: 'X-Personal-Pilot-Api-Key',
 }
 
 function renderDocWithLaunchContext(raw: string, baseUrl: string, authHeader: string): string {
@@ -1312,7 +1312,7 @@ function renderDocWithLaunchContext(raw: string, baseUrl: string, authHeader: st
   return raw
     .split('http://127.0.0.1:19876').join(safeBase)
     .split('127.0.0.1:19876').join(hostPort)
-    .split('X-Ant-Api-Key').join(safeAuthHeader)
+    .split('X-Personal-Pilot-Api-Key').join(safeAuthHeader)
 }
 
 // ============================================================================

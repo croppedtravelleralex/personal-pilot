@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ant-chrome/backend/internal/behavior/humanize"
+	"personal-pilot/backend/internal/behavior/humanize"
 )
 
 // PlannedAction is a parsed LLM-generated action with metadata.

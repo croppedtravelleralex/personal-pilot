@@ -1,8 +1,8 @@
 package browser
 
 import (
-	"ant-chrome/backend/internal/logger"
 	"path/filepath"
+	"personal-pilot/backend/internal/logger"
 	"strings"
 )
 

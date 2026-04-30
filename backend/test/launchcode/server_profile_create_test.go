@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
-	"ant-chrome/backend/internal/launchcode"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/launchcode"
 )
 
 type managerBackedStarter struct {

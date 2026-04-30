@@ -3,16 +3,16 @@ setlocal EnableExtensions
 
 cd /d "%~dp0"
 
-set "LOG=%~dp0antbrowser-dev.log"
-> "%LOG%" echo AntBrowser Tauri dev - %date% %time%
+set "LOG=%~dp0personal-pilot-dev.log"
+> "%LOG%" echo PersonalPilot Tauri dev - %date% %time%
 
 echo ========================================
-echo   AntBrowser - Tauri Dev Launcher
+echo   PersonalPilot - Tauri Dev Launcher
 echo ========================================
 echo.
 echo This starts Tauri 2 dev mode.
 echo Tauri will build the Go sidecar and start Vite via beforeDevCommand.
-echo Log: antbrowser-dev.log
+echo Log: personal-pilot-dev.log
 echo.
 
 where npm >nul 2>&1
@@ -32,7 +32,7 @@ set "EXIT_CODE=%errorlevel%"
 if not "%EXIT_CODE%"=="0" (
     echo.
     echo [ERROR] Tauri dev exited with code %EXIT_CODE%
-    echo See antbrowser-dev.log for launcher details.
+    echo See personal-pilot-dev.log for launcher details.
     pause
 )
 

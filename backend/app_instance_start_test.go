@@ -1,8 +1,6 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/config"
 	"errors"
 	"fmt"
 	"net"
@@ -10,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
 	"reflect"
 	goruntime "runtime"
 	"strings"

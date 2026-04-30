@@ -12,10 +12,27 @@ use std::{
 };
 use tauri::{Emitter, Manager};
 
-const READY_PREFIX: &str = "ANTBROWSER_CORE_READY ";
+const READY_PREFIX: &str = "PERSONAL_PILOT_CORE_READY ";
 const BODY_PREVIEW_LIMIT: usize = 240;
+const SIDECAR_QUIT_READ_TIMEOUT: Duration = Duration::from_secs(3);
+const SIDECAR_QUIT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
 type HttpHeaders = Vec<(String, String)>;
+
+#[derive(Clone, Copy)]
+enum SidecarShutdownMode {
+    Full,
+    AppOnly,
+}
+
+impl SidecarShutdownMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::AppOnly => "app-only",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +59,7 @@ struct CoreInner {
     bridge_url: Option<String>,
     bridge_token: Option<String>,
     event_url: Option<String>,
+    quitting: bool,
 }
 
 struct CoreManager {
@@ -57,6 +75,7 @@ impl CoreManager {
                 bridge_url: None,
                 bridge_token: None,
                 event_url: None,
+                quitting: false,
             }),
             ready: Condvar::new(),
         }
@@ -79,6 +98,9 @@ impl CoreManager {
         {
             let mut inner = self.inner.lock().map_err(|_| "core mutex poisoned")?;
             prune_exited_child(&mut inner);
+            if inner.quitting {
+                return Err("app is quitting".to_string());
+            }
             if inner.child.is_some() && inner.bridge_url.is_some() && inner.bridge_token.is_some() {
                 return Ok(CoreStatus {
                     running: true,
@@ -105,6 +127,9 @@ impl CoreManager {
         let mut inner = self.inner.lock().map_err(|_| "core mutex poisoned")?;
         loop {
             prune_exited_child(&mut inner);
+            if inner.quitting {
+                return Err("app is quitting".to_string());
+            }
             if inner.child.is_none() {
                 return Err("Go sidecar exited before reporting ready".to_string());
             }
@@ -132,7 +157,17 @@ impl CoreManager {
         }
     }
 
+    fn begin_app_quit(&self) {
+        let mut inner = self.inner.lock().expect("core mutex poisoned");
+        inner.quitting = true;
+        self.ready.notify_all();
+    }
+
     fn stop(&self) {
+        self.stop_with_mode(SidecarShutdownMode::Full, Duration::from_secs(5));
+    }
+
+    fn stop_with_mode(&self, mode: SidecarShutdownMode, wait_timeout: Duration) {
         let (mut child, bridge_url, bridge_token) = {
             let mut inner = self.inner.lock().expect("core mutex poisoned");
             let child = inner.child.take();
@@ -143,11 +178,18 @@ impl CoreManager {
         };
 
         if let Some(url) = bridge_url {
-            let _ = http_post_json(&url, "/shutdown", bridge_token.as_deref(), &json!({}));
+            let _ = http_post_json_with_timeouts(
+                &url,
+                "/shutdown",
+                bridge_token.as_deref(),
+                &json!({ "mode": mode.as_str() }),
+                SIDECAR_QUIT_READ_TIMEOUT,
+                SIDECAR_QUIT_WRITE_TIMEOUT,
+            );
         }
 
         if let Some(mut child) = child.take() {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + wait_timeout;
             while Instant::now() < deadline {
                 if matches!(child.try_wait(), Ok(Some(_))) {
                     return;
@@ -234,7 +276,7 @@ fn spawn_core(app: &tauri::AppHandle) -> Result<Child, String> {
         .arg("--version")
         .arg(env!("CARGO_PKG_VERSION"))
         .current_dir(&app_root)
-        .env("ANTBROWSER_TAURI_SIDECAR", "1")
+        .env("PERSONAL_PILOT_TAURI_SIDECAR", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -251,7 +293,7 @@ fn spawn_core(app: &tauri::AppHandle) -> Result<Child, String> {
 }
 
 fn resolve_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Ok(raw) = env::var("ANTBROWSER_CORE_EXE") {
+    if let Ok(raw) = env::var("PERSONAL_PILOT_CORE_EXE") {
         let path = PathBuf::from(raw);
         if path.is_file() {
             return Ok(path);
@@ -260,32 +302,32 @@ fn resolve_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
     let app_root = resolve_app_root();
     let mut candidates = vec![
-        app_root.join("bin").join("antbrowser-core.exe"),
+        app_root.join("bin").join("personal-pilot-core.exe"),
         app_root
             .join("bin")
-            .join("antbrowser-core-x86_64-pc-windows-msvc.exe"),
+            .join("personal-pilot-core-x86_64-pc-windows-msvc.exe"),
     ];
 
     if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join("antbrowser-core.exe"));
-        candidates.push(resource_dir.join("antbrowser-core-x86_64-pc-windows-msvc.exe"));
+        candidates.push(resource_dir.join("personal-pilot-core.exe"));
+        candidates.push(resource_dir.join("personal-pilot-core-x86_64-pc-windows-msvc.exe"));
     }
 
     if let Ok(exe) = env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            candidates.push(exe_dir.join("antbrowser-core.exe"));
-            candidates.push(exe_dir.join("antbrowser-core-x86_64-pc-windows-msvc.exe"));
+            candidates.push(exe_dir.join("personal-pilot-core.exe"));
+            candidates.push(exe_dir.join("personal-pilot-core-x86_64-pc-windows-msvc.exe"));
         }
     }
 
     candidates
         .into_iter()
         .find(|candidate| candidate.is_file())
-        .ok_or_else(|| "antbrowser-core sidecar executable was not found".to_string())
+        .ok_or_else(|| "personal-pilot-core sidecar executable was not found".to_string())
 }
 
 fn resolve_app_root() -> PathBuf {
-    if let Ok(raw) = env::var("ANTBROWSER_APP_ROOT") {
+    if let Ok(raw) = env::var("PERSONAL_PILOT_APP_ROOT") {
         let path = PathBuf::from(raw);
         if path.is_dir() {
             return path;
@@ -311,14 +353,32 @@ fn http_post_json(
     bridge_token: Option<&str>,
     body: &Value,
 ) -> Result<Value, String> {
+    http_post_json_with_timeouts(
+        base_url,
+        path,
+        bridge_token,
+        body,
+        Duration::from_secs(120),
+        Duration::from_secs(10),
+    )
+}
+
+fn http_post_json_with_timeouts(
+    base_url: &str,
+    path: &str,
+    bridge_token: Option<&str>,
+    body: &Value,
+    read_timeout: Duration,
+    write_timeout: Duration,
+) -> Result<Value, String> {
     let (host, port) = parse_local_http_url(base_url)?;
     let mut stream = TcpStream::connect((host.as_str(), port))
         .map_err(|err| format!("failed to connect sidecar {base_url}: {err}"))?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(120)))
+        .set_read_timeout(Some(read_timeout))
         .map_err(|err| err.to_string())?;
     stream
-        .set_write_timeout(Some(Duration::from_secs(10)))
+        .set_write_timeout(Some(write_timeout))
         .map_err(|err| err.to_string())?;
 
     let payload = serde_json::to_vec(body).map_err(|err| err.to_string())?;
@@ -326,7 +386,7 @@ fn http_post_json(
         "POST {path} HTTP/1.1\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\n"
     );
     if let Some(token) = bridge_token {
-        request.push_str(&format!("X-Antbrowser-Bridge-Token: {token}\r\n"));
+        request.push_str(&format!("X-Personal-Pilot-Bridge-Token: {token}\r\n"));
     }
     request.push_str(&format!(
         "Content-Length: {}\r\nConnection: close\r\n\r\n",
@@ -599,34 +659,38 @@ fn core_status(core: tauri::State<CoreManager>) -> Result<CoreStatus, String> {
 }
 
 #[tauri::command]
-fn core_rpc(
+async fn core_rpc(
     app: tauri::AppHandle,
-    core: tauri::State<CoreManager>,
     method: String,
     args: Vec<Value>,
 ) -> Result<Value, String> {
-    let status = core.ensure_started(&app)?;
-    let base_url = status
-        .bridge_url
-        .ok_or_else(|| "Go sidecar bridge URL is not ready".to_string())?;
-    let bridge_token = status
-        .bridge_token
-        .ok_or_else(|| "Go sidecar bridge token is not ready".to_string())?;
-    let response = http_post_json(
-        &base_url,
-        "/rpc",
-        Some(&bridge_token),
-        &json!({ "method": method, "args": args }),
-    )?;
-    if response.get("ok").and_then(Value::as_bool) == Some(true) {
-        Ok(response.get("result").cloned().unwrap_or(Value::Null))
-    } else {
-        Err(response
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("sidecar RPC failed")
-            .to_string())
-    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let core = app.state::<CoreManager>();
+        let status = core.ensure_started(&app)?;
+        let base_url = status
+            .bridge_url
+            .ok_or_else(|| "Go sidecar bridge URL is not ready".to_string())?;
+        let bridge_token = status
+            .bridge_token
+            .ok_or_else(|| "Go sidecar bridge token is not ready".to_string())?;
+        let response = http_post_json(
+            &base_url,
+            "/rpc",
+            Some(&bridge_token),
+            &json!({ "method": method, "args": args }),
+        )?;
+        if response.get("ok").and_then(Value::as_bool) == Some(true) {
+            Ok(response.get("result").cloned().unwrap_or(Value::Null))
+        } else {
+            Err(response
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("sidecar RPC failed")
+                .to_string())
+        }
+    })
+    .await
+    .map_err(|err| format!("sidecar RPC worker failed: {err}"))?
 }
 
 #[tauri::command]
@@ -670,50 +734,30 @@ fn app_window_minimize(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn app_quit(app: tauri::AppHandle, core: tauri::State<CoreManager>) -> Result<(), String> {
-    core.stop();
-    app.exit(0);
+fn app_quit(app: tauri::AppHandle) -> Result<(), String> {
+    start_app_quit(app, SidecarShutdownMode::Full, Duration::from_secs(30));
     Ok(())
 }
 
 #[tauri::command]
-fn app_quit_app_only(app: tauri::AppHandle, core: tauri::State<CoreManager>) -> Result<(), String> {
-    let status = core.ensure_started(&app)?;
-    let base_url = status
-        .bridge_url
-        .ok_or_else(|| "Go sidecar bridge URL is not ready".to_string())?;
-    let bridge_token = status
-        .bridge_token
-        .ok_or_else(|| "Go sidecar bridge token is not ready".to_string())?;
-    let _ = http_post_json(
-        &base_url,
-        "/rpc",
-        Some(&bridge_token),
-        &json!({ "method": "QuitAppOnly", "args": [] }),
-    )?;
-    core.stop();
-    app.exit(0);
+fn app_quit_app_only(app: tauri::AppHandle) -> Result<(), String> {
+    start_app_quit(app, SidecarShutdownMode::AppOnly, Duration::from_secs(8));
     Ok(())
 }
 
 #[tauri::command]
-fn app_quit_full(app: tauri::AppHandle, core: tauri::State<CoreManager>) -> Result<(), String> {
-    let status = core.ensure_started(&app)?;
-    let base_url = status
-        .bridge_url
-        .ok_or_else(|| "Go sidecar bridge URL is not ready".to_string())?;
-    let bridge_token = status
-        .bridge_token
-        .ok_or_else(|| "Go sidecar bridge token is not ready".to_string())?;
-    let _ = http_post_json(
-        &base_url,
-        "/rpc",
-        Some(&bridge_token),
-        &json!({ "method": "ForceQuit", "args": [] }),
-    )?;
-    core.stop();
-    app.exit(0);
+fn app_quit_full(app: tauri::AppHandle) -> Result<(), String> {
+    start_app_quit(app, SidecarShutdownMode::Full, Duration::from_secs(30));
     Ok(())
+}
+
+fn start_app_quit(app: tauri::AppHandle, mode: SidecarShutdownMode, wait_timeout: Duration) {
+    thread::spawn(move || {
+        let core = app.state::<CoreManager>();
+        core.begin_app_quit();
+        core.stop_with_mode(mode, wait_timeout);
+        app.exit(0);
+    });
 }
 
 #[cfg(test)]

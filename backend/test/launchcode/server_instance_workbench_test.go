@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"ant-chrome/backend/internal/browser"
-	"ant-chrome/backend/internal/launchcode"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/launchcode"
 )
 
 type instanceWorkbenchStarter struct {

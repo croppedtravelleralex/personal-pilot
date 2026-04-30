@@ -135,7 +135,7 @@ launch_server:
   auth:
     enabled: true
     api_key: secret-key
-    header: X-Custom-Ant-Key
+    header: X-Custom-Personal-Pilot-Key
 `
 	if err := os.WriteFile(configPath, []byte(customConfig), 0o644); err != nil {
 		t.Fatalf("写入测试配置失败: %v", err)
@@ -182,7 +182,7 @@ launch_server:
 	if cfg.LaunchServer.Auth.APIKey != "secret-key" {
 		t.Fatalf("LaunchServer.Auth.APIKey 显式配置被覆盖: got=%q", cfg.LaunchServer.Auth.APIKey)
 	}
-	if cfg.LaunchServer.Auth.Header != "X-Custom-Ant-Key" {
+	if cfg.LaunchServer.Auth.Header != "X-Custom-Personal-Pilot-Key" {
 		t.Fatalf("LaunchServer.Auth.Header 显式配置被覆盖: got=%q", cfg.LaunchServer.Auth.Header)
 	}
 }

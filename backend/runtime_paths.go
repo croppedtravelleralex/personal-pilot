@@ -1,6 +1,6 @@
 package backend
 
-import "ant-chrome/backend/internal/apppath"
+import "personal-pilot/backend/internal/apppath"
 
 // EnsureRuntimeLayout 为运行时准备已安装应用的用户可写目录。
 func EnsureRuntimeLayout(appRoot string) error {

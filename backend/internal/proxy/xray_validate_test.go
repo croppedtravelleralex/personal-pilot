@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"ant-chrome/backend/internal/config"
+	"personal-pilot/backend/internal/config"
 	"strings"
 	"testing"
 )

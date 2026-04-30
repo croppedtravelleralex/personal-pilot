@@ -15,7 +15,7 @@ interface ProxyPickerModalProps {
 type SpeedResult = { ok: boolean; latencyMs: number; error: string }
 
 const ALL_GROUP = '__all__'
-const BATCH_TEST_CONCURRENCY = 20
+const BATCH_TEST_CONCURRENCY = 8
 
 export function ProxyPickerModal({ open, currentProxyId, onSelect, onClose }: ProxyPickerModalProps) {
   const [groups, setGroups] = useState<string[]>([])
@@ -28,6 +28,35 @@ export function ProxyPickerModal({ open, currentProxyId, onSelect, onClose }: Pr
   const [speedMap, setSpeedMap] = useState<Record<string, SpeedResult>>({})
   const [testingIds, setTestingIds] = useState<Set<string>>(new Set())
   const abortRef = useRef(false)
+  const pendingSpeedPatchRef = useRef<Record<string, SpeedResult>>({})
+  const pendingTestingDoneIdsRef = useRef<Set<string>>(new Set())
+  const speedPatchTimerRef = useRef<number | null>(null)
+
+  const flushSpeedPatch = () => {
+    speedPatchTimerRef.current = null
+    const patch = pendingSpeedPatchRef.current
+    const doneIds = pendingTestingDoneIdsRef.current
+    pendingSpeedPatchRef.current = {}
+    pendingTestingDoneIdsRef.current = new Set()
+    if (abortRef.current) return
+    if (Object.keys(patch).length > 0) {
+      setSpeedMap(prev => ({ ...prev, ...patch }))
+    }
+    if (doneIds.size > 0) {
+      setTestingIds(prev => {
+        const next = new Set(prev)
+        doneIds.forEach(id => next.delete(id))
+        return next
+      })
+    }
+  }
+
+  const queueSpeedPatch = (proxyId: string, result: SpeedResult) => {
+    pendingSpeedPatchRef.current[proxyId] = result
+    pendingTestingDoneIdsRef.current.add(proxyId)
+    if (speedPatchTimerRef.current !== null) return
+    speedPatchTimerRef.current = window.setTimeout(flushSpeedPatch, 120)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -37,7 +66,13 @@ export function ProxyPickerModal({ open, currentProxyId, onSelect, onClose }: Pr
     setTestingIds(new Set())
     abortRef.current = false
     loadData()
-    return () => { abortRef.current = true }
+    return () => {
+      abortRef.current = true
+      if (speedPatchTimerRef.current !== null) {
+        window.clearTimeout(speedPatchTimerRef.current)
+        speedPatchTimerRef.current = null
+      }
+    }
   }, [open])
 
   const loadData = async () => {
@@ -127,12 +162,7 @@ export function ProxyPickerModal({ open, currentProxyId, onSelect, onClose }: Pr
     const idSet = new Set(ids)
     const off = EventsOn('proxy:speed:result', (data: { proxyId: string; ok: boolean; latencyMs: number; error: string }) => {
       if (abortRef.current || !idSet.has(data.proxyId)) return
-      setSpeedMap(prev => ({ ...prev, [data.proxyId]: { ok: data.ok, latencyMs: data.latencyMs, error: data.error } }))
-      setTestingIds(prev => {
-        const next = new Set(prev)
-        next.delete(data.proxyId)
-        return next
-      })
+      queueSpeedPatch(data.proxyId, { ok: data.ok, latencyMs: data.latencyMs, error: data.error })
     })
     try {
       const results = await browserProxyBatchTestSpeed(ids, BATCH_TEST_CONCURRENCY)

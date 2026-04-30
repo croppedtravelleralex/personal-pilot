@@ -1,4 +1,4 @@
-module ant-chrome
+module personal-pilot
 
 go 1.25.0
 

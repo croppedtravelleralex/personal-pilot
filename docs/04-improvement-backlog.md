@@ -1,4 +1,4 @@
-# antbrowser 长期改进建议池
+# personal-pilot 长期改进建议池
 
 本文件记录长期改进建议，不直接替代路线图。
 状态词固定为：`Idea`、`Planned`、`In Progress`、`Done`、`Dropped`。
@@ -12,7 +12,7 @@
 | UX-003 | 自然语言任务完成态不完整 | 失败/取消态和监听释放曾不完整 | 补取消和失败态，并保持逐个 off 释放 | P2 | Done | `NaturalLanguageTask.tsx` 已经通过 API 层调用并逐个 off |
 | UX-004 | 实例工作台真实窗口激活未完成 | 工作台已能 API 操作和预览，现已补 Windows-only 外部窗口激活/平铺/主辅排列 | 继续做多屏、最小化其他窗口和布局恢复增强 | P1 | Done | `SynchronizerPage.tsx`、`app_synchronizer.go`、`window_control_windows.go` |
 | UX-005 | 工作台任务队列未持久化 | 当前任务队列是前端内存态，刷新页面会丢失历史 | 后端保存最近 200 条任务；后续再补分页筛选 | P2 | Done | `app_synchronizer.go`、`SynchronizerPage.tsx` |
-| UX-006 | 代理池缺免费候选导入 | 只能手动导入或刷新 Clash 订阅，免费代理候选缺自动抓取、直连检测和最新 IP 结果持久化 | 后端抓取公开 raw 列表，HTTP/HTTPS/SOCKS5 并发直连检测，通过后入库，最新 IP 检测结果覆盖写入 | P2 | Done | `BrowserProxyImportFreeDirectProxies`、`free_proxy.go`、`ProxyPoolPage.tsx` |
+| UX-006 | 代理池缺免费候选导入 | 只能手动导入或刷新 Clash 订阅，免费代理候选缺自动抓取、直连检测和最新 IP 结果持久化 | 后端抓取公开 raw 列表，HTTP/HTTPS/SOCKS5 并发直连检测，通过出口 IP + 真实 HTTPS 可用性探针后入库，最新 IP 检测结果覆盖写入 | P2 | Done | `BrowserProxyImportFreeDirectProxies`、`free_proxy.go`、`ProxyPoolPage.tsx`；已加固长 RPC 后台执行和批量结果节流 |
 | UX-007 | 工作台缺身份强度可见化 | 用户无法在软件内判断当前运行实例的指纹维度、一致性和 profile 安全状态 | 增加本地 CDP 指纹体检、身份强度报告、70+ 字段采集、466 个事件注册与迁移回归脚本同探针对比 | P1 | Done | `IdentityReportProfile`、`identity_report.go`、`fingerprint_verifier.go`、`SynchronizerPage.tsx` |
 
 ## 前端
@@ -46,7 +46,7 @@
 | ID | 标题 | 现象/问题 | 建议方向 | 优先级 | 状态 | 备注/证据 |
 | --- | --- | --- | --- | --- | --- | --- |
 | MTN-001 | 全仓后端测试未通过 | `go test ./backend/...` 失败在 `backend/internal/apppath` Darwin 路径测试 | 修复路径测试或平台条件，恢复质量门禁 | P0 | Done | 已修复 Darwin HOME 模拟路径，`go test -count=1 ./backend/...` 通过 |
-| MTN-002 | 缺真实浏览器 E2E 验收 | 行为包单测通过，但真实浏览器测试硬编码端口且可 skip | 建立可重复 E2E 或手工验收脚本 | P1 | Done | `ANT_RECORDING_E2E=1 go test -run TestRealFingerprintBrowserRecordPlayback` 已通过真实指纹 Chromium 录制/回放 |
+| MTN-002 | 缺真实浏览器 E2E 验收 | 行为包单测通过，但真实浏览器测试硬编码端口且可 skip | 建立可重复 E2E 或手工验收脚本 | P1 | Done | `PERSONAL_PILOT_RECORDING_E2E=1 go test -run TestRealFingerprintBrowserRecordPlayback` 已通过真实指纹 Chromium 录制/回放 |
 | MTN-003 | 录制数据敏感信息风险 | 输入内容可能明文保存到 JSON | 默认屏蔽密码/验证码字段，必要时加密或用户确认 | P1 | Done | 敏感输入默认脱敏保存；真实敏感值不回放 |
 | MTN-004 | 录制列表返回完整事件 | list API 和前端 state 都持有完整 events | 拆 metadata list/detail，详情按需加载 | P2 | Done | `BehaviorRecordingSummaryList` / HTTP list 返回 summary；详情走 `BehaviorGetRecordingDetail` 分页，manifest/index 已用于长录制索引读取 |
 ## 2026-04-29 收口记录

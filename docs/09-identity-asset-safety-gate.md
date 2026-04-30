@@ -4,7 +4,7 @@ Last updated: 2026-04-29
 
 ## Decision
 
-Antbrowser manages identity assets, not just browser windows. The production mainline stays at L0:
+PersonalPilot manages identity assets, not just browser windows. The production mainline stays at L0:
 
 - Real external fingerprint Chromium top-level windows.
 - Tauri is only the desktop shell and management UI.
@@ -146,7 +146,7 @@ Any operation that calls `RemoveAll` or equivalent destructive behavior must be 
 
 ## Fingerprint Acceptance
 
-Fingerprint verification should align with AdsPower-level external fields, while keeping Antbrowser's safety policy stricter.
+Fingerprint verification should align with AdsPower-level external fields, while keeping PersonalPilot's safety policy stricter.
 
 Stable fields must match across baseline/candidate, cold/hot starts, and repeated restarts for the same profile:
 

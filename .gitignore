@@ -23,7 +23,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-.ant-license.json
+.personal-pilot-license.json
 
 # Build outputs
 /bin/

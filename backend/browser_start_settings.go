@@ -1,8 +1,8 @@
 package backend
 
 import (
-	"ant-chrome/backend/internal/config"
 	"errors"
+	"personal-pilot/backend/internal/config"
 	"time"
 )
 

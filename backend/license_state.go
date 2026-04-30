@@ -1,15 +1,15 @@
 package backend
 
 import (
-	appconfig "ant-chrome/backend/internal/config"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	appconfig "personal-pilot/backend/internal/config"
 	"strings"
 )
 
-const localLicenseStateFilename = ".ant-license.json"
+const localLicenseStateFilename = ".personal-pilot-license.json"
 
 type localLicenseState struct {
 	MaxProfileLimit int      `json:"maxProfileLimit"`

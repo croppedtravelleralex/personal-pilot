@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"ant-chrome/backend/internal/behavior"
+	"personal-pilot/backend/internal/behavior"
 )
 
 type recordingHTTPTestAPI struct {

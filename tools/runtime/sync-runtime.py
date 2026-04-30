@@ -98,7 +98,7 @@ def download_archive(url: str, dest: Path) -> None:
         try:
             if tmp.exists():
                 tmp.unlink()
-            req = Request(url, headers={"User-Agent": "ant-chrome-runtime-sync/1.0"})
+            req = Request(url, headers={"User-Agent": "personal-pilot-runtime-sync/1.0"})
             with urlopen(req, timeout=120) as resp:
                 if getattr(resp, "status", 200) >= 400:
                     raise RuntimeError(f"download failed ({resp.status}): {url}")

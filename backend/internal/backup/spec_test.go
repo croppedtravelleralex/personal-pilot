@@ -1,8 +1,8 @@
 package backup
 
 import (
-	"ant-chrome/backend/internal/config"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	"testing"
 	"time"
 )
