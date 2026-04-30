@@ -114,7 +114,6 @@ const (
 	EventLLMTaskExecuting = "llm:task:executing"
 	EventLLMTaskStepDone  = "llm:task:step-done"
 	EventLLMTaskComplete  = "llm:task:complete"
-
 )
 
 // ─── Download ──────────────────────────────────────────────────────────────────
@@ -126,44 +125,5 @@ const (
 // AllEventNames returns every event name defined in this package.
 // Useful for documentation generation and validation.
 func AllEventNames() []string {
-	return []string{
-		EventBrowserInstanceStarted,
-		EventBrowserInstanceStopped,
-		EventBrowserInstanceCrashed,
-		EventBrowserInstanceUpdated,
-		EventProxyBridgeDied,
-		EventProxyBridgeFailed,
-		EventProxySpeedResult,
-		EventProxyIPHealthResult,
-		EventRiskFingerprintMismatch,
-		EventRiskFingerprintTimezoneIP,
-		EventRiskProxyHighLatency,
-		EventRiskProxyHealthDrop,
-		EventRiskProxyDatacenter,
-		EventRiskProxyAuthFailure,
-		EventRiskWebRTCLeak,
-		EventRiskDNSLeak,
-		EventRiskCaptchaDetected,
-		EventRiskCaptchaFailed,
-		EventRiskBrowserCrashLoop,
-		EventRiskSessionRateLimit,
-		EventRiskSessionCookieCleared,
-		EventRiskSessionSecurityChallenge,
-		EventRiskSystemLowDisk,
-		EventRiskSystemMemoryPressure,
-		EventRiskProfileCorrupted,
-		EventRiskNodeBanned,
-		EventRiskNodeGeoJump,
-		EventRiskNodeOffline,
-		EventAppRequestClose,
-		EventDownloadProgress,
-		EventAutomationPlaybackCompleted,
-		EventAutomationPlaybackFailed,
-		EventAutomationPlaybackProgress,
-		EventLLMTaskPlanning,
-		EventLLMTaskPlanReady,
-		EventLLMTaskExecuting,
-		EventLLMTaskStepDone,
-		EventLLMTaskComplete,
-	}
+	return AllRegistryNames()
 }

@@ -195,6 +195,13 @@ var migrations = []migration{
 			)`,
 		},
 	},
+	{
+		version: 10,
+		desc:    "add stable humanize seed to browser profiles",
+		stmts: []string{
+			`ALTER TABLE browser_profiles ADD COLUMN humanize_seed TEXT NOT NULL DEFAULT ''`,
+		},
+	},
 }
 
 // NewDB 创建新的数据库连接

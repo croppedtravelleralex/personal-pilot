@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  ShieldCheck,
   Square,
   XCircle,
 } from 'lucide-react'
@@ -28,6 +29,7 @@ import {
   captureProfileScreenshot,
   activateProfileWindow,
   arrangeProfileWindows,
+  checkWorkbenchIdentityReport,
   checkWorkbenchFingerprintHealthProfile,
   getBrowserInstanceStatus,
   listSyncGroups,
@@ -41,6 +43,7 @@ import type {
   SyncGroup,
   SyncWindow,
   WorkbenchFingerprintHealthProfile,
+  WorkbenchIdentityStrengthReport,
   WorkbenchTask,
   WorkbenchTaskType,
 } from './types'
@@ -114,6 +117,7 @@ type FingerprintHealthMap = Record<string, WorkbenchFingerprintHealthProfile>
 type FingerprintHealthUiLevel = WorkbenchFingerprintHealthProfile['level'] | 'coherent' | 'suspicious' | 'inconsistent'
 type FingerprintHealthCheck = WorkbenchFingerprintHealthProfile['checks'][number]
 type FingerprintHealthCheckStatus = 'passed' | 'warning' | 'failed' | 'unknown'
+type IdentityReportMap = Record<string, WorkbenchIdentityStrengthReport>
 
 const FINGERPRINT_HEALTH_LEVEL_UI: Record<
   'good' | 'warning' | 'risk' | 'unknown',
@@ -121,6 +125,17 @@ const FINGERPRINT_HEALTH_LEVEL_UI: Record<
 > = {
   good: { label: '良好', variant: 'success' },
   warning: { label: '预警', variant: 'warning' },
+  risk: { label: '风险', variant: 'error' },
+  unknown: { label: '未知', variant: 'default' },
+}
+
+const IDENTITY_LEVEL_UI: Record<
+  WorkbenchIdentityStrengthReport['level'],
+  { label: string; variant: 'default' | 'success' | 'error' | 'warning' | 'info' }
+> = {
+  strong: { label: '强身份', variant: 'success' },
+  normal: { label: '稳定', variant: 'info' },
+  weak: { label: '偏弱', variant: 'warning' },
   risk: { label: '风险', variant: 'error' },
   unknown: { label: '未知', variant: 'default' },
 }
@@ -169,6 +184,31 @@ function fingerprintHealthBadge(health: WorkbenchFingerprintHealthProfile) {
       {ui.label} {health.score}
     </Badge>
   )
+}
+
+function identityReportBadge(report: WorkbenchIdentityStrengthReport) {
+  const ui = IDENTITY_LEVEL_UI[report.level] || IDENTITY_LEVEL_UI.unknown
+  return (
+    <Badge variant={ui.variant} dot>
+      {ui.label} {report.score}
+    </Badge>
+  )
+}
+
+function getIdentityReportTime(report: WorkbenchIdentityStrengthReport) {
+  return readStringField(report, ['capturedAt', 'updatedAt', 'checkedAt'])
+}
+
+function getIdentityReportTimestamp(report: WorkbenchIdentityStrengthReport) {
+  const parsed = Date.parse(getIdentityReportTime(report))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function getIdentityReportSummary(report: WorkbenchIdentityStrengthReport) {
+  if (Array.isArray(report.summary) && report.summary.length > 0) return report.summary.slice(0, 2).join('；')
+  const abnormal = (report.dimensions || []).filter((dim) => dim.status === 'fail' || dim.status === 'warning')
+  if (abnormal.length === 0) return `全部 ${report.dimensions?.length || 0} 项通过`
+  return abnormal.slice(0, 2).map((dim) => `${dim.id}：${dim.message}`).join('；')
 }
 
 function getFingerprintHealthTime(health: WorkbenchFingerprintHealthProfile) {
@@ -288,6 +328,8 @@ export function SynchronizerPage() {
   const [previews, setPreviews] = useState<PreviewMap>({})
   const [fingerprintHealthById, setFingerprintHealthById] = useState<FingerprintHealthMap>({})
   const [fingerprintHealthCheckingIds, setFingerprintHealthCheckingIds] = useState<Set<string>>(new Set())
+  const [identityReportById, setIdentityReportById] = useState<IdentityReportMap>({})
+  const [identityReportCheckingIds, setIdentityReportCheckingIds] = useState<Set<string>>(new Set())
   const activeGroupIdRef = useRef(activeGroupId)
   const debouncedSearch = useDebouncedValue(search, 300)
 
@@ -453,6 +495,11 @@ export function SynchronizerPage() {
       .sort((a, b) => getFingerprintHealthTimestamp(b) - getFingerprintHealthTimestamp(a))
       .slice(0, 12)
   ), [fingerprintHealthById])
+  const identityReportResults = useMemo(() => (
+    Object.values(identityReportById)
+      .sort((a, b) => getIdentityReportTimestamp(b) - getIdentityReportTimestamp(a))
+      .slice(0, 12)
+  ), [identityReportById])
 
   const toggleSelect = (profileId: string) => {
     setSelectedIds((prev) => {
@@ -548,6 +595,11 @@ export function SynchronizerPage() {
             delete next[task.profileId]
             return next
           })
+          setIdentityReportById((prev) => {
+            const next = { ...prev }
+            delete next[task.profileId]
+            return next
+          })
           break
         }
         case 'navigate':
@@ -621,6 +673,58 @@ export function SynchronizerPage() {
         timestamp: new Date().toISOString(),
         status: 'error',
       })
+    }
+  }
+
+  const runIdentityReports = async (targets: BrowserProfile[]) => {
+    const runnable = targets.filter((profile) => profile.running && profile.debugReady)
+    if (runnable.length === 0) {
+      toast.warning('请选择正在运行且 CDP 就绪的实例')
+      return
+    }
+    for (const profile of runnable) {
+      setIdentityReportCheckingIds((prev) => {
+        const next = new Set(prev)
+        next.add(profile.profileId)
+        return next
+      })
+      try {
+        const report = await checkWorkbenchIdentityReport(profile.profileId)
+        const normalizedReport = {
+          ...report,
+          profileId: report.profileId || profile.profileId,
+          profileName: report.profileName || profile.profileName,
+        }
+        setIdentityReportById((prev) => ({
+          ...prev,
+          [normalizedReport.profileId]: normalizedReport,
+        }))
+        addActionToFeed({
+          id: `identity-${profile.profileId}-${Date.now()}`,
+          operation: 'identity-report',
+          windowName: profile.profileName,
+          detail: `身份强度 ${normalizedReport.score} · ${IDENTITY_LEVEL_UI[normalizedReport.level]?.label || normalizedReport.level}`,
+          timestamp: new Date().toISOString(),
+          status: 'ok',
+        })
+      } catch (err) {
+        const message = normalizeError(err)
+        addActionToFeed({
+          id: `identity-${profile.profileId}-${Date.now()}`,
+          operation: 'identity-report',
+          windowName: profile.profileName,
+          detail: message,
+          timestamp: new Date().toISOString(),
+          status: 'error',
+        })
+        toast.error(message)
+      } finally {
+        setIdentityReportCheckingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(profile.profileId)
+          return next
+        })
+      }
     }
   }
 
@@ -792,6 +896,9 @@ export function SynchronizerPage() {
                   <Button size="sm" variant="secondary" className="whitespace-nowrap shrink-0" onClick={() => enqueueTasks('fingerprint-health', selectedRunningProfiles)} disabled={selectedRunningProfiles.length === 0 || taskRunning}>
                     <Fingerprint className="w-3.5 h-3.5" /> 指纹体检
                   </Button>
+                  <Button size="sm" variant="secondary" className="whitespace-nowrap shrink-0" onClick={() => runIdentityReports(selectedRunningProfiles)} disabled={selectedRunningProfiles.length === 0 || taskRunning || identityReportCheckingIds.size > 0}>
+                    <ShieldCheck className="w-3.5 h-3.5" /> 身份体检
+                  </Button>
                 </div>
               </div>
 
@@ -887,6 +994,8 @@ export function SynchronizerPage() {
                 const preview = previews[profile.profileId]
                 const fingerprintHealth = fingerprintHealthById[profile.profileId]
                 const fingerprintHealthChecking = fingerprintHealthCheckingIds.has(profile.profileId)
+                const identityReport = identityReportById[profile.profileId]
+                const identityReportChecking = identityReportCheckingIds.has(profile.profileId)
                 const selected = selectedIds.has(profile.profileId)
 
                 return (
@@ -934,6 +1043,7 @@ export function SynchronizerPage() {
                                 <Badge key={tag} size="sm">{tag}</Badge>
                               ))}
                               {fingerprintHealth && fingerprintHealthBadge(fingerprintHealth)}
+                              {identityReport && identityReportBadge(identityReport)}
                             </div>
                           </div>
                           <Link to={`/browser/edit/${profile.profileId}`}>
@@ -979,6 +1089,23 @@ export function SynchronizerPage() {
                           </div>
                         )}
 
+                        {identityReport && (
+                          <div className="rounded-md border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] px-2.5 py-2 text-xs min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)]" />
+                                <span className="font-medium text-[var(--color-text-primary)] shrink-0">身份强度</span>
+                                <span className="text-[var(--color-text-muted)] truncate">
+                                  {getIdentityReportSummary(identityReport)}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-[var(--color-text-muted)] shrink-0">
+                                {identityReport.dimensions?.length || 0} 项
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex flex-wrap gap-2 mt-auto">
                           <Button size="sm" variant="ghost" onClick={() => enqueueTasks('activate', [profile])} disabled={!profile.running || !(runtime?.pid || profile.pid) || taskRunning}>
                             <MousePointer2 className="w-3.5 h-3.5" /> 激活
@@ -1004,6 +1131,9 @@ export function SynchronizerPage() {
                           <Button size="sm" variant="ghost" className="whitespace-nowrap shrink-0" onClick={() => enqueueTasks('fingerprint-health', [profile])} disabled={!profile.running || !profile.debugReady || taskRunning} loading={fingerprintHealthChecking}>
                             <Fingerprint className="w-3.5 h-3.5" /> 体检
                           </Button>
+                          <Button size="sm" variant="ghost" className="whitespace-nowrap shrink-0" onClick={() => runIdentityReports([profile])} disabled={!profile.running || !profile.debugReady || taskRunning || identityReportChecking} loading={identityReportChecking}>
+                            <ShieldCheck className="w-3.5 h-3.5" /> 身份
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -1017,6 +1147,50 @@ export function SynchronizerPage() {
         </div>
 
         <div className="space-y-4 min-w-0">
+          <Card title="身份强度报告" subtitle={identityReportResults.length > 0 ? `最近 ${identityReportResults.length} 条` : '等待体检'}>
+            {identityReportResults.length === 0 ? (
+              <div className="py-10 text-center text-xs text-[var(--color-text-muted)]">
+                暂无身份体检结果
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {identityReportResults.map((report) => {
+                  const abnormal = (report.dimensions || []).filter((dim) => dim.status === 'fail' || dim.status === 'warning')
+                  const checkedAt = getIdentityReportTimestamp(report)
+                  const profileName = report.profileName || profileNameById.get(report.profileId) || report.profileId
+
+                  return (
+                    <div key={report.profileId} className="rounded-lg border border-[var(--color-border-muted)] px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">
+                            {profileName}
+                          </p>
+                          <p className="text-[11px] text-[var(--color-text-muted)] truncate">
+                            {checkedAt > 0 ? new Date(checkedAt).toLocaleTimeString() : '刚刚'} · {report.source || 'local-cdp'}
+                          </p>
+                        </div>
+                        {identityReportBadge(report)}
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 gap-1.5 text-[11px]">
+                        <Badge size="sm" variant="default">指纹 {report.subscores.fingerprintVisible}</Badge>
+                        <Badge size="sm" variant="default">一致 {report.subscores.consistency}</Badge>
+                        <Badge size="sm" variant="default">Profile {report.subscores.profilePersistence}</Badge>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <Badge size="sm" variant="success">维度 {report.dimensions?.length || 0}</Badge>
+                        <Badge size="sm" variant={abnormal.length > 0 ? 'warning' : 'default'}>异常 {abnormal.length}</Badge>
+                      </div>
+                      <p className="mt-2 text-[11px] text-[var(--color-text-secondary)] line-clamp-2">
+                        {getIdentityReportSummary(report)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+
           <Card title="指纹体检结果" subtitle={fingerprintHealthResults.length > 0 ? `最近 ${fingerprintHealthResults.length} 条` : '等待体检'}>
             {fingerprintHealthResults.length === 0 ? (
               <div className="py-10 text-center text-xs text-[var(--color-text-muted)]">

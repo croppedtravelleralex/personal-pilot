@@ -12,6 +12,8 @@
 | UX-003 | 自然语言任务完成态不完整 | 失败/取消态和监听释放曾不完整 | 补取消和失败态，并保持逐个 off 释放 | P2 | Done | `NaturalLanguageTask.tsx` 已经通过 API 层调用并逐个 off |
 | UX-004 | 实例工作台真实窗口激活未完成 | 工作台已能 API 操作和预览，现已补 Windows-only 外部窗口激活/平铺/主辅排列 | 继续做多屏、最小化其他窗口和布局恢复增强 | P1 | Done | `SynchronizerPage.tsx`、`app_synchronizer.go`、`window_control_windows.go` |
 | UX-005 | 工作台任务队列未持久化 | 当前任务队列是前端内存态，刷新页面会丢失历史 | 后端保存最近 200 条任务；后续再补分页筛选 | P2 | Done | `app_synchronizer.go`、`SynchronizerPage.tsx` |
+| UX-006 | 代理池缺免费候选导入 | 只能手动导入或刷新 Clash 订阅，免费代理候选缺自动抓取、直连检测和最新 IP 结果持久化 | 后端抓取公开 raw 列表，HTTP/HTTPS/SOCKS5 并发直连检测，通过后入库，最新 IP 检测结果覆盖写入 | P2 | Done | `BrowserProxyImportFreeDirectProxies`、`free_proxy.go`、`ProxyPoolPage.tsx` |
+| UX-007 | 工作台缺身份强度可见化 | 用户无法在软件内判断当前运行实例的指纹维度、一致性和 profile 安全状态 | 增加本地 CDP 指纹体检、身份强度报告、70+ 字段采集、466 个事件注册与迁移回归脚本同探针对比 | P1 | Done | `IdentityReportProfile`、`identity_report.go`、`fingerprint_verifier.go`、`SynchronizerPage.tsx` |
 
 ## 前端
 

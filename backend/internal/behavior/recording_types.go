@@ -188,12 +188,14 @@ type ActiveRecordingStatus struct {
 
 // VariationConfig controls how much random variation to apply during playback.
 type VariationConfig struct {
-	Intensity        float64 `json:"intensity"`        // 0.0-1.0 overall variation strength
-	TimingJitter     float64 `json:"timingJitter"`     // max timing offset in ms
-	PositionJitter   float64 `json:"positionJitter"`   // max position offset in pixels
-	SpeedVariation   float64 `json:"speedVariation"`   // 0.0-1.0 speed multiplier range
-	MicroCorrections bool    `json:"microCorrections"` // add overshoot/undershoot corrections
-	ExtraPauses      bool    `json:"extraPauses"`      // insert random pauses between actions
+	Intensity         float64            `json:"intensity"`        // 0.0-1.0 overall variation strength
+	TimingJitter      float64            `json:"timingJitter"`     // max timing offset in ms
+	PositionJitter    float64            `json:"positionJitter"`   // max position offset in pixels
+	SpeedVariation    float64            `json:"speedVariation"`   // 0.0-1.0 speed multiplier range
+	MicroCorrections  bool               `json:"microCorrections"` // add overshoot/undershoot corrections
+	ExtraPauses       bool               `json:"extraPauses"`      // insert random pauses between actions
+	ExecutionPolicy   *ExecutionPolicy   `json:"executionPolicy,omitempty"`
+	TemplateSemantics *TemplateSemantics `json:"templateSemantics,omitempty"`
 }
 
 // NewRecordingExportBundle creates a stable JSON export wrapper.

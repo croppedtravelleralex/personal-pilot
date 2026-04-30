@@ -1,15 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronDown, ChevronUp, Play, Square, Trash2, Circle, Zap, Pencil, Search, X,
-  Info, WifiOff, Download, Upload, Copy as CopyIcon, RotateCcw,
+  Info, WifiOff, Download, Upload, Copy as CopyIcon, RotateCcw, AlertTriangle,
+  Shield, ShieldAlert,
 } from 'lucide-react'
 import { Button, FormItem, Input, Select, Textarea, toast } from '../../../shared/components'
-import type { PlaybackEventPayload, PlaybackProgressPayload, RecordingSummary, VariationConfig } from '../types'
+import {
+  BEHAVIOR_EXECUTION_PERMISSION_MODES,
+  BEHAVIOR_HUMAN_BOUNDARIES,
+  BEHAVIOR_HUMAN_BOUNDARY_LABELS,
+  DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE,
+} from '../types'
+import type {
+  BehaviorExecutionPermissionMode, PlaybackEventPayload, PlaybackProgressPayload,
+  PlaybackReviewDecision, RecordingSummary, VariationConfig,
+} from '../types'
 import {
   startRecording, stopRecording, fetchRecordingSummaries, deleteRecording,
   playRecording, stopPlayback, quickRecord, cleanupRecordingSessions,
   renameRecording, onPlaybackEvents, fetchRecordingStatus, exportRecording,
-  importRecording, copyRecording,
+  importRecording, copyRecording, buildPlaybackVariation, reviewPlayback,
+  activateBrowserProfile,
 } from '../api'
 import { RecordingDetailModal } from './RecordingDetailModal'
 
@@ -30,6 +41,22 @@ const DEFAULT_VARIATION: VariationConfig = {
 const SEARCH_DEBOUNCE_MS = 300
 const LIST_PAGE_SIZES = [25, 50, 100]
 const PLAYBACK_OPTION_LIMIT = 200
+const LOW_CONFIDENCE_PAUSE_STATUSES = new Set(['low_confidence_paused', 'paused_low_confidence', 'needs_review'])
+
+const PERMISSION_MODE_COPY: Record<BehaviorExecutionPermissionMode, { label: string; description: string }> = {
+  ask_each_time: {
+    label: '每次询问',
+    description: '执行前逐步确认，默认最稳。',
+  },
+  auto_review: {
+    label: '自动审查',
+    description: '普通步骤自动走，风险步骤暂停。',
+  },
+  full_access: {
+    label: '完全权限',
+    description: '普通步骤放行，人工边界仍强制暂停。',
+  },
+}
 
 interface PlaybackRequest {
   profileId: string
@@ -47,6 +74,7 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [variation, setVariation] = useState<VariationConfig>(DEFAULT_VARIATION)
+  const [executionPermissionMode, setExecutionPermissionMode] = useState<BehaviorExecutionPermissionMode>(DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [playRecordingId, setPlayRecordingId] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -67,6 +95,7 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
   const [lastPlaybackRequest, setLastPlaybackRequest] = useState<PlaybackRequest | null>(null)
   const [playbackError, setPlaybackError] = useState('')
   const [playbackProgress, setPlaybackProgress] = useState<PlaybackProgressPayload | null>(null)
+  const [reviewLoading, setReviewLoading] = useState<PlaybackReviewDecision | 'takeover' | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Load recordings list
@@ -172,8 +201,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       setElapsedSec(0)
       await syncRecordingStatus()
       toast.success('录制已开始 - 请在浏览器中操作')
-    } catch (e: any) {
-      toast.error(`开始录制失败: ${e?.message || e}`)
+    } catch (e) {
+      toast.error(`开始录制失败: ${getErrorMessage(e)}`)
     } finally {
       setLoading(false)
     }
@@ -191,8 +220,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await syncRecordingStatus()
       toast.success('录制已保存')
       await loadRecordings()
-    } catch (e: any) {
-      toast.error(`停止录制失败: ${e?.message || e}`)
+    } catch (e) {
+      toast.error(`停止录制失败: ${getErrorMessage(e)}`)
     } finally {
       setLoading(false)
     }
@@ -207,8 +236,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       const rec = await quickRecord(profileId)
       if (rec) toast.success(`养号录制完成: ${rec.name}`)
       await loadRecordings()
-    } catch (e: any) {
-      toast.error(`养号录制失败: ${e?.message || e}`)
+    } catch (e) {
+      toast.error(`养号录制失败: ${getErrorMessage(e)}`)
     } finally {
       setLoading(false)
     }
@@ -222,8 +251,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await loadRecordings()
       if (playRecordingId === id) setPlayRecordingId('')
       if (detailRecordingId === id) setDetailRecordingId(null)
-    } catch (e: any) {
-      toast.error(`删除失败: ${e?.message || e}`)
+    } catch (e) {
+      toast.error(`删除失败: ${getErrorMessage(e)}`)
     }
   }
 
@@ -314,8 +343,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await renameRecording(editingId, editName.trim())
       setRecordings(prev => prev.map(r => r.id === editingId ? { ...r, name: editName.trim() } : r))
       toast.success('名称已更新')
-    } catch (e: any) {
-      toast.error(`重命名失败: ${e?.message || e}`)
+    } catch (e) {
+      toast.error(`重命名失败: ${getErrorMessage(e)}`)
     }
     setEditingId(null)
   }
@@ -327,11 +356,15 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
   const runPlayback = async (request: PlaybackRequest) => {
     setLoading(true)
     setPlaybackError('')
-    setLastPlaybackRequest(request)
-    const selected = recordings.find(r => r.id === request.recordingId)
+    const requestWithPolicy: PlaybackRequest = {
+      ...request,
+      variation: buildPlaybackVariation(request.variation),
+    }
+    setLastPlaybackRequest(requestWithPolicy)
+    const selected = recordings.find(r => r.id === requestWithPolicy.recordingId)
     setPlaybackProgress({
-      profileId: request.profileId,
-      recordingId: request.recordingId,
+      profileId: requestWithPolicy.profileId,
+      recordingId: requestWithPolicy.recordingId,
       eventIndex: 0,
       eventTotal: selected ? getEventCount(selected) : 0,
       percent: 0,
@@ -339,7 +372,7 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       status: 'starting',
     })
     try {
-      await playRecording(request.profileId, request.recordingId, request.variation)
+      await playRecording(requestWithPolicy.profileId, requestWithPolicy.recordingId, requestWithPolicy.variation)
       setIsPlaying(true)
       toast.success('回放已开始')
     } catch (e) {
@@ -359,7 +392,7 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
     await runPlayback({
       profileId,
       recordingId: playRecordingId,
-      variation: { ...variation },
+      variation: buildPlaybackVariation(variation, executionPermissionMode),
     })
   }
 
@@ -376,8 +409,40 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await stopPlayback(profileId)
       setIsPlaying(false)
       toast.success('回放已停止')
-    } catch (e: any) {
-      toast.error(`停止回放失败: ${e?.message || e}`)
+    } catch (e) {
+      toast.error(`停止回放失败: ${getErrorMessage(e)}`)
+    }
+  }
+
+  const handlePlaybackReview = async (decision: PlaybackReviewDecision) => {
+    if (!profileId) return
+    setReviewLoading(decision)
+    try {
+      await reviewPlayback(profileId, decision)
+      if (decision === 'continue') toast.success('已确认继续')
+      if (decision === 'skip') toast.success('已跳过当前步骤')
+      if (decision === 'stop') {
+        setIsPlaying(false)
+        toast.success('已终止回放')
+      }
+    } catch (e) {
+      toast.error(`处理暂停失败: ${getErrorMessage(e)}`)
+    } finally {
+      setReviewLoading(null)
+    }
+  }
+
+  const handleTakeoverBrowser = async () => {
+    if (!profileId) return
+    setReviewLoading('takeover')
+    try {
+      const ok = await activateBrowserProfile(profileId)
+      if (ok) toast.success('已激活外部浏览器，请在真实窗口中接管')
+      else toast.error('当前环境不支持激活外部浏览器')
+    } catch (e) {
+      toast.error(`接管失败: ${getErrorMessage(e)}`)
+    } finally {
+      setReviewLoading(null)
     }
   }
 
@@ -387,8 +452,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await cleanupRecordingSessions()
       toast.success('卡死会话已清理')
       await loadRecordings()
-    } catch (e: any) {
-      toast.error(`清理失败: ${e?.message || e}`)
+    } catch (e) {
+      toast.error(`清理失败: ${getErrorMessage(e)}`)
     }
   }
 
@@ -436,6 +501,14 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
   const playbackPercent = playbackProgress
     ? Math.max(0, Math.min(100, Math.round(playbackProgress.percent || 0)))
     : 0
+  const mandatoryHumanBoundaryText = BEHAVIOR_HUMAN_BOUNDARIES
+    .map(boundary => BEHAVIOR_HUMAN_BOUNDARY_LABELS[boundary])
+    .join('、')
+  const activePermissionCopy = PERMISSION_MODE_COPY[executionPermissionMode]
+  const playbackPermissionMode = lastPlaybackRequest?.variation.executionPolicy?.permissionMode ?? executionPermissionMode
+  const isLowConfidencePaused = playbackProgress
+    ? LOW_CONFIDENCE_PAUSE_STATUSES.has(playbackProgress.status)
+    : false
 
   return (
     <div className="space-y-4">
@@ -513,6 +586,52 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
         )}
       </div>
 
+      <div className="rounded-lg border-2 border-[var(--color-accent)] bg-[var(--color-bg-subtle)] px-3 py-3 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2 min-w-0">
+            <ShieldAlert className="w-4 h-4 mt-0.5 text-[var(--color-accent)] shrink-0" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[var(--color-text)]">执行权限：{activePermissionCopy.label}</div>
+              <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                默认每次询问；低置信暂停只显示原因和下一步动作。
+              </div>
+            </div>
+          </div>
+          <span className="text-[10px] px-2 py-1 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] shrink-0">
+            模板策略
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+          {BEHAVIOR_EXECUTION_PERMISSION_MODES.map(mode => {
+            const copy = PERMISSION_MODE_COPY[mode]
+            const active = executionPermissionMode === mode
+            return (
+              <button
+                key={mode}
+                type="button"
+                className={`text-left rounded-md border px-3 py-2 transition-colors ${
+                  active
+                    ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text)]'
+                    : 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]'
+                }`}
+                onClick={() => setExecutionPermissionMode(mode)}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold">
+                  <Shield className="w-3.5 h-3.5" />
+                  {copy.label}
+                </span>
+                <span className="block mt-1 text-[10px] leading-snug">{copy.description}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-2 text-[10px] leading-relaxed text-[var(--color-text-muted)]">
+          强制人工边界：{mandatoryHumanBoundaryText}。不启用第三方检测，不嵌入目标站截图、候选元素或推荐点。
+        </div>
+      </div>
+
       {/* Search bar */}
       {recordings.length > 0 && !isRecording && (
         <div className="relative">
@@ -577,8 +696,59 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
                   />
                 </div>
                 <div className="text-[10px] text-[var(--color-text-muted)]">
-                  elapsed {formatElapsedMs(playbackProgress.elapsedMs)}
+                  elapsed {formatElapsedMs(playbackProgress.elapsedMs)} · 权限 {PERMISSION_MODE_COPY[playbackPermissionMode].label}
                 </div>
+                {isLowConfidencePaused && (
+                  <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-amber-900">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      低置信暂停
+                    </div>
+                    <div className="mt-1">原因：{playbackProgress.reason || '当前步骤置信度不足。'}</div>
+                    <div>动作：{playbackProgress.action || '请人工确认后继续或停止回放。'}</div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Button
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => handlePlaybackReview('continue')}
+                        loading={reviewLoading === 'continue'}
+                        disabled={!hasRunningProfile || !!reviewLoading}
+                      >
+                        确认继续
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2"
+                        onClick={handleTakeoverBrowser}
+                        loading={reviewLoading === 'takeover'}
+                        disabled={!hasRunningProfile || !!reviewLoading}
+                      >
+                        接管浏览器
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2"
+                        onClick={() => handlePlaybackReview('skip')}
+                        loading={reviewLoading === 'skip'}
+                        disabled={!hasRunningProfile || !!reviewLoading}
+                      >
+                        跳过
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        className="h-7 px-2"
+                        onClick={() => handlePlaybackReview('stop')}
+                        loading={reviewLoading === 'stop'}
+                        disabled={!hasRunningProfile || !!reviewLoading}
+                      >
+                        终止
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
             {playbackError && lastPlaybackRequest && (

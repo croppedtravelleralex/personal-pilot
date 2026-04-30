@@ -45,6 +45,26 @@ const (
 	EventAutomationBatchStarted = "automation:batch:started"
 	// EventAutomationBatchSummary is generated from registry.
 	EventAutomationBatchSummary = "automation:batch:summary"
+	// EventAutomationGuardAccountSettingsDetected is generated from registry.
+	EventAutomationGuardAccountSettingsDetected = "automation:guard:account-settings-detected"
+	// EventAutomationGuardCaptchaDetected is generated from registry.
+	EventAutomationGuardCaptchaDetected = "automation:guard:captcha-detected"
+	// EventAutomationGuardDeleteDetected is generated from registry.
+	EventAutomationGuardDeleteDetected = "automation:guard:delete-detected"
+	// EventAutomationGuardManualRequired is generated from registry.
+	EventAutomationGuardManualRequired = "automation:guard:manual-required"
+	// EventAutomationGuardPasswordDetected is generated from registry.
+	EventAutomationGuardPasswordDetected = "automation:guard:password-detected"
+	// EventAutomationGuardSwitchAccountDetected is generated from registry.
+	EventAutomationGuardSwitchAccountDetected = "automation:guard:switch-account-detected"
+	// EventAutomationGuardTwoFactorDetected is generated from registry.
+	EventAutomationGuardTwoFactorDetected = "automation:guard:two-factor-detected"
+	// EventAutomationPermissionAskEachTime is generated from registry.
+	EventAutomationPermissionAskEachTime = "automation:permission:ask-each-time"
+	// EventAutomationPermissionAutoReview is generated from registry.
+	EventAutomationPermissionAutoReview = "automation:permission:auto-review"
+	// EventAutomationPermissionFullAccess is generated from registry.
+	EventAutomationPermissionFullAccess = "automation:permission:full-access"
 	// EventAutomationRuleCooldownSkipped is generated from registry.
 	EventAutomationRuleCooldownSkipped = "automation:rule:cooldown-skipped"
 	// EventAutomationRuleTriggered is generated from registry.
@@ -69,20 +89,40 @@ const (
 	EventAutomationScriptRetrying = "automation:script:retrying"
 	// EventAutomationScriptStarted is generated from registry.
 	EventAutomationScriptStarted = "automation:script:started"
+	// EventAutomationTargetConfidenceHigh is generated from registry.
+	EventAutomationTargetConfidenceHigh = "automation:target:confidence-high"
+	// EventAutomationTargetConfidenceLow is generated from registry.
+	EventAutomationTargetConfidenceLow = "automation:target:confidence-low"
+	// EventAutomationTargetConfidenceMedium is generated from registry.
+	EventAutomationTargetConfidenceMedium = "automation:target:confidence-medium"
+	// EventAutomationTargetHitTestFail is generated from registry.
+	EventAutomationTargetHitTestFail = "automation:target:hit-test-fail"
+	// EventAutomationTargetHitTestPass is generated from registry.
+	EventAutomationTargetHitTestPass = "automation:target:hit-test-pass"
+	// EventAutomationTaskBehaviorRiskBlocked is generated from registry.
+	EventAutomationTaskBehaviorRiskBlocked = "automation:task:behavior-risk-blocked"
 	// EventAutomationTaskCancelled is generated from registry.
 	EventAutomationTaskCancelled = "automation:task:cancelled"
 	// EventAutomationTaskCompleted is generated from registry.
 	EventAutomationTaskCompleted = "automation:task:completed"
+	// EventAutomationTaskCookieRiskBlocked is generated from registry.
+	EventAutomationTaskCookieRiskBlocked = "automation:task:cookie-risk-blocked"
 	// EventAutomationTaskCreated is generated from registry.
 	EventAutomationTaskCreated = "automation:task:created"
 	// EventAutomationTaskExpired is generated from registry.
 	EventAutomationTaskExpired = "automation:task:expired"
 	// EventAutomationTaskFailed is generated from registry.
 	EventAutomationTaskFailed = "automation:task:failed"
+	// EventAutomationTaskIdentityRiskBlocked is generated from registry.
+	EventAutomationTaskIdentityRiskBlocked = "automation:task:identity-risk-blocked"
 	// EventAutomationTaskPaused is generated from registry.
 	EventAutomationTaskPaused = "automation:task:paused"
+	// EventAutomationTaskProfileLockBlocked is generated from registry.
+	EventAutomationTaskProfileLockBlocked = "automation:task:profile-lock-blocked"
 	// EventAutomationTaskProgress is generated from registry.
 	EventAutomationTaskProgress = "automation:task:progress"
+	// EventAutomationTaskProxyRiskBlocked is generated from registry.
+	EventAutomationTaskProxyRiskBlocked = "automation:task:proxy-risk-blocked"
 	// EventAutomationTaskResumed is generated from registry.
 	EventAutomationTaskResumed = "automation:task:resumed"
 	// EventAutomationTaskRetried is generated from registry.
@@ -105,6 +145,78 @@ const (
 	EventBackupImportStarted = "backup:import:started"
 	// EventBackupImportValidating is generated from registry.
 	EventBackupImportValidating = "backup:import:validating"
+	// EventBehaviorCadenceBotLike is generated from registry.
+	EventBehaviorCadenceBotLike = "behavior:cadence:bot-like"
+	// EventBehaviorCadenceHuman is generated from registry.
+	EventBehaviorCadenceHuman = "behavior:cadence:human"
+	// EventBehaviorCadenceMixed is generated from registry.
+	EventBehaviorCadenceMixed = "behavior:cadence:mixed"
+	// EventBehaviorClickOffsetApplied is generated from registry.
+	EventBehaviorClickOffsetApplied = "behavior:click:offset-applied"
+	// EventBehaviorClickStrictFailed is generated from registry.
+	EventBehaviorClickStrictFailed = "behavior:click:strict-failed"
+	// EventBehaviorHumanBoundaryDetected is generated from registry.
+	EventBehaviorHumanBoundaryDetected = "behavior:human-boundary:detected"
+	// EventBehaviorMoveDegraded is generated from registry.
+	EventBehaviorMoveDegraded = "behavior:move:degraded"
+	// EventBehaviorPermissionModeChanged is generated from registry.
+	EventBehaviorPermissionModeChanged = "behavior:permission-mode:changed"
+	// EventBehaviorPlaybackCompleted is generated from registry.
+	EventBehaviorPlaybackCompleted = "behavior:playback:completed"
+	// EventBehaviorPlaybackDecisionContinue is generated from registry.
+	EventBehaviorPlaybackDecisionContinue = "behavior:playback:decision-continue"
+	// EventBehaviorPlaybackDecisionSkip is generated from registry.
+	EventBehaviorPlaybackDecisionSkip = "behavior:playback:decision-skip"
+	// EventBehaviorPlaybackDecisionStop is generated from registry.
+	EventBehaviorPlaybackDecisionStop = "behavior:playback:decision-stop"
+	// EventBehaviorPlaybackFailed is generated from registry.
+	EventBehaviorPlaybackFailed = "behavior:playback:failed"
+	// EventBehaviorPlaybackNeedsReview is generated from registry.
+	EventBehaviorPlaybackNeedsReview = "behavior:playback:needs-review"
+	// EventBehaviorPlaybackProgress is generated from registry.
+	EventBehaviorPlaybackProgress = "behavior:playback:progress"
+	// EventBehaviorPlaybackStarted is generated from registry.
+	EventBehaviorPlaybackStarted = "behavior:playback:started"
+	// EventBehaviorRecordingDeleted is generated from registry.
+	EventBehaviorRecordingDeleted = "behavior:recording:deleted"
+	// EventBehaviorRecordingEventPageLoaded is generated from registry.
+	EventBehaviorRecordingEventPageLoaded = "behavior:recording:event-page-loaded"
+	// EventBehaviorRecordingExported is generated from registry.
+	EventBehaviorRecordingExported = "behavior:recording:exported"
+	// EventBehaviorRecordingImported is generated from registry.
+	EventBehaviorRecordingImported = "behavior:recording:imported"
+	// EventBehaviorRecordingSaved is generated from registry.
+	EventBehaviorRecordingSaved = "behavior:recording:saved"
+	// EventBehaviorRecordingSensitiveRedacted is generated from registry.
+	EventBehaviorRecordingSensitiveRedacted = "behavior:recording:sensitive-redacted"
+	// EventBehaviorRecordingStarted is generated from registry.
+	EventBehaviorRecordingStarted = "behavior:recording:started"
+	// EventBehaviorRecordingStopped is generated from registry.
+	EventBehaviorRecordingStopped = "behavior:recording:stopped"
+	// EventBehaviorReviewPromptHiddenEvidence is generated from registry.
+	EventBehaviorReviewPromptHiddenEvidence = "behavior:review:prompt-hidden-evidence"
+	// EventBehaviorReviewResumed is generated from registry.
+	EventBehaviorReviewResumed = "behavior:review:resumed"
+	// EventBehaviorReviewTimeout is generated from registry.
+	EventBehaviorReviewTimeout = "behavior:review:timeout"
+	// EventBehaviorScrollPlanGenerated is generated from registry.
+	EventBehaviorScrollPlanGenerated = "behavior:scroll-plan:generated"
+	// EventBehaviorTakeoverRequested is generated from registry.
+	EventBehaviorTakeoverRequested = "behavior:takeover:requested"
+	// EventBehaviorTargetLowConfidence is generated from registry.
+	EventBehaviorTargetLowConfidence = "behavior:target:low-confidence"
+	// EventBehaviorTargetResolved is generated from registry.
+	EventBehaviorTargetResolved = "behavior:target:resolved"
+	// EventBehaviorTemplateCreated is generated from registry.
+	EventBehaviorTemplateCreated = "behavior:template:created"
+	// EventBehaviorTemplateRejected is generated from registry.
+	EventBehaviorTemplateRejected = "behavior:template:rejected"
+	// EventBehaviorTemplateUpdated is generated from registry.
+	EventBehaviorTemplateUpdated = "behavior:template:updated"
+	// EventBehaviorTemplateValidated is generated from registry.
+	EventBehaviorTemplateValidated = "behavior:template:validated"
+	// EventBehaviorTypingPlanGenerated is generated from registry.
+	EventBehaviorTypingPlanGenerated = "behavior:typing-plan:generated"
 	// EventBrowserInstanceStartCdpAttached is generated from registry.
 	EventBrowserInstanceStartCdpAttached = "browser:instance:start:cdp-attached"
 	// EventBrowserInstanceStartCdpAttaching is generated from registry.
@@ -181,6 +293,68 @@ const (
 	EventContentPublishScheduled = "content:publish:scheduled"
 	// EventContentPublishSubmitted is generated from registry.
 	EventContentPublishSubmitted = "content:publish:submitted"
+	// EventCookieBackupCompleted is generated from registry.
+	EventCookieBackupCompleted = "cookie:backup:completed"
+	// EventCookieBackupFailed is generated from registry.
+	EventCookieBackupFailed = "cookie:backup:failed"
+	// EventCookieBackupManifestWritten is generated from registry.
+	EventCookieBackupManifestWritten = "cookie:backup:manifest-written"
+	// EventCookieBackupStarted is generated from registry.
+	EventCookieBackupStarted = "cookie:backup:started"
+	// EventCookieCountChanged is generated from registry.
+	EventCookieCountChanged = "cookie:count:changed"
+	// EventCookieDbCorrupted is generated from registry.
+	EventCookieDbCorrupted = "cookie:db:corrupted"
+	// EventCookieDbLocked is generated from registry.
+	EventCookieDbLocked = "cookie:db:locked"
+	// EventCookieDbUnlocked is generated from registry.
+	EventCookieDbUnlocked = "cookie:db:unlocked"
+	// EventCookieDomainExported is generated from registry.
+	EventCookieDomainExported = "cookie:domain:exported"
+	// EventCookieDomainImported is generated from registry.
+	EventCookieDomainImported = "cookie:domain:imported"
+	// EventCookieEncryptedStoreUnavailable is generated from registry.
+	EventCookieEncryptedStoreUnavailable = "cookie:encrypted-store:unavailable"
+	// EventCookieImportConflict is generated from registry.
+	EventCookieImportConflict = "cookie:import:conflict"
+	// EventCookieIntegrityChanged is generated from registry.
+	EventCookieIntegrityChanged = "cookie:integrity:changed"
+	// EventCookieIntegrityChecked is generated from registry.
+	EventCookieIntegrityChecked = "cookie:integrity:checked"
+	// EventCookieIntegrityMatched is generated from registry.
+	EventCookieIntegrityMatched = "cookie:integrity:matched"
+	// EventCookiePersistentCookieSummary is generated from registry.
+	EventCookiePersistentCookieSummary = "cookie:persistent-cookie:summary"
+	// EventCookieProfileBindingRejected is generated from registry.
+	EventCookieProfileBindingRejected = "cookie:profile-binding:rejected"
+	// EventCookieProfileBindingValidated is generated from registry.
+	EventCookieProfileBindingValidated = "cookie:profile-binding:validated"
+	// EventCookieReadCompleted is generated from registry.
+	EventCookieReadCompleted = "cookie:read:completed"
+	// EventCookieRestoreCompleted is generated from registry.
+	EventCookieRestoreCompleted = "cookie:restore:completed"
+	// EventCookieRestoreFailed is generated from registry.
+	EventCookieRestoreFailed = "cookie:restore:failed"
+	// EventCookieRestoreManifestRead is generated from registry.
+	EventCookieRestoreManifestRead = "cookie:restore:manifest-read"
+	// EventCookieRestoreStarted is generated from registry.
+	EventCookieRestoreStarted = "cookie:restore:started"
+	// EventCookieRetentionPolicyApplied is generated from registry.
+	EventCookieRetentionPolicyApplied = "cookie:retention:policy-applied"
+	// EventCookieRetentionPolicySkipped is generated from registry.
+	EventCookieRetentionPolicySkipped = "cookie:retention:policy-skipped"
+	// EventCookieSameSiteSummary is generated from registry.
+	EventCookieSameSiteSummary = "cookie:same-site:summary"
+	// EventCookieSessionCookieSummary is generated from registry.
+	EventCookieSessionCookieSummary = "cookie:session-cookie:summary"
+	// EventCookieSqliteWalDetected is generated from registry.
+	EventCookieSqliteWalDetected = "cookie:sqlite-wal:detected"
+	// EventCookieUnexpectedCleared is generated from registry.
+	EventCookieUnexpectedCleared = "cookie:unexpected-cleared"
+	// EventCookieValueRedacted is generated from registry.
+	EventCookieValueRedacted = "cookie:value:redacted"
+	// EventCookieWriteBlocked is generated from registry.
+	EventCookieWriteBlocked = "cookie:write:blocked"
 	// EventCoreDownloadCompleted is generated from registry.
 	EventCoreDownloadCompleted = "core:download:completed"
 	// EventCoreDownloadExtracting is generated from registry.
@@ -221,6 +395,202 @@ const (
 	EventDataScrapeRateLimited = "data:scrape:rate-limited"
 	// EventDataScrapeStarted is generated from registry.
 	EventDataScrapeStarted = "data:scrape:started"
+	// EventFingerprintAppVersionCaptured is generated from registry.
+	EventFingerprintAppVersionCaptured = "fingerprint:app-version:captured"
+	// EventFingerprintAudioCaptured is generated from registry.
+	EventFingerprintAudioCaptured = "fingerprint:audio:captured"
+	// EventFingerprintAudioError is generated from registry.
+	EventFingerprintAudioError = "fingerprint:audio:error"
+	// EventFingerprintAudioUnsupported is generated from registry.
+	EventFingerprintAudioUnsupported = "fingerprint:audio:unsupported"
+	// EventFingerprintCanvasCaptured is generated from registry.
+	EventFingerprintCanvasCaptured = "fingerprint:canvas:captured"
+	// EventFingerprintCanvasError is generated from registry.
+	EventFingerprintCanvasError = "fingerprint:canvas:error"
+	// EventFingerprintCanvasVanillaDetected is generated from registry.
+	EventFingerprintCanvasVanillaDetected = "fingerprint:canvas:vanilla-detected"
+	// EventFingerprintCdpCaptureCompleted is generated from registry.
+	EventFingerprintCdpCaptureCompleted = "fingerprint:cdp:capture-completed"
+	// EventFingerprintCdpCaptureFailed is generated from registry.
+	EventFingerprintCdpCaptureFailed = "fingerprint:cdp:capture-failed"
+	// EventFingerprintCdpCaptureStarted is generated from registry.
+	EventFingerprintCdpCaptureStarted = "fingerprint:cdp:capture-started"
+	// EventFingerprintClientHintsCaptured is generated from registry.
+	EventFingerprintClientHintsCaptured = "fingerprint:client-hints:captured"
+	// EventFingerprintClientHintsMismatch is generated from registry.
+	EventFingerprintClientHintsMismatch = "fingerprint:client-hints:mismatch"
+	// EventFingerprintClientHintsUnavailable is generated from registry.
+	EventFingerprintClientHintsUnavailable = "fingerprint:client-hints:unavailable"
+	// EventFingerprintColorSchemeCaptured is generated from registry.
+	EventFingerprintColorSchemeCaptured = "fingerprint:color-scheme:captured"
+	// EventFingerprintDateFormatCaptured is generated from registry.
+	EventFingerprintDateFormatCaptured = "fingerprint:date-format:captured"
+	// EventFingerprintDimensionCaptured is generated from registry.
+	EventFingerprintDimensionCaptured = "fingerprint:dimension:captured"
+	// EventFingerprintDimensionMismatch is generated from registry.
+	EventFingerprintDimensionMismatch = "fingerprint:dimension:mismatch"
+	// EventFingerprintDimensionMissing is generated from registry.
+	EventFingerprintDimensionMissing = "fingerprint:dimension:missing"
+	// EventFingerprintDoNotTrackCaptured is generated from registry.
+	EventFingerprintDoNotTrackCaptured = "fingerprint:do-not-track:captured"
+	// EventFingerprintFontsCaptured is generated from registry.
+	EventFingerprintFontsCaptured = "fingerprint:fonts:captured"
+	// EventFingerprintFontsError is generated from registry.
+	EventFingerprintFontsError = "fingerprint:fonts:error"
+	// EventFingerprintHardwareCaptured is generated from registry.
+	EventFingerprintHardwareCaptured = "fingerprint:hardware:captured"
+	// EventFingerprintHardwareMismatch is generated from registry.
+	EventFingerprintHardwareMismatch = "fingerprint:hardware:mismatch"
+	// EventFingerprintHoverCaptured is generated from registry.
+	EventFingerprintHoverCaptured = "fingerprint:hover:captured"
+	// EventFingerprintIntlCaptured is generated from registry.
+	EventFingerprintIntlCaptured = "fingerprint:intl:captured"
+	// EventFingerprintLanguageCaptured is generated from registry.
+	EventFingerprintLanguageCaptured = "fingerprint:language:captured"
+	// EventFingerprintLanguageMismatch is generated from registry.
+	EventFingerprintLanguageMismatch = "fingerprint:language:mismatch"
+	// EventFingerprintMediaQueryCaptured is generated from registry.
+	EventFingerprintMediaQueryCaptured = "fingerprint:media-query:captured"
+	// EventFingerprintMimeTypesCaptured is generated from registry.
+	EventFingerprintMimeTypesCaptured = "fingerprint:mime-types:captured"
+	// EventFingerprintNetworkInfoCaptured is generated from registry.
+	EventFingerprintNetworkInfoCaptured = "fingerprint:network-info:captured"
+	// EventFingerprintNetworkInfoUnavailable is generated from registry.
+	EventFingerprintNetworkInfoUnavailable = "fingerprint:network-info:unavailable"
+	// EventFingerprintNumberFormatCaptured is generated from registry.
+	EventFingerprintNumberFormatCaptured = "fingerprint:number-format:captured"
+	// EventFingerprintPdfViewerCaptured is generated from registry.
+	EventFingerprintPdfViewerCaptured = "fingerprint:pdf-viewer:captured"
+	// EventFingerprintPlatformCaptured is generated from registry.
+	EventFingerprintPlatformCaptured = "fingerprint:platform:captured"
+	// EventFingerprintPlatformMismatch is generated from registry.
+	EventFingerprintPlatformMismatch = "fingerprint:platform:mismatch"
+	// EventFingerprintPluginsCaptured is generated from registry.
+	EventFingerprintPluginsCaptured = "fingerprint:plugins:captured"
+	// EventFingerprintPointerCaptured is generated from registry.
+	EventFingerprintPointerCaptured = "fingerprint:pointer:captured"
+	// EventFingerprintReducedMotionCaptured is generated from registry.
+	EventFingerprintReducedMotionCaptured = "fingerprint:reduced-motion:captured"
+	// EventFingerprintScreenCaptured is generated from registry.
+	EventFingerprintScreenCaptured = "fingerprint:screen:captured"
+	// EventFingerprintScreenMismatch is generated from registry.
+	EventFingerprintScreenMismatch = "fingerprint:screen:mismatch"
+	// EventFingerprintStorageCaptured is generated from registry.
+	EventFingerprintStorageCaptured = "fingerprint:storage:captured"
+	// EventFingerprintStorageUnavailable is generated from registry.
+	EventFingerprintStorageUnavailable = "fingerprint:storage:unavailable"
+	// EventFingerprintTimezoneCaptured is generated from registry.
+	EventFingerprintTimezoneCaptured = "fingerprint:timezone:captured"
+	// EventFingerprintTimezoneMismatch is generated from registry.
+	EventFingerprintTimezoneMismatch = "fingerprint:timezone:mismatch"
+	// EventFingerprintTouchCaptured is generated from registry.
+	EventFingerprintTouchCaptured = "fingerprint:touch:captured"
+	// EventFingerprintUserAgentCaptured is generated from registry.
+	EventFingerprintUserAgentCaptured = "fingerprint:user-agent:captured"
+	// EventFingerprintUserAgentMismatch is generated from registry.
+	EventFingerprintUserAgentMismatch = "fingerprint:user-agent:mismatch"
+	// EventFingerprintViewportCaptured is generated from registry.
+	EventFingerprintViewportCaptured = "fingerprint:viewport:captured"
+	// EventFingerprintViewportMismatch is generated from registry.
+	EventFingerprintViewportMismatch = "fingerprint:viewport:mismatch"
+	// EventFingerprintWebdriverExposed is generated from registry.
+	EventFingerprintWebdriverExposed = "fingerprint:webdriver:exposed"
+	// EventFingerprintWebdriverHidden is generated from registry.
+	EventFingerprintWebdriverHidden = "fingerprint:webdriver:hidden"
+	// EventFingerprintWebglCaptured is generated from registry.
+	EventFingerprintWebglCaptured = "fingerprint:webgl:captured"
+	// EventFingerprintWebglEmpty is generated from registry.
+	EventFingerprintWebglEmpty = "fingerprint:webgl:empty"
+	// EventFingerprintWebglExtensionsCaptured is generated from registry.
+	EventFingerprintWebglExtensionsCaptured = "fingerprint:webgl:extensions-captured"
+	// EventFingerprintWebglLimitsCaptured is generated from registry.
+	EventFingerprintWebglLimitsCaptured = "fingerprint:webgl:limits-captured"
+	// EventFingerprintWebgpuAvailable is generated from registry.
+	EventFingerprintWebgpuAvailable = "fingerprint:webgpu:available"
+	// EventFingerprintWebgpuUnavailable is generated from registry.
+	EventFingerprintWebgpuUnavailable = "fingerprint:webgpu:unavailable"
+	// EventFingerprintWebrtcApiSupported is generated from registry.
+	EventFingerprintWebrtcApiSupported = "fingerprint:webrtc-api:supported"
+	// EventIdentityAuditHashMatched is generated from registry.
+	EventIdentityAuditHashMatched = "identity:audit:hash-matched"
+	// EventIdentityAuditHashMismatched is generated from registry.
+	EventIdentityAuditHashMismatched = "identity:audit:hash-mismatched"
+	// EventIdentityAuditMissing is generated from registry.
+	EventIdentityAuditMissing = "identity:audit:missing"
+	// EventIdentityBaselineCreated is generated from registry.
+	EventIdentityBaselineCreated = "identity:baseline:created"
+	// EventIdentityBaselineDrifted is generated from registry.
+	EventIdentityBaselineDrifted = "identity:baseline:drifted"
+	// EventIdentityBaselineMatched is generated from registry.
+	EventIdentityBaselineMatched = "identity:baseline:matched"
+	// EventIdentityBaselineResetRequested is generated from registry.
+	EventIdentityBaselineResetRequested = "identity:baseline:reset-requested"
+	// EventIdentityCapsuleCopied is generated from registry.
+	EventIdentityCapsuleCopied = "identity:capsule:copied"
+	// EventIdentityCapsuleCreated is generated from registry.
+	EventIdentityCapsuleCreated = "identity:capsule:created"
+	// EventIdentityCapsuleExported is generated from registry.
+	EventIdentityCapsuleExported = "identity:capsule:exported"
+	// EventIdentityCapsuleImported is generated from registry.
+	EventIdentityCapsuleImported = "identity:capsule:imported"
+	// EventIdentityCapsuleLocked is generated from registry.
+	EventIdentityCapsuleLocked = "identity:capsule:locked"
+	// EventIdentityCapsuleUnlocked is generated from registry.
+	EventIdentityCapsuleUnlocked = "identity:capsule:unlocked"
+	// EventIdentityCapsuleUpdated is generated from registry.
+	EventIdentityCapsuleUpdated = "identity:capsule:updated"
+	// EventIdentityCapsuleWriteBlocked is generated from registry.
+	EventIdentityCapsuleWriteBlocked = "identity:capsule:write-blocked"
+	// EventIdentityConsistencyFail is generated from registry.
+	EventIdentityConsistencyFail = "identity:consistency:fail"
+	// EventIdentityConsistencyPass is generated from registry.
+	EventIdentityConsistencyPass = "identity:consistency:pass"
+	// EventIdentityConsistencyWarning is generated from registry.
+	EventIdentityConsistencyWarning = "identity:consistency:warning"
+	// EventIdentityDimensionFail is generated from registry.
+	EventIdentityDimensionFail = "identity:dimension:fail"
+	// EventIdentityDimensionPass is generated from registry.
+	EventIdentityDimensionPass = "identity:dimension:pass"
+	// EventIdentityDimensionWarning is generated from registry.
+	EventIdentityDimensionWarning = "identity:dimension:warning"
+	// EventIdentityGuardFail is generated from registry.
+	EventIdentityGuardFail = "identity:guard:fail"
+	// EventIdentityGuardPass is generated from registry.
+	EventIdentityGuardPass = "identity:guard:pass"
+	// EventIdentityGuardWarning is generated from registry.
+	EventIdentityGuardWarning = "identity:guard:warning"
+	// EventIdentityProfileBound is generated from registry.
+	EventIdentityProfileBound = "identity:profile:bound"
+	// EventIdentityProfileUnbound is generated from registry.
+	EventIdentityProfileUnbound = "identity:profile:unbound"
+	// EventIdentityReportCompleted is generated from registry.
+	EventIdentityReportCompleted = "identity:report:completed"
+	// EventIdentityReportFailed is generated from registry.
+	EventIdentityReportFailed = "identity:report:failed"
+	// EventIdentityReportHistoryPruned is generated from registry.
+	EventIdentityReportHistoryPruned = "identity:report:history-pruned"
+	// EventIdentityReportHistorySaved is generated from registry.
+	EventIdentityReportHistorySaved = "identity:report:history-saved"
+	// EventIdentityReportStarted is generated from registry.
+	EventIdentityReportStarted = "identity:report:started"
+	// EventIdentityRiskAcknowledged is generated from registry.
+	EventIdentityRiskAcknowledged = "identity:risk:acknowledged"
+	// EventIdentityRiskCreated is generated from registry.
+	EventIdentityRiskCreated = "identity:risk:created"
+	// EventIdentityRiskResolved is generated from registry.
+	EventIdentityRiskResolved = "identity:risk:resolved"
+	// EventIdentityScoreChanged is generated from registry.
+	EventIdentityScoreChanged = "identity:score:changed"
+	// EventIdentityScoreThresholdCrossed is generated from registry.
+	EventIdentityScoreThresholdCrossed = "identity:score:threshold-crossed"
+	// EventIdentitySeedBound is generated from registry.
+	EventIdentitySeedBound = "identity:seed:bound"
+	// EventIdentitySeedRotationBlocked is generated from registry.
+	EventIdentitySeedRotationBlocked = "identity:seed:rotation-blocked"
+	// EventIdentitySubscoreChanged is generated from registry.
+	EventIdentitySubscoreChanged = "identity:subscore:changed"
+	// EventIdentitySummaryUpdated is generated from registry.
+	EventIdentitySummaryUpdated = "identity:summary:updated"
 	// EventLicenseActivated is generated from registry.
 	EventLicenseActivated = "license:activated"
 	// EventLicenseCdkeyInvalid is generated from registry.
@@ -233,6 +603,120 @@ const (
 	EventLicenseExpiring = "license:expiring"
 	// EventLicenseRenewed is generated from registry.
 	EventLicenseRenewed = "license:renewed"
+	// EventNetworkDnsCheckCompleted is generated from registry.
+	EventNetworkDnsCheckCompleted = "network:dns:check-completed"
+	// EventNetworkDnsCheckFailed is generated from registry.
+	EventNetworkDnsCheckFailed = "network:dns:check-failed"
+	// EventNetworkDnsCheckStarted is generated from registry.
+	EventNetworkDnsCheckStarted = "network:dns:check-started"
+	// EventNetworkExitIpChanged is generated from registry.
+	EventNetworkExitIpChanged = "network:exit-ip:changed"
+	// EventNetworkExitIpCheckCompleted is generated from registry.
+	EventNetworkExitIpCheckCompleted = "network:exit-ip:check-completed"
+	// EventNetworkExitIpCheckStarted is generated from registry.
+	EventNetworkExitIpCheckStarted = "network:exit-ip:check-started"
+	// EventNetworkGeoMatched is generated from registry.
+	EventNetworkGeoMatched = "network:geo:matched"
+	// EventNetworkGeoMismatch is generated from registry.
+	EventNetworkGeoMismatch = "network:geo:mismatch"
+	// EventNetworkLatencySampled is generated from registry.
+	EventNetworkLatencySampled = "network:latency:sampled"
+	// EventNetworkProxyAuthFailed is generated from registry.
+	EventNetworkProxyAuthFailed = "network:proxy:auth-failed"
+	// EventNetworkProxyDatacenterDetected is generated from registry.
+	EventNetworkProxyDatacenterDetected = "network:proxy:datacenter-detected"
+	// EventNetworkProxyHealthRecovered is generated from registry.
+	EventNetworkProxyHealthRecovered = "network:proxy:health-recovered"
+	// EventNetworkProxyHealthWarning is generated from registry.
+	EventNetworkProxyHealthWarning = "network:proxy:health-warning"
+	// EventNetworkProxyResidentialDetected is generated from registry.
+	EventNetworkProxyResidentialDetected = "network:proxy:residential-detected"
+	// EventNetworkProxyRotationAllowed is generated from registry.
+	EventNetworkProxyRotationAllowed = "network:proxy:rotation-allowed"
+	// EventNetworkProxyRotationBlocked is generated from registry.
+	EventNetworkProxyRotationBlocked = "network:proxy:rotation-blocked"
+	// EventNetworkProxyStickySessionBound is generated from registry.
+	EventNetworkProxyStickySessionBound = "network:proxy:sticky-session-bound"
+	// EventNetworkProxyStickySessionExpired is generated from registry.
+	EventNetworkProxyStickySessionExpired = "network:proxy:sticky-session-expired"
+	// EventNetworkWebrtcApiSupported is generated from registry.
+	EventNetworkWebrtcApiSupported = "network:webrtc:api-supported"
+	// EventNetworkWebrtcApiUnavailable is generated from registry.
+	EventNetworkWebrtcApiUnavailable = "network:webrtc:api-unavailable"
+	// EventProfileClosed is generated from registry.
+	EventProfileClosed = "profile:closed"
+	// EventProfileCopyCompleted is generated from registry.
+	EventProfileCopyCompleted = "profile:copy:completed"
+	// EventProfileCopyStarted is generated from registry.
+	EventProfileCopyStarted = "profile:copy:started"
+	// EventProfileCoreBound is generated from registry.
+	EventProfileCoreBound = "profile:core:bound"
+	// EventProfileCoreMissing is generated from registry.
+	EventProfileCoreMissing = "profile:core:missing"
+	// EventProfileCreateCompleted is generated from registry.
+	EventProfileCreateCompleted = "profile:create:completed"
+	// EventProfileCreateStarted is generated from registry.
+	EventProfileCreateStarted = "profile:create:started"
+	// EventProfileDeleteCompleted is generated from registry.
+	EventProfileDeleteCompleted = "profile:delete:completed"
+	// EventProfileDeleteStarted is generated from registry.
+	EventProfileDeleteStarted = "profile:delete:started"
+	// EventProfileExportCompleted is generated from registry.
+	EventProfileExportCompleted = "profile:export:completed"
+	// EventProfileExportStarted is generated from registry.
+	EventProfileExportStarted = "profile:export:started"
+	// EventProfileGroupMoved is generated from registry.
+	EventProfileGroupMoved = "profile:group:moved"
+	// EventProfileGuardDuplicateUserDataDir is generated from registry.
+	EventProfileGuardDuplicateUserDataDir = "profile:guard:duplicate-user-data-dir"
+	// EventProfileGuardPathNormalized is generated from registry.
+	EventProfileGuardPathNormalized = "profile:guard:path-normalized"
+	// EventProfileGuardPathRejected is generated from registry.
+	EventProfileGuardPathRejected = "profile:guard:path-rejected"
+	// EventProfileGuardStartLockConflict is generated from registry.
+	EventProfileGuardStartLockConflict = "profile:guard:start-lock-conflict"
+	// EventProfileGuardSymlinkRejected is generated from registry.
+	EventProfileGuardSymlinkRejected = "profile:guard:symlink-rejected"
+	// EventProfileHumanizeSeedCreated is generated from registry.
+	EventProfileHumanizeSeedCreated = "profile:humanize-seed:created"
+	// EventProfileHumanizeSeedEmptyRepaired is generated from registry.
+	EventProfileHumanizeSeedEmptyRepaired = "profile:humanize-seed:empty-repaired"
+	// EventProfileHumanizeSeedPreserved is generated from registry.
+	EventProfileHumanizeSeedPreserved = "profile:humanize-seed:preserved"
+	// EventProfileImportCompleted is generated from registry.
+	EventProfileImportCompleted = "profile:import:completed"
+	// EventProfileImportStarted is generated from registry.
+	EventProfileImportStarted = "profile:import:started"
+	// EventProfileLaunchAuditCreated is generated from registry.
+	EventProfileLaunchAuditCreated = "profile:launch-audit:created"
+	// EventProfileLaunchAuditRejected is generated from registry.
+	EventProfileLaunchAuditRejected = "profile:launch-audit:rejected"
+	// EventProfileLaunchAuditValidated is generated from registry.
+	EventProfileLaunchAuditValidated = "profile:launch-audit:validated"
+	// EventProfileOpened is generated from registry.
+	EventProfileOpened = "profile:opened"
+	// EventProfilePathConfirmationRequired is generated from registry.
+	EventProfilePathConfirmationRequired = "profile:path:confirmation-required"
+	// EventProfilePreferenceMerged is generated from registry.
+	EventProfilePreferenceMerged = "profile:preference:merged"
+	// EventProfileRuntimeWarningCleared is generated from registry.
+	EventProfileRuntimeWarningCleared = "profile:runtime-warning:cleared"
+	// EventProfileRuntimeWarningSet is generated from registry.
+	EventProfileRuntimeWarningSet = "profile:runtime-warning:set"
+	// EventProfileSnapshotPreflight is generated from registry.
+	EventProfileSnapshotPreflight = "profile:snapshot:preflight"
+	// EventProfileSnapshotRestored is generated from registry.
+	EventProfileSnapshotRestored = "profile:snapshot:restored"
+	// EventProfileTagUpdated is generated from registry.
+	EventProfileTagUpdated = "profile:tag:updated"
+	// EventProfileUpdateCompleted is generated from registry.
+	EventProfileUpdateCompleted = "profile:update:completed"
+	// EventProfileUpdateStarted is generated from registry.
+	EventProfileUpdateStarted = "profile:update:started"
+	// EventProfileUserDataDirBound is generated from registry.
+	EventProfileUserDataDirBound = "profile:user-data-dir:bound"
+	// EventProfileUserDataDirChangedBlocked is generated from registry.
+	EventProfileUserDataDirChangedBlocked = "profile:user-data-dir:changed-blocked"
 	// EventProxyBridgeClashStarted is generated from registry.
 	EventProxyBridgeClashStarted = "proxy:bridge:clash:started"
 	// EventProxyBridgeClashStarting is generated from registry.
@@ -345,4 +829,52 @@ const (
 	EventSystemRecoveryPortReleased = "system:recovery:port-released"
 	// EventSystemRecoveryProfileRepaired is generated from registry.
 	EventSystemRecoveryProfileRepaired = "system:recovery:profile-repaired"
+	// EventWorkbenchBatchCompleted is generated from registry.
+	EventWorkbenchBatchCompleted = "workbench:batch:completed"
+	// EventWorkbenchBatchFailed is generated from registry.
+	EventWorkbenchBatchFailed = "workbench:batch:failed"
+	// EventWorkbenchBatchStarted is generated from registry.
+	EventWorkbenchBatchStarted = "workbench:batch:started"
+	// EventWorkbenchFingerprintHealthCompleted is generated from registry.
+	EventWorkbenchFingerprintHealthCompleted = "workbench:fingerprint-health:completed"
+	// EventWorkbenchFingerprintHealthQueued is generated from registry.
+	EventWorkbenchFingerprintHealthQueued = "workbench:fingerprint-health:queued"
+	// EventWorkbenchIdentityReportCompleted is generated from registry.
+	EventWorkbenchIdentityReportCompleted = "workbench:identity-report:completed"
+	// EventWorkbenchIdentityReportFailed is generated from registry.
+	EventWorkbenchIdentityReportFailed = "workbench:identity-report:failed"
+	// EventWorkbenchIdentityReportQueued is generated from registry.
+	EventWorkbenchIdentityReportQueued = "workbench:identity-report:queued"
+	// EventWorkbenchIdentityReportStarted is generated from registry.
+	EventWorkbenchIdentityReportStarted = "workbench:identity-report:started"
+	// EventWorkbenchPreviewCaptured is generated from registry.
+	EventWorkbenchPreviewCaptured = "workbench:preview:captured"
+	// EventWorkbenchPreviewFailed is generated from registry.
+	EventWorkbenchPreviewFailed = "workbench:preview:failed"
+	// EventWorkbenchRefreshSilent is generated from registry.
+	EventWorkbenchRefreshSilent = "workbench:refresh:silent"
+	// EventWorkbenchSelectionChanged is generated from registry.
+	EventWorkbenchSelectionChanged = "workbench:selection:changed"
+	// EventWorkbenchStatusPollCompleted is generated from registry.
+	EventWorkbenchStatusPollCompleted = "workbench:status:poll-completed"
+	// EventWorkbenchStatusPollStarted is generated from registry.
+	EventWorkbenchStatusPollStarted = "workbench:status:poll-started"
+	// EventWorkbenchStatusStaleResultIgnored is generated from registry.
+	EventWorkbenchStatusStaleResultIgnored = "workbench:status:stale-result-ignored"
+	// EventWorkbenchTaskCompleted is generated from registry.
+	EventWorkbenchTaskCompleted = "workbench:task:completed"
+	// EventWorkbenchTaskFailed is generated from registry.
+	EventWorkbenchTaskFailed = "workbench:task:failed"
+	// EventWorkbenchTaskQueued is generated from registry.
+	EventWorkbenchTaskQueued = "workbench:task:queued"
+	// EventWorkbenchTaskStarted is generated from registry.
+	EventWorkbenchTaskStarted = "workbench:task:started"
+	// EventWorkbenchWindowActivateRequested is generated from registry.
+	EventWorkbenchWindowActivateRequested = "workbench:window:activate-requested"
+	// EventWorkbenchWindowActivated is generated from registry.
+	EventWorkbenchWindowActivated = "workbench:window:activated"
+	// EventWorkbenchWindowArrangeCompleted is generated from registry.
+	EventWorkbenchWindowArrangeCompleted = "workbench:window:arrange-completed"
+	// EventWorkbenchWindowArrangeRequested is generated from registry.
+	EventWorkbenchWindowArrangeRequested = "workbench:window:arrange-requested"
 )

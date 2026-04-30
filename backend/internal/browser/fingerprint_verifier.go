@@ -15,28 +15,79 @@ import (
 
 // FingerprintSnapshot holds the actual browser fingerprint values extracted via CDP.
 type FingerprintSnapshot struct {
-	UserAgent           string   `json:"userAgent"`
-	Platform            string   `json:"platform"`
-	HardwareConcurrency int      `json:"hardwareConcurrency"`
-	DeviceMemory        int      `json:"deviceMemory"`
-	ColorDepth          int      `json:"colorDepth"`
-	PixelDepth          int      `json:"pixelDepth"`
-	ScreenWidth         int      `json:"screenWidth"`
-	ScreenHeight        int      `json:"screenHeight"`
-	AvailWidth          int      `json:"availWidth"`
-	AvailHeight         int      `json:"availHeight"`
-	DevicePixelRatio    float64  `json:"devicePixelRatio"`
-	MaxTouchPoints      int      `json:"maxTouchPoints"`
-	Vendor              string   `json:"vendor"`
-	Timezone            string   `json:"timezone"`
-	Language            string   `json:"language"`
-	Languages           []string `json:"languages"`
+	UserAgent            string   `json:"userAgent"`
+	AppVersion           string   `json:"appVersion"`
+	AppName              string   `json:"appName"`
+	Product              string   `json:"product"`
+	ProductSub           string   `json:"productSub"`
+	Platform             string   `json:"platform"`
+	Webdriver            bool     `json:"webdriver"`
+	CookieEnabled        bool     `json:"cookieEnabled"`
+	DoNotTrack           string   `json:"doNotTrack"`
+	PDFViewerEnabled     bool     `json:"pdfViewerEnabled"`
+	Online               bool     `json:"online"`
+	HardwareConcurrency  int      `json:"hardwareConcurrency"`
+	DeviceMemory         int      `json:"deviceMemory"`
+	ColorDepth           int      `json:"colorDepth"`
+	PixelDepth           int      `json:"pixelDepth"`
+	ScreenWidth          int      `json:"screenWidth"`
+	ScreenHeight         int      `json:"screenHeight"`
+	AvailWidth           int      `json:"availWidth"`
+	AvailHeight          int      `json:"availHeight"`
+	DevicePixelRatio     float64  `json:"devicePixelRatio"`
+	MaxTouchPoints       int      `json:"maxTouchPoints"`
+	Vendor               string   `json:"vendor"`
+	Timezone             string   `json:"timezone"`
+	TimezoneOffset       int      `json:"timezoneOffset"`
+	Language             string   `json:"language"`
+	Languages            []string `json:"languages"`
+	IntlLocale           string   `json:"intlLocale"`
+	IntlCalendar         string   `json:"intlCalendar"`
+	IntlNumberingSystem  string   `json:"intlNumberingSystem"`
+	DateFormatSample     string   `json:"dateFormatSample"`
+	NumberFormatSample   string   `json:"numberFormatSample"`
+	UADataBrands         []string `json:"uaDataBrands"`
+	UADataMobile         bool     `json:"uaDataMobile"`
+	UADataPlatform       string   `json:"uaDataPlatform"`
+	UADataPlatformVer    string   `json:"uaDataPlatformVersion"`
+	UADataArchitecture   string   `json:"uaDataArchitecture"`
+	UADataBitness        string   `json:"uaDataBitness"`
+	UADataModel          string   `json:"uaDataModel"`
+	UADataFullVersions   []string `json:"uaDataFullVersionList"`
+	InnerWidth           int      `json:"innerWidth"`
+	InnerHeight          int      `json:"innerHeight"`
+	OuterWidth           int      `json:"outerWidth"`
+	OuterHeight          int      `json:"outerHeight"`
+	VisualViewportWidth  float64  `json:"visualViewportWidth"`
+	VisualViewportHeight float64  `json:"visualViewportHeight"`
+	VisualViewportScale  float64  `json:"visualViewportScale"`
+	PointerFine          bool     `json:"pointerFine"`
+	PointerCoarse        bool     `json:"pointerCoarse"`
+	HoverHover           bool     `json:"hoverHover"`
+	HoverNone            bool     `json:"hoverNone"`
+	PrefersColorScheme   string   `json:"prefersColorScheme"`
+	PrefersReducedMotion string   `json:"prefersReducedMotion"`
+	NetworkEffectiveType string   `json:"networkEffectiveType"`
+	NetworkDownlink      float64  `json:"networkDownlink"`
+	NetworkRTT           int      `json:"networkRtt"`
+	NetworkSaveData      bool     `json:"networkSaveData"`
+	StorageQuota         int64    `json:"storageQuota"`
+	StorageUsage         int64    `json:"storageUsage"`
 
 	// Deep fingerprint checks — seed-driven noise verification.
-	CanvasHash    string `json:"canvasHash"`    // hash of a known-text canvas rendering
-	WebGLVendor   string `json:"webglVendor"`   // actual (spoofed) WebGL vendor string
-	WebGLRenderer string `json:"webglRenderer"` // actual (spoofed) WebGL renderer string
-	FontHash      string `json:"fontHash"`      // hash of measured font widths for key fonts
+	CanvasHash            string `json:"canvasHash"`          // hash of a known-text canvas rendering
+	WebGLVendor           string `json:"webglVendor"`         // actual (spoofed) WebGL vendor string
+	WebGLRenderer         string `json:"webglRenderer"`       // actual (spoofed) WebGL renderer string
+	WebGLExtensionsHash   string `json:"webglExtensionsHash"` // hash of supported WebGL extensions
+	WebGLMaxTextureSize   int    `json:"webglMaxTextureSize"`
+	WebGLMaxVertexAttribs int    `json:"webglMaxVertexAttribs"`
+	WebGLMaxViewportDims  string `json:"webglMaxViewportDims"`
+	FontHash              string `json:"fontHash"` // hash of measured font widths for key fonts
+	AudioHash             string `json:"audioHash"`
+	PluginsHash           string `json:"pluginsHash"`
+	MimeTypesHash         string `json:"mimeTypesHash"`
+	WebGPUAvailable       bool   `json:"webgpuAvailable"`
+	WebRTCSupported       bool   `json:"webrtcSupported"`
 }
 
 // FingerprintDiff describes mismatches between expected and actual fingerprints.
@@ -48,30 +99,139 @@ type FingerprintDiff struct {
 // jsExtractFingerprint is the JavaScript snippet injected via CDP Runtime.evaluate
 // to extract all navigator/screen/Intl/Canvas/WebGL properties.
 const jsExtractFingerprint = `
-(function() {
-	// --- navigator / screen / Intl (existing) ---
+(async function() {
+	function hashString(input) {
+		var text = String(input || '');
+		var hash = 5381;
+		for (var i = 0; i < text.length; i++) {
+			hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+		}
+		return (hash >>> 0).toString(16);
+	}
+	function media(query) {
+		try { return !!(window.matchMedia && window.matchMedia(query).matches); } catch (_) { return false; }
+	}
+	function navArray(list, limit) {
+		try { return Array.prototype.slice.call(list || [], 0, limit || 20).map(function(item) { return String(item); }); } catch (_) { return []; }
+	}
+	var nav = navigator || {};
+	var scr = screen || {};
+	var dtf = {};
+	try { dtf = Intl.DateTimeFormat().resolvedOptions() || {}; } catch (_) {}
+	var vv = window.visualViewport || {};
 	var info = {
-		userAgent: navigator.userAgent,
-		platform: navigator.platform,
-		hardwareConcurrency: navigator.hardwareConcurrency || 0,
-		deviceMemory: navigator.deviceMemory || 0,
-		colorDepth: screen.colorDepth || 0,
-		pixelDepth: screen.pixelDepth || 0,
-		screenWidth: screen.width,
-		screenHeight: screen.height,
-		availWidth: screen.availWidth || 0,
-		availHeight: screen.availHeight || 0,
+		userAgent: nav.userAgent || '',
+		appVersion: nav.appVersion || '',
+		appName: nav.appName || '',
+		product: nav.product || '',
+		productSub: nav.productSub || '',
+		platform: nav.platform || '',
+		webdriver: !!nav.webdriver,
+		cookieEnabled: !!nav.cookieEnabled,
+		doNotTrack: nav.doNotTrack || window.doNotTrack || '',
+		pdfViewerEnabled: !!nav.pdfViewerEnabled,
+		online: !!nav.onLine,
+		hardwareConcurrency: nav.hardwareConcurrency || 0,
+		deviceMemory: nav.deviceMemory || 0,
+		colorDepth: scr.colorDepth || 0,
+		pixelDepth: scr.pixelDepth || 0,
+		screenWidth: scr.width || 0,
+		screenHeight: scr.height || 0,
+		availWidth: scr.availWidth || 0,
+		availHeight: scr.availHeight || 0,
 		devicePixelRatio: window.devicePixelRatio || 1,
-		maxTouchPoints: navigator.maxTouchPoints || 0,
-		vendor: navigator.vendor || '',
-		timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-		language: navigator.language || '',
-		languages: Array.isArray(navigator.languages) ? navigator.languages.slice(0, 5) : []
+		maxTouchPoints: nav.maxTouchPoints || 0,
+		vendor: nav.vendor || '',
+		timezone: dtf.timeZone || '',
+		timezoneOffset: new Date().getTimezoneOffset(),
+		language: nav.language || '',
+		languages: Array.isArray(nav.languages) ? nav.languages.slice(0, 8) : [],
+		intlLocale: dtf.locale || '',
+		intlCalendar: dtf.calendar || '',
+		intlNumberingSystem: dtf.numberingSystem || '',
+		dateFormatSample: '',
+		numberFormatSample: '',
+		uaDataBrands: [],
+		uaDataMobile: false,
+		uaDataPlatform: '',
+		uaDataPlatformVersion: '',
+		uaDataArchitecture: '',
+		uaDataBitness: '',
+		uaDataModel: '',
+		uaDataFullVersionList: [],
+		innerWidth: window.innerWidth || 0,
+		innerHeight: window.innerHeight || 0,
+		outerWidth: window.outerWidth || 0,
+		outerHeight: window.outerHeight || 0,
+		visualViewportWidth: vv.width || 0,
+		visualViewportHeight: vv.height || 0,
+		visualViewportScale: vv.scale || 0,
+		pointerFine: media('(pointer: fine)'),
+		pointerCoarse: media('(pointer: coarse)'),
+		hoverHover: media('(hover: hover)'),
+		hoverNone: media('(hover: none)'),
+		prefersColorScheme: media('(prefers-color-scheme: dark)') ? 'dark' : (media('(prefers-color-scheme: light)') ? 'light' : 'no-preference'),
+		prefersReducedMotion: media('(prefers-reduced-motion: reduce)') ? 'reduce' : 'no-preference',
+		networkEffectiveType: '',
+		networkDownlink: 0,
+		networkRtt: 0,
+		networkSaveData: false,
+		storageQuota: 0,
+		storageUsage: 0,
+		canvasHash: '',
+		webglVendor: '',
+		webglRenderer: '',
+		webglExtensionsHash: '',
+		webglMaxTextureSize: 0,
+		webglMaxVertexAttribs: 0,
+		webglMaxViewportDims: '',
+		fontHash: '',
+		audioHash: '',
+		pluginsHash: '',
+		mimeTypesHash: '',
+		webgpuAvailable: !!nav.gpu,
+		webrtcSupported: typeof RTCPeerConnection !== 'undefined'
 	};
-
-	// --- Canvas fingerprint hash ---
-	// Render known text+emoji; hash the result. Seed-based noise should produce
-	// a different hash per seed (and differ from vanilla Chrome).
+	try { info.dateFormatSample = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'long' }).format(new Date(1704067200000)); } catch (_) {}
+	try { info.numberFormatSample = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(123456.78); } catch (_) {}
+	try {
+		if (nav.userAgentData) {
+			info.uaDataBrands = (nav.userAgentData.brands || []).map(function(b) { return String(b.brand || '') + '/' + String(b.version || ''); });
+			info.uaDataMobile = !!nav.userAgentData.mobile;
+			info.uaDataPlatform = nav.userAgentData.platform || '';
+			if (nav.userAgentData.getHighEntropyValues) {
+				var high = await nav.userAgentData.getHighEntropyValues(['architecture','bitness','model','platformVersion','fullVersionList']);
+				info.uaDataArchitecture = high.architecture || '';
+				info.uaDataBitness = high.bitness || '';
+				info.uaDataModel = high.model || '';
+				info.uaDataPlatformVersion = high.platformVersion || '';
+				info.uaDataFullVersionList = (high.fullVersionList || []).map(function(b) { return String(b.brand || '') + '/' + String(b.version || ''); });
+			}
+		}
+	} catch (_) {}
+	try {
+		var conn = nav.connection || nav.mozConnection || nav.webkitConnection;
+		if (conn) {
+			info.networkEffectiveType = conn.effectiveType || '';
+			info.networkDownlink = Number(conn.downlink || 0);
+			info.networkRtt = Number(conn.rtt || 0);
+			info.networkSaveData = !!conn.saveData;
+		}
+	} catch (_) {}
+	try {
+		if (nav.storage && nav.storage.estimate) {
+			var estimate = await nav.storage.estimate();
+			info.storageQuota = Math.round(estimate.quota || 0);
+			info.storageUsage = Math.round(estimate.usage || 0);
+		}
+	} catch (_) {}
+	try {
+		info.pluginsHash = hashString(navArray(nav.plugins, 50).join('|'));
+		info.mimeTypesHash = hashString(navArray(nav.mimeTypes, 80).join('|'));
+	} catch (_) {
+		info.pluginsHash = 'error';
+		info.mimeTypesHash = 'error';
+	}
 	try {
 		var c = document.createElement('canvas');
 		c.width = 280; c.height = 60;
@@ -79,25 +239,17 @@ const jsExtractFingerprint = `
 		ctx.textBaseline = 'top';
 		ctx.font = '14px Arial';
 		ctx.fillStyle = '#069';
-		ctx.fillText('Cwm fjordbank glyphs vext quiz ♣🌍', 4, 4);
+		ctx.fillText('Cwm fjordbank glyphs vext quiz 123', 4, 4);
 		ctx.fillStyle = '#c00';
 		ctx.font = 'bold 16px "Times New Roman"';
-		ctx.fillText('The quick brown fox 🦊 jumps', 2, 24);
+		ctx.fillText('The quick brown fox jumps', 2, 24);
 		ctx.fillStyle = '#080';
 		ctx.font = 'italic 12px "Courier New"';
 		ctx.fillText('Sphinx of black quartz, judge my vow', 2, 44);
-		var data = c.toDataURL();
-		// Simple DJB2 hash of the data URL
-		var hash = 5381;
-		for (var i = 0; i < data.length; i++) {
-			hash = ((hash << 5) + hash + data.charCodeAt(i)) | 0;
-		}
-		info.canvasHash = (hash >>> 0).toString(16);
-	} catch(e) {
+		info.canvasHash = hashString(c.toDataURL());
+	} catch (_) {
 		info.canvasHash = 'error';
 	}
-
-	// --- WebGL unmasked vendor/renderer ---
 	try {
 		var gl = document.createElement('canvas').getContext('webgl') ||
 		         document.createElement('canvas').getContext('experimental-webgl');
@@ -107,18 +259,16 @@ const jsExtractFingerprint = `
 				info.webglVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || '';
 				info.webglRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '';
 			}
+			var extensions = gl.getSupportedExtensions() || [];
+			info.webglExtensionsHash = hashString(extensions.sort().join('|'));
+			info.webglMaxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0);
+			info.webglMaxVertexAttribs = Number(gl.getParameter(gl.MAX_VERTEX_ATTRIBS) || 0);
+			var dims = gl.getParameter(gl.MAX_VIEWPORT_DIMS) || [];
+			info.webglMaxViewportDims = Array.prototype.join.call(dims, 'x');
 		}
-	} catch(e) {}
-	if (!info.webglVendor) info.webglVendor = '';
-	if (!info.webglRenderer) info.webglRenderer = '';
-
-	// --- Font fingerprint hash ---
-	// Measure widths of key fonts; different font stacks produce different widths.
+	} catch (_) {}
 	try {
-		var testFonts = [
-			'Arial','Helvetica','Times New Roman','Courier New','Georgia',
-			'Verdana','SimSun','Microsoft YaHei','PingFang SC','Hiragino Sans GB'
-		];
+		var testFonts = ['Arial','Helvetica','Times New Roman','Courier New','Georgia','Verdana','SimSun','Microsoft YaHei','PingFang SC','Hiragino Sans GB'];
 		var canvas2 = document.createElement('canvas');
 		var ctx2 = canvas2.getContext('2d');
 		var testStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -127,11 +277,37 @@ const jsExtractFingerprint = `
 			ctx2.font = '16px "' + testFonts[f] + '"';
 			widths.push(ctx2.measureText(testStr).width.toFixed(2));
 		}
-		info.fontHash = widths.join(',');
-	} catch(e) {
+		info.fontHash = hashString(widths.join(','));
+	} catch (_) {
 		info.fontHash = 'error';
 	}
-
+	try {
+		var OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+		if (OfflineCtx) {
+			var audioCtx = new OfflineCtx(1, 4410, 44100);
+			var osc = audioCtx.createOscillator();
+			var comp = audioCtx.createDynamicsCompressor();
+			osc.type = 'triangle';
+			osc.frequency.value = 10000;
+			comp.threshold.value = -50;
+			comp.knee.value = 40;
+			comp.ratio.value = 12;
+			comp.attack.value = 0;
+			comp.release.value = 0.25;
+			osc.connect(comp);
+			comp.connect(audioCtx.destination);
+			osc.start(0);
+			var rendered = await audioCtx.startRendering();
+			var data = rendered.getChannelData(0);
+			var sample = [];
+			for (var a = 0; a < data.length; a += 64) sample.push(data[a].toFixed(6));
+			info.audioHash = hashString(sample.join(','));
+		} else {
+			info.audioHash = 'unsupported';
+		}
+	} catch (_) {
+		info.audioHash = 'error';
+	}
 	return JSON.stringify(info);
 })()
 `

@@ -7,6 +7,8 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -21,6 +23,9 @@ type PlaybackEngine struct {
 	rng              *rand.Rand
 	viewport         playbackViewport
 	progressCallback func(PlaybackProgress)
+	sendCommandFn    func(id int, method string, params interface{}) (json.RawMessage, error)
+	reviewMu         sync.Mutex
+	reviewDecisionCh chan PlaybackReviewDecision
 }
 
 type playbackViewport struct {
@@ -38,14 +43,25 @@ type PlaybackProgress struct {
 	Percent     float64 `json:"percent"`
 	ElapsedMs   int64   `json:"elapsedMs"`
 	Status      string  `json:"status"`
+	Reason      string  `json:"reason,omitempty"`
+	Action      string  `json:"action,omitempty"`
 }
+
+type PlaybackReviewDecision string
+
+const (
+	PlaybackReviewContinue PlaybackReviewDecision = "continue"
+	PlaybackReviewSkip     PlaybackReviewDecision = "skip"
+	PlaybackReviewStop     PlaybackReviewDecision = "stop"
+)
 
 // NewPlaybackEngine creates a new playback engine.
 func NewPlaybackEngine(recording *Recording, variation VariationConfig) *PlaybackEngine {
 	return &PlaybackEngine{
-		recording: recording,
-		variation: variation,
-		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		recording:        recording,
+		variation:        variation,
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
+		reviewDecisionCh: make(chan PlaybackReviewDecision, 1),
 	}
 }
 
@@ -98,6 +114,28 @@ func (e *PlaybackEngine) Stop() {
 	}
 }
 
+func (e *PlaybackEngine) SubmitReviewDecision(decision string) error {
+	if e == nil {
+		return fmt.Errorf("playback engine unavailable")
+	}
+	normalized, err := normalizePlaybackReviewDecision(decision)
+	if err != nil {
+		return err
+	}
+	e.reviewMu.Lock()
+	defer e.reviewMu.Unlock()
+	if e.reviewDecisionCh == nil {
+		e.reviewDecisionCh = make(chan PlaybackReviewDecision, 1)
+	}
+	select {
+	case e.reviewDecisionCh <- normalized:
+	default:
+		<-e.reviewDecisionCh
+		e.reviewDecisionCh <- normalized
+	}
+	return nil
+}
+
 func (e *PlaybackEngine) run(ctx context.Context) (err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -131,6 +169,7 @@ func (e *PlaybackEngine) run(ctx context.Context) (err error) {
 	lastX := 0.0
 	lastY := 0.0
 	msgID := 100
+	skipNextMouseRelease := false
 
 	for i, evt := range events {
 		select {
@@ -158,11 +197,34 @@ func (e *PlaybackEngine) run(ctx context.Context) (err error) {
 			y += e.gaussian(0, e.variation.Intensity*e.variation.PositionJitter)
 		}
 
+		if skipNextMouseRelease && evt.Type == "up" {
+			skipNextMouseRelease = false
+			lastProgressIndex = i + 1
+			e.emitProgress(lastProgressIndex, len(events), startedAt, "running")
+			continue
+		}
+
+		if needsReview, reason, action := e.reviewRequirement(evt); needsReview {
+			decision, err := e.awaitReviewDecision(ctx, i+1, len(events), startedAt, reason, action)
+			if err != nil {
+				return err
+			}
+			switch decision {
+			case PlaybackReviewStop:
+				return fmt.Errorf("playback stopped by review decision")
+			case PlaybackReviewSkip:
+				if evt.Type == "down" {
+					skipNextMouseRelease = true
+				}
+				lastProgressIndex = i + 1
+				e.emitProgress(lastProgressIndex, len(events), startedAt, "running")
+				continue
+			}
+		}
+
 		switch evt.Type {
 		case "move":
-			if err := e.dispatchMouseMove(msgID, lastX, lastY, x, y); err != nil {
-				return fmt.Errorf("move event failed: %w", err)
-			}
+			e.dispatchMouseMove(msgID, lastX, lastY, x, y)
 			msgID++
 			lastX, lastY = x, y
 
@@ -238,9 +300,7 @@ func (e *PlaybackEngine) run(ctx context.Context) (err error) {
 			}
 			overshootX := x + float64(e.rng.Intn(3)-1)
 			overshootY := y + float64(e.rng.Intn(3)-1)
-			if err := e.dispatchMouseMove(msgID, x, y, overshootX, overshootY); err != nil {
-				return fmt.Errorf("micro-correction failed: %w", err)
-			}
+			e.dispatchMouseMove(msgID, x, y, overshootX, overshootY)
 			msgID++
 			lastX, lastY = overshootX, overshootY
 		}
@@ -277,6 +337,10 @@ func (e *PlaybackEngine) recordingEventTotal() int {
 }
 
 func (e *PlaybackEngine) emitProgress(eventIndex int, eventTotal int, startedAt time.Time, status string) {
+	e.emitProgressWithReview(eventIndex, eventTotal, startedAt, status, "", "")
+}
+
+func (e *PlaybackEngine) emitProgressWithReview(eventIndex int, eventTotal int, startedAt time.Time, status string, reason string, action string) {
 	if e == nil || e.progressCallback == nil {
 		return
 	}
@@ -322,7 +386,104 @@ func (e *PlaybackEngine) emitProgress(eventIndex int, eventTotal int, startedAt 
 		Percent:     percent,
 		ElapsedMs:   elapsedMs,
 		Status:      status,
+		Reason:      reason,
+		Action:      action,
 	})
+}
+
+func (e *PlaybackEngine) awaitReviewDecision(ctx context.Context, eventIndex int, eventTotal int, startedAt time.Time, reason string, action string) (PlaybackReviewDecision, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(action) == "" {
+		action = "请确认继续、跳过当前步骤，或终止回放。"
+	}
+	e.emitProgressWithReview(eventIndex, eventTotal, startedAt, "needs_review", reason, action)
+
+	e.reviewMu.Lock()
+	if e.reviewDecisionCh == nil {
+		e.reviewDecisionCh = make(chan PlaybackReviewDecision, 1)
+	}
+	ch := e.reviewDecisionCh
+	e.reviewMu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return PlaybackReviewStop, ctx.Err()
+	case decision := <-ch:
+		return decision, nil
+	}
+}
+
+func (e *PlaybackEngine) reviewRequirement(evt RecordedEvent) (bool, string, string) {
+	policy := effectivePlaybackExecutionPolicy(e.variation.ExecutionPolicy)
+	if policy == nil || !isReviewableRecordedEvent(evt) {
+		return false, "", ""
+	}
+	if evt.Sensitive {
+		return true, "当前步骤包含敏感输入或强制人工边界。", "请在真实浏览器中人工处理后确认继续，或跳过/终止。"
+	}
+	switch policy.PermissionMode {
+	case PermissionAskEachTime:
+		return true, "当前执行权限为“每次询问”。", "确认后执行当前步骤；不展示目标截图、候选元素或推荐点击点。"
+	case PermissionAutoReview:
+		if isLowConfidenceRecordedEvent(evt) {
+			return true, "当前步骤缺少稳定目标信息，自动审查判定为低置信。", "请确认继续、接管真实浏览器、跳过或终止。"
+		}
+	}
+	return false, "", ""
+}
+
+func effectivePlaybackExecutionPolicy(policy *ExecutionPolicy) *ExecutionPolicy {
+	if policy == nil {
+		return nil
+	}
+	normalized := DefaultExecutionPolicy(policy.PermissionMode)
+	if len(policy.HumanBoundaries) > 0 {
+		normalized.HumanBoundaries = append([]HumanBoundary{}, policy.HumanBoundaries...)
+	}
+	normalized.LowConfidencePause = policy.LowConfidencePause
+	if !normalized.LowConfidencePause.Enabled {
+		normalized.LowConfidencePause.Enabled = true
+	}
+	normalized.LowConfidencePause.RevealTargetScreenshot = false
+	normalized.LowConfidencePause.RevealCandidateElements = false
+	normalized.LowConfidencePause.RevealRecommendedPoint = false
+	if len(normalized.LowConfidencePause.PromptFields) == 0 {
+		normalized.LowConfidencePause.PromptFields = []string{"reason", "action"}
+	}
+	return &normalized
+}
+
+func isReviewableRecordedEvent(evt RecordedEvent) bool {
+	switch evt.Type {
+	case "click", "down", "key", "scroll", "input", "change", "paste", "composition":
+		return true
+	default:
+		return false
+	}
+}
+
+func isLowConfidenceRecordedEvent(evt RecordedEvent) bool {
+	switch evt.Type {
+	case "click", "down", "scroll":
+		return strings.TrimSpace(evt.TargetPath) == ""
+	default:
+		return false
+	}
+}
+
+func normalizePlaybackReviewDecision(decision string) (PlaybackReviewDecision, error) {
+	switch PlaybackReviewDecision(strings.TrimSpace(strings.ToLower(decision))) {
+	case PlaybackReviewContinue:
+		return PlaybackReviewContinue, nil
+	case PlaybackReviewSkip:
+		return PlaybackReviewSkip, nil
+	case PlaybackReviewStop:
+		return PlaybackReviewStop, nil
+	default:
+		return "", fmt.Errorf("invalid playback review decision: %s", decision)
+	}
 }
 
 func (e *PlaybackEngine) readCurrentViewport() (playbackViewport, error) {
@@ -501,8 +662,12 @@ func clamp01(v float64) float64 {
 
 func (e *PlaybackEngine) dispatchMouseMove(msgID int, fromX, fromY, toX, toY float64) error {
 	// Use simple linear interpolation for replay (not bezier - replay already has the path)
-	steps := 5 + e.rng.Intn(5)
-	for step := 0; step <= steps; step++ {
+	steps := e.mouseMoveStepCount(fromX, fromY, toX, toY)
+	var firstErr error
+	targetDelivered := false
+	targetX := math.Round(toX)
+	targetY := math.Round(toY)
+	for step := 1; step <= steps; step++ {
 		t := float64(step) / float64(steps)
 		x := fromX + (toX-fromX)*t
 		y := fromY + (toY-fromY)*t
@@ -510,23 +675,48 @@ func (e *PlaybackEngine) dispatchMouseMove(msgID int, fromX, fromY, toX, toY flo
 			x += e.gaussian(0, 1)
 			y += e.gaussian(0, 1)
 		}
-		if err := e.sendMessage(map[string]interface{}{
-			"id":     msgID*1000 + step,
-			"method": "Input.dispatchMouseEvent",
-			"params": map[string]interface{}{
-				"type": "mouseMoved",
-				"x":    math.Round(x),
-				"y":    math.Round(y),
-			},
-		}); err != nil {
-			return err
+		if err := e.dispatchMouseMoved(msgID*1000+step, x, y); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		} else if math.Round(x) == targetX && math.Round(y) == targetY {
+			targetDelivered = true
 		}
-		time.Sleep(time.Duration(computePlaybackDelayMs(int64(8+e.rng.Intn(8)), VariationConfig{
-			Intensity:      e.variation.Intensity,
-			SpeedVariation: e.variation.SpeedVariation,
-		}, e.rng)) * time.Millisecond)
+		if step < steps {
+			time.Sleep(time.Duration(computePlaybackDelayMs(int64(8+e.rng.Intn(8)), VariationConfig{
+				Intensity:      e.variation.Intensity,
+				SpeedVariation: e.variation.SpeedVariation,
+			}, e.rng)) * time.Millisecond)
+		}
 	}
-	return nil
+	if firstErr != nil && !targetDelivered {
+		_ = e.dispatchMouseMoved(msgID*1000+steps+1, toX, toY)
+	}
+	return firstErr
+}
+
+func (e *PlaybackEngine) mouseMoveStepCount(fromX, fromY, toX, toY float64) int {
+	distance := math.Hypot(toX-fromX, toY-fromY)
+	switch {
+	case distance <= 8:
+		return 1
+	case distance <= 32:
+		return 2
+	default:
+		return 5 + e.rng.Intn(5)
+	}
+}
+
+func (e *PlaybackEngine) dispatchMouseMoved(msgID int, x, y float64) error {
+	return e.sendMessage(map[string]interface{}{
+		"id":     msgID,
+		"method": "Input.dispatchMouseEvent",
+		"params": map[string]interface{}{
+			"type": "mouseMoved",
+			"x":    math.Round(x),
+			"y":    math.Round(y),
+		},
+	})
 }
 
 func (e *PlaybackEngine) dispatchMouseEvent(msgID int, eventType string, x, y float64, button int) error {
@@ -634,6 +824,9 @@ func (e *PlaybackEngine) sendMessage(msg map[string]interface{}) error {
 }
 
 func (e *PlaybackEngine) sendCommand(id int, method string, params interface{}) (json.RawMessage, error) {
+	if e.sendCommandFn != nil {
+		return e.sendCommandFn(id, method, params)
+	}
 	if e.wsConn == nil {
 		return nil, fmt.Errorf("websocket not connected")
 	}

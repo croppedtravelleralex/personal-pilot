@@ -145,6 +145,116 @@ type AutomationBatchSummaryPayload struct {
 	Duration int64  `json:"duration"`
 }
 
+// AutomationGuardAccountSettingsDetectedPayload is the payload for event "automation:guard:account-settings-detected".
+type AutomationGuardAccountSettingsDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationGuardCaptchaDetectedPayload is the payload for event "automation:guard:captcha-detected".
+type AutomationGuardCaptchaDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationGuardDeleteDetectedPayload is the payload for event "automation:guard:delete-detected".
+type AutomationGuardDeleteDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationGuardManualRequiredPayload is the payload for event "automation:guard:manual-required".
+type AutomationGuardManualRequiredPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationGuardPasswordDetectedPayload is the payload for event "automation:guard:password-detected".
+type AutomationGuardPasswordDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationGuardSwitchAccountDetectedPayload is the payload for event "automation:guard:switch-account-detected".
+type AutomationGuardSwitchAccountDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationGuardTwoFactorDetectedPayload is the payload for event "automation:guard:two-factor-detected".
+type AutomationGuardTwoFactorDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationPermissionAskEachTimePayload is the payload for event "automation:permission:ask-each-time".
+type AutomationPermissionAskEachTimePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationPermissionAutoReviewPayload is the payload for event "automation:permission:auto-review".
+type AutomationPermissionAutoReviewPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationPermissionFullAccessPayload is the payload for event "automation:permission:full-access".
+type AutomationPermissionFullAccessPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
 // AutomationRuleCooldownSkippedPayload is the payload for event "automation:rule:cooldown-skipped".
 type AutomationRuleCooldownSkippedPayload struct {
 	RuleId   string `json:"ruleId"`
@@ -220,6 +330,72 @@ type AutomationScriptStartedPayload struct {
 	TaskName string `json:"taskName"`
 }
 
+// AutomationTargetConfidenceHighPayload is the payload for event "automation:target:confidence-high".
+type AutomationTargetConfidenceHighPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationTargetConfidenceLowPayload is the payload for event "automation:target:confidence-low".
+type AutomationTargetConfidenceLowPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationTargetConfidenceMediumPayload is the payload for event "automation:target:confidence-medium".
+type AutomationTargetConfidenceMediumPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationTargetHitTestFailPayload is the payload for event "automation:target:hit-test-fail".
+type AutomationTargetHitTestFailPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationTargetHitTestPassPayload is the payload for event "automation:target:hit-test-pass".
+type AutomationTargetHitTestPassPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// AutomationTaskBehaviorRiskBlockedPayload is the payload for event "automation:task:behavior-risk-blocked".
+type AutomationTaskBehaviorRiskBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
 // AutomationTaskCancelledPayload is the payload for event "automation:task:cancelled".
 type AutomationTaskCancelledPayload struct {
 	TaskId string `json:"taskId"`
@@ -230,6 +406,17 @@ type AutomationTaskCompletedPayload struct {
 	TaskId   string                 `json:"taskId"`
 	Duration int64                  `json:"duration"`
 	Result   map[string]interface{} `json:"result"`
+}
+
+// AutomationTaskCookieRiskBlockedPayload is the payload for event "automation:task:cookie-risk-blocked".
+type AutomationTaskCookieRiskBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
 }
 
 // AutomationTaskCreatedPayload is the payload for event "automation:task:created".
@@ -253,9 +440,31 @@ type AutomationTaskFailedPayload struct {
 	Step   string `json:"step"`
 }
 
+// AutomationTaskIdentityRiskBlockedPayload is the payload for event "automation:task:identity-risk-blocked".
+type AutomationTaskIdentityRiskBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
 // AutomationTaskPausedPayload is the payload for event "automation:task:paused".
 type AutomationTaskPausedPayload struct {
 	TaskId string `json:"taskId"`
+}
+
+// AutomationTaskProfileLockBlockedPayload is the payload for event "automation:task:profile-lock-blocked".
+type AutomationTaskProfileLockBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
 }
 
 // AutomationTaskProgressPayload is the payload for event "automation:task:progress".
@@ -263,6 +472,17 @@ type AutomationTaskProgressPayload struct {
 	TaskId      string `json:"taskId"`
 	Progress    int    `json:"progress"`
 	CurrentStep string `json:"currentStep"`
+}
+
+// AutomationTaskProxyRiskBlockedPayload is the payload for event "automation:task:proxy-risk-blocked".
+type AutomationTaskProxyRiskBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
 }
 
 // AutomationTaskResumedPayload is the payload for event "automation:task:resumed".
@@ -318,6 +538,402 @@ type BackupImportRestoringPayload struct {
 // BackupImportStartedPayload is the payload for event "backup:import:started".
 type BackupImportStartedPayload struct {
 	Path string `json:"path"`
+}
+
+// BehaviorCadenceBotLikePayload is the payload for event "behavior:cadence:bot-like".
+type BehaviorCadenceBotLikePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorCadenceHumanPayload is the payload for event "behavior:cadence:human".
+type BehaviorCadenceHumanPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorCadenceMixedPayload is the payload for event "behavior:cadence:mixed".
+type BehaviorCadenceMixedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorClickOffsetAppliedPayload is the payload for event "behavior:click:offset-applied".
+type BehaviorClickOffsetAppliedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorClickStrictFailedPayload is the payload for event "behavior:click:strict-failed".
+type BehaviorClickStrictFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorHumanBoundaryDetectedPayload is the payload for event "behavior:human-boundary:detected".
+type BehaviorHumanBoundaryDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorMoveDegradedPayload is the payload for event "behavior:move:degraded".
+type BehaviorMoveDegradedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPermissionModeChangedPayload is the payload for event "behavior:permission-mode:changed".
+type BehaviorPermissionModeChangedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackCompletedPayload is the payload for event "behavior:playback:completed".
+type BehaviorPlaybackCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackDecisionContinuePayload is the payload for event "behavior:playback:decision-continue".
+type BehaviorPlaybackDecisionContinuePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackDecisionSkipPayload is the payload for event "behavior:playback:decision-skip".
+type BehaviorPlaybackDecisionSkipPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackDecisionStopPayload is the payload for event "behavior:playback:decision-stop".
+type BehaviorPlaybackDecisionStopPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackFailedPayload is the payload for event "behavior:playback:failed".
+type BehaviorPlaybackFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackNeedsReviewPayload is the payload for event "behavior:playback:needs-review".
+type BehaviorPlaybackNeedsReviewPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackProgressPayload is the payload for event "behavior:playback:progress".
+type BehaviorPlaybackProgressPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorPlaybackStartedPayload is the payload for event "behavior:playback:started".
+type BehaviorPlaybackStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingDeletedPayload is the payload for event "behavior:recording:deleted".
+type BehaviorRecordingDeletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingEventPageLoadedPayload is the payload for event "behavior:recording:event-page-loaded".
+type BehaviorRecordingEventPageLoadedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingExportedPayload is the payload for event "behavior:recording:exported".
+type BehaviorRecordingExportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingImportedPayload is the payload for event "behavior:recording:imported".
+type BehaviorRecordingImportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingSavedPayload is the payload for event "behavior:recording:saved".
+type BehaviorRecordingSavedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingSensitiveRedactedPayload is the payload for event "behavior:recording:sensitive-redacted".
+type BehaviorRecordingSensitiveRedactedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingStartedPayload is the payload for event "behavior:recording:started".
+type BehaviorRecordingStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorRecordingStoppedPayload is the payload for event "behavior:recording:stopped".
+type BehaviorRecordingStoppedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorReviewPromptHiddenEvidencePayload is the payload for event "behavior:review:prompt-hidden-evidence".
+type BehaviorReviewPromptHiddenEvidencePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorReviewResumedPayload is the payload for event "behavior:review:resumed".
+type BehaviorReviewResumedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorReviewTimeoutPayload is the payload for event "behavior:review:timeout".
+type BehaviorReviewTimeoutPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorScrollPlanGeneratedPayload is the payload for event "behavior:scroll-plan:generated".
+type BehaviorScrollPlanGeneratedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTakeoverRequestedPayload is the payload for event "behavior:takeover:requested".
+type BehaviorTakeoverRequestedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTargetLowConfidencePayload is the payload for event "behavior:target:low-confidence".
+type BehaviorTargetLowConfidencePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTargetResolvedPayload is the payload for event "behavior:target:resolved".
+type BehaviorTargetResolvedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTemplateCreatedPayload is the payload for event "behavior:template:created".
+type BehaviorTemplateCreatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTemplateRejectedPayload is the payload for event "behavior:template:rejected".
+type BehaviorTemplateRejectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTemplateUpdatedPayload is the payload for event "behavior:template:updated".
+type BehaviorTemplateUpdatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTemplateValidatedPayload is the payload for event "behavior:template:validated".
+type BehaviorTemplateValidatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// BehaviorTypingPlanGeneratedPayload is the payload for event "behavior:typing-plan:generated".
+type BehaviorTypingPlanGeneratedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
 }
 
 // BrowserInstanceCrashedPayload is the payload for event "browser:instance:crashed".
@@ -587,6 +1203,347 @@ type ContentPublishSubmittedPayload struct {
 	NoteId    string `json:"noteId"`
 }
 
+// CookieBackupCompletedPayload is the payload for event "cookie:backup:completed".
+type CookieBackupCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieBackupFailedPayload is the payload for event "cookie:backup:failed".
+type CookieBackupFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieBackupManifestWrittenPayload is the payload for event "cookie:backup:manifest-written".
+type CookieBackupManifestWrittenPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieBackupStartedPayload is the payload for event "cookie:backup:started".
+type CookieBackupStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieCountChangedPayload is the payload for event "cookie:count:changed".
+type CookieCountChangedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieDbCorruptedPayload is the payload for event "cookie:db:corrupted".
+type CookieDbCorruptedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieDbLockedPayload is the payload for event "cookie:db:locked".
+type CookieDbLockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieDbUnlockedPayload is the payload for event "cookie:db:unlocked".
+type CookieDbUnlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieDomainExportedPayload is the payload for event "cookie:domain:exported".
+type CookieDomainExportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieDomainImportedPayload is the payload for event "cookie:domain:imported".
+type CookieDomainImportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieEncryptedStoreUnavailablePayload is the payload for event "cookie:encrypted-store:unavailable".
+type CookieEncryptedStoreUnavailablePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieImportConflictPayload is the payload for event "cookie:import:conflict".
+type CookieImportConflictPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieIntegrityChangedPayload is the payload for event "cookie:integrity:changed".
+type CookieIntegrityChangedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieIntegrityCheckedPayload is the payload for event "cookie:integrity:checked".
+type CookieIntegrityCheckedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieIntegrityMatchedPayload is the payload for event "cookie:integrity:matched".
+type CookieIntegrityMatchedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookiePersistentCookieSummaryPayload is the payload for event "cookie:persistent-cookie:summary".
+type CookiePersistentCookieSummaryPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieProfileBindingRejectedPayload is the payload for event "cookie:profile-binding:rejected".
+type CookieProfileBindingRejectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieProfileBindingValidatedPayload is the payload for event "cookie:profile-binding:validated".
+type CookieProfileBindingValidatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieReadCompletedPayload is the payload for event "cookie:read:completed".
+type CookieReadCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieRestoreCompletedPayload is the payload for event "cookie:restore:completed".
+type CookieRestoreCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieRestoreFailedPayload is the payload for event "cookie:restore:failed".
+type CookieRestoreFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieRestoreManifestReadPayload is the payload for event "cookie:restore:manifest-read".
+type CookieRestoreManifestReadPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieRestoreStartedPayload is the payload for event "cookie:restore:started".
+type CookieRestoreStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieRetentionPolicyAppliedPayload is the payload for event "cookie:retention:policy-applied".
+type CookieRetentionPolicyAppliedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieRetentionPolicySkippedPayload is the payload for event "cookie:retention:policy-skipped".
+type CookieRetentionPolicySkippedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieSameSiteSummaryPayload is the payload for event "cookie:same-site:summary".
+type CookieSameSiteSummaryPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieSessionCookieSummaryPayload is the payload for event "cookie:session-cookie:summary".
+type CookieSessionCookieSummaryPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieSqliteWalDetectedPayload is the payload for event "cookie:sqlite-wal:detected".
+type CookieSqliteWalDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieUnexpectedClearedPayload is the payload for event "cookie:unexpected-cleared".
+type CookieUnexpectedClearedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieValueRedactedPayload is the payload for event "cookie:value:redacted".
+type CookieValueRedactedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// CookieWriteBlockedPayload is the payload for event "cookie:write:blocked".
+type CookieWriteBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
 // CoreDownloadCompletedPayload is the payload for event "core:download:completed".
 type CoreDownloadCompletedPayload struct {
 	Version string `json:"version"`
@@ -705,6 +1662,1084 @@ type DownloadProgressPayload struct {
 	Message  string `json:"message"`
 }
 
+// FingerprintAppVersionCapturedPayload is the payload for event "fingerprint:app-version:captured".
+type FingerprintAppVersionCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintAudioCapturedPayload is the payload for event "fingerprint:audio:captured".
+type FingerprintAudioCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintAudioErrorPayload is the payload for event "fingerprint:audio:error".
+type FingerprintAudioErrorPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintAudioUnsupportedPayload is the payload for event "fingerprint:audio:unsupported".
+type FingerprintAudioUnsupportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintCanvasCapturedPayload is the payload for event "fingerprint:canvas:captured".
+type FingerprintCanvasCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintCanvasErrorPayload is the payload for event "fingerprint:canvas:error".
+type FingerprintCanvasErrorPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintCanvasVanillaDetectedPayload is the payload for event "fingerprint:canvas:vanilla-detected".
+type FingerprintCanvasVanillaDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintCdpCaptureCompletedPayload is the payload for event "fingerprint:cdp:capture-completed".
+type FingerprintCdpCaptureCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintCdpCaptureFailedPayload is the payload for event "fingerprint:cdp:capture-failed".
+type FingerprintCdpCaptureFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintCdpCaptureStartedPayload is the payload for event "fingerprint:cdp:capture-started".
+type FingerprintCdpCaptureStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintClientHintsCapturedPayload is the payload for event "fingerprint:client-hints:captured".
+type FingerprintClientHintsCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintClientHintsMismatchPayload is the payload for event "fingerprint:client-hints:mismatch".
+type FingerprintClientHintsMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintClientHintsUnavailablePayload is the payload for event "fingerprint:client-hints:unavailable".
+type FingerprintClientHintsUnavailablePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintColorSchemeCapturedPayload is the payload for event "fingerprint:color-scheme:captured".
+type FingerprintColorSchemeCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintDateFormatCapturedPayload is the payload for event "fingerprint:date-format:captured".
+type FingerprintDateFormatCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintDimensionCapturedPayload is the payload for event "fingerprint:dimension:captured".
+type FingerprintDimensionCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintDimensionMismatchPayload is the payload for event "fingerprint:dimension:mismatch".
+type FingerprintDimensionMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintDimensionMissingPayload is the payload for event "fingerprint:dimension:missing".
+type FingerprintDimensionMissingPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintDoNotTrackCapturedPayload is the payload for event "fingerprint:do-not-track:captured".
+type FingerprintDoNotTrackCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintFontsCapturedPayload is the payload for event "fingerprint:fonts:captured".
+type FingerprintFontsCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintFontsErrorPayload is the payload for event "fingerprint:fonts:error".
+type FingerprintFontsErrorPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintHardwareCapturedPayload is the payload for event "fingerprint:hardware:captured".
+type FingerprintHardwareCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintHardwareMismatchPayload is the payload for event "fingerprint:hardware:mismatch".
+type FingerprintHardwareMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintHoverCapturedPayload is the payload for event "fingerprint:hover:captured".
+type FingerprintHoverCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintIntlCapturedPayload is the payload for event "fingerprint:intl:captured".
+type FingerprintIntlCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintLanguageCapturedPayload is the payload for event "fingerprint:language:captured".
+type FingerprintLanguageCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintLanguageMismatchPayload is the payload for event "fingerprint:language:mismatch".
+type FingerprintLanguageMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintMediaQueryCapturedPayload is the payload for event "fingerprint:media-query:captured".
+type FingerprintMediaQueryCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintMimeTypesCapturedPayload is the payload for event "fingerprint:mime-types:captured".
+type FingerprintMimeTypesCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintNetworkInfoCapturedPayload is the payload for event "fingerprint:network-info:captured".
+type FingerprintNetworkInfoCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintNetworkInfoUnavailablePayload is the payload for event "fingerprint:network-info:unavailable".
+type FingerprintNetworkInfoUnavailablePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintNumberFormatCapturedPayload is the payload for event "fingerprint:number-format:captured".
+type FingerprintNumberFormatCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintPdfViewerCapturedPayload is the payload for event "fingerprint:pdf-viewer:captured".
+type FingerprintPdfViewerCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintPlatformCapturedPayload is the payload for event "fingerprint:platform:captured".
+type FingerprintPlatformCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintPlatformMismatchPayload is the payload for event "fingerprint:platform:mismatch".
+type FingerprintPlatformMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintPluginsCapturedPayload is the payload for event "fingerprint:plugins:captured".
+type FingerprintPluginsCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintPointerCapturedPayload is the payload for event "fingerprint:pointer:captured".
+type FingerprintPointerCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintReducedMotionCapturedPayload is the payload for event "fingerprint:reduced-motion:captured".
+type FingerprintReducedMotionCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintScreenCapturedPayload is the payload for event "fingerprint:screen:captured".
+type FingerprintScreenCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintScreenMismatchPayload is the payload for event "fingerprint:screen:mismatch".
+type FingerprintScreenMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintStorageCapturedPayload is the payload for event "fingerprint:storage:captured".
+type FingerprintStorageCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintStorageUnavailablePayload is the payload for event "fingerprint:storage:unavailable".
+type FingerprintStorageUnavailablePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintTimezoneCapturedPayload is the payload for event "fingerprint:timezone:captured".
+type FingerprintTimezoneCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintTimezoneMismatchPayload is the payload for event "fingerprint:timezone:mismatch".
+type FingerprintTimezoneMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintTouchCapturedPayload is the payload for event "fingerprint:touch:captured".
+type FingerprintTouchCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintUserAgentCapturedPayload is the payload for event "fingerprint:user-agent:captured".
+type FingerprintUserAgentCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintUserAgentMismatchPayload is the payload for event "fingerprint:user-agent:mismatch".
+type FingerprintUserAgentMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintViewportCapturedPayload is the payload for event "fingerprint:viewport:captured".
+type FingerprintViewportCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintViewportMismatchPayload is the payload for event "fingerprint:viewport:mismatch".
+type FingerprintViewportMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebdriverExposedPayload is the payload for event "fingerprint:webdriver:exposed".
+type FingerprintWebdriverExposedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebdriverHiddenPayload is the payload for event "fingerprint:webdriver:hidden".
+type FingerprintWebdriverHiddenPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebglCapturedPayload is the payload for event "fingerprint:webgl:captured".
+type FingerprintWebglCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebglEmptyPayload is the payload for event "fingerprint:webgl:empty".
+type FingerprintWebglEmptyPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebglExtensionsCapturedPayload is the payload for event "fingerprint:webgl:extensions-captured".
+type FingerprintWebglExtensionsCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebglLimitsCapturedPayload is the payload for event "fingerprint:webgl:limits-captured".
+type FingerprintWebglLimitsCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebgpuAvailablePayload is the payload for event "fingerprint:webgpu:available".
+type FingerprintWebgpuAvailablePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebgpuUnavailablePayload is the payload for event "fingerprint:webgpu:unavailable".
+type FingerprintWebgpuUnavailablePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// FingerprintWebrtcApiSupportedPayload is the payload for event "fingerprint:webrtc-api:supported".
+type FingerprintWebrtcApiSupportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityAuditHashMatchedPayload is the payload for event "identity:audit:hash-matched".
+type IdentityAuditHashMatchedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityAuditHashMismatchedPayload is the payload for event "identity:audit:hash-mismatched".
+type IdentityAuditHashMismatchedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityAuditMissingPayload is the payload for event "identity:audit:missing".
+type IdentityAuditMissingPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityBaselineCreatedPayload is the payload for event "identity:baseline:created".
+type IdentityBaselineCreatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityBaselineDriftedPayload is the payload for event "identity:baseline:drifted".
+type IdentityBaselineDriftedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityBaselineMatchedPayload is the payload for event "identity:baseline:matched".
+type IdentityBaselineMatchedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityBaselineResetRequestedPayload is the payload for event "identity:baseline:reset-requested".
+type IdentityBaselineResetRequestedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleCopiedPayload is the payload for event "identity:capsule:copied".
+type IdentityCapsuleCopiedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleCreatedPayload is the payload for event "identity:capsule:created".
+type IdentityCapsuleCreatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleExportedPayload is the payload for event "identity:capsule:exported".
+type IdentityCapsuleExportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleImportedPayload is the payload for event "identity:capsule:imported".
+type IdentityCapsuleImportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleLockedPayload is the payload for event "identity:capsule:locked".
+type IdentityCapsuleLockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleUnlockedPayload is the payload for event "identity:capsule:unlocked".
+type IdentityCapsuleUnlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleUpdatedPayload is the payload for event "identity:capsule:updated".
+type IdentityCapsuleUpdatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityCapsuleWriteBlockedPayload is the payload for event "identity:capsule:write-blocked".
+type IdentityCapsuleWriteBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityConsistencyFailPayload is the payload for event "identity:consistency:fail".
+type IdentityConsistencyFailPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityConsistencyPassPayload is the payload for event "identity:consistency:pass".
+type IdentityConsistencyPassPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityConsistencyWarningPayload is the payload for event "identity:consistency:warning".
+type IdentityConsistencyWarningPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityDimensionFailPayload is the payload for event "identity:dimension:fail".
+type IdentityDimensionFailPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityDimensionPassPayload is the payload for event "identity:dimension:pass".
+type IdentityDimensionPassPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityDimensionWarningPayload is the payload for event "identity:dimension:warning".
+type IdentityDimensionWarningPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityGuardFailPayload is the payload for event "identity:guard:fail".
+type IdentityGuardFailPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityGuardPassPayload is the payload for event "identity:guard:pass".
+type IdentityGuardPassPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityGuardWarningPayload is the payload for event "identity:guard:warning".
+type IdentityGuardWarningPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityProfileBoundPayload is the payload for event "identity:profile:bound".
+type IdentityProfileBoundPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityProfileUnboundPayload is the payload for event "identity:profile:unbound".
+type IdentityProfileUnboundPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityReportCompletedPayload is the payload for event "identity:report:completed".
+type IdentityReportCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityReportFailedPayload is the payload for event "identity:report:failed".
+type IdentityReportFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityReportHistoryPrunedPayload is the payload for event "identity:report:history-pruned".
+type IdentityReportHistoryPrunedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityReportHistorySavedPayload is the payload for event "identity:report:history-saved".
+type IdentityReportHistorySavedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityReportStartedPayload is the payload for event "identity:report:started".
+type IdentityReportStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityRiskAcknowledgedPayload is the payload for event "identity:risk:acknowledged".
+type IdentityRiskAcknowledgedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityRiskCreatedPayload is the payload for event "identity:risk:created".
+type IdentityRiskCreatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityRiskResolvedPayload is the payload for event "identity:risk:resolved".
+type IdentityRiskResolvedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityScoreChangedPayload is the payload for event "identity:score:changed".
+type IdentityScoreChangedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentityScoreThresholdCrossedPayload is the payload for event "identity:score:threshold-crossed".
+type IdentityScoreThresholdCrossedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentitySeedBoundPayload is the payload for event "identity:seed:bound".
+type IdentitySeedBoundPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentitySeedRotationBlockedPayload is the payload for event "identity:seed:rotation-blocked".
+type IdentitySeedRotationBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentitySubscoreChangedPayload is the payload for event "identity:subscore:changed".
+type IdentitySubscoreChangedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// IdentitySummaryUpdatedPayload is the payload for event "identity:summary:updated".
+type IdentitySummaryUpdatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
 // LicenseActivatedPayload is the payload for event "license:activated".
 type LicenseActivatedPayload struct {
 	MaxLimit int `json:"maxLimit"`
@@ -728,6 +2763,633 @@ type LicenseExpiringPayload struct {
 // LicenseRenewedPayload is the payload for event "license:renewed".
 type LicenseRenewedPayload struct {
 	NewExpiry string `json:"newExpiry"`
+}
+
+// NetworkDnsCheckCompletedPayload is the payload for event "network:dns:check-completed".
+type NetworkDnsCheckCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkDnsCheckFailedPayload is the payload for event "network:dns:check-failed".
+type NetworkDnsCheckFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkDnsCheckStartedPayload is the payload for event "network:dns:check-started".
+type NetworkDnsCheckStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkExitIpChangedPayload is the payload for event "network:exit-ip:changed".
+type NetworkExitIpChangedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkExitIpCheckCompletedPayload is the payload for event "network:exit-ip:check-completed".
+type NetworkExitIpCheckCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkExitIpCheckStartedPayload is the payload for event "network:exit-ip:check-started".
+type NetworkExitIpCheckStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkGeoMatchedPayload is the payload for event "network:geo:matched".
+type NetworkGeoMatchedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkGeoMismatchPayload is the payload for event "network:geo:mismatch".
+type NetworkGeoMismatchPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkLatencySampledPayload is the payload for event "network:latency:sampled".
+type NetworkLatencySampledPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyAuthFailedPayload is the payload for event "network:proxy:auth-failed".
+type NetworkProxyAuthFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyDatacenterDetectedPayload is the payload for event "network:proxy:datacenter-detected".
+type NetworkProxyDatacenterDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyHealthRecoveredPayload is the payload for event "network:proxy:health-recovered".
+type NetworkProxyHealthRecoveredPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyHealthWarningPayload is the payload for event "network:proxy:health-warning".
+type NetworkProxyHealthWarningPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyResidentialDetectedPayload is the payload for event "network:proxy:residential-detected".
+type NetworkProxyResidentialDetectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyRotationAllowedPayload is the payload for event "network:proxy:rotation-allowed".
+type NetworkProxyRotationAllowedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyRotationBlockedPayload is the payload for event "network:proxy:rotation-blocked".
+type NetworkProxyRotationBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyStickySessionBoundPayload is the payload for event "network:proxy:sticky-session-bound".
+type NetworkProxyStickySessionBoundPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkProxyStickySessionExpiredPayload is the payload for event "network:proxy:sticky-session-expired".
+type NetworkProxyStickySessionExpiredPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkWebrtcApiSupportedPayload is the payload for event "network:webrtc:api-supported".
+type NetworkWebrtcApiSupportedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// NetworkWebrtcApiUnavailablePayload is the payload for event "network:webrtc:api-unavailable".
+type NetworkWebrtcApiUnavailablePayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileClosedPayload is the payload for event "profile:closed".
+type ProfileClosedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileCopyCompletedPayload is the payload for event "profile:copy:completed".
+type ProfileCopyCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileCopyStartedPayload is the payload for event "profile:copy:started".
+type ProfileCopyStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileCoreBoundPayload is the payload for event "profile:core:bound".
+type ProfileCoreBoundPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileCoreMissingPayload is the payload for event "profile:core:missing".
+type ProfileCoreMissingPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileCreateCompletedPayload is the payload for event "profile:create:completed".
+type ProfileCreateCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileCreateStartedPayload is the payload for event "profile:create:started".
+type ProfileCreateStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileDeleteCompletedPayload is the payload for event "profile:delete:completed".
+type ProfileDeleteCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileDeleteStartedPayload is the payload for event "profile:delete:started".
+type ProfileDeleteStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileExportCompletedPayload is the payload for event "profile:export:completed".
+type ProfileExportCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileExportStartedPayload is the payload for event "profile:export:started".
+type ProfileExportStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileGroupMovedPayload is the payload for event "profile:group:moved".
+type ProfileGroupMovedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileGuardDuplicateUserDataDirPayload is the payload for event "profile:guard:duplicate-user-data-dir".
+type ProfileGuardDuplicateUserDataDirPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileGuardPathNormalizedPayload is the payload for event "profile:guard:path-normalized".
+type ProfileGuardPathNormalizedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileGuardPathRejectedPayload is the payload for event "profile:guard:path-rejected".
+type ProfileGuardPathRejectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileGuardStartLockConflictPayload is the payload for event "profile:guard:start-lock-conflict".
+type ProfileGuardStartLockConflictPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileGuardSymlinkRejectedPayload is the payload for event "profile:guard:symlink-rejected".
+type ProfileGuardSymlinkRejectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileHumanizeSeedCreatedPayload is the payload for event "profile:humanize-seed:created".
+type ProfileHumanizeSeedCreatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileHumanizeSeedEmptyRepairedPayload is the payload for event "profile:humanize-seed:empty-repaired".
+type ProfileHumanizeSeedEmptyRepairedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileHumanizeSeedPreservedPayload is the payload for event "profile:humanize-seed:preserved".
+type ProfileHumanizeSeedPreservedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileImportCompletedPayload is the payload for event "profile:import:completed".
+type ProfileImportCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileImportStartedPayload is the payload for event "profile:import:started".
+type ProfileImportStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileLaunchAuditCreatedPayload is the payload for event "profile:launch-audit:created".
+type ProfileLaunchAuditCreatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileLaunchAuditRejectedPayload is the payload for event "profile:launch-audit:rejected".
+type ProfileLaunchAuditRejectedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileLaunchAuditValidatedPayload is the payload for event "profile:launch-audit:validated".
+type ProfileLaunchAuditValidatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileOpenedPayload is the payload for event "profile:opened".
+type ProfileOpenedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfilePathConfirmationRequiredPayload is the payload for event "profile:path:confirmation-required".
+type ProfilePathConfirmationRequiredPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfilePreferenceMergedPayload is the payload for event "profile:preference:merged".
+type ProfilePreferenceMergedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileRuntimeWarningClearedPayload is the payload for event "profile:runtime-warning:cleared".
+type ProfileRuntimeWarningClearedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileRuntimeWarningSetPayload is the payload for event "profile:runtime-warning:set".
+type ProfileRuntimeWarningSetPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileSnapshotPreflightPayload is the payload for event "profile:snapshot:preflight".
+type ProfileSnapshotPreflightPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileSnapshotRestoredPayload is the payload for event "profile:snapshot:restored".
+type ProfileSnapshotRestoredPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileTagUpdatedPayload is the payload for event "profile:tag:updated".
+type ProfileTagUpdatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileUpdateCompletedPayload is the payload for event "profile:update:completed".
+type ProfileUpdateCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileUpdateStartedPayload is the payload for event "profile:update:started".
+type ProfileUpdateStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileUserDataDirBoundPayload is the payload for event "profile:user-data-dir:bound".
+type ProfileUserDataDirBoundPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// ProfileUserDataDirChangedBlockedPayload is the payload for event "profile:user-data-dir:changed-blocked".
+type ProfileUserDataDirChangedBlockedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
 }
 
 // ProxyBridgeClashStartedPayload is the payload for event "proxy:bridge:clash:started".
@@ -1172,6 +3834,270 @@ type SystemRecoveryProfileRepairedPayload struct {
 	ProfileId string `json:"profileId"`
 }
 
+// WorkbenchBatchCompletedPayload is the payload for event "workbench:batch:completed".
+type WorkbenchBatchCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchBatchFailedPayload is the payload for event "workbench:batch:failed".
+type WorkbenchBatchFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchBatchStartedPayload is the payload for event "workbench:batch:started".
+type WorkbenchBatchStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchFingerprintHealthCompletedPayload is the payload for event "workbench:fingerprint-health:completed".
+type WorkbenchFingerprintHealthCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchFingerprintHealthQueuedPayload is the payload for event "workbench:fingerprint-health:queued".
+type WorkbenchFingerprintHealthQueuedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchIdentityReportCompletedPayload is the payload for event "workbench:identity-report:completed".
+type WorkbenchIdentityReportCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchIdentityReportFailedPayload is the payload for event "workbench:identity-report:failed".
+type WorkbenchIdentityReportFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchIdentityReportQueuedPayload is the payload for event "workbench:identity-report:queued".
+type WorkbenchIdentityReportQueuedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchIdentityReportStartedPayload is the payload for event "workbench:identity-report:started".
+type WorkbenchIdentityReportStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchPreviewCapturedPayload is the payload for event "workbench:preview:captured".
+type WorkbenchPreviewCapturedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchPreviewFailedPayload is the payload for event "workbench:preview:failed".
+type WorkbenchPreviewFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchRefreshSilentPayload is the payload for event "workbench:refresh:silent".
+type WorkbenchRefreshSilentPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchSelectionChangedPayload is the payload for event "workbench:selection:changed".
+type WorkbenchSelectionChangedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchStatusPollCompletedPayload is the payload for event "workbench:status:poll-completed".
+type WorkbenchStatusPollCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchStatusPollStartedPayload is the payload for event "workbench:status:poll-started".
+type WorkbenchStatusPollStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchStatusStaleResultIgnoredPayload is the payload for event "workbench:status:stale-result-ignored".
+type WorkbenchStatusStaleResultIgnoredPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchTaskCompletedPayload is the payload for event "workbench:task:completed".
+type WorkbenchTaskCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchTaskFailedPayload is the payload for event "workbench:task:failed".
+type WorkbenchTaskFailedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchTaskQueuedPayload is the payload for event "workbench:task:queued".
+type WorkbenchTaskQueuedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchTaskStartedPayload is the payload for event "workbench:task:started".
+type WorkbenchTaskStartedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchWindowActivateRequestedPayload is the payload for event "workbench:window:activate-requested".
+type WorkbenchWindowActivateRequestedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchWindowActivatedPayload is the payload for event "workbench:window:activated".
+type WorkbenchWindowActivatedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchWindowArrangeCompletedPayload is the payload for event "workbench:window:arrange-completed".
+type WorkbenchWindowArrangeCompletedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
+// WorkbenchWindowArrangeRequestedPayload is the payload for event "workbench:window:arrange-requested".
+type WorkbenchWindowArrangeRequestedPayload struct {
+	ProfileId   string `json:"profileId"`
+	ProfileName string `json:"profileName"`
+	ReportId    string `json:"reportId"`
+	DimensionId string `json:"dimensionId"`
+	Status      string `json:"status"`
+	Score       int    `json:"score"`
+	Message     string `json:"message"`
+}
+
 // ─── Emitter Functions ──────────────────────────────────────────
 
 // toMap converts a struct to map[string]interface{} via JSON round-trip.
@@ -1308,6 +4234,66 @@ func EmitAutomationBatchSummary(ctx context.Context, data AutomationBatchSummary
 	EmitAndLog(ctx, EventAutomationBatchSummary, toMap(data))
 }
 
+// EmitAutomationGuardAccountSettingsDetected emits a "automation:guard:account-settings-detected" event.
+// Identity observability event: automation:guard:account-settings-detected
+func EmitAutomationGuardAccountSettingsDetected(ctx context.Context, data AutomationGuardAccountSettingsDetectedPayload) {
+	EmitAndLog(ctx, EventAutomationGuardAccountSettingsDetected, toMap(data))
+}
+
+// EmitAutomationGuardCaptchaDetected emits a "automation:guard:captcha-detected" event.
+// Identity observability event: automation:guard:captcha-detected
+func EmitAutomationGuardCaptchaDetected(ctx context.Context, data AutomationGuardCaptchaDetectedPayload) {
+	EmitAndLog(ctx, EventAutomationGuardCaptchaDetected, toMap(data))
+}
+
+// EmitAutomationGuardDeleteDetected emits a "automation:guard:delete-detected" event.
+// Identity observability event: automation:guard:delete-detected
+func EmitAutomationGuardDeleteDetected(ctx context.Context, data AutomationGuardDeleteDetectedPayload) {
+	EmitAndLog(ctx, EventAutomationGuardDeleteDetected, toMap(data))
+}
+
+// EmitAutomationGuardManualRequired emits a "automation:guard:manual-required" event.
+// Identity observability event: automation:guard:manual-required
+func EmitAutomationGuardManualRequired(ctx context.Context, data AutomationGuardManualRequiredPayload) {
+	EmitAndLog(ctx, EventAutomationGuardManualRequired, toMap(data))
+}
+
+// EmitAutomationGuardPasswordDetected emits a "automation:guard:password-detected" event.
+// Identity observability event: automation:guard:password-detected
+func EmitAutomationGuardPasswordDetected(ctx context.Context, data AutomationGuardPasswordDetectedPayload) {
+	EmitAndLog(ctx, EventAutomationGuardPasswordDetected, toMap(data))
+}
+
+// EmitAutomationGuardSwitchAccountDetected emits a "automation:guard:switch-account-detected" event.
+// Identity observability event: automation:guard:switch-account-detected
+func EmitAutomationGuardSwitchAccountDetected(ctx context.Context, data AutomationGuardSwitchAccountDetectedPayload) {
+	EmitAndLog(ctx, EventAutomationGuardSwitchAccountDetected, toMap(data))
+}
+
+// EmitAutomationGuardTwoFactorDetected emits a "automation:guard:two-factor-detected" event.
+// Identity observability event: automation:guard:two-factor-detected
+func EmitAutomationGuardTwoFactorDetected(ctx context.Context, data AutomationGuardTwoFactorDetectedPayload) {
+	EmitAndLog(ctx, EventAutomationGuardTwoFactorDetected, toMap(data))
+}
+
+// EmitAutomationPermissionAskEachTime emits a "automation:permission:ask-each-time" event.
+// Identity observability event: automation:permission:ask-each-time
+func EmitAutomationPermissionAskEachTime(ctx context.Context, data AutomationPermissionAskEachTimePayload) {
+	EmitAndLog(ctx, EventAutomationPermissionAskEachTime, toMap(data))
+}
+
+// EmitAutomationPermissionAutoReview emits a "automation:permission:auto-review" event.
+// Identity observability event: automation:permission:auto-review
+func EmitAutomationPermissionAutoReview(ctx context.Context, data AutomationPermissionAutoReviewPayload) {
+	EmitAndLog(ctx, EventAutomationPermissionAutoReview, toMap(data))
+}
+
+// EmitAutomationPermissionFullAccess emits a "automation:permission:full-access" event.
+// Identity observability event: automation:permission:full-access
+func EmitAutomationPermissionFullAccess(ctx context.Context, data AutomationPermissionFullAccessPayload) {
+	EmitAndLog(ctx, EventAutomationPermissionFullAccess, toMap(data))
+}
+
 // EmitAutomationRuleCooldownSkipped emits a "automation:rule:cooldown-skipped" event.
 // 规则被冷却跳过
 func EmitAutomationRuleCooldownSkipped(ctx context.Context, data AutomationRuleCooldownSkippedPayload) {
@@ -1380,6 +4366,42 @@ func EmitAutomationScriptStarted(ctx context.Context, data AutomationScriptStart
 	EmitAndLog(ctx, EventAutomationScriptStarted, toMap(data))
 }
 
+// EmitAutomationTargetConfidenceHigh emits a "automation:target:confidence-high" event.
+// Identity observability event: automation:target:confidence-high
+func EmitAutomationTargetConfidenceHigh(ctx context.Context, data AutomationTargetConfidenceHighPayload) {
+	EmitAndLog(ctx, EventAutomationTargetConfidenceHigh, toMap(data))
+}
+
+// EmitAutomationTargetConfidenceLow emits a "automation:target:confidence-low" event.
+// Identity observability event: automation:target:confidence-low
+func EmitAutomationTargetConfidenceLow(ctx context.Context, data AutomationTargetConfidenceLowPayload) {
+	EmitAndLog(ctx, EventAutomationTargetConfidenceLow, toMap(data))
+}
+
+// EmitAutomationTargetConfidenceMedium emits a "automation:target:confidence-medium" event.
+// Identity observability event: automation:target:confidence-medium
+func EmitAutomationTargetConfidenceMedium(ctx context.Context, data AutomationTargetConfidenceMediumPayload) {
+	EmitAndLog(ctx, EventAutomationTargetConfidenceMedium, toMap(data))
+}
+
+// EmitAutomationTargetHitTestFail emits a "automation:target:hit-test-fail" event.
+// Identity observability event: automation:target:hit-test-fail
+func EmitAutomationTargetHitTestFail(ctx context.Context, data AutomationTargetHitTestFailPayload) {
+	EmitAndLog(ctx, EventAutomationTargetHitTestFail, toMap(data))
+}
+
+// EmitAutomationTargetHitTestPass emits a "automation:target:hit-test-pass" event.
+// Identity observability event: automation:target:hit-test-pass
+func EmitAutomationTargetHitTestPass(ctx context.Context, data AutomationTargetHitTestPassPayload) {
+	EmitAndLog(ctx, EventAutomationTargetHitTestPass, toMap(data))
+}
+
+// EmitAutomationTaskBehaviorRiskBlocked emits a "automation:task:behavior-risk-blocked" event.
+// Identity observability event: automation:task:behavior-risk-blocked
+func EmitAutomationTaskBehaviorRiskBlocked(ctx context.Context, data AutomationTaskBehaviorRiskBlockedPayload) {
+	EmitAndLog(ctx, EventAutomationTaskBehaviorRiskBlocked, toMap(data))
+}
+
 // EmitAutomationTaskCancelled emits a "automation:task:cancelled" event.
 // 自动化任务已取消
 func EmitAutomationTaskCancelled(ctx context.Context, data AutomationTaskCancelledPayload) {
@@ -1390,6 +4412,12 @@ func EmitAutomationTaskCancelled(ctx context.Context, data AutomationTaskCancell
 // 自动化任务执行完成
 func EmitAutomationTaskCompleted(ctx context.Context, data AutomationTaskCompletedPayload) {
 	EmitAndLog(ctx, EventAutomationTaskCompleted, toMap(data))
+}
+
+// EmitAutomationTaskCookieRiskBlocked emits a "automation:task:cookie-risk-blocked" event.
+// Identity observability event: automation:task:cookie-risk-blocked
+func EmitAutomationTaskCookieRiskBlocked(ctx context.Context, data AutomationTaskCookieRiskBlockedPayload) {
+	EmitAndLog(ctx, EventAutomationTaskCookieRiskBlocked, toMap(data))
 }
 
 // EmitAutomationTaskCreated emits a "automation:task:created" event.
@@ -1410,16 +4438,34 @@ func EmitAutomationTaskFailed(ctx context.Context, data AutomationTaskFailedPayl
 	EmitAndLog(ctx, EventAutomationTaskFailed, toMap(data))
 }
 
+// EmitAutomationTaskIdentityRiskBlocked emits a "automation:task:identity-risk-blocked" event.
+// Identity observability event: automation:task:identity-risk-blocked
+func EmitAutomationTaskIdentityRiskBlocked(ctx context.Context, data AutomationTaskIdentityRiskBlockedPayload) {
+	EmitAndLog(ctx, EventAutomationTaskIdentityRiskBlocked, toMap(data))
+}
+
 // EmitAutomationTaskPaused emits a "automation:task:paused" event.
 // 自动化任务已暂停
 func EmitAutomationTaskPaused(ctx context.Context, data AutomationTaskPausedPayload) {
 	EmitAndLog(ctx, EventAutomationTaskPaused, toMap(data))
 }
 
+// EmitAutomationTaskProfileLockBlocked emits a "automation:task:profile-lock-blocked" event.
+// Identity observability event: automation:task:profile-lock-blocked
+func EmitAutomationTaskProfileLockBlocked(ctx context.Context, data AutomationTaskProfileLockBlockedPayload) {
+	EmitAndLog(ctx, EventAutomationTaskProfileLockBlocked, toMap(data))
+}
+
 // EmitAutomationTaskProgress emits a "automation:task:progress" event.
 // 自动化任务执行进度
 func EmitAutomationTaskProgress(ctx context.Context, data AutomationTaskProgressPayload) {
 	EmitAndLog(ctx, EventAutomationTaskProgress, toMap(data))
+}
+
+// EmitAutomationTaskProxyRiskBlocked emits a "automation:task:proxy-risk-blocked" event.
+// Identity observability event: automation:task:proxy-risk-blocked
+func EmitAutomationTaskProxyRiskBlocked(ctx context.Context, data AutomationTaskProxyRiskBlockedPayload) {
+	EmitAndLog(ctx, EventAutomationTaskProxyRiskBlocked, toMap(data))
 }
 
 // EmitAutomationTaskResumed emits a "automation:task:resumed" event.
@@ -1486,6 +4532,222 @@ func EmitBackupImportStarted(ctx context.Context, data BackupImportStartedPayloa
 // 正在验证备份包完整性
 func EmitBackupImportValidating(ctx context.Context) {
 	EmitAndLog(ctx, EventBackupImportValidating)
+}
+
+// EmitBehaviorCadenceBotLike emits a "behavior:cadence:bot-like" event.
+// Identity observability event: behavior:cadence:bot-like
+func EmitBehaviorCadenceBotLike(ctx context.Context, data BehaviorCadenceBotLikePayload) {
+	EmitAndLog(ctx, EventBehaviorCadenceBotLike, toMap(data))
+}
+
+// EmitBehaviorCadenceHuman emits a "behavior:cadence:human" event.
+// Identity observability event: behavior:cadence:human
+func EmitBehaviorCadenceHuman(ctx context.Context, data BehaviorCadenceHumanPayload) {
+	EmitAndLog(ctx, EventBehaviorCadenceHuman, toMap(data))
+}
+
+// EmitBehaviorCadenceMixed emits a "behavior:cadence:mixed" event.
+// Identity observability event: behavior:cadence:mixed
+func EmitBehaviorCadenceMixed(ctx context.Context, data BehaviorCadenceMixedPayload) {
+	EmitAndLog(ctx, EventBehaviorCadenceMixed, toMap(data))
+}
+
+// EmitBehaviorClickOffsetApplied emits a "behavior:click:offset-applied" event.
+// Identity observability event: behavior:click:offset-applied
+func EmitBehaviorClickOffsetApplied(ctx context.Context, data BehaviorClickOffsetAppliedPayload) {
+	EmitAndLog(ctx, EventBehaviorClickOffsetApplied, toMap(data))
+}
+
+// EmitBehaviorClickStrictFailed emits a "behavior:click:strict-failed" event.
+// Identity observability event: behavior:click:strict-failed
+func EmitBehaviorClickStrictFailed(ctx context.Context, data BehaviorClickStrictFailedPayload) {
+	EmitAndLog(ctx, EventBehaviorClickStrictFailed, toMap(data))
+}
+
+// EmitBehaviorHumanBoundaryDetected emits a "behavior:human-boundary:detected" event.
+// Identity observability event: behavior:human-boundary:detected
+func EmitBehaviorHumanBoundaryDetected(ctx context.Context, data BehaviorHumanBoundaryDetectedPayload) {
+	EmitAndLog(ctx, EventBehaviorHumanBoundaryDetected, toMap(data))
+}
+
+// EmitBehaviorMoveDegraded emits a "behavior:move:degraded" event.
+// Identity observability event: behavior:move:degraded
+func EmitBehaviorMoveDegraded(ctx context.Context, data BehaviorMoveDegradedPayload) {
+	EmitAndLog(ctx, EventBehaviorMoveDegraded, toMap(data))
+}
+
+// EmitBehaviorPermissionModeChanged emits a "behavior:permission-mode:changed" event.
+// Identity observability event: behavior:permission-mode:changed
+func EmitBehaviorPermissionModeChanged(ctx context.Context, data BehaviorPermissionModeChangedPayload) {
+	EmitAndLog(ctx, EventBehaviorPermissionModeChanged, toMap(data))
+}
+
+// EmitBehaviorPlaybackCompleted emits a "behavior:playback:completed" event.
+// Identity observability event: behavior:playback:completed
+func EmitBehaviorPlaybackCompleted(ctx context.Context, data BehaviorPlaybackCompletedPayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackCompleted, toMap(data))
+}
+
+// EmitBehaviorPlaybackDecisionContinue emits a "behavior:playback:decision-continue" event.
+// Identity observability event: behavior:playback:decision-continue
+func EmitBehaviorPlaybackDecisionContinue(ctx context.Context, data BehaviorPlaybackDecisionContinuePayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackDecisionContinue, toMap(data))
+}
+
+// EmitBehaviorPlaybackDecisionSkip emits a "behavior:playback:decision-skip" event.
+// Identity observability event: behavior:playback:decision-skip
+func EmitBehaviorPlaybackDecisionSkip(ctx context.Context, data BehaviorPlaybackDecisionSkipPayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackDecisionSkip, toMap(data))
+}
+
+// EmitBehaviorPlaybackDecisionStop emits a "behavior:playback:decision-stop" event.
+// Identity observability event: behavior:playback:decision-stop
+func EmitBehaviorPlaybackDecisionStop(ctx context.Context, data BehaviorPlaybackDecisionStopPayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackDecisionStop, toMap(data))
+}
+
+// EmitBehaviorPlaybackFailed emits a "behavior:playback:failed" event.
+// Identity observability event: behavior:playback:failed
+func EmitBehaviorPlaybackFailed(ctx context.Context, data BehaviorPlaybackFailedPayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackFailed, toMap(data))
+}
+
+// EmitBehaviorPlaybackNeedsReview emits a "behavior:playback:needs-review" event.
+// Identity observability event: behavior:playback:needs-review
+func EmitBehaviorPlaybackNeedsReview(ctx context.Context, data BehaviorPlaybackNeedsReviewPayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackNeedsReview, toMap(data))
+}
+
+// EmitBehaviorPlaybackProgress emits a "behavior:playback:progress" event.
+// Identity observability event: behavior:playback:progress
+func EmitBehaviorPlaybackProgress(ctx context.Context, data BehaviorPlaybackProgressPayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackProgress, toMap(data))
+}
+
+// EmitBehaviorPlaybackStarted emits a "behavior:playback:started" event.
+// Identity observability event: behavior:playback:started
+func EmitBehaviorPlaybackStarted(ctx context.Context, data BehaviorPlaybackStartedPayload) {
+	EmitAndLog(ctx, EventBehaviorPlaybackStarted, toMap(data))
+}
+
+// EmitBehaviorRecordingDeleted emits a "behavior:recording:deleted" event.
+// Identity observability event: behavior:recording:deleted
+func EmitBehaviorRecordingDeleted(ctx context.Context, data BehaviorRecordingDeletedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingDeleted, toMap(data))
+}
+
+// EmitBehaviorRecordingEventPageLoaded emits a "behavior:recording:event-page-loaded" event.
+// Identity observability event: behavior:recording:event-page-loaded
+func EmitBehaviorRecordingEventPageLoaded(ctx context.Context, data BehaviorRecordingEventPageLoadedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingEventPageLoaded, toMap(data))
+}
+
+// EmitBehaviorRecordingExported emits a "behavior:recording:exported" event.
+// Identity observability event: behavior:recording:exported
+func EmitBehaviorRecordingExported(ctx context.Context, data BehaviorRecordingExportedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingExported, toMap(data))
+}
+
+// EmitBehaviorRecordingImported emits a "behavior:recording:imported" event.
+// Identity observability event: behavior:recording:imported
+func EmitBehaviorRecordingImported(ctx context.Context, data BehaviorRecordingImportedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingImported, toMap(data))
+}
+
+// EmitBehaviorRecordingSaved emits a "behavior:recording:saved" event.
+// Identity observability event: behavior:recording:saved
+func EmitBehaviorRecordingSaved(ctx context.Context, data BehaviorRecordingSavedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingSaved, toMap(data))
+}
+
+// EmitBehaviorRecordingSensitiveRedacted emits a "behavior:recording:sensitive-redacted" event.
+// Identity observability event: behavior:recording:sensitive-redacted
+func EmitBehaviorRecordingSensitiveRedacted(ctx context.Context, data BehaviorRecordingSensitiveRedactedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingSensitiveRedacted, toMap(data))
+}
+
+// EmitBehaviorRecordingStarted emits a "behavior:recording:started" event.
+// Identity observability event: behavior:recording:started
+func EmitBehaviorRecordingStarted(ctx context.Context, data BehaviorRecordingStartedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingStarted, toMap(data))
+}
+
+// EmitBehaviorRecordingStopped emits a "behavior:recording:stopped" event.
+// Identity observability event: behavior:recording:stopped
+func EmitBehaviorRecordingStopped(ctx context.Context, data BehaviorRecordingStoppedPayload) {
+	EmitAndLog(ctx, EventBehaviorRecordingStopped, toMap(data))
+}
+
+// EmitBehaviorReviewPromptHiddenEvidence emits a "behavior:review:prompt-hidden-evidence" event.
+// Identity observability event: behavior:review:prompt-hidden-evidence
+func EmitBehaviorReviewPromptHiddenEvidence(ctx context.Context, data BehaviorReviewPromptHiddenEvidencePayload) {
+	EmitAndLog(ctx, EventBehaviorReviewPromptHiddenEvidence, toMap(data))
+}
+
+// EmitBehaviorReviewResumed emits a "behavior:review:resumed" event.
+// Identity observability event: behavior:review:resumed
+func EmitBehaviorReviewResumed(ctx context.Context, data BehaviorReviewResumedPayload) {
+	EmitAndLog(ctx, EventBehaviorReviewResumed, toMap(data))
+}
+
+// EmitBehaviorReviewTimeout emits a "behavior:review:timeout" event.
+// Identity observability event: behavior:review:timeout
+func EmitBehaviorReviewTimeout(ctx context.Context, data BehaviorReviewTimeoutPayload) {
+	EmitAndLog(ctx, EventBehaviorReviewTimeout, toMap(data))
+}
+
+// EmitBehaviorScrollPlanGenerated emits a "behavior:scroll-plan:generated" event.
+// Identity observability event: behavior:scroll-plan:generated
+func EmitBehaviorScrollPlanGenerated(ctx context.Context, data BehaviorScrollPlanGeneratedPayload) {
+	EmitAndLog(ctx, EventBehaviorScrollPlanGenerated, toMap(data))
+}
+
+// EmitBehaviorTakeoverRequested emits a "behavior:takeover:requested" event.
+// Identity observability event: behavior:takeover:requested
+func EmitBehaviorTakeoverRequested(ctx context.Context, data BehaviorTakeoverRequestedPayload) {
+	EmitAndLog(ctx, EventBehaviorTakeoverRequested, toMap(data))
+}
+
+// EmitBehaviorTargetLowConfidence emits a "behavior:target:low-confidence" event.
+// Identity observability event: behavior:target:low-confidence
+func EmitBehaviorTargetLowConfidence(ctx context.Context, data BehaviorTargetLowConfidencePayload) {
+	EmitAndLog(ctx, EventBehaviorTargetLowConfidence, toMap(data))
+}
+
+// EmitBehaviorTargetResolved emits a "behavior:target:resolved" event.
+// Identity observability event: behavior:target:resolved
+func EmitBehaviorTargetResolved(ctx context.Context, data BehaviorTargetResolvedPayload) {
+	EmitAndLog(ctx, EventBehaviorTargetResolved, toMap(data))
+}
+
+// EmitBehaviorTemplateCreated emits a "behavior:template:created" event.
+// Identity observability event: behavior:template:created
+func EmitBehaviorTemplateCreated(ctx context.Context, data BehaviorTemplateCreatedPayload) {
+	EmitAndLog(ctx, EventBehaviorTemplateCreated, toMap(data))
+}
+
+// EmitBehaviorTemplateRejected emits a "behavior:template:rejected" event.
+// Identity observability event: behavior:template:rejected
+func EmitBehaviorTemplateRejected(ctx context.Context, data BehaviorTemplateRejectedPayload) {
+	EmitAndLog(ctx, EventBehaviorTemplateRejected, toMap(data))
+}
+
+// EmitBehaviorTemplateUpdated emits a "behavior:template:updated" event.
+// Identity observability event: behavior:template:updated
+func EmitBehaviorTemplateUpdated(ctx context.Context, data BehaviorTemplateUpdatedPayload) {
+	EmitAndLog(ctx, EventBehaviorTemplateUpdated, toMap(data))
+}
+
+// EmitBehaviorTemplateValidated emits a "behavior:template:validated" event.
+// Identity observability event: behavior:template:validated
+func EmitBehaviorTemplateValidated(ctx context.Context, data BehaviorTemplateValidatedPayload) {
+	EmitAndLog(ctx, EventBehaviorTemplateValidated, toMap(data))
+}
+
+// EmitBehaviorTypingPlanGenerated emits a "behavior:typing-plan:generated" event.
+// Identity observability event: behavior:typing-plan:generated
+func EmitBehaviorTypingPlanGenerated(ctx context.Context, data BehaviorTypingPlanGeneratedPayload) {
+	EmitAndLog(ctx, EventBehaviorTypingPlanGenerated, toMap(data))
 }
 
 // EmitBrowserInstanceCrashed emits a "browser:instance:crashed" event.
@@ -1740,6 +5002,192 @@ func EmitContentPublishSubmitted(ctx context.Context, data ContentPublishSubmitt
 	EmitAndLog(ctx, EventContentPublishSubmitted, toMap(data))
 }
 
+// EmitCookieBackupCompleted emits a "cookie:backup:completed" event.
+// Identity observability event: cookie:backup:completed
+func EmitCookieBackupCompleted(ctx context.Context, data CookieBackupCompletedPayload) {
+	EmitAndLog(ctx, EventCookieBackupCompleted, toMap(data))
+}
+
+// EmitCookieBackupFailed emits a "cookie:backup:failed" event.
+// Identity observability event: cookie:backup:failed
+func EmitCookieBackupFailed(ctx context.Context, data CookieBackupFailedPayload) {
+	EmitAndLog(ctx, EventCookieBackupFailed, toMap(data))
+}
+
+// EmitCookieBackupManifestWritten emits a "cookie:backup:manifest-written" event.
+// Identity observability event: cookie:backup:manifest-written
+func EmitCookieBackupManifestWritten(ctx context.Context, data CookieBackupManifestWrittenPayload) {
+	EmitAndLog(ctx, EventCookieBackupManifestWritten, toMap(data))
+}
+
+// EmitCookieBackupStarted emits a "cookie:backup:started" event.
+// Identity observability event: cookie:backup:started
+func EmitCookieBackupStarted(ctx context.Context, data CookieBackupStartedPayload) {
+	EmitAndLog(ctx, EventCookieBackupStarted, toMap(data))
+}
+
+// EmitCookieCountChanged emits a "cookie:count:changed" event.
+// Identity observability event: cookie:count:changed
+func EmitCookieCountChanged(ctx context.Context, data CookieCountChangedPayload) {
+	EmitAndLog(ctx, EventCookieCountChanged, toMap(data))
+}
+
+// EmitCookieDbCorrupted emits a "cookie:db:corrupted" event.
+// Identity observability event: cookie:db:corrupted
+func EmitCookieDbCorrupted(ctx context.Context, data CookieDbCorruptedPayload) {
+	EmitAndLog(ctx, EventCookieDbCorrupted, toMap(data))
+}
+
+// EmitCookieDbLocked emits a "cookie:db:locked" event.
+// Identity observability event: cookie:db:locked
+func EmitCookieDbLocked(ctx context.Context, data CookieDbLockedPayload) {
+	EmitAndLog(ctx, EventCookieDbLocked, toMap(data))
+}
+
+// EmitCookieDbUnlocked emits a "cookie:db:unlocked" event.
+// Identity observability event: cookie:db:unlocked
+func EmitCookieDbUnlocked(ctx context.Context, data CookieDbUnlockedPayload) {
+	EmitAndLog(ctx, EventCookieDbUnlocked, toMap(data))
+}
+
+// EmitCookieDomainExported emits a "cookie:domain:exported" event.
+// Identity observability event: cookie:domain:exported
+func EmitCookieDomainExported(ctx context.Context, data CookieDomainExportedPayload) {
+	EmitAndLog(ctx, EventCookieDomainExported, toMap(data))
+}
+
+// EmitCookieDomainImported emits a "cookie:domain:imported" event.
+// Identity observability event: cookie:domain:imported
+func EmitCookieDomainImported(ctx context.Context, data CookieDomainImportedPayload) {
+	EmitAndLog(ctx, EventCookieDomainImported, toMap(data))
+}
+
+// EmitCookieEncryptedStoreUnavailable emits a "cookie:encrypted-store:unavailable" event.
+// Identity observability event: cookie:encrypted-store:unavailable
+func EmitCookieEncryptedStoreUnavailable(ctx context.Context, data CookieEncryptedStoreUnavailablePayload) {
+	EmitAndLog(ctx, EventCookieEncryptedStoreUnavailable, toMap(data))
+}
+
+// EmitCookieImportConflict emits a "cookie:import:conflict" event.
+// Identity observability event: cookie:import:conflict
+func EmitCookieImportConflict(ctx context.Context, data CookieImportConflictPayload) {
+	EmitAndLog(ctx, EventCookieImportConflict, toMap(data))
+}
+
+// EmitCookieIntegrityChanged emits a "cookie:integrity:changed" event.
+// Identity observability event: cookie:integrity:changed
+func EmitCookieIntegrityChanged(ctx context.Context, data CookieIntegrityChangedPayload) {
+	EmitAndLog(ctx, EventCookieIntegrityChanged, toMap(data))
+}
+
+// EmitCookieIntegrityChecked emits a "cookie:integrity:checked" event.
+// Identity observability event: cookie:integrity:checked
+func EmitCookieIntegrityChecked(ctx context.Context, data CookieIntegrityCheckedPayload) {
+	EmitAndLog(ctx, EventCookieIntegrityChecked, toMap(data))
+}
+
+// EmitCookieIntegrityMatched emits a "cookie:integrity:matched" event.
+// Identity observability event: cookie:integrity:matched
+func EmitCookieIntegrityMatched(ctx context.Context, data CookieIntegrityMatchedPayload) {
+	EmitAndLog(ctx, EventCookieIntegrityMatched, toMap(data))
+}
+
+// EmitCookiePersistentCookieSummary emits a "cookie:persistent-cookie:summary" event.
+// Identity observability event: cookie:persistent-cookie:summary
+func EmitCookiePersistentCookieSummary(ctx context.Context, data CookiePersistentCookieSummaryPayload) {
+	EmitAndLog(ctx, EventCookiePersistentCookieSummary, toMap(data))
+}
+
+// EmitCookieProfileBindingRejected emits a "cookie:profile-binding:rejected" event.
+// Identity observability event: cookie:profile-binding:rejected
+func EmitCookieProfileBindingRejected(ctx context.Context, data CookieProfileBindingRejectedPayload) {
+	EmitAndLog(ctx, EventCookieProfileBindingRejected, toMap(data))
+}
+
+// EmitCookieProfileBindingValidated emits a "cookie:profile-binding:validated" event.
+// Identity observability event: cookie:profile-binding:validated
+func EmitCookieProfileBindingValidated(ctx context.Context, data CookieProfileBindingValidatedPayload) {
+	EmitAndLog(ctx, EventCookieProfileBindingValidated, toMap(data))
+}
+
+// EmitCookieReadCompleted emits a "cookie:read:completed" event.
+// Identity observability event: cookie:read:completed
+func EmitCookieReadCompleted(ctx context.Context, data CookieReadCompletedPayload) {
+	EmitAndLog(ctx, EventCookieReadCompleted, toMap(data))
+}
+
+// EmitCookieRestoreCompleted emits a "cookie:restore:completed" event.
+// Identity observability event: cookie:restore:completed
+func EmitCookieRestoreCompleted(ctx context.Context, data CookieRestoreCompletedPayload) {
+	EmitAndLog(ctx, EventCookieRestoreCompleted, toMap(data))
+}
+
+// EmitCookieRestoreFailed emits a "cookie:restore:failed" event.
+// Identity observability event: cookie:restore:failed
+func EmitCookieRestoreFailed(ctx context.Context, data CookieRestoreFailedPayload) {
+	EmitAndLog(ctx, EventCookieRestoreFailed, toMap(data))
+}
+
+// EmitCookieRestoreManifestRead emits a "cookie:restore:manifest-read" event.
+// Identity observability event: cookie:restore:manifest-read
+func EmitCookieRestoreManifestRead(ctx context.Context, data CookieRestoreManifestReadPayload) {
+	EmitAndLog(ctx, EventCookieRestoreManifestRead, toMap(data))
+}
+
+// EmitCookieRestoreStarted emits a "cookie:restore:started" event.
+// Identity observability event: cookie:restore:started
+func EmitCookieRestoreStarted(ctx context.Context, data CookieRestoreStartedPayload) {
+	EmitAndLog(ctx, EventCookieRestoreStarted, toMap(data))
+}
+
+// EmitCookieRetentionPolicyApplied emits a "cookie:retention:policy-applied" event.
+// Identity observability event: cookie:retention:policy-applied
+func EmitCookieRetentionPolicyApplied(ctx context.Context, data CookieRetentionPolicyAppliedPayload) {
+	EmitAndLog(ctx, EventCookieRetentionPolicyApplied, toMap(data))
+}
+
+// EmitCookieRetentionPolicySkipped emits a "cookie:retention:policy-skipped" event.
+// Identity observability event: cookie:retention:policy-skipped
+func EmitCookieRetentionPolicySkipped(ctx context.Context, data CookieRetentionPolicySkippedPayload) {
+	EmitAndLog(ctx, EventCookieRetentionPolicySkipped, toMap(data))
+}
+
+// EmitCookieSameSiteSummary emits a "cookie:same-site:summary" event.
+// Identity observability event: cookie:same-site:summary
+func EmitCookieSameSiteSummary(ctx context.Context, data CookieSameSiteSummaryPayload) {
+	EmitAndLog(ctx, EventCookieSameSiteSummary, toMap(data))
+}
+
+// EmitCookieSessionCookieSummary emits a "cookie:session-cookie:summary" event.
+// Identity observability event: cookie:session-cookie:summary
+func EmitCookieSessionCookieSummary(ctx context.Context, data CookieSessionCookieSummaryPayload) {
+	EmitAndLog(ctx, EventCookieSessionCookieSummary, toMap(data))
+}
+
+// EmitCookieSqliteWalDetected emits a "cookie:sqlite-wal:detected" event.
+// Identity observability event: cookie:sqlite-wal:detected
+func EmitCookieSqliteWalDetected(ctx context.Context, data CookieSqliteWalDetectedPayload) {
+	EmitAndLog(ctx, EventCookieSqliteWalDetected, toMap(data))
+}
+
+// EmitCookieUnexpectedCleared emits a "cookie:unexpected-cleared" event.
+// Identity observability event: cookie:unexpected-cleared
+func EmitCookieUnexpectedCleared(ctx context.Context, data CookieUnexpectedClearedPayload) {
+	EmitAndLog(ctx, EventCookieUnexpectedCleared, toMap(data))
+}
+
+// EmitCookieValueRedacted emits a "cookie:value:redacted" event.
+// Identity observability event: cookie:value:redacted
+func EmitCookieValueRedacted(ctx context.Context, data CookieValueRedactedPayload) {
+	EmitAndLog(ctx, EventCookieValueRedacted, toMap(data))
+}
+
+// EmitCookieWriteBlocked emits a "cookie:write:blocked" event.
+// Identity observability event: cookie:write:blocked
+func EmitCookieWriteBlocked(ctx context.Context, data CookieWriteBlockedPayload) {
+	EmitAndLog(ctx, EventCookieWriteBlocked, toMap(data))
+}
+
 // EmitCoreDownloadCompleted emits a "core:download:completed" event.
 // 内核下载已完成
 func EmitCoreDownloadCompleted(ctx context.Context, data CoreDownloadCompletedPayload) {
@@ -1866,6 +5314,594 @@ func EmitDownloadProgress(ctx context.Context, data DownloadProgressPayload) {
 	EmitAndLog(ctx, EventDownloadProgress, toMap(data))
 }
 
+// EmitFingerprintAppVersionCaptured emits a "fingerprint:app-version:captured" event.
+// Identity observability event: fingerprint:app-version:captured
+func EmitFingerprintAppVersionCaptured(ctx context.Context, data FingerprintAppVersionCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintAppVersionCaptured, toMap(data))
+}
+
+// EmitFingerprintAudioCaptured emits a "fingerprint:audio:captured" event.
+// Identity observability event: fingerprint:audio:captured
+func EmitFingerprintAudioCaptured(ctx context.Context, data FingerprintAudioCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintAudioCaptured, toMap(data))
+}
+
+// EmitFingerprintAudioError emits a "fingerprint:audio:error" event.
+// Identity observability event: fingerprint:audio:error
+func EmitFingerprintAudioError(ctx context.Context, data FingerprintAudioErrorPayload) {
+	EmitAndLog(ctx, EventFingerprintAudioError, toMap(data))
+}
+
+// EmitFingerprintAudioUnsupported emits a "fingerprint:audio:unsupported" event.
+// Identity observability event: fingerprint:audio:unsupported
+func EmitFingerprintAudioUnsupported(ctx context.Context, data FingerprintAudioUnsupportedPayload) {
+	EmitAndLog(ctx, EventFingerprintAudioUnsupported, toMap(data))
+}
+
+// EmitFingerprintCanvasCaptured emits a "fingerprint:canvas:captured" event.
+// Identity observability event: fingerprint:canvas:captured
+func EmitFingerprintCanvasCaptured(ctx context.Context, data FingerprintCanvasCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintCanvasCaptured, toMap(data))
+}
+
+// EmitFingerprintCanvasError emits a "fingerprint:canvas:error" event.
+// Identity observability event: fingerprint:canvas:error
+func EmitFingerprintCanvasError(ctx context.Context, data FingerprintCanvasErrorPayload) {
+	EmitAndLog(ctx, EventFingerprintCanvasError, toMap(data))
+}
+
+// EmitFingerprintCanvasVanillaDetected emits a "fingerprint:canvas:vanilla-detected" event.
+// Identity observability event: fingerprint:canvas:vanilla-detected
+func EmitFingerprintCanvasVanillaDetected(ctx context.Context, data FingerprintCanvasVanillaDetectedPayload) {
+	EmitAndLog(ctx, EventFingerprintCanvasVanillaDetected, toMap(data))
+}
+
+// EmitFingerprintCdpCaptureCompleted emits a "fingerprint:cdp:capture-completed" event.
+// Identity observability event: fingerprint:cdp:capture-completed
+func EmitFingerprintCdpCaptureCompleted(ctx context.Context, data FingerprintCdpCaptureCompletedPayload) {
+	EmitAndLog(ctx, EventFingerprintCdpCaptureCompleted, toMap(data))
+}
+
+// EmitFingerprintCdpCaptureFailed emits a "fingerprint:cdp:capture-failed" event.
+// Identity observability event: fingerprint:cdp:capture-failed
+func EmitFingerprintCdpCaptureFailed(ctx context.Context, data FingerprintCdpCaptureFailedPayload) {
+	EmitAndLog(ctx, EventFingerprintCdpCaptureFailed, toMap(data))
+}
+
+// EmitFingerprintCdpCaptureStarted emits a "fingerprint:cdp:capture-started" event.
+// Identity observability event: fingerprint:cdp:capture-started
+func EmitFingerprintCdpCaptureStarted(ctx context.Context, data FingerprintCdpCaptureStartedPayload) {
+	EmitAndLog(ctx, EventFingerprintCdpCaptureStarted, toMap(data))
+}
+
+// EmitFingerprintClientHintsCaptured emits a "fingerprint:client-hints:captured" event.
+// Identity observability event: fingerprint:client-hints:captured
+func EmitFingerprintClientHintsCaptured(ctx context.Context, data FingerprintClientHintsCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintClientHintsCaptured, toMap(data))
+}
+
+// EmitFingerprintClientHintsMismatch emits a "fingerprint:client-hints:mismatch" event.
+// Identity observability event: fingerprint:client-hints:mismatch
+func EmitFingerprintClientHintsMismatch(ctx context.Context, data FingerprintClientHintsMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintClientHintsMismatch, toMap(data))
+}
+
+// EmitFingerprintClientHintsUnavailable emits a "fingerprint:client-hints:unavailable" event.
+// Identity observability event: fingerprint:client-hints:unavailable
+func EmitFingerprintClientHintsUnavailable(ctx context.Context, data FingerprintClientHintsUnavailablePayload) {
+	EmitAndLog(ctx, EventFingerprintClientHintsUnavailable, toMap(data))
+}
+
+// EmitFingerprintColorSchemeCaptured emits a "fingerprint:color-scheme:captured" event.
+// Identity observability event: fingerprint:color-scheme:captured
+func EmitFingerprintColorSchemeCaptured(ctx context.Context, data FingerprintColorSchemeCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintColorSchemeCaptured, toMap(data))
+}
+
+// EmitFingerprintDateFormatCaptured emits a "fingerprint:date-format:captured" event.
+// Identity observability event: fingerprint:date-format:captured
+func EmitFingerprintDateFormatCaptured(ctx context.Context, data FingerprintDateFormatCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintDateFormatCaptured, toMap(data))
+}
+
+// EmitFingerprintDimensionCaptured emits a "fingerprint:dimension:captured" event.
+// Identity observability event: fingerprint:dimension:captured
+func EmitFingerprintDimensionCaptured(ctx context.Context, data FingerprintDimensionCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintDimensionCaptured, toMap(data))
+}
+
+// EmitFingerprintDimensionMismatch emits a "fingerprint:dimension:mismatch" event.
+// Identity observability event: fingerprint:dimension:mismatch
+func EmitFingerprintDimensionMismatch(ctx context.Context, data FingerprintDimensionMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintDimensionMismatch, toMap(data))
+}
+
+// EmitFingerprintDimensionMissing emits a "fingerprint:dimension:missing" event.
+// Identity observability event: fingerprint:dimension:missing
+func EmitFingerprintDimensionMissing(ctx context.Context, data FingerprintDimensionMissingPayload) {
+	EmitAndLog(ctx, EventFingerprintDimensionMissing, toMap(data))
+}
+
+// EmitFingerprintDoNotTrackCaptured emits a "fingerprint:do-not-track:captured" event.
+// Identity observability event: fingerprint:do-not-track:captured
+func EmitFingerprintDoNotTrackCaptured(ctx context.Context, data FingerprintDoNotTrackCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintDoNotTrackCaptured, toMap(data))
+}
+
+// EmitFingerprintFontsCaptured emits a "fingerprint:fonts:captured" event.
+// Identity observability event: fingerprint:fonts:captured
+func EmitFingerprintFontsCaptured(ctx context.Context, data FingerprintFontsCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintFontsCaptured, toMap(data))
+}
+
+// EmitFingerprintFontsError emits a "fingerprint:fonts:error" event.
+// Identity observability event: fingerprint:fonts:error
+func EmitFingerprintFontsError(ctx context.Context, data FingerprintFontsErrorPayload) {
+	EmitAndLog(ctx, EventFingerprintFontsError, toMap(data))
+}
+
+// EmitFingerprintHardwareCaptured emits a "fingerprint:hardware:captured" event.
+// Identity observability event: fingerprint:hardware:captured
+func EmitFingerprintHardwareCaptured(ctx context.Context, data FingerprintHardwareCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintHardwareCaptured, toMap(data))
+}
+
+// EmitFingerprintHardwareMismatch emits a "fingerprint:hardware:mismatch" event.
+// Identity observability event: fingerprint:hardware:mismatch
+func EmitFingerprintHardwareMismatch(ctx context.Context, data FingerprintHardwareMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintHardwareMismatch, toMap(data))
+}
+
+// EmitFingerprintHoverCaptured emits a "fingerprint:hover:captured" event.
+// Identity observability event: fingerprint:hover:captured
+func EmitFingerprintHoverCaptured(ctx context.Context, data FingerprintHoverCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintHoverCaptured, toMap(data))
+}
+
+// EmitFingerprintIntlCaptured emits a "fingerprint:intl:captured" event.
+// Identity observability event: fingerprint:intl:captured
+func EmitFingerprintIntlCaptured(ctx context.Context, data FingerprintIntlCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintIntlCaptured, toMap(data))
+}
+
+// EmitFingerprintLanguageCaptured emits a "fingerprint:language:captured" event.
+// Identity observability event: fingerprint:language:captured
+func EmitFingerprintLanguageCaptured(ctx context.Context, data FingerprintLanguageCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintLanguageCaptured, toMap(data))
+}
+
+// EmitFingerprintLanguageMismatch emits a "fingerprint:language:mismatch" event.
+// Identity observability event: fingerprint:language:mismatch
+func EmitFingerprintLanguageMismatch(ctx context.Context, data FingerprintLanguageMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintLanguageMismatch, toMap(data))
+}
+
+// EmitFingerprintMediaQueryCaptured emits a "fingerprint:media-query:captured" event.
+// Identity observability event: fingerprint:media-query:captured
+func EmitFingerprintMediaQueryCaptured(ctx context.Context, data FingerprintMediaQueryCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintMediaQueryCaptured, toMap(data))
+}
+
+// EmitFingerprintMimeTypesCaptured emits a "fingerprint:mime-types:captured" event.
+// Identity observability event: fingerprint:mime-types:captured
+func EmitFingerprintMimeTypesCaptured(ctx context.Context, data FingerprintMimeTypesCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintMimeTypesCaptured, toMap(data))
+}
+
+// EmitFingerprintNetworkInfoCaptured emits a "fingerprint:network-info:captured" event.
+// Identity observability event: fingerprint:network-info:captured
+func EmitFingerprintNetworkInfoCaptured(ctx context.Context, data FingerprintNetworkInfoCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintNetworkInfoCaptured, toMap(data))
+}
+
+// EmitFingerprintNetworkInfoUnavailable emits a "fingerprint:network-info:unavailable" event.
+// Identity observability event: fingerprint:network-info:unavailable
+func EmitFingerprintNetworkInfoUnavailable(ctx context.Context, data FingerprintNetworkInfoUnavailablePayload) {
+	EmitAndLog(ctx, EventFingerprintNetworkInfoUnavailable, toMap(data))
+}
+
+// EmitFingerprintNumberFormatCaptured emits a "fingerprint:number-format:captured" event.
+// Identity observability event: fingerprint:number-format:captured
+func EmitFingerprintNumberFormatCaptured(ctx context.Context, data FingerprintNumberFormatCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintNumberFormatCaptured, toMap(data))
+}
+
+// EmitFingerprintPdfViewerCaptured emits a "fingerprint:pdf-viewer:captured" event.
+// Identity observability event: fingerprint:pdf-viewer:captured
+func EmitFingerprintPdfViewerCaptured(ctx context.Context, data FingerprintPdfViewerCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintPdfViewerCaptured, toMap(data))
+}
+
+// EmitFingerprintPlatformCaptured emits a "fingerprint:platform:captured" event.
+// Identity observability event: fingerprint:platform:captured
+func EmitFingerprintPlatformCaptured(ctx context.Context, data FingerprintPlatformCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintPlatformCaptured, toMap(data))
+}
+
+// EmitFingerprintPlatformMismatch emits a "fingerprint:platform:mismatch" event.
+// Identity observability event: fingerprint:platform:mismatch
+func EmitFingerprintPlatformMismatch(ctx context.Context, data FingerprintPlatformMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintPlatformMismatch, toMap(data))
+}
+
+// EmitFingerprintPluginsCaptured emits a "fingerprint:plugins:captured" event.
+// Identity observability event: fingerprint:plugins:captured
+func EmitFingerprintPluginsCaptured(ctx context.Context, data FingerprintPluginsCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintPluginsCaptured, toMap(data))
+}
+
+// EmitFingerprintPointerCaptured emits a "fingerprint:pointer:captured" event.
+// Identity observability event: fingerprint:pointer:captured
+func EmitFingerprintPointerCaptured(ctx context.Context, data FingerprintPointerCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintPointerCaptured, toMap(data))
+}
+
+// EmitFingerprintReducedMotionCaptured emits a "fingerprint:reduced-motion:captured" event.
+// Identity observability event: fingerprint:reduced-motion:captured
+func EmitFingerprintReducedMotionCaptured(ctx context.Context, data FingerprintReducedMotionCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintReducedMotionCaptured, toMap(data))
+}
+
+// EmitFingerprintScreenCaptured emits a "fingerprint:screen:captured" event.
+// Identity observability event: fingerprint:screen:captured
+func EmitFingerprintScreenCaptured(ctx context.Context, data FingerprintScreenCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintScreenCaptured, toMap(data))
+}
+
+// EmitFingerprintScreenMismatch emits a "fingerprint:screen:mismatch" event.
+// Identity observability event: fingerprint:screen:mismatch
+func EmitFingerprintScreenMismatch(ctx context.Context, data FingerprintScreenMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintScreenMismatch, toMap(data))
+}
+
+// EmitFingerprintStorageCaptured emits a "fingerprint:storage:captured" event.
+// Identity observability event: fingerprint:storage:captured
+func EmitFingerprintStorageCaptured(ctx context.Context, data FingerprintStorageCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintStorageCaptured, toMap(data))
+}
+
+// EmitFingerprintStorageUnavailable emits a "fingerprint:storage:unavailable" event.
+// Identity observability event: fingerprint:storage:unavailable
+func EmitFingerprintStorageUnavailable(ctx context.Context, data FingerprintStorageUnavailablePayload) {
+	EmitAndLog(ctx, EventFingerprintStorageUnavailable, toMap(data))
+}
+
+// EmitFingerprintTimezoneCaptured emits a "fingerprint:timezone:captured" event.
+// Identity observability event: fingerprint:timezone:captured
+func EmitFingerprintTimezoneCaptured(ctx context.Context, data FingerprintTimezoneCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintTimezoneCaptured, toMap(data))
+}
+
+// EmitFingerprintTimezoneMismatch emits a "fingerprint:timezone:mismatch" event.
+// Identity observability event: fingerprint:timezone:mismatch
+func EmitFingerprintTimezoneMismatch(ctx context.Context, data FingerprintTimezoneMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintTimezoneMismatch, toMap(data))
+}
+
+// EmitFingerprintTouchCaptured emits a "fingerprint:touch:captured" event.
+// Identity observability event: fingerprint:touch:captured
+func EmitFingerprintTouchCaptured(ctx context.Context, data FingerprintTouchCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintTouchCaptured, toMap(data))
+}
+
+// EmitFingerprintUserAgentCaptured emits a "fingerprint:user-agent:captured" event.
+// Identity observability event: fingerprint:user-agent:captured
+func EmitFingerprintUserAgentCaptured(ctx context.Context, data FingerprintUserAgentCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintUserAgentCaptured, toMap(data))
+}
+
+// EmitFingerprintUserAgentMismatch emits a "fingerprint:user-agent:mismatch" event.
+// Identity observability event: fingerprint:user-agent:mismatch
+func EmitFingerprintUserAgentMismatch(ctx context.Context, data FingerprintUserAgentMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintUserAgentMismatch, toMap(data))
+}
+
+// EmitFingerprintViewportCaptured emits a "fingerprint:viewport:captured" event.
+// Identity observability event: fingerprint:viewport:captured
+func EmitFingerprintViewportCaptured(ctx context.Context, data FingerprintViewportCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintViewportCaptured, toMap(data))
+}
+
+// EmitFingerprintViewportMismatch emits a "fingerprint:viewport:mismatch" event.
+// Identity observability event: fingerprint:viewport:mismatch
+func EmitFingerprintViewportMismatch(ctx context.Context, data FingerprintViewportMismatchPayload) {
+	EmitAndLog(ctx, EventFingerprintViewportMismatch, toMap(data))
+}
+
+// EmitFingerprintWebdriverExposed emits a "fingerprint:webdriver:exposed" event.
+// Identity observability event: fingerprint:webdriver:exposed
+func EmitFingerprintWebdriverExposed(ctx context.Context, data FingerprintWebdriverExposedPayload) {
+	EmitAndLog(ctx, EventFingerprintWebdriverExposed, toMap(data))
+}
+
+// EmitFingerprintWebdriverHidden emits a "fingerprint:webdriver:hidden" event.
+// Identity observability event: fingerprint:webdriver:hidden
+func EmitFingerprintWebdriverHidden(ctx context.Context, data FingerprintWebdriverHiddenPayload) {
+	EmitAndLog(ctx, EventFingerprintWebdriverHidden, toMap(data))
+}
+
+// EmitFingerprintWebglCaptured emits a "fingerprint:webgl:captured" event.
+// Identity observability event: fingerprint:webgl:captured
+func EmitFingerprintWebglCaptured(ctx context.Context, data FingerprintWebglCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintWebglCaptured, toMap(data))
+}
+
+// EmitFingerprintWebglEmpty emits a "fingerprint:webgl:empty" event.
+// Identity observability event: fingerprint:webgl:empty
+func EmitFingerprintWebglEmpty(ctx context.Context, data FingerprintWebglEmptyPayload) {
+	EmitAndLog(ctx, EventFingerprintWebglEmpty, toMap(data))
+}
+
+// EmitFingerprintWebglExtensionsCaptured emits a "fingerprint:webgl:extensions-captured" event.
+// Identity observability event: fingerprint:webgl:extensions-captured
+func EmitFingerprintWebglExtensionsCaptured(ctx context.Context, data FingerprintWebglExtensionsCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintWebglExtensionsCaptured, toMap(data))
+}
+
+// EmitFingerprintWebglLimitsCaptured emits a "fingerprint:webgl:limits-captured" event.
+// Identity observability event: fingerprint:webgl:limits-captured
+func EmitFingerprintWebglLimitsCaptured(ctx context.Context, data FingerprintWebglLimitsCapturedPayload) {
+	EmitAndLog(ctx, EventFingerprintWebglLimitsCaptured, toMap(data))
+}
+
+// EmitFingerprintWebgpuAvailable emits a "fingerprint:webgpu:available" event.
+// Identity observability event: fingerprint:webgpu:available
+func EmitFingerprintWebgpuAvailable(ctx context.Context, data FingerprintWebgpuAvailablePayload) {
+	EmitAndLog(ctx, EventFingerprintWebgpuAvailable, toMap(data))
+}
+
+// EmitFingerprintWebgpuUnavailable emits a "fingerprint:webgpu:unavailable" event.
+// Identity observability event: fingerprint:webgpu:unavailable
+func EmitFingerprintWebgpuUnavailable(ctx context.Context, data FingerprintWebgpuUnavailablePayload) {
+	EmitAndLog(ctx, EventFingerprintWebgpuUnavailable, toMap(data))
+}
+
+// EmitFingerprintWebrtcApiSupported emits a "fingerprint:webrtc-api:supported" event.
+// Identity observability event: fingerprint:webrtc-api:supported
+func EmitFingerprintWebrtcApiSupported(ctx context.Context, data FingerprintWebrtcApiSupportedPayload) {
+	EmitAndLog(ctx, EventFingerprintWebrtcApiSupported, toMap(data))
+}
+
+// EmitIdentityAuditHashMatched emits a "identity:audit:hash-matched" event.
+// Identity observability event: identity:audit:hash-matched
+func EmitIdentityAuditHashMatched(ctx context.Context, data IdentityAuditHashMatchedPayload) {
+	EmitAndLog(ctx, EventIdentityAuditHashMatched, toMap(data))
+}
+
+// EmitIdentityAuditHashMismatched emits a "identity:audit:hash-mismatched" event.
+// Identity observability event: identity:audit:hash-mismatched
+func EmitIdentityAuditHashMismatched(ctx context.Context, data IdentityAuditHashMismatchedPayload) {
+	EmitAndLog(ctx, EventIdentityAuditHashMismatched, toMap(data))
+}
+
+// EmitIdentityAuditMissing emits a "identity:audit:missing" event.
+// Identity observability event: identity:audit:missing
+func EmitIdentityAuditMissing(ctx context.Context, data IdentityAuditMissingPayload) {
+	EmitAndLog(ctx, EventIdentityAuditMissing, toMap(data))
+}
+
+// EmitIdentityBaselineCreated emits a "identity:baseline:created" event.
+// Identity observability event: identity:baseline:created
+func EmitIdentityBaselineCreated(ctx context.Context, data IdentityBaselineCreatedPayload) {
+	EmitAndLog(ctx, EventIdentityBaselineCreated, toMap(data))
+}
+
+// EmitIdentityBaselineDrifted emits a "identity:baseline:drifted" event.
+// Identity observability event: identity:baseline:drifted
+func EmitIdentityBaselineDrifted(ctx context.Context, data IdentityBaselineDriftedPayload) {
+	EmitAndLog(ctx, EventIdentityBaselineDrifted, toMap(data))
+}
+
+// EmitIdentityBaselineMatched emits a "identity:baseline:matched" event.
+// Identity observability event: identity:baseline:matched
+func EmitIdentityBaselineMatched(ctx context.Context, data IdentityBaselineMatchedPayload) {
+	EmitAndLog(ctx, EventIdentityBaselineMatched, toMap(data))
+}
+
+// EmitIdentityBaselineResetRequested emits a "identity:baseline:reset-requested" event.
+// Identity observability event: identity:baseline:reset-requested
+func EmitIdentityBaselineResetRequested(ctx context.Context, data IdentityBaselineResetRequestedPayload) {
+	EmitAndLog(ctx, EventIdentityBaselineResetRequested, toMap(data))
+}
+
+// EmitIdentityCapsuleCopied emits a "identity:capsule:copied" event.
+// Identity observability event: identity:capsule:copied
+func EmitIdentityCapsuleCopied(ctx context.Context, data IdentityCapsuleCopiedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleCopied, toMap(data))
+}
+
+// EmitIdentityCapsuleCreated emits a "identity:capsule:created" event.
+// Identity observability event: identity:capsule:created
+func EmitIdentityCapsuleCreated(ctx context.Context, data IdentityCapsuleCreatedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleCreated, toMap(data))
+}
+
+// EmitIdentityCapsuleExported emits a "identity:capsule:exported" event.
+// Identity observability event: identity:capsule:exported
+func EmitIdentityCapsuleExported(ctx context.Context, data IdentityCapsuleExportedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleExported, toMap(data))
+}
+
+// EmitIdentityCapsuleImported emits a "identity:capsule:imported" event.
+// Identity observability event: identity:capsule:imported
+func EmitIdentityCapsuleImported(ctx context.Context, data IdentityCapsuleImportedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleImported, toMap(data))
+}
+
+// EmitIdentityCapsuleLocked emits a "identity:capsule:locked" event.
+// Identity observability event: identity:capsule:locked
+func EmitIdentityCapsuleLocked(ctx context.Context, data IdentityCapsuleLockedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleLocked, toMap(data))
+}
+
+// EmitIdentityCapsuleUnlocked emits a "identity:capsule:unlocked" event.
+// Identity observability event: identity:capsule:unlocked
+func EmitIdentityCapsuleUnlocked(ctx context.Context, data IdentityCapsuleUnlockedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleUnlocked, toMap(data))
+}
+
+// EmitIdentityCapsuleUpdated emits a "identity:capsule:updated" event.
+// Identity observability event: identity:capsule:updated
+func EmitIdentityCapsuleUpdated(ctx context.Context, data IdentityCapsuleUpdatedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleUpdated, toMap(data))
+}
+
+// EmitIdentityCapsuleWriteBlocked emits a "identity:capsule:write-blocked" event.
+// Identity observability event: identity:capsule:write-blocked
+func EmitIdentityCapsuleWriteBlocked(ctx context.Context, data IdentityCapsuleWriteBlockedPayload) {
+	EmitAndLog(ctx, EventIdentityCapsuleWriteBlocked, toMap(data))
+}
+
+// EmitIdentityConsistencyFail emits a "identity:consistency:fail" event.
+// Identity observability event: identity:consistency:fail
+func EmitIdentityConsistencyFail(ctx context.Context, data IdentityConsistencyFailPayload) {
+	EmitAndLog(ctx, EventIdentityConsistencyFail, toMap(data))
+}
+
+// EmitIdentityConsistencyPass emits a "identity:consistency:pass" event.
+// Identity observability event: identity:consistency:pass
+func EmitIdentityConsistencyPass(ctx context.Context, data IdentityConsistencyPassPayload) {
+	EmitAndLog(ctx, EventIdentityConsistencyPass, toMap(data))
+}
+
+// EmitIdentityConsistencyWarning emits a "identity:consistency:warning" event.
+// Identity observability event: identity:consistency:warning
+func EmitIdentityConsistencyWarning(ctx context.Context, data IdentityConsistencyWarningPayload) {
+	EmitAndLog(ctx, EventIdentityConsistencyWarning, toMap(data))
+}
+
+// EmitIdentityDimensionFail emits a "identity:dimension:fail" event.
+// Identity observability event: identity:dimension:fail
+func EmitIdentityDimensionFail(ctx context.Context, data IdentityDimensionFailPayload) {
+	EmitAndLog(ctx, EventIdentityDimensionFail, toMap(data))
+}
+
+// EmitIdentityDimensionPass emits a "identity:dimension:pass" event.
+// Identity observability event: identity:dimension:pass
+func EmitIdentityDimensionPass(ctx context.Context, data IdentityDimensionPassPayload) {
+	EmitAndLog(ctx, EventIdentityDimensionPass, toMap(data))
+}
+
+// EmitIdentityDimensionWarning emits a "identity:dimension:warning" event.
+// Identity observability event: identity:dimension:warning
+func EmitIdentityDimensionWarning(ctx context.Context, data IdentityDimensionWarningPayload) {
+	EmitAndLog(ctx, EventIdentityDimensionWarning, toMap(data))
+}
+
+// EmitIdentityGuardFail emits a "identity:guard:fail" event.
+// Identity observability event: identity:guard:fail
+func EmitIdentityGuardFail(ctx context.Context, data IdentityGuardFailPayload) {
+	EmitAndLog(ctx, EventIdentityGuardFail, toMap(data))
+}
+
+// EmitIdentityGuardPass emits a "identity:guard:pass" event.
+// Identity observability event: identity:guard:pass
+func EmitIdentityGuardPass(ctx context.Context, data IdentityGuardPassPayload) {
+	EmitAndLog(ctx, EventIdentityGuardPass, toMap(data))
+}
+
+// EmitIdentityGuardWarning emits a "identity:guard:warning" event.
+// Identity observability event: identity:guard:warning
+func EmitIdentityGuardWarning(ctx context.Context, data IdentityGuardWarningPayload) {
+	EmitAndLog(ctx, EventIdentityGuardWarning, toMap(data))
+}
+
+// EmitIdentityProfileBound emits a "identity:profile:bound" event.
+// Identity observability event: identity:profile:bound
+func EmitIdentityProfileBound(ctx context.Context, data IdentityProfileBoundPayload) {
+	EmitAndLog(ctx, EventIdentityProfileBound, toMap(data))
+}
+
+// EmitIdentityProfileUnbound emits a "identity:profile:unbound" event.
+// Identity observability event: identity:profile:unbound
+func EmitIdentityProfileUnbound(ctx context.Context, data IdentityProfileUnboundPayload) {
+	EmitAndLog(ctx, EventIdentityProfileUnbound, toMap(data))
+}
+
+// EmitIdentityReportCompleted emits a "identity:report:completed" event.
+// Identity observability event: identity:report:completed
+func EmitIdentityReportCompleted(ctx context.Context, data IdentityReportCompletedPayload) {
+	EmitAndLog(ctx, EventIdentityReportCompleted, toMap(data))
+}
+
+// EmitIdentityReportFailed emits a "identity:report:failed" event.
+// Identity observability event: identity:report:failed
+func EmitIdentityReportFailed(ctx context.Context, data IdentityReportFailedPayload) {
+	EmitAndLog(ctx, EventIdentityReportFailed, toMap(data))
+}
+
+// EmitIdentityReportHistoryPruned emits a "identity:report:history-pruned" event.
+// Identity observability event: identity:report:history-pruned
+func EmitIdentityReportHistoryPruned(ctx context.Context, data IdentityReportHistoryPrunedPayload) {
+	EmitAndLog(ctx, EventIdentityReportHistoryPruned, toMap(data))
+}
+
+// EmitIdentityReportHistorySaved emits a "identity:report:history-saved" event.
+// Identity observability event: identity:report:history-saved
+func EmitIdentityReportHistorySaved(ctx context.Context, data IdentityReportHistorySavedPayload) {
+	EmitAndLog(ctx, EventIdentityReportHistorySaved, toMap(data))
+}
+
+// EmitIdentityReportStarted emits a "identity:report:started" event.
+// Identity observability event: identity:report:started
+func EmitIdentityReportStarted(ctx context.Context, data IdentityReportStartedPayload) {
+	EmitAndLog(ctx, EventIdentityReportStarted, toMap(data))
+}
+
+// EmitIdentityRiskAcknowledged emits a "identity:risk:acknowledged" event.
+// Identity observability event: identity:risk:acknowledged
+func EmitIdentityRiskAcknowledged(ctx context.Context, data IdentityRiskAcknowledgedPayload) {
+	EmitAndLog(ctx, EventIdentityRiskAcknowledged, toMap(data))
+}
+
+// EmitIdentityRiskCreated emits a "identity:risk:created" event.
+// Identity observability event: identity:risk:created
+func EmitIdentityRiskCreated(ctx context.Context, data IdentityRiskCreatedPayload) {
+	EmitAndLog(ctx, EventIdentityRiskCreated, toMap(data))
+}
+
+// EmitIdentityRiskResolved emits a "identity:risk:resolved" event.
+// Identity observability event: identity:risk:resolved
+func EmitIdentityRiskResolved(ctx context.Context, data IdentityRiskResolvedPayload) {
+	EmitAndLog(ctx, EventIdentityRiskResolved, toMap(data))
+}
+
+// EmitIdentityScoreChanged emits a "identity:score:changed" event.
+// Identity observability event: identity:score:changed
+func EmitIdentityScoreChanged(ctx context.Context, data IdentityScoreChangedPayload) {
+	EmitAndLog(ctx, EventIdentityScoreChanged, toMap(data))
+}
+
+// EmitIdentityScoreThresholdCrossed emits a "identity:score:threshold-crossed" event.
+// Identity observability event: identity:score:threshold-crossed
+func EmitIdentityScoreThresholdCrossed(ctx context.Context, data IdentityScoreThresholdCrossedPayload) {
+	EmitAndLog(ctx, EventIdentityScoreThresholdCrossed, toMap(data))
+}
+
+// EmitIdentitySeedBound emits a "identity:seed:bound" event.
+// Identity observability event: identity:seed:bound
+func EmitIdentitySeedBound(ctx context.Context, data IdentitySeedBoundPayload) {
+	EmitAndLog(ctx, EventIdentitySeedBound, toMap(data))
+}
+
+// EmitIdentitySeedRotationBlocked emits a "identity:seed:rotation-blocked" event.
+// Identity observability event: identity:seed:rotation-blocked
+func EmitIdentitySeedRotationBlocked(ctx context.Context, data IdentitySeedRotationBlockedPayload) {
+	EmitAndLog(ctx, EventIdentitySeedRotationBlocked, toMap(data))
+}
+
+// EmitIdentitySubscoreChanged emits a "identity:subscore:changed" event.
+// Identity observability event: identity:subscore:changed
+func EmitIdentitySubscoreChanged(ctx context.Context, data IdentitySubscoreChangedPayload) {
+	EmitAndLog(ctx, EventIdentitySubscoreChanged, toMap(data))
+}
+
+// EmitIdentitySummaryUpdated emits a "identity:summary:updated" event.
+// Identity observability event: identity:summary:updated
+func EmitIdentitySummaryUpdated(ctx context.Context, data IdentitySummaryUpdatedPayload) {
+	EmitAndLog(ctx, EventIdentitySummaryUpdated, toMap(data))
+}
+
 // EmitLicenseActivated emits a "license:activated" event.
 // 许可证已激活
 func EmitLicenseActivated(ctx context.Context, data LicenseActivatedPayload) {
@@ -1900,6 +5936,348 @@ func EmitLicenseExpiring(ctx context.Context, data LicenseExpiringPayload) {
 // 许可证已续期
 func EmitLicenseRenewed(ctx context.Context, data LicenseRenewedPayload) {
 	EmitAndLog(ctx, EventLicenseRenewed, toMap(data))
+}
+
+// EmitNetworkDnsCheckCompleted emits a "network:dns:check-completed" event.
+// Identity observability event: network:dns:check-completed
+func EmitNetworkDnsCheckCompleted(ctx context.Context, data NetworkDnsCheckCompletedPayload) {
+	EmitAndLog(ctx, EventNetworkDnsCheckCompleted, toMap(data))
+}
+
+// EmitNetworkDnsCheckFailed emits a "network:dns:check-failed" event.
+// Identity observability event: network:dns:check-failed
+func EmitNetworkDnsCheckFailed(ctx context.Context, data NetworkDnsCheckFailedPayload) {
+	EmitAndLog(ctx, EventNetworkDnsCheckFailed, toMap(data))
+}
+
+// EmitNetworkDnsCheckStarted emits a "network:dns:check-started" event.
+// Identity observability event: network:dns:check-started
+func EmitNetworkDnsCheckStarted(ctx context.Context, data NetworkDnsCheckStartedPayload) {
+	EmitAndLog(ctx, EventNetworkDnsCheckStarted, toMap(data))
+}
+
+// EmitNetworkExitIpChanged emits a "network:exit-ip:changed" event.
+// Identity observability event: network:exit-ip:changed
+func EmitNetworkExitIpChanged(ctx context.Context, data NetworkExitIpChangedPayload) {
+	EmitAndLog(ctx, EventNetworkExitIpChanged, toMap(data))
+}
+
+// EmitNetworkExitIpCheckCompleted emits a "network:exit-ip:check-completed" event.
+// Identity observability event: network:exit-ip:check-completed
+func EmitNetworkExitIpCheckCompleted(ctx context.Context, data NetworkExitIpCheckCompletedPayload) {
+	EmitAndLog(ctx, EventNetworkExitIpCheckCompleted, toMap(data))
+}
+
+// EmitNetworkExitIpCheckStarted emits a "network:exit-ip:check-started" event.
+// Identity observability event: network:exit-ip:check-started
+func EmitNetworkExitIpCheckStarted(ctx context.Context, data NetworkExitIpCheckStartedPayload) {
+	EmitAndLog(ctx, EventNetworkExitIpCheckStarted, toMap(data))
+}
+
+// EmitNetworkGeoMatched emits a "network:geo:matched" event.
+// Identity observability event: network:geo:matched
+func EmitNetworkGeoMatched(ctx context.Context, data NetworkGeoMatchedPayload) {
+	EmitAndLog(ctx, EventNetworkGeoMatched, toMap(data))
+}
+
+// EmitNetworkGeoMismatch emits a "network:geo:mismatch" event.
+// Identity observability event: network:geo:mismatch
+func EmitNetworkGeoMismatch(ctx context.Context, data NetworkGeoMismatchPayload) {
+	EmitAndLog(ctx, EventNetworkGeoMismatch, toMap(data))
+}
+
+// EmitNetworkLatencySampled emits a "network:latency:sampled" event.
+// Identity observability event: network:latency:sampled
+func EmitNetworkLatencySampled(ctx context.Context, data NetworkLatencySampledPayload) {
+	EmitAndLog(ctx, EventNetworkLatencySampled, toMap(data))
+}
+
+// EmitNetworkProxyAuthFailed emits a "network:proxy:auth-failed" event.
+// Identity observability event: network:proxy:auth-failed
+func EmitNetworkProxyAuthFailed(ctx context.Context, data NetworkProxyAuthFailedPayload) {
+	EmitAndLog(ctx, EventNetworkProxyAuthFailed, toMap(data))
+}
+
+// EmitNetworkProxyDatacenterDetected emits a "network:proxy:datacenter-detected" event.
+// Identity observability event: network:proxy:datacenter-detected
+func EmitNetworkProxyDatacenterDetected(ctx context.Context, data NetworkProxyDatacenterDetectedPayload) {
+	EmitAndLog(ctx, EventNetworkProxyDatacenterDetected, toMap(data))
+}
+
+// EmitNetworkProxyHealthRecovered emits a "network:proxy:health-recovered" event.
+// Identity observability event: network:proxy:health-recovered
+func EmitNetworkProxyHealthRecovered(ctx context.Context, data NetworkProxyHealthRecoveredPayload) {
+	EmitAndLog(ctx, EventNetworkProxyHealthRecovered, toMap(data))
+}
+
+// EmitNetworkProxyHealthWarning emits a "network:proxy:health-warning" event.
+// Identity observability event: network:proxy:health-warning
+func EmitNetworkProxyHealthWarning(ctx context.Context, data NetworkProxyHealthWarningPayload) {
+	EmitAndLog(ctx, EventNetworkProxyHealthWarning, toMap(data))
+}
+
+// EmitNetworkProxyResidentialDetected emits a "network:proxy:residential-detected" event.
+// Identity observability event: network:proxy:residential-detected
+func EmitNetworkProxyResidentialDetected(ctx context.Context, data NetworkProxyResidentialDetectedPayload) {
+	EmitAndLog(ctx, EventNetworkProxyResidentialDetected, toMap(data))
+}
+
+// EmitNetworkProxyRotationAllowed emits a "network:proxy:rotation-allowed" event.
+// Identity observability event: network:proxy:rotation-allowed
+func EmitNetworkProxyRotationAllowed(ctx context.Context, data NetworkProxyRotationAllowedPayload) {
+	EmitAndLog(ctx, EventNetworkProxyRotationAllowed, toMap(data))
+}
+
+// EmitNetworkProxyRotationBlocked emits a "network:proxy:rotation-blocked" event.
+// Identity observability event: network:proxy:rotation-blocked
+func EmitNetworkProxyRotationBlocked(ctx context.Context, data NetworkProxyRotationBlockedPayload) {
+	EmitAndLog(ctx, EventNetworkProxyRotationBlocked, toMap(data))
+}
+
+// EmitNetworkProxyStickySessionBound emits a "network:proxy:sticky-session-bound" event.
+// Identity observability event: network:proxy:sticky-session-bound
+func EmitNetworkProxyStickySessionBound(ctx context.Context, data NetworkProxyStickySessionBoundPayload) {
+	EmitAndLog(ctx, EventNetworkProxyStickySessionBound, toMap(data))
+}
+
+// EmitNetworkProxyStickySessionExpired emits a "network:proxy:sticky-session-expired" event.
+// Identity observability event: network:proxy:sticky-session-expired
+func EmitNetworkProxyStickySessionExpired(ctx context.Context, data NetworkProxyStickySessionExpiredPayload) {
+	EmitAndLog(ctx, EventNetworkProxyStickySessionExpired, toMap(data))
+}
+
+// EmitNetworkWebrtcApiSupported emits a "network:webrtc:api-supported" event.
+// Identity observability event: network:webrtc:api-supported
+func EmitNetworkWebrtcApiSupported(ctx context.Context, data NetworkWebrtcApiSupportedPayload) {
+	EmitAndLog(ctx, EventNetworkWebrtcApiSupported, toMap(data))
+}
+
+// EmitNetworkWebrtcApiUnavailable emits a "network:webrtc:api-unavailable" event.
+// Identity observability event: network:webrtc:api-unavailable
+func EmitNetworkWebrtcApiUnavailable(ctx context.Context, data NetworkWebrtcApiUnavailablePayload) {
+	EmitAndLog(ctx, EventNetworkWebrtcApiUnavailable, toMap(data))
+}
+
+// EmitProfileClosed emits a "profile:closed" event.
+// Identity observability event: profile:closed
+func EmitProfileClosed(ctx context.Context, data ProfileClosedPayload) {
+	EmitAndLog(ctx, EventProfileClosed, toMap(data))
+}
+
+// EmitProfileCopyCompleted emits a "profile:copy:completed" event.
+// Identity observability event: profile:copy:completed
+func EmitProfileCopyCompleted(ctx context.Context, data ProfileCopyCompletedPayload) {
+	EmitAndLog(ctx, EventProfileCopyCompleted, toMap(data))
+}
+
+// EmitProfileCopyStarted emits a "profile:copy:started" event.
+// Identity observability event: profile:copy:started
+func EmitProfileCopyStarted(ctx context.Context, data ProfileCopyStartedPayload) {
+	EmitAndLog(ctx, EventProfileCopyStarted, toMap(data))
+}
+
+// EmitProfileCoreBound emits a "profile:core:bound" event.
+// Identity observability event: profile:core:bound
+func EmitProfileCoreBound(ctx context.Context, data ProfileCoreBoundPayload) {
+	EmitAndLog(ctx, EventProfileCoreBound, toMap(data))
+}
+
+// EmitProfileCoreMissing emits a "profile:core:missing" event.
+// Identity observability event: profile:core:missing
+func EmitProfileCoreMissing(ctx context.Context, data ProfileCoreMissingPayload) {
+	EmitAndLog(ctx, EventProfileCoreMissing, toMap(data))
+}
+
+// EmitProfileCreateCompleted emits a "profile:create:completed" event.
+// Identity observability event: profile:create:completed
+func EmitProfileCreateCompleted(ctx context.Context, data ProfileCreateCompletedPayload) {
+	EmitAndLog(ctx, EventProfileCreateCompleted, toMap(data))
+}
+
+// EmitProfileCreateStarted emits a "profile:create:started" event.
+// Identity observability event: profile:create:started
+func EmitProfileCreateStarted(ctx context.Context, data ProfileCreateStartedPayload) {
+	EmitAndLog(ctx, EventProfileCreateStarted, toMap(data))
+}
+
+// EmitProfileDeleteCompleted emits a "profile:delete:completed" event.
+// Identity observability event: profile:delete:completed
+func EmitProfileDeleteCompleted(ctx context.Context, data ProfileDeleteCompletedPayload) {
+	EmitAndLog(ctx, EventProfileDeleteCompleted, toMap(data))
+}
+
+// EmitProfileDeleteStarted emits a "profile:delete:started" event.
+// Identity observability event: profile:delete:started
+func EmitProfileDeleteStarted(ctx context.Context, data ProfileDeleteStartedPayload) {
+	EmitAndLog(ctx, EventProfileDeleteStarted, toMap(data))
+}
+
+// EmitProfileExportCompleted emits a "profile:export:completed" event.
+// Identity observability event: profile:export:completed
+func EmitProfileExportCompleted(ctx context.Context, data ProfileExportCompletedPayload) {
+	EmitAndLog(ctx, EventProfileExportCompleted, toMap(data))
+}
+
+// EmitProfileExportStarted emits a "profile:export:started" event.
+// Identity observability event: profile:export:started
+func EmitProfileExportStarted(ctx context.Context, data ProfileExportStartedPayload) {
+	EmitAndLog(ctx, EventProfileExportStarted, toMap(data))
+}
+
+// EmitProfileGroupMoved emits a "profile:group:moved" event.
+// Identity observability event: profile:group:moved
+func EmitProfileGroupMoved(ctx context.Context, data ProfileGroupMovedPayload) {
+	EmitAndLog(ctx, EventProfileGroupMoved, toMap(data))
+}
+
+// EmitProfileGuardDuplicateUserDataDir emits a "profile:guard:duplicate-user-data-dir" event.
+// Identity observability event: profile:guard:duplicate-user-data-dir
+func EmitProfileGuardDuplicateUserDataDir(ctx context.Context, data ProfileGuardDuplicateUserDataDirPayload) {
+	EmitAndLog(ctx, EventProfileGuardDuplicateUserDataDir, toMap(data))
+}
+
+// EmitProfileGuardPathNormalized emits a "profile:guard:path-normalized" event.
+// Identity observability event: profile:guard:path-normalized
+func EmitProfileGuardPathNormalized(ctx context.Context, data ProfileGuardPathNormalizedPayload) {
+	EmitAndLog(ctx, EventProfileGuardPathNormalized, toMap(data))
+}
+
+// EmitProfileGuardPathRejected emits a "profile:guard:path-rejected" event.
+// Identity observability event: profile:guard:path-rejected
+func EmitProfileGuardPathRejected(ctx context.Context, data ProfileGuardPathRejectedPayload) {
+	EmitAndLog(ctx, EventProfileGuardPathRejected, toMap(data))
+}
+
+// EmitProfileGuardStartLockConflict emits a "profile:guard:start-lock-conflict" event.
+// Identity observability event: profile:guard:start-lock-conflict
+func EmitProfileGuardStartLockConflict(ctx context.Context, data ProfileGuardStartLockConflictPayload) {
+	EmitAndLog(ctx, EventProfileGuardStartLockConflict, toMap(data))
+}
+
+// EmitProfileGuardSymlinkRejected emits a "profile:guard:symlink-rejected" event.
+// Identity observability event: profile:guard:symlink-rejected
+func EmitProfileGuardSymlinkRejected(ctx context.Context, data ProfileGuardSymlinkRejectedPayload) {
+	EmitAndLog(ctx, EventProfileGuardSymlinkRejected, toMap(data))
+}
+
+// EmitProfileHumanizeSeedCreated emits a "profile:humanize-seed:created" event.
+// Identity observability event: profile:humanize-seed:created
+func EmitProfileHumanizeSeedCreated(ctx context.Context, data ProfileHumanizeSeedCreatedPayload) {
+	EmitAndLog(ctx, EventProfileHumanizeSeedCreated, toMap(data))
+}
+
+// EmitProfileHumanizeSeedEmptyRepaired emits a "profile:humanize-seed:empty-repaired" event.
+// Identity observability event: profile:humanize-seed:empty-repaired
+func EmitProfileHumanizeSeedEmptyRepaired(ctx context.Context, data ProfileHumanizeSeedEmptyRepairedPayload) {
+	EmitAndLog(ctx, EventProfileHumanizeSeedEmptyRepaired, toMap(data))
+}
+
+// EmitProfileHumanizeSeedPreserved emits a "profile:humanize-seed:preserved" event.
+// Identity observability event: profile:humanize-seed:preserved
+func EmitProfileHumanizeSeedPreserved(ctx context.Context, data ProfileHumanizeSeedPreservedPayload) {
+	EmitAndLog(ctx, EventProfileHumanizeSeedPreserved, toMap(data))
+}
+
+// EmitProfileImportCompleted emits a "profile:import:completed" event.
+// Identity observability event: profile:import:completed
+func EmitProfileImportCompleted(ctx context.Context, data ProfileImportCompletedPayload) {
+	EmitAndLog(ctx, EventProfileImportCompleted, toMap(data))
+}
+
+// EmitProfileImportStarted emits a "profile:import:started" event.
+// Identity observability event: profile:import:started
+func EmitProfileImportStarted(ctx context.Context, data ProfileImportStartedPayload) {
+	EmitAndLog(ctx, EventProfileImportStarted, toMap(data))
+}
+
+// EmitProfileLaunchAuditCreated emits a "profile:launch-audit:created" event.
+// Identity observability event: profile:launch-audit:created
+func EmitProfileLaunchAuditCreated(ctx context.Context, data ProfileLaunchAuditCreatedPayload) {
+	EmitAndLog(ctx, EventProfileLaunchAuditCreated, toMap(data))
+}
+
+// EmitProfileLaunchAuditRejected emits a "profile:launch-audit:rejected" event.
+// Identity observability event: profile:launch-audit:rejected
+func EmitProfileLaunchAuditRejected(ctx context.Context, data ProfileLaunchAuditRejectedPayload) {
+	EmitAndLog(ctx, EventProfileLaunchAuditRejected, toMap(data))
+}
+
+// EmitProfileLaunchAuditValidated emits a "profile:launch-audit:validated" event.
+// Identity observability event: profile:launch-audit:validated
+func EmitProfileLaunchAuditValidated(ctx context.Context, data ProfileLaunchAuditValidatedPayload) {
+	EmitAndLog(ctx, EventProfileLaunchAuditValidated, toMap(data))
+}
+
+// EmitProfileOpened emits a "profile:opened" event.
+// Identity observability event: profile:opened
+func EmitProfileOpened(ctx context.Context, data ProfileOpenedPayload) {
+	EmitAndLog(ctx, EventProfileOpened, toMap(data))
+}
+
+// EmitProfilePathConfirmationRequired emits a "profile:path:confirmation-required" event.
+// Identity observability event: profile:path:confirmation-required
+func EmitProfilePathConfirmationRequired(ctx context.Context, data ProfilePathConfirmationRequiredPayload) {
+	EmitAndLog(ctx, EventProfilePathConfirmationRequired, toMap(data))
+}
+
+// EmitProfilePreferenceMerged emits a "profile:preference:merged" event.
+// Identity observability event: profile:preference:merged
+func EmitProfilePreferenceMerged(ctx context.Context, data ProfilePreferenceMergedPayload) {
+	EmitAndLog(ctx, EventProfilePreferenceMerged, toMap(data))
+}
+
+// EmitProfileRuntimeWarningCleared emits a "profile:runtime-warning:cleared" event.
+// Identity observability event: profile:runtime-warning:cleared
+func EmitProfileRuntimeWarningCleared(ctx context.Context, data ProfileRuntimeWarningClearedPayload) {
+	EmitAndLog(ctx, EventProfileRuntimeWarningCleared, toMap(data))
+}
+
+// EmitProfileRuntimeWarningSet emits a "profile:runtime-warning:set" event.
+// Identity observability event: profile:runtime-warning:set
+func EmitProfileRuntimeWarningSet(ctx context.Context, data ProfileRuntimeWarningSetPayload) {
+	EmitAndLog(ctx, EventProfileRuntimeWarningSet, toMap(data))
+}
+
+// EmitProfileSnapshotPreflight emits a "profile:snapshot:preflight" event.
+// Identity observability event: profile:snapshot:preflight
+func EmitProfileSnapshotPreflight(ctx context.Context, data ProfileSnapshotPreflightPayload) {
+	EmitAndLog(ctx, EventProfileSnapshotPreflight, toMap(data))
+}
+
+// EmitProfileSnapshotRestored emits a "profile:snapshot:restored" event.
+// Identity observability event: profile:snapshot:restored
+func EmitProfileSnapshotRestored(ctx context.Context, data ProfileSnapshotRestoredPayload) {
+	EmitAndLog(ctx, EventProfileSnapshotRestored, toMap(data))
+}
+
+// EmitProfileTagUpdated emits a "profile:tag:updated" event.
+// Identity observability event: profile:tag:updated
+func EmitProfileTagUpdated(ctx context.Context, data ProfileTagUpdatedPayload) {
+	EmitAndLog(ctx, EventProfileTagUpdated, toMap(data))
+}
+
+// EmitProfileUpdateCompleted emits a "profile:update:completed" event.
+// Identity observability event: profile:update:completed
+func EmitProfileUpdateCompleted(ctx context.Context, data ProfileUpdateCompletedPayload) {
+	EmitAndLog(ctx, EventProfileUpdateCompleted, toMap(data))
+}
+
+// EmitProfileUpdateStarted emits a "profile:update:started" event.
+// Identity observability event: profile:update:started
+func EmitProfileUpdateStarted(ctx context.Context, data ProfileUpdateStartedPayload) {
+	EmitAndLog(ctx, EventProfileUpdateStarted, toMap(data))
+}
+
+// EmitProfileUserDataDirBound emits a "profile:user-data-dir:bound" event.
+// Identity observability event: profile:user-data-dir:bound
+func EmitProfileUserDataDirBound(ctx context.Context, data ProfileUserDataDirBoundPayload) {
+	EmitAndLog(ctx, EventProfileUserDataDirBound, toMap(data))
+}
+
+// EmitProfileUserDataDirChangedBlocked emits a "profile:user-data-dir:changed-blocked" event.
+// Identity observability event: profile:user-data-dir:changed-blocked
+func EmitProfileUserDataDirChangedBlocked(ctx context.Context, data ProfileUserDataDirChangedBlockedPayload) {
+	EmitAndLog(ctx, EventProfileUserDataDirChangedBlocked, toMap(data))
 }
 
 // EmitProxyBridgeClashStarted emits a "proxy:bridge:clash:started" event.
@@ -2380,4 +6758,148 @@ func EmitSystemRecoveryPortReleased(ctx context.Context, data SystemRecoveryPort
 // 实例配置已修复
 func EmitSystemRecoveryProfileRepaired(ctx context.Context, data SystemRecoveryProfileRepairedPayload) {
 	EmitAndLog(ctx, EventSystemRecoveryProfileRepaired, toMap(data))
+}
+
+// EmitWorkbenchBatchCompleted emits a "workbench:batch:completed" event.
+// Identity observability event: workbench:batch:completed
+func EmitWorkbenchBatchCompleted(ctx context.Context, data WorkbenchBatchCompletedPayload) {
+	EmitAndLog(ctx, EventWorkbenchBatchCompleted, toMap(data))
+}
+
+// EmitWorkbenchBatchFailed emits a "workbench:batch:failed" event.
+// Identity observability event: workbench:batch:failed
+func EmitWorkbenchBatchFailed(ctx context.Context, data WorkbenchBatchFailedPayload) {
+	EmitAndLog(ctx, EventWorkbenchBatchFailed, toMap(data))
+}
+
+// EmitWorkbenchBatchStarted emits a "workbench:batch:started" event.
+// Identity observability event: workbench:batch:started
+func EmitWorkbenchBatchStarted(ctx context.Context, data WorkbenchBatchStartedPayload) {
+	EmitAndLog(ctx, EventWorkbenchBatchStarted, toMap(data))
+}
+
+// EmitWorkbenchFingerprintHealthCompleted emits a "workbench:fingerprint-health:completed" event.
+// Identity observability event: workbench:fingerprint-health:completed
+func EmitWorkbenchFingerprintHealthCompleted(ctx context.Context, data WorkbenchFingerprintHealthCompletedPayload) {
+	EmitAndLog(ctx, EventWorkbenchFingerprintHealthCompleted, toMap(data))
+}
+
+// EmitWorkbenchFingerprintHealthQueued emits a "workbench:fingerprint-health:queued" event.
+// Identity observability event: workbench:fingerprint-health:queued
+func EmitWorkbenchFingerprintHealthQueued(ctx context.Context, data WorkbenchFingerprintHealthQueuedPayload) {
+	EmitAndLog(ctx, EventWorkbenchFingerprintHealthQueued, toMap(data))
+}
+
+// EmitWorkbenchIdentityReportCompleted emits a "workbench:identity-report:completed" event.
+// Identity observability event: workbench:identity-report:completed
+func EmitWorkbenchIdentityReportCompleted(ctx context.Context, data WorkbenchIdentityReportCompletedPayload) {
+	EmitAndLog(ctx, EventWorkbenchIdentityReportCompleted, toMap(data))
+}
+
+// EmitWorkbenchIdentityReportFailed emits a "workbench:identity-report:failed" event.
+// Identity observability event: workbench:identity-report:failed
+func EmitWorkbenchIdentityReportFailed(ctx context.Context, data WorkbenchIdentityReportFailedPayload) {
+	EmitAndLog(ctx, EventWorkbenchIdentityReportFailed, toMap(data))
+}
+
+// EmitWorkbenchIdentityReportQueued emits a "workbench:identity-report:queued" event.
+// Identity observability event: workbench:identity-report:queued
+func EmitWorkbenchIdentityReportQueued(ctx context.Context, data WorkbenchIdentityReportQueuedPayload) {
+	EmitAndLog(ctx, EventWorkbenchIdentityReportQueued, toMap(data))
+}
+
+// EmitWorkbenchIdentityReportStarted emits a "workbench:identity-report:started" event.
+// Identity observability event: workbench:identity-report:started
+func EmitWorkbenchIdentityReportStarted(ctx context.Context, data WorkbenchIdentityReportStartedPayload) {
+	EmitAndLog(ctx, EventWorkbenchIdentityReportStarted, toMap(data))
+}
+
+// EmitWorkbenchPreviewCaptured emits a "workbench:preview:captured" event.
+// Identity observability event: workbench:preview:captured
+func EmitWorkbenchPreviewCaptured(ctx context.Context, data WorkbenchPreviewCapturedPayload) {
+	EmitAndLog(ctx, EventWorkbenchPreviewCaptured, toMap(data))
+}
+
+// EmitWorkbenchPreviewFailed emits a "workbench:preview:failed" event.
+// Identity observability event: workbench:preview:failed
+func EmitWorkbenchPreviewFailed(ctx context.Context, data WorkbenchPreviewFailedPayload) {
+	EmitAndLog(ctx, EventWorkbenchPreviewFailed, toMap(data))
+}
+
+// EmitWorkbenchRefreshSilent emits a "workbench:refresh:silent" event.
+// Identity observability event: workbench:refresh:silent
+func EmitWorkbenchRefreshSilent(ctx context.Context, data WorkbenchRefreshSilentPayload) {
+	EmitAndLog(ctx, EventWorkbenchRefreshSilent, toMap(data))
+}
+
+// EmitWorkbenchSelectionChanged emits a "workbench:selection:changed" event.
+// Identity observability event: workbench:selection:changed
+func EmitWorkbenchSelectionChanged(ctx context.Context, data WorkbenchSelectionChangedPayload) {
+	EmitAndLog(ctx, EventWorkbenchSelectionChanged, toMap(data))
+}
+
+// EmitWorkbenchStatusPollCompleted emits a "workbench:status:poll-completed" event.
+// Identity observability event: workbench:status:poll-completed
+func EmitWorkbenchStatusPollCompleted(ctx context.Context, data WorkbenchStatusPollCompletedPayload) {
+	EmitAndLog(ctx, EventWorkbenchStatusPollCompleted, toMap(data))
+}
+
+// EmitWorkbenchStatusPollStarted emits a "workbench:status:poll-started" event.
+// Identity observability event: workbench:status:poll-started
+func EmitWorkbenchStatusPollStarted(ctx context.Context, data WorkbenchStatusPollStartedPayload) {
+	EmitAndLog(ctx, EventWorkbenchStatusPollStarted, toMap(data))
+}
+
+// EmitWorkbenchStatusStaleResultIgnored emits a "workbench:status:stale-result-ignored" event.
+// Identity observability event: workbench:status:stale-result-ignored
+func EmitWorkbenchStatusStaleResultIgnored(ctx context.Context, data WorkbenchStatusStaleResultIgnoredPayload) {
+	EmitAndLog(ctx, EventWorkbenchStatusStaleResultIgnored, toMap(data))
+}
+
+// EmitWorkbenchTaskCompleted emits a "workbench:task:completed" event.
+// Identity observability event: workbench:task:completed
+func EmitWorkbenchTaskCompleted(ctx context.Context, data WorkbenchTaskCompletedPayload) {
+	EmitAndLog(ctx, EventWorkbenchTaskCompleted, toMap(data))
+}
+
+// EmitWorkbenchTaskFailed emits a "workbench:task:failed" event.
+// Identity observability event: workbench:task:failed
+func EmitWorkbenchTaskFailed(ctx context.Context, data WorkbenchTaskFailedPayload) {
+	EmitAndLog(ctx, EventWorkbenchTaskFailed, toMap(data))
+}
+
+// EmitWorkbenchTaskQueued emits a "workbench:task:queued" event.
+// Identity observability event: workbench:task:queued
+func EmitWorkbenchTaskQueued(ctx context.Context, data WorkbenchTaskQueuedPayload) {
+	EmitAndLog(ctx, EventWorkbenchTaskQueued, toMap(data))
+}
+
+// EmitWorkbenchTaskStarted emits a "workbench:task:started" event.
+// Identity observability event: workbench:task:started
+func EmitWorkbenchTaskStarted(ctx context.Context, data WorkbenchTaskStartedPayload) {
+	EmitAndLog(ctx, EventWorkbenchTaskStarted, toMap(data))
+}
+
+// EmitWorkbenchWindowActivateRequested emits a "workbench:window:activate-requested" event.
+// Identity observability event: workbench:window:activate-requested
+func EmitWorkbenchWindowActivateRequested(ctx context.Context, data WorkbenchWindowActivateRequestedPayload) {
+	EmitAndLog(ctx, EventWorkbenchWindowActivateRequested, toMap(data))
+}
+
+// EmitWorkbenchWindowActivated emits a "workbench:window:activated" event.
+// Identity observability event: workbench:window:activated
+func EmitWorkbenchWindowActivated(ctx context.Context, data WorkbenchWindowActivatedPayload) {
+	EmitAndLog(ctx, EventWorkbenchWindowActivated, toMap(data))
+}
+
+// EmitWorkbenchWindowArrangeCompleted emits a "workbench:window:arrange-completed" event.
+// Identity observability event: workbench:window:arrange-completed
+func EmitWorkbenchWindowArrangeCompleted(ctx context.Context, data WorkbenchWindowArrangeCompletedPayload) {
+	EmitAndLog(ctx, EventWorkbenchWindowArrangeCompleted, toMap(data))
+}
+
+// EmitWorkbenchWindowArrangeRequested emits a "workbench:window:arrange-requested" event.
+// Identity observability event: workbench:window:arrange-requested
+func EmitWorkbenchWindowArrangeRequested(ctx context.Context, data WorkbenchWindowArrangeRequestedPayload) {
+	EmitAndLog(ctx, EventWorkbenchWindowArrangeRequested, toMap(data))
 }

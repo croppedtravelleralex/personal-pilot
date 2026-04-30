@@ -2,9 +2,13 @@ package behavior
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestGaussian_ZeroStddev(t *testing.T) {
@@ -249,4 +253,255 @@ func TestPlaybackProgressCallbackReportsRunningAndCompleted(t *testing.T) {
 	if got[2].EventIndex != 2 || got[2].EventTotal != 2 || got[2].Percent != 100 || got[2].Status != "completed" {
 		t.Fatalf("completed progress = %+v, want completed at 100 percent", got[2])
 	}
+}
+
+func TestPlaybackRun_MoveFailuresDoNotAbortStrictDownUp(t *testing.T) {
+	engine := newPlaybackTestEngine([]RecordedEvent{
+		{T: 0, Type: "move", X: 20, Y: 20},
+		{T: 0, Type: "down", X: 20, Y: 20},
+		{T: 0, Type: "up", X: 20, Y: 20},
+	}, VariationConfig{})
+
+	var strictEvents []string
+	engine.sendCommandFn = func(id int, method string, params interface{}) (json.RawMessage, error) {
+		eventType := mouseEventType(method, params)
+		if eventType == "mouseMoved" {
+			return nil, errors.New("cdp move rejected")
+		}
+		if eventType == "mousePressed" || eventType == "mouseReleased" {
+			strictEvents = append(strictEvents, eventType)
+		}
+		return json.RawMessage(`{"result":{}}`), nil
+	}
+
+	if err := engine.run(context.Background()); err != nil {
+		t.Fatalf("run should ignore best-effort move failures: %v", err)
+	}
+	if got, want := strings.Join(strictEvents, ","), "mousePressed,mouseReleased"; got != want {
+		t.Fatalf("strict events = %q, want %q", got, want)
+	}
+}
+
+func TestPlaybackRun_StrictPressReleaseFailuresReturnError(t *testing.T) {
+	tests := []struct {
+		name       string
+		failType   string
+		wantErrSub string
+	}{
+		{name: "press", failType: "mousePressed", wantErrSub: "mouseDown event failed"},
+		{name: "release", failType: "mouseReleased", wantErrSub: "mouseUp event failed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := newPlaybackTestEngine([]RecordedEvent{
+				{T: 0, Type: "down", X: 20, Y: 20},
+				{T: 0, Type: "up", X: 20, Y: 20},
+			}, VariationConfig{})
+			engine.sendCommandFn = func(id int, method string, params interface{}) (json.RawMessage, error) {
+				if mouseEventType(method, params) == tt.failType {
+					return nil, errors.New("strict cdp failure")
+				}
+				return json.RawMessage(`{"result":{}}`), nil
+			}
+
+			err := engine.run(context.Background())
+			if err == nil {
+				t.Fatalf("run error = nil, want strict failure")
+			}
+			if !strings.Contains(err.Error(), tt.wantErrSub) || !strings.Contains(err.Error(), "strict cdp failure") {
+				t.Fatalf("run error = %q, want %q with cause", err.Error(), tt.wantErrSub)
+			}
+		})
+	}
+}
+
+func TestPlaybackRun_ClickMicroCorrectionMoveFailureDoesNotAbort(t *testing.T) {
+	engine := newPlaybackTestEngine([]RecordedEvent{
+		{T: 0, Type: "click", X: 20, Y: 20},
+	}, VariationConfig{MicroCorrections: true})
+	engine.rng = rand.New(rand.NewSource(seedForClickMicroCorrection(t)))
+
+	var strictEvents []string
+	moveAttempts := 0
+	engine.sendCommandFn = func(id int, method string, params interface{}) (json.RawMessage, error) {
+		eventType := mouseEventType(method, params)
+		if eventType == "mouseMoved" {
+			moveAttempts++
+			return nil, errors.New("micro-correction rejected")
+		}
+		if eventType == "mousePressed" || eventType == "mouseReleased" {
+			strictEvents = append(strictEvents, eventType)
+		}
+		return json.RawMessage(`{"result":{}}`), nil
+	}
+
+	if err := engine.run(context.Background()); err != nil {
+		t.Fatalf("run should ignore micro-correction move failures: %v", err)
+	}
+	if got, want := strings.Join(strictEvents, ","), "mousePressed,mouseReleased"; got != want {
+		t.Fatalf("strict events = %q, want %q", got, want)
+	}
+	if moveAttempts == 0 {
+		t.Fatalf("micro-correction move was not attempted")
+	}
+}
+
+func TestPlaybackRun_AskEachTimePausesUntilReviewContinue(t *testing.T) {
+	engine := newPlaybackTestEngine([]RecordedEvent{
+		{T: 0, Type: "down", X: 20, Y: 20},
+		{T: 0, Type: "up", X: 20, Y: 20},
+	}, VariationConfig{
+		ExecutionPolicy: ptrExecutionPolicy(DefaultExecutionPolicy(PermissionAskEachTime)),
+	})
+
+	progressCh := make(chan PlaybackProgress, 4)
+	engine.SetProgressCallback(func(progress PlaybackProgress) {
+		progressCh <- progress
+	})
+	var strictEvents []string
+	engine.sendCommandFn = func(id int, method string, params interface{}) (json.RawMessage, error) {
+		if eventType := mouseEventType(method, params); eventType == "mousePressed" || eventType == "mouseReleased" {
+			strictEvents = append(strictEvents, eventType)
+		}
+		return json.RawMessage(`{"result":{}}`), nil
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- engine.run(context.Background()) }()
+
+	progress := waitPlaybackProgress(t, progressCh)
+	if progress.Status != "needs_review" || !strings.Contains(progress.Reason, "每次询问") {
+		t.Fatalf("review progress = %+v, want needs_review with ask reason", progress)
+	}
+	if len(strictEvents) != 0 {
+		t.Fatalf("strict events before continue = %#v, want none", strictEvents)
+	}
+	if err := engine.SubmitReviewDecision("continue"); err != nil {
+		t.Fatalf("continue decision: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got, want := strings.Join(strictEvents, ","), "mousePressed,mouseReleased"; got != want {
+		t.Fatalf("strict events = %q, want %q", got, want)
+	}
+}
+
+func TestPlaybackRun_ReviewSkipDownAlsoSkipsPairedRelease(t *testing.T) {
+	engine := newPlaybackTestEngine([]RecordedEvent{
+		{T: 0, Type: "down", X: 20, Y: 20},
+		{T: 0, Type: "up", X: 20, Y: 20},
+	}, VariationConfig{
+		ExecutionPolicy: ptrExecutionPolicy(DefaultExecutionPolicy(PermissionAskEachTime)),
+	})
+
+	progressCh := make(chan PlaybackProgress, 4)
+	engine.SetProgressCallback(func(progress PlaybackProgress) {
+		progressCh <- progress
+	})
+	var strictEvents []string
+	engine.sendCommandFn = func(id int, method string, params interface{}) (json.RawMessage, error) {
+		if eventType := mouseEventType(method, params); eventType == "mousePressed" || eventType == "mouseReleased" {
+			strictEvents = append(strictEvents, eventType)
+		}
+		return json.RawMessage(`{"result":{}}`), nil
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- engine.run(context.Background()) }()
+	progress := waitPlaybackProgress(t, progressCh)
+	if progress.Status != "needs_review" {
+		t.Fatalf("review progress = %+v, want needs_review", progress)
+	}
+	if err := engine.SubmitReviewDecision("skip"); err != nil {
+		t.Fatalf("skip decision: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(strictEvents) != 0 {
+		t.Fatalf("strict events after skip = %#v, want none", strictEvents)
+	}
+}
+
+func TestPlaybackRun_AutoReviewPausesLowConfidenceClick(t *testing.T) {
+	engine := newPlaybackTestEngine([]RecordedEvent{
+		{T: 0, Type: "click", X: 20, Y: 20},
+	}, VariationConfig{
+		ExecutionPolicy: ptrExecutionPolicy(DefaultExecutionPolicy(PermissionAutoReview)),
+	})
+	progressCh := make(chan PlaybackProgress, 4)
+	engine.SetProgressCallback(func(progress PlaybackProgress) {
+		progressCh <- progress
+	})
+	engine.sendCommandFn = func(id int, method string, params interface{}) (json.RawMessage, error) {
+		return json.RawMessage(`{"result":{}}`), nil
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- engine.run(context.Background()) }()
+	progress := waitPlaybackProgress(t, progressCh)
+	if progress.Status != "needs_review" || !strings.Contains(progress.Reason, "低置信") {
+		t.Fatalf("review progress = %+v, want low confidence pause", progress)
+	}
+	if err := engine.SubmitReviewDecision("stop"); err != nil {
+		t.Fatalf("stop decision: %v", err)
+	}
+	err := <-done
+	if err == nil || !strings.Contains(err.Error(), "review decision") {
+		t.Fatalf("run error = %v, want review stop", err)
+	}
+}
+
+func newPlaybackTestEngine(events []RecordedEvent, variation VariationConfig) *PlaybackEngine {
+	engine := NewPlaybackEngine(&Recording{
+		ID:        "rec-playback-test",
+		Events:    events,
+		ViewportW: 100,
+		ViewportH: 100,
+	}, variation)
+	engine.viewport = playbackViewport{Width: 100, Height: 100, DPR: 1, Scale: 1}
+	engine.rng = rand.New(rand.NewSource(1))
+	return engine
+}
+
+func ptrExecutionPolicy(policy ExecutionPolicy) *ExecutionPolicy {
+	return &policy
+}
+
+func waitPlaybackProgress(t *testing.T, ch <-chan PlaybackProgress) PlaybackProgress {
+	t.Helper()
+	select {
+	case progress := <-ch:
+		return progress
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for playback progress")
+		return PlaybackProgress{}
+	}
+}
+
+func mouseEventType(method string, params interface{}) string {
+	if method != "Input.dispatchMouseEvent" {
+		return ""
+	}
+	values, ok := params.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	eventType, _ := values["type"].(string)
+	return eventType
+}
+
+func seedForClickMicroCorrection(t *testing.T) int64 {
+	t.Helper()
+	for seed := int64(1); seed < 1000; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		rng.Intn(70)
+		if rng.Float64() < 0.3 {
+			return seed
+		}
+	}
+	t.Fatal("could not find deterministic seed for click micro-correction")
+	return 0
 }

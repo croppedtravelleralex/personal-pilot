@@ -368,9 +368,46 @@ function Get-AdvancedFingerprint {
   }
   var info = {
     webRTC: { supported: false, candidateTypes: [], hasHostCandidate: false, hasSrflxCandidate: false, hasRelayCandidate: false, error: '' },
+    canvasHash: '',
+    canvasError: '',
+    fontHash: '',
+    fontError: '',
     audioHash: '',
     audioError: ''
   };
+  try {
+    var canvas = document.createElement('canvas');
+    canvas.width = 280;
+    canvas.height = 60;
+    var ctx = canvas.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#069';
+    ctx.fillText('Cwm fjordbank glyphs vext quiz 123', 4, 4);
+    ctx.fillStyle = '#c00';
+    ctx.font = 'bold 16px "Times New Roman"';
+    ctx.fillText('The quick brown fox jumps', 2, 24);
+    ctx.fillStyle = '#080';
+    ctx.font = 'italic 12px "Courier New"';
+    ctx.fillText('Sphinx of black quartz, judge my vow', 2, 44);
+    info.canvasHash = hashString(canvas.toDataURL());
+  } catch (e) {
+    info.canvasError = String(e && e.message ? e.message : e);
+  }
+  try {
+    var testFonts = ['Arial','Helvetica','Times New Roman','Courier New','Georgia','Verdana','SimSun','Microsoft YaHei','PingFang SC','Hiragino Sans GB'];
+    var fontCanvas = document.createElement('canvas');
+    var fontCtx = fontCanvas.getContext('2d');
+    var testStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    var widths = [];
+    for (var f = 0; f < testFonts.length; f++) {
+      fontCtx.font = '16px "' + testFonts[f] + '"';
+      widths.push(fontCtx.measureText(testStr).width.toFixed(2));
+    }
+    info.fontHash = hashString(widths.join(','));
+  } catch (e) {
+    info.fontError = String(e && e.message ? e.message : e);
+  }
   try {
     var Ctor = window.RTCPeerConnection || window.webkitRTCPeerConnection;
     info.webRTC.supported = !!Ctor;
@@ -498,13 +535,13 @@ function Collect-FingerprintRun {
         $stableFields = [ordered]@{
             userAgent = $fingerprintResp.fingerprint.userAgent
             webRTC = $advancedFingerprint.webRTC
-            canvas = $fingerprintResp.fingerprint.canvasHash
+            canvas = $advancedFingerprint.canvasHash
             audio = $advancedFingerprint.audioHash
             webGL = [ordered]@{
                 vendor = $fingerprintResp.fingerprint.webglVendor
                 renderer = $fingerprintResp.fingerprint.webglRenderer
             }
-            fonts = $fingerprintResp.fingerprint.fontHash
+            fonts = $advancedFingerprint.fontHash
             timezone = $fingerprintResp.fingerprint.timezone
             language = [ordered]@{
                 language = $fingerprintResp.fingerprint.language

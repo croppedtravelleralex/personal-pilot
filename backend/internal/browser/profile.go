@@ -2,6 +2,8 @@ package browser
 
 import (
 	"ant-chrome/backend/internal/logger"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -52,6 +54,34 @@ func ValidateFingerprintArgs(args []string) []string {
 }
 
 // InitData 初始化浏览器数据
+const humanizeSeedSalt = "antbrowser-humanize-seed-v1:"
+
+func generateHumanizeSeed(profileId string) string {
+	id := strings.TrimSpace(profileId)
+	if id == "" {
+		id = uuid.NewString()
+	}
+	sum := sha256.Sum256([]byte(humanizeSeedSalt + id))
+	return hex.EncodeToString(sum[:])
+}
+
+func ensureProfileHumanizeSeed(profile *Profile) bool {
+	if profile == nil {
+		return false
+	}
+	seed := strings.TrimSpace(profile.HumanizeSeed)
+	if seed != "" {
+		if seed != profile.HumanizeSeed {
+			profile.HumanizeSeed = seed
+			return true
+		}
+		return false
+	}
+	profile.HumanizeSeed = generateHumanizeSeed(profile.ProfileId)
+	return true
+}
+
+// InitData initializes browser data.
 func (m *Manager) InitData() {
 	m.Mutex.Lock()
 	defer m.Mutex.Unlock()
@@ -84,6 +114,7 @@ func (m *Manager) loadProfiles() {
 			// SQLite 模式：无论是否为空都直接使用，不自动创建默认实例
 			for _, p := range profiles {
 				p.CoreId = normalizeProfileCoreID(p.CoreId)
+				ensureProfileHumanizeSeed(p)
 				m.Profiles[p.ProfileId] = p
 			}
 			if len(profiles) > 0 {
@@ -115,7 +146,7 @@ func (m *Manager) loadProfiles() {
 		if updatedAt == "" {
 			updatedAt = createdAt
 		}
-		m.Profiles[profileId] = &Profile{
+		profile := &Profile{
 			ProfileId:          profileId,
 			ProfileName:        item.ProfileName,
 			UserDataDir:        item.UserDataDir,
@@ -130,6 +161,8 @@ func (m *Manager) loadProfiles() {
 			LaunchArgs:         append([]string{}, item.LaunchArgs...),
 			Tags:               append([]string{}, item.Tags...),
 			Keywords:           append([]string{}, item.Keywords...),
+			BehaviorProfileID:  item.BehaviorProfileID,
+			HumanizeSeed:       item.HumanizeSeed,
 			Running:            false,
 			DebugPort:          0,
 			Pid:                0,
@@ -137,6 +170,8 @@ func (m *Manager) loadProfiles() {
 			CreatedAt:          createdAt,
 			UpdatedAt:          updatedAt,
 		}
+		ensureProfileHumanizeSeed(profile)
+		m.Profiles[profileId] = profile
 	}
 	log.Info("浏览器配置从文件加载完成", logger.F("count", len(m.Profiles)))
 }
@@ -149,6 +184,7 @@ func (m *Manager) SaveProfiles() error {
 	}
 	if m.ProfileDAO != nil {
 		for _, profile := range m.Profiles {
+			ensureProfileHumanizeSeed(profile)
 			profile.CoreId = normalizeProfileCoreID(profile.CoreId)
 			if err := m.ProfileDAO.Upsert(profile); err != nil {
 				log.Error("实例配置持久化失败", logger.F("profile_id", profile.ProfileId), logger.F("error", err))
@@ -162,6 +198,7 @@ func (m *Manager) SaveProfiles() error {
 	// 降级：写回 config.yaml
 	profiles := make([]ProfileConfig, 0, len(m.Profiles))
 	for _, profile := range m.Profiles {
+		ensureProfileHumanizeSeed(profile)
 		profiles = append(profiles, ProfileConfig{
 			ProfileId:          profile.ProfileId,
 			ProfileName:        profile.ProfileName,
@@ -177,6 +214,8 @@ func (m *Manager) SaveProfiles() error {
 			LaunchArgs:         append([]string{}, profile.LaunchArgs...),
 			Tags:               append([]string{}, profile.Tags...),
 			Keywords:           append([]string{}, profile.Keywords...),
+			BehaviorProfileID:  profile.BehaviorProfileID,
+			HumanizeSeed:       profile.HumanizeSeed,
 			CreatedAt:          profile.CreatedAt,
 			UpdatedAt:          profile.UpdatedAt,
 		})
@@ -309,6 +348,7 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		Keywords:          append([]string{}, input.Keywords...),
 		GroupId:           strings.TrimSpace(input.GroupId),
 		BehaviorProfileID: input.BehaviorProfileID,
+		HumanizeSeed:      strings.TrimSpace(input.HumanizeSeed),
 		Running:           false,
 		DebugPort:         0,
 		Pid:               0,
@@ -322,6 +362,7 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 	if err := m.NormalizeProfileIdentityBinding(profile); err != nil {
 		return nil, err
 	}
+	ensureProfileHumanizeSeed(profile)
 	m.Profiles[profileId] = profile
 	if warnings := ValidateFingerprintArgs(profile.FingerprintArgs); len(warnings) > 0 {
 		log.Warn("实例包含无效指纹标志",
@@ -383,6 +424,10 @@ func (m *Manager) Update(profileId string, input ProfileInput) (*Profile, error)
 	profile.Keywords = append([]string{}, input.Keywords...)
 	profile.GroupId = strings.TrimSpace(input.GroupId)
 	profile.BehaviorProfileID = input.BehaviorProfileID
+	if seed := strings.TrimSpace(input.HumanizeSeed); seed != "" {
+		profile.HumanizeSeed = seed
+	}
+	ensureProfileHumanizeSeed(profile)
 	profile.UpdatedAt = time.Now().Format(time.RFC3339)
 	log.Info("浏览器配置更新", logger.F("profile_id", profileId), logger.F("profile_name", input.ProfileName))
 	if err := m.SaveProfiles(); err != nil {
@@ -434,6 +479,7 @@ func (m *Manager) ApplyDefaults(profile *Profile) bool {
 	if strings.TrimSpace(profile.UserDataDir) == "" {
 		profile.UserDataDir = profile.ProfileId
 	}
+	ensureProfileHumanizeSeed(profile)
 	profile.CoreId = normalizeProfileCoreID(profile.CoreId)
 	if profile.CoreId == "" {
 		if defaultCore, ok := m.GetDefaultCore(); ok {
@@ -486,6 +532,7 @@ func (m *Manager) Copy(profileId string, newName string) (*Profile, error) {
 		return nil, fmt.Errorf("profile not found")
 	}
 
+	ensureProfileHumanizeSeed(src)
 	now := time.Now().Format(time.RFC3339)
 	newId := uuid.NewString()
 
@@ -512,6 +559,7 @@ func (m *Manager) Copy(profileId string, newName string) (*Profile, error) {
 		Tags:               append([]string{}, src.Tags...),
 		Keywords:           append([]string{}, src.Keywords...),
 		GroupId:            src.GroupId, // 复制分组
+		HumanizeSeed:       src.HumanizeSeed,
 		Running:            false,
 		DebugPort:          0,
 		Pid:                0,

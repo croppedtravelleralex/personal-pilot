@@ -565,6 +565,22 @@ func (a *App) BehaviorStopPlayback(profileId string) error {
 	return nil
 }
 
+func (a *App) BehaviorPlaybackReview(profileId string, decision string) error {
+	if _, err := a.requireRecordingStore(); err != nil {
+		return err
+	}
+	a.playMu.Lock()
+	engine, exists := a.playbacks[profileId]
+	a.playMu.Unlock()
+	if !exists {
+		return recordingError(http.StatusConflict, "no active playback", nil)
+	}
+	if err := engine.SubmitReviewDecision(decision); err != nil {
+		return recordingError(http.StatusBadRequest, "review playback", err)
+	}
+	return nil
+}
+
 func (a *App) CleanupStaleRecordingSessions() error {
 	if _, err := a.requireRecordingStore(); err != nil {
 		return err

@@ -2,8 +2,8 @@
 
 ## 最后更新时间
 
-- 日期：2026-04-29
-- 维护目的：记录行为录制功能评估结果、非容器化实例工作台 MVP、外部窗口辅助控制和后续技术完善入口
+- 日期：2026-04-30
+- 维护目的：记录行为录制功能评估结果、非容器化实例工作台 MVP、外部窗口辅助控制、身份强度体检、代理池免费代理抓取与后续技术完善入口
 
 ## 整体状态摘要
 
@@ -35,6 +35,8 @@
 - 支持按 PID 激活真实外部浏览器窗口，并对选中运行实例做平铺/主辅排列。
 - 支持前端任务队列，默认最多 3 个任务并发执行，最近 200 条任务持久化到后端。
 - 支持实例列表虚拟滚动，替代此前前 200 条截断显示。
+- 支持本地 CDP 指纹体检和身份强度报告，覆盖 UA、Client Hints、Intl、screen、Canvas、Audio、WebGL、Fonts、storage、WebRTC 能力等 70+ 采集字段；只读运行态，不导航第三方检测站，不写 profile/cookie。
+- 支持代理池从公开 raw 列表抓取免费 HTTP/HTTPS/SOCKS5 候选，后端并发直连检测出口 IP，仅导入检测通过的代理，并用 `last_ip_health_json` 覆盖式持久化最新 IP 检测结果。
 
 ### 维护性与工程能力
 
@@ -49,6 +51,8 @@
 - 行为录制专项待办已沉淀到维护文档。
 - 实例工作台改动已通过前端生产构建、后端顶层包测试和相关后端包测试。
 - 窗口控制自动 E2E 已用 Notepad 验证 PID 顶层窗口查找、移动和激活路径。
+- 身份强度体检已通过本地单测、全量后端测试、Tauri release 构建、真实两实例工作台验收和同一 CDP 探针的指纹迁移回归；验证 user-data-dir、fingerprint args、launch args、cookie marker 均保持一致。
+- 代理池免费代理导入已通过 `go test -count=1 ./backend/...`、`npm run build`、`npm run tauri:build`、`git diff --check` 和 Win11 Tauri 基线脚本。
 
 ## 进行中事项
 
@@ -74,6 +78,24 @@
 ## 与 README 或旧文档的不一致处
 
 - README 面向用户介绍项目能力；本目录记录内部真实维护状态。行为录制当前可按“基础录制/回放已真实验收”描述，但不应按“完整生产级已完善”对外描述。
+
+## 2026-04-30 身份强度体检与指纹维度扩展
+
+- 已完成：新增 `IdentityReportProfile(profileId)`，在实例运行且 debugReady 后通过当前真实 fingerprint Chromium 的 CDP 只读采集，不改变浏览器启动链路、不进入 Tauri WebView、不重建或改写 profile。
+- 已完成：`FingerprintSnapshot` 扩展到 70+ 字段，身份报告按指纹可见性、一致性、Profile 持久化、代理网络、自然行为、自动化安全 6 个分项评分。
+- 已完成：工作台新增批量/单实例“身份体检”，卡片和右侧面板展示分数、等级、异常摘要和维度数量；原“指纹体检”继续保留为轻量检查。
+- 已完成：事件注册表扩展到 466 个事件，覆盖 identity/fingerprint/cookie/profile/behavior/workbench/network/automation 域，并用测试锁住 350+ 事件目标。
+- 已加固：`user-data-dir` 父级跳转检测改为按路径段 fail-closed，`data\profiles\..\other-profile` 这类边界会被标为身份风险。
+- 已验证：`go test -count=1 -timeout 8m ./backend/...`、`npm run build`、`npm run tauri:build`、`cargo test`、Win11 Tauri baseline、`git diff --check`、真实两实例工作台验收、Tauri 指纹迁移回归均通过。
+- 边界：本地体检不访问第三方指纹站，不代表外部风控通过率；它只证明当前实例的本机可见字段、启动链路和 profile/cookie 持久性没有被软件层破坏。
+
+## 2026-04-30 代理池免费代理抓取与 IP 检测持久化
+
+- 已完成：新增免费代理候选抓取与解析能力，默认读取少量公开 raw 代理列表，也支持用户在代理池弹窗中填写自定义 source URL。
+- 已完成：新增 HTTP/HTTPS/SOCKS5 直连并发检测，只通过候选代理访问轻量 IP 信息接口，不走 Clash/Xray/sing-box 桥接，不启动浏览器或额外常驻服务。
+- 已完成：检测通过的代理才进入正式代理池；每个导入代理同步写入最新 `ProxyIPHealthResult`，再次检测或保存代理列表时覆盖 `browser_proxies.last_ip_health_json`，不追加历史流水。
+- 已完成：修复 `SaveBrowserProxies` 先清表再写入导致测速/IP 健康运行时字段丢失的问题；保存列表时会保留并写回已有 `last_latency_ms`、`last_test_*` 和 `last_ip_health_json`。
+- 已验证：`go test -count=1 ./backend/internal/proxy ./backend/cmd/antbrowser-core ./backend`、`go test -count=1 ./backend/...`、`npm run build`、`npm run tauri:build`、`git diff --check`、`powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\antbrowser` 均通过。
 
 ## 2026-04-29 行为录制 P2/P3 后端切片
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -28,13 +29,17 @@ func NewSQLiteProfileDAO(db *sql.DB) *SQLiteProfileDAO {
 
 // List 查询所有实例配置，按创建时间升序
 func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
+	if err := d.ensureHumanizeSeedColumn(); err != nil {
+		return nil, err
+	}
 	rows, err := d.db.Query(`
 		SELECT profile_id, profile_name, user_data_dir, core_id,
 		       fingerprint_args, proxy_id, proxy_config,
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
-		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''), created_at, updated_at
+		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
+		       COALESCE(humanize_seed, ''), created_at, updated_at
 		FROM browser_profiles ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("查询实例列表失败: %w", err)
@@ -54,13 +59,17 @@ func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
 
 // GetById 根据 profileId 查询单个实例
 func (d *SQLiteProfileDAO) GetById(profileId string) (*Profile, error) {
+	if err := d.ensureHumanizeSeedColumn(); err != nil {
+		return nil, err
+	}
 	row := d.db.QueryRow(`
 		SELECT profile_id, profile_name, user_data_dir, core_id,
 		       fingerprint_args, proxy_id, proxy_config,
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
-		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''), created_at, updated_at
+		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
+		       COALESCE(humanize_seed, ''), created_at, updated_at
 		FROM browser_profiles WHERE profile_id = ?`, profileId)
 	p, err := scanProfile(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -71,6 +80,15 @@ func (d *SQLiteProfileDAO) GetById(profileId string) (*Profile, error) {
 
 // Upsert 新增或更新实例配置
 func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
+	if profile == nil {
+		return fmt.Errorf("profile is nil")
+	}
+	if err := d.ensureHumanizeSeedColumn(); err != nil {
+		return err
+	}
+	if err := d.prepareHumanizeSeedForUpsert(profile); err != nil {
+		return err
+	}
 	fingerprintArgs, _ := json.Marshal(profile.FingerprintArgs)
 	launchArgs, _ := json.Marshal(profile.LaunchArgs)
 	tags, _ := json.Marshal(profile.Tags)
@@ -88,8 +106,8 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		INSERT INTO browser_profiles
 		  (profile_id, profile_name, user_data_dir, core_id, fingerprint_args,
 		   proxy_id, proxy_config, proxy_bind_source_id, proxy_bind_source_url, proxy_bind_name, proxy_bind_updated_at,
-		   launch_args, tags, keywords, group_id, behavior_profile_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   launch_args, tags, keywords, group_id, behavior_profile_id, humanize_seed, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(profile_id) DO UPDATE SET
 		  profile_name     = excluded.profile_name,
 		  user_data_dir    = excluded.user_data_dir,
@@ -106,12 +124,13 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		  keywords         = excluded.keywords,
 		  group_id         = excluded.group_id,
 		  behavior_profile_id = excluded.behavior_profile_id,
+		  humanize_seed    = excluded.humanize_seed,
 		  updated_at       = excluded.updated_at`,
 		profile.ProfileId, profile.ProfileName, profile.UserDataDir, profile.CoreId,
 		string(fingerprintArgs), profile.ProxyId, profile.ProxyConfig,
 		profile.ProxyBindSourceID, profile.ProxyBindSourceURL, profile.ProxyBindName, profile.ProxyBindUpdatedAt,
 		string(launchArgs), string(tags), string(keywords), profile.GroupId,
-		profile.BehaviorProfileID,
+		profile.BehaviorProfileID, profile.HumanizeSeed,
 		profile.CreatedAt, profile.UpdatedAt,
 	)
 	if err != nil {
@@ -121,6 +140,39 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 }
 
 // Delete 删除实例配置
+func (d *SQLiteProfileDAO) prepareHumanizeSeedForUpsert(profile *Profile) error {
+	seed := strings.TrimSpace(profile.HumanizeSeed)
+	if seed != "" {
+		profile.HumanizeSeed = seed
+		return nil
+	}
+	existingSeed, err := d.getExistingHumanizeSeed(profile.ProfileId)
+	if err != nil {
+		return err
+	}
+	if existingSeed != "" {
+		profile.HumanizeSeed = existingSeed
+		return nil
+	}
+	ensureProfileHumanizeSeed(profile)
+	return nil
+}
+
+func (d *SQLiteProfileDAO) getExistingHumanizeSeed(profileId string) (string, error) {
+	if strings.TrimSpace(profileId) == "" {
+		return "", nil
+	}
+	var seed string
+	err := d.db.QueryRow(`SELECT COALESCE(humanize_seed, '') FROM browser_profiles WHERE profile_id = ?`, profileId).Scan(&seed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read existing humanize seed: %w", err)
+	}
+	return strings.TrimSpace(seed), nil
+}
+
 func (d *SQLiteProfileDAO) Delete(profileId string) error {
 	_, err := d.db.Exec(`DELETE FROM browser_profiles WHERE profile_id = ?`, profileId)
 	if err != nil {
@@ -132,7 +184,47 @@ func (d *SQLiteProfileDAO) Delete(profileId string) error {
 // ListByGroup 按分组筛选实例
 // groupId 为空字符串时返回未分组的实例
 // includeChildren=true 时同时包含 childGroupIds 中的子分组实例
+func (d *SQLiteProfileDAO) ensureHumanizeSeedColumn() error {
+	rows, err := d.db.Query(`PRAGMA table_info(browser_profiles)`)
+	if err != nil {
+		return fmt.Errorf("inspect browser_profiles schema: %w", err)
+	}
+	defer rows.Close()
+
+	hasColumn := false
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, pk int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return fmt.Errorf("scan browser_profiles schema: %w", err)
+		}
+		if strings.EqualFold(name, "humanize_seed") {
+			hasColumn = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("inspect browser_profiles schema rows: %w", err)
+	}
+	if hasColumn {
+		return nil
+	}
+	if _, err := d.db.Exec(`ALTER TABLE browser_profiles ADD COLUMN humanize_seed TEXT NOT NULL DEFAULT ''`); err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "duplicate column") || strings.Contains(msg, "already exists") {
+			return nil
+		}
+		return fmt.Errorf("add browser_profiles.humanize_seed: %w", err)
+	}
+	return nil
+}
+
 func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, childGroupIds []string) ([]*Profile, error) {
+	if err := d.ensureHumanizeSeedColumn(); err != nil {
+		return nil, err
+	}
 	var rows *sql.Rows
 	var err error
 
@@ -154,7 +246,8 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 			       launch_args,
-			       tags, keywords, group_id, created_at, updated_at
+			       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
+			       COALESCE(humanize_seed, ''), created_at, updated_at
 			FROM browser_profiles WHERE group_id IN (%s) ORDER BY created_at ASC`, inClause), args...)
 	} else {
 		// 仅查询指定分组
@@ -164,7 +257,8 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 			       launch_args,
-			       tags, keywords, group_id, created_at, updated_at
+			       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
+			       COALESCE(humanize_seed, ''), created_at, updated_at
 			FROM browser_profiles WHERE group_id = ? ORDER BY created_at ASC`, groupId)
 	}
 
@@ -222,6 +316,7 @@ func scanProfile(s scanner) (*Profile, error) {
 		&p.ProxyBindSourceID, &p.ProxyBindSourceURL, &p.ProxyBindName, &p.ProxyBindUpdatedAt,
 		&launchArgsJSON, &tagsJSON, &keywordsJSON, &p.GroupId,
 		&p.BehaviorProfileID,
+		&p.HumanizeSeed,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -243,5 +338,6 @@ func scanProfile(s scanner) (*Profile, error) {
 	if p.Keywords == nil {
 		p.Keywords = []string{}
 	}
+	ensureProfileHumanizeSeed(&p)
 	return &p, nil
 }

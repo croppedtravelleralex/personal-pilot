@@ -176,6 +176,8 @@ type BrowserProfileConfig struct {
 	LaunchArgs         []string `yaml:"launch_args" json:"launchArgs"`
 	Tags               []string `yaml:"tags" json:"tags"`
 	Keywords           []string `yaml:"keywords,omitempty" json:"keywords,omitempty"`
+	BehaviorProfileID  string   `yaml:"behavior_profile_id,omitempty" json:"behaviorProfileId,omitempty"`
+	HumanizeSeed       string   `yaml:"humanize_seed,omitempty" json:"humanizeSeed,omitempty"`
 	CreatedAt          string   `yaml:"created_at" json:"createdAt"`
 	UpdatedAt          string   `yaml:"updated_at" json:"updatedAt"`
 }

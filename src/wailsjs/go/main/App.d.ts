@@ -39,6 +39,8 @@ export function BehaviorGetRecordingDetail(arg1:string,arg2:number,arg3:number):
 
 export function BehaviorPlayRecording(arg1:string,arg2:string,arg3:behavior.VariationConfig):Promise<void>;
 
+export function BehaviorPlaybackReview(arg1:string,arg2:string):Promise<void>;
+
 export function BehaviorPresetList():Promise<Array<backend.BehaviorPresetInfo>>;
 
 export function BehaviorQuickRecord(arg1:string):Promise<behavior.Recording>;
@@ -216,6 +218,8 @@ export function GetRecording(arg1:string):Promise<behavior.Recording>;
 export function GetRecordingDetail(arg1:string,arg2:number,arg3:number):Promise<behavior.RecordingDetailPage>;
 
 export function GetRunningInstances():Promise<Array<browser.Profile>>;
+
+export function IdentityReportProfile(arg1:string):Promise<any>;
 
 export function InitLLMClient():Promise<void>;
 

@@ -54,6 +54,26 @@ func (a *App) WorkbenchFingerprintHealthProfile(profileId string) (*browser.Fing
 	return browser.NewFingerprintHealthProfile(profile.ProfileId, profile.FingerprintArgs, fingerprint, time.Now()), nil
 }
 
+func (a *App) IdentityReportProfile(profileId string) (*browser.IdentityStrengthReport, error) {
+	profile, err := a.runningProfileForWorkbench(profileId)
+	if err != nil {
+		return nil, err
+	}
+	fingerprint, err := browser.ExtractFingerprint(profile.DebugPort)
+	if err != nil {
+		return nil, err
+	}
+	launchAuditError := ""
+	if a.browserMgr != nil {
+		if err := a.browserMgr.ValidateProfileLaunchAudit(profile); err != nil {
+			launchAuditError = err.Error()
+		}
+	}
+	return browser.NewIdentityStrengthReport(profile, fingerprint, time.Now(), browser.IdentityReportContext{
+		LaunchAuditError: launchAuditError,
+	}), nil
+}
+
 func (a *App) WorkbenchActivateProfile(profileId string) error {
 	return a.SynchronizerActivateProfile(profileId)
 }

@@ -77,6 +77,7 @@ const (
 type ClickOffset struct {
 	RadiusPx      uint32
 	BiasDirection *BiasDirection // nil = uniform random within radius
+	Seed          uint64         // deterministic click-point seed; zero is still stable per element/config
 }
 
 // TypingPattern configures keyboard typing behavior.

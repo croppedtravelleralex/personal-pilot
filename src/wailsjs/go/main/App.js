@@ -62,6 +62,10 @@ export function BehaviorPlayRecording(arg1, arg2, arg3) {
   return window['go']['main']['App']['BehaviorPlayRecording'](arg1, arg2, arg3);
 }
 
+export function BehaviorPlaybackReview(arg1, arg2) {
+  return window['go']['main']['App']['BehaviorPlaybackReview'](arg1, arg2);
+}
+
 export function BehaviorPresetList() {
   return window['go']['main']['App']['BehaviorPresetList']();
 }
@@ -416,6 +420,10 @@ export function GetRecordingDetail(arg1, arg2, arg3) {
 
 export function GetRunningInstances() {
   return window['go']['main']['App']['GetRunningInstances']();
+}
+
+export function IdentityReportProfile(arg1) {
+  return window['go']['main']['App']['IdentityReportProfile'](arg1);
 }
 
 export function InitLLMClient() {

@@ -27,6 +27,7 @@ type Profile struct {
 	GroupId              string                 `json:"groupId"` // 所属分组ID
 	LaunchCode           string                 `json:"launchCode"`
 	BehaviorProfileID    string                 `json:"behaviorProfileId"`
+	HumanizeSeed         string                 `json:"humanizeSeed"`
 	Running              bool                   `json:"running"`
 	DebugPort            int                    `json:"debugPort"`
 	DebugReady           bool                   `json:"debugReady"`
@@ -54,6 +55,7 @@ type ProfileInput struct {
 	Keywords             []string               `json:"keywords"`
 	GroupId              string                 `json:"groupId"` // 所属分组ID
 	BehaviorProfileID    string                 `json:"behaviorProfileId"`
+	HumanizeSeed         string                 `json:"humanizeSeed"`
 }
 
 // Tab 浏览器标签页
