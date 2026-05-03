@@ -1,18 +1,13 @@
 import { EventsOn } from '../../wailsjs/runtime'
-import {
-  BEHAVIOR_HUMAN_BOUNDARIES,
-  DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE,
-} from './types'
 import type {
-  BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings, BrowserCore, BrowserCoreInput,
-  BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended, CookieInfo, SnapshotInfo,
-  BrowserBookmark, BrowserGroup, BrowserGroupInput, BrowserGroupWithCount, ProxyIPHealthResult,
-  BrowserProxyImportFreeDirectProxiesInput, BrowserProxyImportFreeDirectProxiesResult,
-  ActiveRecordingStatus, Recording, RecordingDetailPage, RecordingEventStats, RecordingSummary, RecordedEvent,
-  NaturalLanguageAction, NaturalLanguageTaskEvent, PlaybackEventPayload, PlaybackProgressPayload,
-  RecordingExportBundle, VariationConfig, BehaviorExecutionPermissionMode, BehaviorExecutionPolicy,
-  BehaviorLowConfidencePausePolicy, BehaviorTemplateSemantics, PlaybackReviewDecision,
+  BehaviorExecutionPermissionMode, BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings,
+  BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended,
+  CookieInfo, SnapshotInfo, BrowserBookmark, BrowserGroup, BrowserGroupInput, BrowserGroupWithCount,
+  ProxyIPHealthResult, ActiveRecordingStatus, Recording, RecordingDetailPage, RecordingEventStats,
+  RecordingSummary, RecordedEvent, NaturalLanguageAction, NaturalLanguageTaskEvent,
+  PlaybackEventPayload, PlaybackProgressPayload, RecordingExportBundle, VariationConfig,
 } from './types'
+import { DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE } from './types'
 
 type Unsubscribe = () => void
 
@@ -374,23 +369,65 @@ export interface ClashImportURLResult {
   proxyCount: number
   dnsServers?: string
   suggestedGroup?: string
+  autoFallback?: boolean
+  importedCount?: number
+  skippedCount?: number
+  totalCount?: number
+  groupName?: string
+  allProxies?: BrowserProxy[]
 }
 
-function normalizeFreeDirectProxyImportResult(
-  payload: Partial<BrowserProxyImportFreeDirectProxiesResult> | null | undefined,
-): BrowserProxyImportFreeDirectProxiesResult {
-  return {
-    fetchedCount: Number(payload?.fetchedCount ?? 0),
-    uniqueCount: Number(payload?.uniqueCount ?? 0),
-    checkedCount: Number(payload?.checkedCount ?? 0),
-    importedCount: Number(payload?.importedCount ?? 0),
-    failedCount: Number(payload?.failedCount ?? 0),
-    skippedExistingCount: Number(payload?.skippedExistingCount ?? 0),
-    sourceErrors: Array.isArray(payload?.sourceErrors) ? payload.sourceErrors.map(String) : [],
-    importedProxies: Array.isArray(payload?.importedProxies) ? payload.importedProxies : [],
-    healthResults: Array.isArray(payload?.healthResults) ? payload.healthResults : [],
-    allProxies: Array.isArray(payload?.allProxies) ? payload.allProxies : [],
+export interface SubscriptionImportResult {
+  url: string
+  importedCount: number
+  skippedCount: number
+  totalCount: number
+  groupName: string
+  allProxies: BrowserProxy[]
+}
+
+export async function fetchSubscriptionImportFromURL(targetURL: string, groupName: string): Promise<SubscriptionImportResult> {
+  const bindings: any = await getBindings()
+  if (bindings?.BrowserProxyImportSubscriptionByURL) {
+    const result = await bindings.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
+    return {
+      url: String(result?.url || targetURL),
+      importedCount: Number(result?.importedCount || 0),
+      skippedCount: Number(result?.skippedCount || 0),
+      totalCount: Number(result?.totalCount || 0),
+      groupName: String(result?.groupName || groupName),
+      allProxies: (result?.allProxies || []) as BrowserProxy[],
+    }
   }
+
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.BrowserProxyImportSubscriptionByURL) {
+    const result = await goApp.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
+    return {
+      url: String(result?.url || targetURL),
+      importedCount: Number(result?.importedCount || 0),
+      skippedCount: Number(result?.skippedCount || 0),
+      totalCount: Number(result?.totalCount || 0),
+      groupName: String(result?.groupName || groupName),
+      allProxies: (result?.allProxies || []) as BrowserProxy[],
+    }
+  }
+
+  throw new Error('当前环境不支持订阅 URL 导入')
+}
+
+export async function fixBrowserProxyNames(): Promise<{ ok: boolean; fixed: number; total: number; message?: string; error?: string }> {
+  const bindings: any = await getBindings()
+  if (bindings?.BrowserProxyFixNames) {
+    return (await bindings.BrowserProxyFixNames()) || { ok: false, fixed: 0, total: 0, error: '调用失败' }
+  }
+
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.BrowserProxyFixNames) {
+    return (await goApp.BrowserProxyFixNames()) || { ok: false, fixed: 0, total: 0, error: '调用失败' }
+  }
+
+  throw new Error('当前环境不支持代理名称修复')
 }
 
 export async function fetchClashImportFromURL(targetURL: string): Promise<ClashImportURLResult> {
@@ -414,22 +451,6 @@ export async function fetchClashImportFromURL(targetURL: string): Promise<ClashI
   }
 
   throw new Error('当前环境不支持 URL 导入 Clash 配置')
-}
-
-export async function browserProxyImportFreeDirectProxies(
-  input: BrowserProxyImportFreeDirectProxiesInput,
-): Promise<BrowserProxyImportFreeDirectProxiesResult> {
-  const bindings: any = await getBindings()
-  if (bindings?.BrowserProxyImportFreeDirectProxies) {
-    return normalizeFreeDirectProxyImportResult(await bindings.BrowserProxyImportFreeDirectProxies(input))
-  }
-
-  const goApp = (window as any).go?.main?.App
-  if (goApp?.BrowserProxyImportFreeDirectProxies) {
-    return normalizeFreeDirectProxyImportResult(await goApp.BrowserProxyImportFreeDirectProxies(input))
-  }
-
-  throw new Error('当前环境不支持抓取免费代理')
 }
 
 export async function saveBrowserProxies(proxies: BrowserProxy[]): Promise<boolean> {
@@ -479,7 +500,7 @@ export async function browserProxyTestSpeed(proxyId: string): Promise<{ proxyId:
   return { proxyId, ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }
 }
 
-export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency: number = 8): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
+export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency: number = 20): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProxyBatchTestSpeed) {
     return (await bindings.BrowserProxyBatchTestSpeed(proxyIds, concurrency)) || []
@@ -528,7 +549,7 @@ export async function browserProxyCheckIPHealth(proxyId: string): Promise<ProxyI
   }
 }
 
-export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurrency: number = 6): Promise<ProxyIPHealthResult[]> {
+export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurrency: number = 10): Promise<ProxyIPHealthResult[]> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProxyBatchCheckIPHealth) {
     return (await bindings.BrowserProxyBatchCheckIPHealth(proxyIds, concurrency)) || []
@@ -984,56 +1005,6 @@ function normalizeNaturalLanguageAction(action: Record<string, unknown>): Natura
   }
 }
 
-type BehaviorLowConfidencePausePolicyInput = Partial<BehaviorLowConfidencePausePolicy>
-
-type BehaviorExecutionPolicyInput = Partial<Omit<BehaviorExecutionPolicy, 'lowConfidencePause'>> & {
-  lowConfidencePause?: BehaviorLowConfidencePausePolicyInput
-}
-
-function normalizeBehaviorExecutionPolicy(input?: BehaviorExecutionPolicyInput): BehaviorExecutionPolicy {
-  const humanBoundarySet = new Set(input?.humanBoundaries ?? [])
-  BEHAVIOR_HUMAN_BOUNDARIES.forEach(boundary => humanBoundarySet.add(boundary))
-
-  return {
-    permissionMode: input?.permissionMode ?? DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE,
-    humanBoundaries: Array.from(humanBoundarySet),
-    lowConfidencePause: {
-      enabled: input?.lowConfidencePause?.enabled ?? true,
-      revealTargetScreenshot: false,
-      revealCandidateElements: false,
-      revealRecommendedPoint: false,
-      promptFields: ['reason', 'action'],
-    },
-  }
-}
-
-function buildDefaultTemplateSemantics(humanBoundaries: BehaviorExecutionPolicy['humanBoundaries']): BehaviorTemplateSemantics {
-  return {
-    schemaVersion: 1,
-    source: 'recording_template',
-    intent: 'unknown',
-    thirdPartyDetection: false,
-    screenshotCandidates: false,
-    humanBoundaries,
-  }
-}
-
-export function buildPlaybackVariation(
-  variation: VariationConfig,
-  permissionMode?: BehaviorExecutionPermissionMode,
-): VariationConfig {
-  const executionPolicy = normalizeBehaviorExecutionPolicy({
-    ...variation.executionPolicy,
-    permissionMode: permissionMode ?? variation.executionPolicy?.permissionMode,
-  })
-
-  return {
-    ...variation,
-    executionPolicy,
-    templateSemantics: variation.templateSemantics ?? buildDefaultTemplateSemantics(executionPolicy.humanBoundaries),
-  }
-}
-
 export async function startRecording(profileId: string): Promise<boolean> {
   const bindings: any = await getBindings()
   if (!bindings?.BehaviorStartRecording) {
@@ -1135,22 +1106,8 @@ export async function playRecording(profileId: string, recordingId: string, vari
   if (!bindings?.BehaviorPlayRecording) {
     throw new Error('Wails bindings are not available')
   }
-  await bindings.BehaviorPlayRecording(profileId, recordingId, buildPlaybackVariation(variation))
+  await bindings.BehaviorPlayRecording(profileId, recordingId, variation)
   return true
-}
-
-export async function reviewPlayback(profileId: string, decision: PlaybackReviewDecision): Promise<boolean> {
-  const bindings: any = await getBindings()
-  if (bindings?.BehaviorPlaybackReview) {
-    await bindings.BehaviorPlaybackReview(profileId, decision)
-    return true
-  }
-  const goApp = (window as any).go?.main?.App
-  if (goApp?.BehaviorPlaybackReview) {
-    await goApp.BehaviorPlaybackReview(profileId, decision)
-    return true
-  }
-  throw new Error('Wails bindings are not available')
 }
 
 export async function stopPlayback(profileId: string): Promise<boolean> {
@@ -1196,28 +1153,6 @@ export async function renameRecording(id: string, name: string): Promise<boolean
   return false
 }
 
-export async function activateBrowserProfile(profileId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
-  if (bindings?.WorkbenchActivateProfile) {
-    await bindings.WorkbenchActivateProfile(profileId)
-    return true
-  }
-  if (bindings?.SynchronizerActivateProfile) {
-    await bindings.SynchronizerActivateProfile(profileId)
-    return true
-  }
-  const goApp = (window as any).go?.main?.App
-  if (goApp?.WorkbenchActivateProfile) {
-    await goApp.WorkbenchActivateProfile(profileId)
-    return true
-  }
-  if (goApp?.SynchronizerActivateProfile) {
-    await goApp.SynchronizerActivateProfile(profileId)
-    return true
-  }
-  return false
-}
-
 export async function exportRecording(id: string): Promise<RecordingExportBundle | null> {
   const bindings: any = await getBindings()
   if (bindings?.BehaviorRecordingExport) {
@@ -1240,6 +1175,41 @@ export async function copyRecording(id: string, name: string): Promise<Recording
     return (await bindings.BehaviorRecordingCopy(id, name)) || null
   }
   return null
+}
+
+export function buildPlaybackVariation(
+  variation?: Partial<VariationConfig>,
+  executionPermissionMode?: BehaviorExecutionPermissionMode,
+): VariationConfig {
+  return {
+    intensity: variation?.intensity ?? 0.3,
+    timingJitter: variation?.timingJitter ?? 200,
+    positionJitter: variation?.positionJitter ?? 5,
+    speedVariation: variation?.speedVariation ?? 0.2,
+    microCorrections: variation?.microCorrections ?? true,
+    extraPauses: variation?.extraPauses ?? true,
+    executionPolicy: {
+      permissionMode: executionPermissionMode || DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE,
+    },
+  }
+}
+
+export async function reviewPlayback(profileId: string, decision: string): Promise<void> {
+  const bindings: any = await getBindings()
+  if (bindings?.BehaviorPlaybackReview) {
+    await bindings.BehaviorPlaybackReview(profileId, decision)
+    return
+  }
+  throw new Error('当前环境不支持回放审查')
+}
+
+export async function activateBrowserProfile(profileId: string): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.BrowserInstanceOpenUrl) {
+    await bindings.BrowserInstanceOpenUrl(profileId, 'about:blank')
+    return true
+  }
+  return false
 }
 
 export async function trimRecording(id: string, startEvent: number, endEvent: number, name: string): Promise<Recording | null> {

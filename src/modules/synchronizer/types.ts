@@ -48,12 +48,13 @@ export interface SyncActionFeedEntry {
   status: 'ok' | 'error'
 }
 
-export type WorkbenchTaskType = 'start' | 'stop' | 'navigate' | 'refresh' | 'screenshot' | 'activate' | 'fingerprint-health'
+export type WorkbenchTaskType = 'start' | 'stop' | 'navigate' | 'refresh' | 'activate' | 'fingerprint-health'
+export type WorkbenchLegacyTaskType = 'screenshot'
 export type WorkbenchTaskStatus = 'pending' | 'running' | 'success' | 'error'
 
 export interface WorkbenchTask {
   id: string
-  type: WorkbenchTaskType
+  type: WorkbenchTaskType | WorkbenchLegacyTaskType
   profileId: string
   profileName: string
   detail: string
@@ -209,4 +210,46 @@ export interface WorkbenchIdentityStrengthReport {
   capturedAt: string
   source: string
   summary: string[]
+}
+
+export type WorkbenchDetectionKind = 'fingerprint_health' | 'identity_report' | 'detector_site_run'
+
+export interface WorkbenchDetectionResult {
+  id: string
+  profileId: string
+  profileName: string
+  kind: WorkbenchDetectionKind
+  score: number
+  level: string
+  source: string
+  summary: string[]
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export interface WorkbenchUiState {
+  search: string
+  statusFilter: 'all' | 'running' | 'stopped'
+  groupFilter: string
+  activeGroupId: string
+  selectedIds: string[]
+  scrollTop: number
+  targetUrl: string
+  selectedReportKind: WorkbenchDetectionKind | ''
+  selectedReportId: string
+  selectedReportProfileId: string
+  expandedItems: string[]
+  thirdPartyEnabled: boolean
+  updatedAt: string
+}
+
+export interface WorkbenchDetectorSite {
+  id: string
+  name: string
+  url: string
+  enabled: boolean
+  defaultOn: boolean
+  gate: 'medium' | 'strict' | string
+  traceWarning: string
+  notes: string
 }

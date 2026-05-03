@@ -28,6 +28,7 @@ func (a *App) stopRuntimeServices() {
 		if a.singboxMgr != nil {
 			a.singboxMgr.StopAll()
 		}
+		a.clearProfileSingBoxBridges()
 
 		if a.clashMgr != nil {
 			a.clashMgr.StopAll()

@@ -202,6 +202,31 @@ var migrations = []migration{
 			`ALTER TABLE browser_profiles ADD COLUMN humanize_seed TEXT NOT NULL DEFAULT ''`,
 		},
 	},
+	{
+		version: 11,
+		desc:    "workbench detection results and ui state",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS workbench_detection_results (
+				id           TEXT PRIMARY KEY,
+				profile_id   TEXT NOT NULL,
+				profile_name TEXT NOT NULL DEFAULT '',
+				kind         TEXT NOT NULL,
+				score        INTEGER NOT NULL DEFAULT 0,
+				level        TEXT NOT NULL DEFAULT '',
+				source       TEXT NOT NULL DEFAULT '',
+				summary      TEXT NOT NULL DEFAULT '[]',
+				payload      TEXT NOT NULL DEFAULT '{}',
+				created_at   TEXT NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_workbench_detection_profile_kind_time
+				ON workbench_detection_results(profile_id, kind, created_at DESC)`,
+			`CREATE TABLE IF NOT EXISTS workbench_ui_state (
+				state_key  TEXT PRIMARY KEY,
+				payload    TEXT NOT NULL DEFAULT '{}',
+				updated_at TEXT NOT NULL
+			)`,
+		},
+	},
 }
 
 // NewDB 创建新的数据库连接

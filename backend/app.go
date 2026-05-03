@@ -49,13 +49,14 @@ type App struct {
 	appRoot        string
 	version        string
 
-	forceQuit        bool       // 强制退出标志，用于跳过 OnBeforeClose 的拦截
-	quitMode         quitMode   // 退出模式：全量退出 / 仅退出应用
-	maintenanceMu    sync.Mutex // 维护类操作（初始化/导入/导出）互斥锁
-	bridgeMu         sync.Mutex
-	xrayBridgeRefs   map[string]string
-	stopServicesOnce sync.Once
-	finalizeOnce     sync.Once
+	forceQuit         bool       // 强制退出标志，用于跳过 OnBeforeClose 的拦截
+	quitMode          quitMode   // 退出模式：全量退出 / 仅退出应用
+	maintenanceMu     sync.Mutex // 维护类操作（初始化/导入/导出）互斥锁
+	bridgeMu          sync.Mutex
+	xrayBridgeRefs    map[string]string
+	singboxBridgeRefs map[string]string
+	stopServicesOnce  sync.Once
+	finalizeOnce      sync.Once
 
 	crashTimestampsMu sync.Mutex
 	crashTimestamps   map[string][]time.Time // profileId → crash times, for crash-loop detection
@@ -86,12 +87,13 @@ func NewApp(appRoot string, appVersion ...string) *App {
 		version = strings.TrimSpace(appVersion[0])
 	}
 	return &App{
-		appRoot:         strings.TrimSpace(appRoot),
-		version:         version,
-		xrayBridgeRefs:  make(map[string]string),
-		crashTimestamps: make(map[string][]time.Time),
-		recorders:       make(map[string]*behavior.Recorder),
-		playbacks:       make(map[string]*behavior.PlaybackEngine),
+		appRoot:           strings.TrimSpace(appRoot),
+		version:           version,
+		xrayBridgeRefs:    make(map[string]string),
+		singboxBridgeRefs: make(map[string]string),
+		crashTimestamps:   make(map[string][]time.Time),
+		recorders:         make(map[string]*behavior.Recorder),
+		playbacks:         make(map[string]*behavior.PlaybackEngine),
 	}
 }
 
@@ -206,7 +208,6 @@ func (a *App) startup(ctx context.Context) {
 	a.autoDetectCores()
 	a.loadProxies()
 	a.reconcileProfileProxyBindings()
-
 	// 初始化事件日志持久化
 	a.eventLogStore = events.NewSQLiteEventLogStore(conn)
 	events.SetEventLogStore(a.eventLogStore)
@@ -276,7 +277,7 @@ func (a *App) startup(ctx context.Context) {
 	a.speedScheduler = browser.NewProxySpeedScheduler(
 		a.browserMgr.ProxyDAO,
 		func(proxyId string) (bool, int64, string) {
-			r := proxy.SpeedTest(proxyId, a.config.Browser.Proxies, a.xrayMgr, a.singboxMgr, nil)
+			r := proxy.SpeedTest(proxyId, a.getLatestProxies(), a.xrayMgr, a.singboxMgr, nil)
 			return r.Ok, r.LatencyMs, r.Error
 		},
 		5*time.Minute,
@@ -468,6 +469,18 @@ func (a *App) bindProfileXrayBridge(profileId string, bridgeKey string) {
 	a.bridgeMu.Unlock()
 }
 
+func (a *App) bindProfileSingBoxBridge(profileId string, bridgeKey string) {
+	profileId = strings.TrimSpace(profileId)
+	bridgeKey = strings.TrimSpace(bridgeKey)
+	if profileId == "" || bridgeKey == "" {
+		return
+	}
+
+	a.bridgeMu.Lock()
+	a.singboxBridgeRefs[profileId] = bridgeKey
+	a.bridgeMu.Unlock()
+}
+
 func (a *App) releaseProfileXrayBridge(profileId string) {
 	profileId = strings.TrimSpace(profileId)
 	if profileId == "" {
@@ -484,9 +497,31 @@ func (a *App) releaseProfileXrayBridge(profileId string) {
 	}
 }
 
+func (a *App) releaseProfileSingBoxBridge(profileId string) {
+	profileId = strings.TrimSpace(profileId)
+	if profileId == "" {
+		return
+	}
+
+	a.bridgeMu.Lock()
+	bridgeKey := a.singboxBridgeRefs[profileId]
+	delete(a.singboxBridgeRefs, profileId)
+	a.bridgeMu.Unlock()
+
+	if bridgeKey != "" && a.singboxMgr != nil {
+		a.singboxMgr.ReleaseBridge(bridgeKey)
+	}
+}
+
 func (a *App) clearProfileXrayBridges() {
 	a.bridgeMu.Lock()
 	a.xrayBridgeRefs = make(map[string]string)
+	a.bridgeMu.Unlock()
+}
+
+func (a *App) clearProfileSingBoxBridges() {
+	a.bridgeMu.Lock()
+	a.singboxBridgeRefs = make(map[string]string)
 	a.bridgeMu.Unlock()
 }
 
@@ -817,27 +852,6 @@ type ProxyIPHealthResult struct {
 	UpdatedAt      string                 `json:"updatedAt"`
 }
 
-type FreeProxyImportInput struct {
-	SourceUrls  []string `json:"sourceUrls"`
-	GroupName   string   `json:"groupName"`
-	Limit       int      `json:"limit"`
-	Concurrency int      `json:"concurrency"`
-	TimeoutMs   int      `json:"timeoutMs"`
-}
-
-type FreeProxyImportResult struct {
-	FetchedCount         int                   `json:"fetchedCount"`
-	UniqueCount          int                   `json:"uniqueCount"`
-	CheckedCount         int                   `json:"checkedCount"`
-	ImportedCount        int                   `json:"importedCount"`
-	FailedCount          int                   `json:"failedCount"`
-	SkippedExistingCount int                   `json:"skippedExistingCount"`
-	SourceErrors         []string              `json:"sourceErrors"`
-	ImportedProxies      []BrowserProxy        `json:"importedProxies"`
-	HealthResults        []ProxyIPHealthResult `json:"healthResults"`
-	AllProxies           []BrowserProxy        `json:"allProxies"`
-}
-
 // TestProxyConnectivity 测试代理连通性
 func (a *App) TestProxyConnectivity(proxyId string, proxyConfig string) ProxyTestResult {
 	proxies := a.getLatestProxies()
@@ -929,7 +943,7 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 // BrowserProxyCheckIPHealth 检测单个代理的出口 IP 健康信息（通过 IPPure 接口）
 func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 	proxies := a.getLatestProxies()
-	data, err := proxy.FetchIPPureInfo(proxyId, proxies, a.xrayMgr, a.singboxMgr)
+	data, err := proxy.FetchProxyIPInfo(proxyId, proxies, a.xrayMgr, a.singboxMgr)
 	result := buildProxyIPHealthResult(proxyId, data, err)
 	result = a.withProxyHTTPSConnectivity(result, proxies)
 	a.persistProxyIPHealthResult(result)
@@ -969,7 +983,7 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				data, err := proxy.FetchIPPureInfo(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr)
+				data, err := proxy.FetchProxyIPInfo(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr)
 				result := buildProxyIPHealthResult(job.ProxyId, data, err)
 				result = a.withProxyHTTPSConnectivity(result, proxies)
 				a.persistProxyIPHealthResult(result)
@@ -995,6 +1009,12 @@ func (a *App) withProxyHTTPSConnectivity(result ProxyIPHealthResult, proxies []B
 	if result.RawData == nil {
 		result.RawData = map[string]interface{}{}
 	}
+	if result.Source == "https-canary" && mapBool(result.RawData, "realCheckOk") {
+		if latency := mapInt64(result.RawData, "realCheckLatencyMs"); latency > 0 {
+			result.LatencyMs = latency
+		}
+		return result
+	}
 	connectivity := proxy.CheckProxyHTTPSConnectivity(result.ProxyId, proxies, a.xrayMgr, a.singboxMgr, 8*time.Second)
 	result.RawData["realHttpsCheck"] = map[string]interface{}{
 		"ok":        connectivity.Ok,
@@ -1011,179 +1031,44 @@ func (a *App) withProxyHTTPSConnectivity(result ProxyIPHealthResult, proxies []B
 	return result
 }
 
-func (a *App) BrowserProxyImportFreeDirectProxies(input FreeProxyImportInput) (FreeProxyImportResult, error) {
-	groupName := strings.TrimSpace(input.GroupName)
-	if groupName == "" {
-		groupName = "免费代理"
-	}
-	limit := proxy.NormalizeFreeProxyLimit(input.Limit)
-	concurrency := proxy.NormalizeFreeProxyConcurrency(input.Concurrency)
-	timeout := time.Duration(input.TimeoutMs) * time.Millisecond
-	timeout = proxy.NormalizeFreeProxyTimeout(timeout)
-
-	ctx := a.ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	candidates, sourceErrors := proxy.FetchFreeProxyCandidates(ctx, input.SourceUrls, limit, timeout)
-	result := FreeProxyImportResult{
-		FetchedCount: len(candidates),
-		UniqueCount:  len(candidates),
-		SourceErrors: sourceErrors,
-	}
-	if len(candidates) == 0 {
-		result.AllProxies = a.BrowserProxyList()
-		return result, nil
-	}
-
-	existing := a.getLatestProxies()
-	existingByConfig := make(map[string]struct{}, len(existing))
-	for _, item := range existing {
-		key := strings.ToLower(strings.TrimSpace(item.ProxyConfig))
-		if key != "" {
-			existingByConfig[key] = struct{}{}
-		}
-	}
-
-	toCheck := make([]proxy.FreeProxyCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		key := strings.ToLower(strings.TrimSpace(candidate.ProxyConfig))
-		if _, exists := existingByConfig[key]; exists {
-			result.SkippedExistingCount++
-			continue
-		}
-		toCheck = append(toCheck, candidate)
-	}
-	result.CheckedCount = len(toCheck)
-	if len(toCheck) == 0 {
-		result.AllProxies = a.BrowserProxyList()
-		return result, nil
-	}
-
-	checks := proxy.CheckFreeDirectProxies(ctx, toCheck, concurrency, timeout)
-	now := time.Now().Format(time.RFC3339)
-	imported := make([]BrowserProxy, 0, len(checks))
-	healthResults := make([]ProxyIPHealthResult, 0, len(checks))
-	for _, check := range checks {
-		if !check.Ok {
-			result.FailedCount++
-			continue
-		}
-		proxyID := generateUUID()
-		health := buildFreeDirectProxyIPHealthResult(proxyID, check)
-		payload, _ := json.Marshal(health)
-		imported = append(imported, BrowserProxy{
-			ProxyId:          proxyID,
-			ProxyName:        freeDirectProxyName(check),
-			ProxyConfig:      check.Candidate.ProxyConfig,
-			GroupName:        groupName,
-			LastLatencyMs:    check.LatencyMs,
-			LastTestOk:       true,
-			LastTestedAt:     now,
-			LastIPHealthJSON: string(payload),
-		})
-		healthResults = append(healthResults, health)
-	}
-
-	result.ImportedCount = len(imported)
-	result.ImportedProxies = imported
-	result.HealthResults = healthResults
-	result.FailedCount = len(checks) - len(imported)
-
-	if len(imported) == 0 {
-		result.AllProxies = a.BrowserProxyList()
-		return result, nil
-	}
-
-	allProxies := append(append([]BrowserProxy{}, existing...), imported...)
-	if err := a.SaveBrowserProxies(allProxies); err != nil {
-		return result, err
-	}
-	for _, health := range healthResults {
-		a.persistProxyIPHealthResult(health)
-		if a.ctx != nil {
-			a.emit(events.EventProxyIPHealthResult, health)
-		}
-		a.emitProxyIPHealthRisks(health)
-	}
-	result.AllProxies = a.BrowserProxyList()
-	return result, nil
-}
-
-func buildFreeDirectProxyIPHealthResult(proxyId string, check proxy.FreeProxyCheckResult) ProxyIPHealthResult {
-	rawData := check.RawData
-	if rawData == nil {
-		rawData = map[string]interface{}{}
-	}
-	updatedAt := strings.TrimSpace(check.CheckedAt)
-	if updatedAt == "" {
-		updatedAt = time.Now().Format(time.RFC3339)
-	}
-	return ProxyIPHealthResult{
-		ProxyId:        proxyId,
-		Ok:             check.Ok,
-		Source:         "free-direct",
-		Error:          check.Error,
-		LatencyMs:      check.LatencyMs,
-		IP:             check.IP,
-		FraudScore:     0,
-		IsResidential:  !check.Hosting && !check.ProxyFlag,
-		IsBroadcast:    false,
-		Country:        check.Country,
-		Region:         check.Region,
-		City:           check.City,
-		AsOrganization: check.AsOrganization,
-		RawData:        rawData,
-		UpdatedAt:      updatedAt,
-	}
-}
-
-func freeDirectProxyName(check proxy.FreeProxyCheckResult) string {
-	protocol := strings.ToUpper(strings.TrimSpace(check.Candidate.Protocol))
-	if protocol == "" {
-		protocol = "HTTP"
-	}
-	location := strings.TrimSpace(check.Country)
-	if location == "" {
-		location = "FREE"
-	}
-	endpoint := strings.TrimSpace(check.Candidate.Endpoint)
-	if endpoint == "" {
-		endpoint = strings.TrimSpace(check.Candidate.ProxyConfig)
-	}
-	return strings.TrimSpace(fmt.Sprintf("%s-%s-%s", location, protocol, endpoint))
-}
-
 func buildProxyIPHealthResult(proxyId string, data map[string]interface{}, err error) ProxyIPHealthResult {
+	if data == nil {
+		data = map[string]interface{}{}
+	}
+	source := strings.TrimSpace(mapString(data, "source"))
+	if source == "" {
+		source = "ippure"
+	}
 	if err != nil {
 		return ProxyIPHealthResult{
 			ProxyId:   proxyId,
 			Ok:        false,
-			Source:    "ippure",
+			Source:    source,
 			Error:     err.Error(),
-			RawData:   map[string]interface{}{},
+			LatencyMs: mapInt64(data, "realCheckLatencyMs"),
+			IP:        firstNonEmptyString(mapString(data, "ip"), mapString(data, "query")),
+			Country:   firstNonEmptyString(mapString(data, "countryCode"), mapString(data, "country")),
+			Region:    firstNonEmptyString(mapString(data, "regionName"), mapString(data, "region")),
+			City:      mapString(data, "city"),
+			RawData:   data,
 			UpdatedAt: time.Now().Format(time.RFC3339),
 		}
-	}
-
-	if data == nil {
-		data = map[string]interface{}{}
 	}
 
 	return ProxyIPHealthResult{
 		ProxyId:        proxyId,
 		Ok:             true,
-		Source:         "ippure",
-		Error:          "",
-		IP:             mapString(data, "ip"),
+		Source:         source,
+		Error:          mapString(data, "metadataError"),
+		LatencyMs:      mapInt64(data, "realCheckLatencyMs"),
+		IP:             firstNonEmptyString(mapString(data, "ip"), mapString(data, "query")),
 		FraudScore:     mapInt64(data, "fraudScore"),
-		IsResidential:  mapBool(data, "isResidential"),
+		IsResidential:  mapProxyIPIsResidential(source, data),
 		IsBroadcast:    mapBool(data, "isBroadcast"),
-		Country:        mapString(data, "country"),
-		Region:         mapString(data, "region"),
+		Country:        firstNonEmptyString(mapString(data, "countryCode"), mapString(data, "country")),
+		Region:         firstNonEmptyString(mapString(data, "regionName"), mapString(data, "region")),
 		City:           mapString(data, "city"),
-		AsOrganization: mapString(data, "asOrganization"),
+		AsOrganization: firstNonEmptyString(mapString(data, "asOrganization"), mapString(data, "as"), mapString(data, "isp"), mapString(data, "org")),
 		RawData:        data,
 		UpdatedAt:      time.Now().Format(time.RFC3339),
 	}
@@ -1234,6 +1119,22 @@ func (a *App) emitProxyIPHealthRisks(result ProxyIPHealthResult) {
 			"fraudScore": result.FraudScore,
 		})
 	}
+}
+
+func mapProxyIPIsResidential(source string, data map[string]interface{}) bool {
+	if strings.EqualFold(source, "ip-api") {
+		return !mapBool(data, "hosting") && !mapBool(data, "proxy")
+	}
+	return mapBool(data, "isResidential")
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func mapString(m map[string]interface{}, key string) string {
@@ -1432,6 +1333,19 @@ func (a *App) SaveBrowserProxies(proxies []BrowserProxy) error {
 
 	// 优先写入 SQLite
 	if a.browserMgr.ProxyDAO != nil {
+
+		existingList, _ := a.browserMgr.ProxyDAO.List()
+		existingCount := len(existingList)
+		newCount := len(normalized)
+		// 安全护栏：如果当前数据库有大量代理而新列表只有内置代理，拒绝写入
+		if existingCount > 10 && newCount <= 4 {
+			log.Error("拒绝保存代理列表：当前数据库有大量代理，新列表异常少",
+				logger.F("existing", existingCount),
+				logger.F("new", newCount),
+			)
+			return fmt.Errorf("拒绝保存：当前有 %d 条代理，新列表仅 %d 条，可能是前端数据异常", existingCount, newCount)
+		}
+
 		if err := a.browserMgr.ProxyDAO.DeleteAll(); err != nil {
 			log.Error("清空代理表失败", logger.F("error", err))
 			return err

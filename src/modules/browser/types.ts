@@ -26,7 +26,6 @@ export interface BrowserProfile {
   lastStopAt?: string
   launchCode?: string
   behaviorProfileId?: string
-  humanizeSeed?: string
 }
 
 export interface BrowserProfileInput {
@@ -41,7 +40,6 @@ export interface BrowserProfileInput {
   keywords: string[]
   groupId?: string
   behaviorProfileId?: string
-  humanizeSeed?: string
 }
 
 export interface BrowserTab {
@@ -102,7 +100,6 @@ export interface ProxyIPHealthResult {
   ok: boolean
   source: string
   error: string
-  latencyMs?: number
   ip: string
   fraudScore: number
   isResidential: boolean
@@ -113,27 +110,6 @@ export interface ProxyIPHealthResult {
   asOrganization: string
   rawData: Record<string, any>
   updatedAt: string
-}
-
-export interface BrowserProxyImportFreeDirectProxiesInput {
-  sourceUrls?: string[]
-  groupName?: string
-  limit?: number
-  concurrency?: number
-  timeoutMs?: number
-}
-
-export interface BrowserProxyImportFreeDirectProxiesResult {
-  fetchedCount: number
-  uniqueCount: number
-  checkedCount: number
-  importedCount: number
-  failedCount: number
-  skippedExistingCount: number
-  sourceErrors: string[]
-  importedProxies: BrowserProxy[]
-  healthResults: ProxyIPHealthResult[]
-  allProxies: BrowserProxy[]
 }
 
 export interface BrowserCoreExtended {
@@ -263,55 +239,30 @@ export interface ActiveRecordingStatus {
   recoverableProfileIds?: string[]
 }
 
-export const BEHAVIOR_EXECUTION_PERMISSION_MODES = ['ask_each_time', 'auto_review', 'full_access'] as const
+export type BehaviorExecutionPermissionMode = 'ask_each_time' | 'auto_review' | 'full_access'
 
-export type BehaviorExecutionPermissionMode = typeof BEHAVIOR_EXECUTION_PERMISSION_MODES[number]
+export const BEHAVIOR_EXECUTION_PERMISSION_MODES: BehaviorExecutionPermissionMode[] = [
+  'ask_each_time',
+  'auto_review',
+  'full_access',
+]
 
 export const DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE: BehaviorExecutionPermissionMode = 'ask_each_time'
 
+export type PlaybackReviewDecision = 'continue' | 'skip' | 'stop'
+
 export const BEHAVIOR_HUMAN_BOUNDARIES = [
-  'captcha',
-  '2fa',
-  'device_trust',
-  'password',
-  'delete',
-  'account_settings',
-  'switch_account',
+  'payment',
+  'credential',
+  'personal_info',
+  'destructive',
 ] as const
 
-export type BehaviorHumanBoundary = typeof BEHAVIOR_HUMAN_BOUNDARIES[number]
-
-export const BEHAVIOR_HUMAN_BOUNDARY_LABELS: Record<BehaviorHumanBoundary, string> = {
-  captcha: '验证码',
-  '2fa': '2FA',
-  device_trust: '设备信任',
-  password: '密码',
-  delete: '删除',
-  account_settings: '账号设置',
-  switch_account: '切换账号',
-}
-
-export interface BehaviorLowConfidencePausePolicy {
-  enabled: boolean
-  revealTargetScreenshot: false
-  revealCandidateElements: false
-  revealRecommendedPoint: false
-  promptFields: Array<'reason' | 'action'>
-}
-
-export interface BehaviorExecutionPolicy {
-  permissionMode: BehaviorExecutionPermissionMode
-  humanBoundaries: BehaviorHumanBoundary[]
-  lowConfidencePause: BehaviorLowConfidencePausePolicy
-}
-
-export interface BehaviorTemplateSemantics {
-  schemaVersion: 1
-  source: 'recording_template'
-  intent: 'unknown'
-  thirdPartyDetection: false
-  screenshotCandidates: false
-  humanBoundaries: BehaviorHumanBoundary[]
+export const BEHAVIOR_HUMAN_BOUNDARY_LABELS: Record<string, string> = {
+  payment: '支付操作',
+  credential: '凭证输入',
+  personal_info: '个人信息',
+  destructive: '删除操作',
 }
 
 export interface VariationConfig {
@@ -321,8 +272,9 @@ export interface VariationConfig {
   speedVariation: number
   microCorrections: boolean
   extraPauses: boolean
-  executionPolicy?: BehaviorExecutionPolicy
-  templateSemantics?: BehaviorTemplateSemantics
+  executionPolicy?: {
+    permissionMode: BehaviorExecutionPermissionMode
+  }
 }
 
 export interface PlaybackProgressPayload {
@@ -342,8 +294,6 @@ export interface PlaybackEventPayload {
   recordingId?: string
   error?: string
 }
-
-export type PlaybackReviewDecision = 'continue' | 'skip' | 'stop'
 
 export interface NaturalLanguageAction {
   type: 'goto' | 'click' | 'scroll' | 'type' | 'wait'

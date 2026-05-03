@@ -9,11 +9,15 @@ import type {
   SyncGroup,
   SyncOperation,
   SyncWindowPlacement,
+  WorkbenchDetectionKind,
+  WorkbenchDetectionResult,
+  WorkbenchDetectorSite,
   WorkbenchFingerprintHealthCheck,
   WorkbenchFingerprintHealthProfile,
   WorkbenchFingerprintSnapshot,
   WorkbenchIdentityStrengthReport,
   WorkbenchTask,
+  WorkbenchUiState,
 } from './types'
 
 // Sidecar RPC stays routed through services/desktop.ts, which owns Tauri invoke.
@@ -103,6 +107,16 @@ function readOptionalNumber(source: Record<string, unknown>, keys: string[]) {
     }
   }
   return undefined
+}
+
+function readStringArray(source: Record<string, unknown>, keys: string[]): string[] {
+  for (const key of keys) {
+    const value = source[key]
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    }
+  }
+  return []
 }
 
 function clampScore(score: number) {
@@ -247,6 +261,51 @@ function normalizeIdentityDimension(payload: unknown): WorkbenchIdentityStrength
   }
 }
 
+function normalizeDetectionKind(value: unknown): WorkbenchDetectionKind {
+  const text = String(value || '').trim()
+  if (text === 'identity_report' || text === 'detector_site_run') return text
+  return 'fingerprint_health'
+}
+
+function normalizeDetectionResult(payload: unknown): WorkbenchDetectionResult {
+  const source = readRecord(payload)
+  const rawPayload = readRecord(source.payload)
+  const score = clampScore(readNumber(source, ['score'], 0))
+  return {
+    id: readString(source, ['id'], crypto.randomUUID()),
+    profileId: readString(source, ['profileId', 'profileID']),
+    profileName: readString(source, ['profileName']),
+    kind: normalizeDetectionKind(source.kind),
+    score,
+    level: readString(source, ['level'], score >= 90 ? 'good' : score >= 70 ? 'warning' : 'risk'),
+    source: readString(source, ['source'], 'local-cdp'),
+    summary: readStringArray(source, ['summary']),
+    payload: rawPayload,
+    createdAt: readString(source, ['createdAt', 'capturedAt', 'updatedAt'], new Date().toISOString()),
+  }
+}
+
+function normalizeUiState(payload: unknown): WorkbenchUiState {
+  const source = readRecord(payload)
+  const status = readString(source, ['statusFilter'], 'all')
+  const rawKind = readString(source, ['selectedReportKind'])
+  return {
+    search: readString(source, ['search']),
+    statusFilter: status === 'running' || status === 'stopped' ? status : 'all',
+    groupFilter: readString(source, ['groupFilter'], 'all') || 'all',
+    activeGroupId: readString(source, ['activeGroupId']),
+    selectedIds: readStringArray(source, ['selectedIds']),
+    scrollTop: Math.max(0, Math.round(readNumber(source, ['scrollTop'], 0))),
+    targetUrl: readString(source, ['targetUrl']),
+    selectedReportKind: rawKind === 'fingerprint_health' || rawKind === 'identity_report' || rawKind === 'detector_site_run' ? rawKind : '',
+    selectedReportId: readString(source, ['selectedReportId']),
+    selectedReportProfileId: readString(source, ['selectedReportProfileId']),
+    expandedItems: readStringArray(source, ['expandedItems']),
+    thirdPartyEnabled: Boolean(source.thirdPartyEnabled),
+    updatedAt: readString(source, ['updatedAt']),
+  }
+}
+
 function checkFromSnapshot(
   id: string,
   status: FingerprintHealthCheckStatus,
@@ -382,4 +441,48 @@ export function listWorkbenchTasks(limit?: number): Promise<WorkbenchTask[]> {
 
 export function saveWorkbenchTasks(tasks: WorkbenchTask[]): Promise<void> {
   return backendCall('SynchronizerSaveTasks', tasks)
+}
+
+export async function listWorkbenchDetectionResults(
+  profileId = '',
+  kind: WorkbenchDetectionKind | '' = '',
+  limit = 50,
+): Promise<WorkbenchDetectionResult[]> {
+  const results = await backendCall<unknown[]>('WorkbenchListDetectionResults', profileId, kind, limit)
+  return Array.isArray(results) ? results.map(normalizeDetectionResult) : []
+}
+
+export function saveWorkbenchDetectionResult(result: WorkbenchDetectionResult): Promise<void> {
+  return backendCall('WorkbenchSaveDetectionResult', result)
+}
+
+export async function getWorkbenchUiState(): Promise<WorkbenchUiState> {
+  return normalizeUiState(await backendCall<unknown>('WorkbenchGetUiState'))
+}
+
+export function saveWorkbenchUiState(state: WorkbenchUiState): Promise<void> {
+  return backendCall('WorkbenchSaveUiState', state)
+}
+
+export async function listWorkbenchDetectorSites(): Promise<WorkbenchDetectorSite[]> {
+  const results = await backendCall<unknown[]>('WorkbenchListDetectorSites')
+  return Array.isArray(results)
+    ? results.map((item) => {
+      const source = readRecord(item)
+      return {
+        id: readString(source, ['id']),
+        name: readString(source, ['name']),
+        url: readString(source, ['url']),
+        enabled: source.enabled !== false,
+        defaultOn: Boolean(source.defaultOn),
+        gate: readString(source, ['gate'], 'medium'),
+        traceWarning: readString(source, ['traceWarning']),
+        notes: readString(source, ['notes']),
+      }
+    })
+    : []
+}
+
+export async function runWorkbenchDetectorSite(profileId: string, detectorId: string): Promise<WorkbenchDetectionResult> {
+  return normalizeDetectionResult(await backendCall<unknown>('WorkbenchRunDetectorSite', profileId, detectorId))
 }

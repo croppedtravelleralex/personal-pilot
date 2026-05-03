@@ -75,35 +75,58 @@ func SpeedTest(
 	}
 
 	// 将代理配置转换为 mihomo mapping
+	if RequiresBridge(src, proxies, proxyId) || IsSingBoxProtocol(src) {
+		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
+	}
+
 	mapping, err := proxyConfigToMapping(src)
 	if err != nil {
-		log.Warn("代理配置解析失败，降级到 TCP ping",
+		log.Warn("代理配置解析失败，改用真实 HTTP 出口测速",
 			logger.F("proxy_id", proxyId),
 			logger.F("error", err.Error()),
 		)
-		return tcpPingFallback(proxyId, src, cfg.TCPTimeout, log)
+		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
 	}
 
 	// 使用 mihomo adapter.ParseProxy 创建代理实例
 	proxyInstance, err := adapter.ParseProxy(mapping)
 	if err != nil {
-		log.Warn("mihomo 代理创建失败，降级到 TCP ping",
+		log.Warn("mihomo 代理创建失败，改用真实 HTTP 出口测速",
 			logger.F("proxy_id", proxyId),
 			logger.F("error", err.Error()),
 			logger.F("type", mapping["type"]),
 		)
-		return tcpPingFallback(proxyId, src, cfg.TCPTimeout, log)
+		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
 	}
 
 	// unified-delay 测速：分离连接建立和 HTTP 往返计时
 	return unifiedDelayTest(proxyId, proxyInstance, testURL, cfg.Timeout)
 }
 
-// unifiedDelayTest 模拟 Clash unified-delay 模式：
-// 1. 通过代理建立到目标的 TCP 连接（预热，不计入延迟）
-// 2. 发送第一次 HTTP 请求预热连接（不计入延迟）
-// 3. 在已建立的连接上发送第二次 HTTP 请求，只计这次的 RTT
-// 这样测出的延迟 = 纯 HTTP 往返时间，和 Clash unified-delay: true 一致。
+// httpClientDelayTest 通过实际 HTTP 请求检测代理出口，避免把远端 TCP 可达误判为可用出口。
+func httpClientDelayTest(
+	proxyId string,
+	src string,
+	proxies []config.BrowserProxy,
+	xrayMgr *XrayManager,
+	singboxMgr *SingBoxManager,
+	testURL string,
+	timeout time.Duration,
+) TestResult {
+	client, err := buildProxyHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, timeout)
+	if err != nil {
+		return TestResult{ProxyId: proxyId, Ok: false, Error: err.Error()}
+	}
+	latency, statusCode, err := checkHTTPClientGET(context.Background(), client, testURL, "PersonalPilot/1.0")
+	if err != nil {
+		return TestResult{ProxyId: proxyId, Ok: false, LatencyMs: latency, Error: err.Error()}
+	}
+	if !isUsableHTTPStatus(statusCode) {
+		return TestResult{ProxyId: proxyId, Ok: false, LatencyMs: latency, Error: fmt.Sprintf("HTTP %d", statusCode)}
+	}
+	return TestResult{ProxyId: proxyId, Ok: true, LatencyMs: latency}
+}
+
 func unifiedDelayTest(proxyId string, px C.Proxy, testURL string, timeout time.Duration) TestResult {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

@@ -278,6 +278,14 @@ export function BrowserProxyFetchClashByURL(arg1) {
   return window['go']['main']['App']['BrowserProxyFetchClashByURL'](arg1);
 }
 
+export function BrowserProxyFixNames() {
+  return window['go']['main']['App']['BrowserProxyFixNames']();
+}
+
+export function BrowserProxyImportSubscriptionByURL(arg1, arg2) {
+  return window['go']['main']['App']['BrowserProxyImportSubscriptionByURL'](arg1, arg2);
+}
+
 export function BrowserProxyList() {
   return window['go']['main']['App']['BrowserProxyList']();
 }

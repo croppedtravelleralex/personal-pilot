@@ -735,19 +735,19 @@ fn app_window_minimize(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn app_quit(app: tauri::AppHandle) -> Result<(), String> {
-    start_app_quit(app, SidecarShutdownMode::Full, Duration::from_secs(30));
+    start_app_quit(app, SidecarShutdownMode::Full, Duration::from_secs(10));
     Ok(())
 }
 
 #[tauri::command]
 fn app_quit_app_only(app: tauri::AppHandle) -> Result<(), String> {
-    start_app_quit(app, SidecarShutdownMode::AppOnly, Duration::from_secs(8));
+    start_app_quit(app, SidecarShutdownMode::AppOnly, Duration::from_secs(5));
     Ok(())
 }
 
 #[tauri::command]
 fn app_quit_full(app: tauri::AppHandle) -> Result<(), String> {
-    start_app_quit(app, SidecarShutdownMode::Full, Duration::from_secs(30));
+    start_app_quit(app, SidecarShutdownMode::Full, Duration::from_secs(10));
     Ok(())
 }
 

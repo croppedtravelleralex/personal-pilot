@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Switch, Table, Textarea, toast } from '../../../shared/components'
 import type { SortOrder, TableColumn } from '../../../shared/components/Table'
 import type { BrowserProxy, ProxyIPHealthResult } from '../types'
-import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL } from '../api'
+import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, fetchSubscriptionImportFromURL } from '../api'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import yaml from 'js-yaml'
 
@@ -15,6 +15,7 @@ const PROXY_GLOBAL_AUTO_REFRESH_KEY = 'browser:proxyPool:globalAutoRefreshEnable
 const PROXY_GLOBAL_REFRESH_INTERVAL_KEY = 'browser:proxyPool:globalRefreshIntervalM:v1'
 const PROXY_LATENCY_CACHE_TTL_MS = 12 * 60 * 60 * 1000
 const PROXY_IP_HEALTH_CACHE_TTL_MS = 12 * 60 * 60 * 1000
+const HIGH_LATENCY_THRESHOLD_MS = 3000
 
 const BUILTIN_PROXIES: BrowserProxy[] = [
   { proxyId: '__direct__', proxyName: '直连（不走代理）', proxyConfig: 'direct://' },
@@ -39,7 +40,66 @@ interface ClashProxy {
   [key: string]: any
 }
 
-type ProxyImportMode = 'clash' | 'direct'
+type ProxyImportMode = 'clash' | 'direct' | 'subscription'
+type ProxyQuickFilter = 'all' | 'available' | 'highLatency' | 'speedFailed' | 'ipHealthFailed' | 'ipUnchecked' | 'speedUnchecked'
+type ProxyQuickFilterTone = 'neutral' | 'success' | 'warning' | 'danger' | 'muted'
+type IPHealthFailureBucket = 'timeout' | 'connectivity' | 'dns' | 'auth' | 'metadata' | 'unknown'
+
+const QUICK_FILTER_OPTIONS: Array<{ value: ProxyQuickFilter; label: string; description: string; tone: ProxyQuickFilterTone }> = [
+  { value: 'all', label: '全部', description: '当前筛选范围', tone: 'neutral' },
+  { value: 'available', label: '可用', description: '测速通过且 IP 健康通过', tone: 'success' },
+  { value: 'highLatency', label: '高延迟', description: '延迟 >= 3000ms', tone: 'warning' },
+  { value: 'speedFailed', label: '测速失败/超时', description: '测速超时或协议不支持', tone: 'danger' },
+  { value: 'ipHealthFailed', label: 'IP 健康失败', description: '真实 HTTPS 或出口信息检测失败', tone: 'danger' },
+  { value: 'ipUnchecked', label: 'IP 未检测', description: '还没有 IP 健康结果', tone: 'muted' },
+  { value: 'speedUnchecked', label: '未测速', description: '还没有测速结果', tone: 'muted' },
+]
+
+const QUICK_FILTER_TONE_CLASSES: Record<ProxyQuickFilterTone, { active: string; inactive: string; count: string }> = {
+  neutral: {
+    active: 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
+    inactive: 'border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-text-primary)]',
+    count: 'text-[var(--color-text-primary)]',
+  },
+  success: {
+    active: 'border-green-500 bg-green-500/10 text-green-700',
+    inactive: 'border-green-500/30 bg-green-500/5 text-green-700 hover:border-green-500',
+    count: 'text-green-700',
+  },
+  warning: {
+    active: 'border-yellow-500 bg-yellow-500/10 text-yellow-700',
+    inactive: 'border-yellow-500/30 bg-yellow-500/5 text-yellow-700 hover:border-yellow-500',
+    count: 'text-yellow-700',
+  },
+  danger: {
+    active: 'border-red-500 bg-red-500/10 text-red-700',
+    inactive: 'border-red-500/30 bg-red-500/5 text-red-700 hover:border-red-500',
+    count: 'text-red-700',
+  },
+  muted: {
+    active: 'border-slate-500 bg-slate-500/10 text-slate-700',
+    inactive: 'border-slate-300 bg-slate-500/5 text-slate-600 hover:border-slate-500',
+    count: 'text-slate-700',
+  },
+}
+
+const IP_HEALTH_FAILURE_LABELS: Record<IPHealthFailureBucket, string> = {
+  timeout: '超时',
+  connectivity: '连接失败',
+  dns: 'DNS/解析失败',
+  auth: '认证失败',
+  metadata: '出口信息失败',
+  unknown: '其他失败',
+}
+
+const IP_HEALTH_FAILURE_HINTS: Record<IPHealthFailureBucket, string> = {
+  timeout: '代理没有在超时时间内完成真实 HTTPS 请求，可能是节点不穩定或线路较差。',
+  connectivity: '代理端口不可达、连接被拒绝、协议不匹配或远端已失效。',
+  dns: '代理链路里域名解析失败，可能是代理不可用或 DNS 被阻断。',
+  auth: '代理需要账号密码，或认证信息错误。',
+  metadata: '真实连接可能失败，或出口信息接口无法返回 IP/归属地数据。',
+  unknown: '检测失败但错误信息不完整，建议打开详情查看原始返回。',
+}
 
 interface DirectImportForm {
   proxyName: string
@@ -691,6 +751,32 @@ function writeIPHealthCache(data: Record<string, ProxyIPHealthResult>) {
   }
 }
 
+function readRawObjectField(rawData: Record<string, unknown> | undefined, objectKey: string, fieldKey: string): string {
+  const value = rawData?.[objectKey]
+  if (!value || typeof value !== 'object') return ''
+  const fieldValue = (value as Record<string, unknown>)[fieldKey]
+  return typeof fieldValue === 'string' ? fieldValue.trim() : ''
+}
+
+function getIPHealthFailureText(result?: ProxyIPHealthResult | null): string {
+  if (!result) return '未检测'
+  const directError = (result.error || '').trim()
+  const httpsError = readRawObjectField(result.rawData, 'realHttpsCheck', 'error')
+  const metadataError = readRawObjectField(result.rawData, 'metadata', 'error') || String(result.rawData?.metadataError || '').trim()
+  return directError || httpsError || metadataError || '检测失败，未返回明确原因'
+}
+
+function getIPHealthFailureBucket(result?: ProxyIPHealthResult | null): IPHealthFailureBucket {
+  if (!result) return 'unknown'
+  const rawText = `${getIPHealthFailureText(result)} ${JSON.stringify(result.rawData || {})}`.toLowerCase()
+  if (/timeout|timed out|deadline|i\/o timeout|超时/.test(rawText)) return 'timeout'
+  if (/dns|lookup|no such host|解析/.test(rawText)) return 'dns'
+  if (/407|auth|authentication|unauthorized|认证|鉴权|账号|密码/.test(rawText)) return 'auth'
+  if (/connect|connection|refused|reset|unreachable|no route|proxyconnect|dial tcp|econn|socket|tls|handshake|连接|拒绝|不可达/.test(rawText)) return 'connectivity'
+  if (/metadata|metadataerror|ip-api.*fail|ippure.*fail|ipapi.*fail|出口信息|接口失败|接口返回/.test(rawText)) return 'metadata'
+  return 'unknown'
+}
+
 export function ProxyPoolPage() {
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
   const [displayList, setDisplayList] = useState<ProxyDisplayInfo[]>([])
@@ -700,6 +786,7 @@ export function ProxyPoolPage() {
   const [filterProtocol, setFilterProtocol] = useState<string>('all')
   const [filterKeyword, setFilterKeyword] = useState('')
   const [filterGroup, setFilterGroup] = useState<string>('all')
+  const [quickFilter, setQuickFilter] = useState<ProxyQuickFilter>('all')
   const [sortColumn, setSortColumn] = useState<string>('') // 默认不排序
   const [sortOrder, setSortOrder] = useState<SortOrder>(undefined)
 
@@ -1019,36 +1106,111 @@ export function ProxyPoolPage() {
     }
   }
 
-  const filteredList = useMemo(() => {
-    const filtered = displayList.filter(p => {
+  const matchQuickFilter = useCallback((proxy: ProxyDisplayInfo, filter: ProxyQuickFilter): boolean => {
+    const isDirect = proxy.proxyConfig === 'direct://'
+    const latency = latencyMap[proxy.proxyId]
+    const ipHealth = ipHealthMap[proxy.proxyId]
+
+    switch (filter) {
+      case 'available':
+        return isDirect || (typeof latency === 'number' && latency >= 0 && latency < HIGH_LATENCY_THRESHOLD_MS && !!ipHealth && ipHealth.ok)
+      case 'highLatency':
+        return !isDirect && typeof latency === 'number' && latency >= HIGH_LATENCY_THRESHOLD_MS
+      case 'speedFailed':
+        return !isDirect && (latency === -2 || latency === -3)
+      case 'ipHealthFailed':
+        return !isDirect && !!ipHealth && !ipHealth.ok
+      case 'ipUnchecked':
+        return !isDirect && !ipHealth
+      case 'speedUnchecked':
+        return !isDirect && latency === undefined
+      case 'all':
+      default:
+        return true
+    }
+  }, [ipHealthMap, latencyMap])
+
+  const baseFilteredList = useMemo(() => {
+    return displayList.filter(p => {
       const matchProtocol = filterProtocol === 'all' || p.type === filterProtocol
       const matchKeyword = !filterKeyword || p.proxyName.toLowerCase().includes(filterKeyword.toLowerCase()) || p.server.toLowerCase().includes(filterKeyword.toLowerCase())
       const matchGroup = filterGroup === 'all' || p.groupName === filterGroup
       return matchProtocol && matchKeyword && matchGroup
     })
+  }, [displayList, filterProtocol, filterKeyword, filterGroup])
 
+  const quickFilterCounts = useMemo(() => {
+    const counts = QUICK_FILTER_OPTIONS.reduce((acc, option) => {
+      acc[option.value] = 0
+      return acc
+    }, {} as Record<ProxyQuickFilter, number>)
+
+    baseFilteredList.forEach(proxy => {
+      QUICK_FILTER_OPTIONS.forEach(option => {
+        if (matchQuickFilter(proxy, option.value)) {
+          counts[option.value] += 1
+        }
+      })
+    })
+
+    return counts
+  }, [baseFilteredList, matchQuickFilter])
+
+  const activeQuickFilterOption = useMemo(
+    () => QUICK_FILTER_OPTIONS.find(option => option.value === quickFilter) || QUICK_FILTER_OPTIONS[0],
+    [quickFilter]
+  )
+
+  const ipHealthFailureSummary = useMemo(() => {
+    const counts = {
+      timeout: 0,
+      connectivity: 0,
+      dns: 0,
+      auth: 0,
+      metadata: 0,
+      unknown: 0,
+    } as Record<IPHealthFailureBucket, number>
+
+    baseFilteredList.forEach(proxy => {
+      if (proxy.proxyConfig === 'direct://') return
+      const result = ipHealthMap[proxy.proxyId]
+      if (!result || result.ok) return
+      counts[getIPHealthFailureBucket(result)] += 1
+    })
+
+    return (Object.keys(IP_HEALTH_FAILURE_LABELS) as IPHealthFailureBucket[])
+      .map(bucket => ({ bucket, label: IP_HEALTH_FAILURE_LABELS[bucket], count: counts[bucket] }))
+      .filter(item => item.count > 0)
+  }, [baseFilteredList, ipHealthMap])
+
+  const filteredList = useMemo(() => {
+    const filtered = baseFilteredList.filter(p => matchQuickFilter(p, quickFilter))
     if (!sortColumn || !sortOrder) return filtered
 
     return [...filtered].sort((a, b) => {
       const cmp = compareByColumn(a, b, sortColumn)
       return sortOrder === 'asc' ? cmp : -cmp
     })
-  }, [displayList, filterProtocol, filterKeyword, filterGroup, sortColumn, sortOrder, latencyMap])
+  }, [baseFilteredList, quickFilter, sortColumn, sortOrder, latencyMap, matchQuickFilter])
 
-  const allFilteredSelected = filteredList.length > 0 && filteredList.every(p => selectedIds.has(p.proxyId))
-  const someFilteredSelected = filteredList.some(p => selectedIds.has(p.proxyId))
+  const selectableFilteredList = useMemo(
+    () => filteredList.filter(p => !BUILTIN_PROXY_IDS.has(p.proxyId)),
+    [filteredList]
+  )
+  const allFilteredSelected = selectableFilteredList.length > 0 && selectableFilteredList.every(p => selectedIds.has(p.proxyId))
+  const someFilteredSelected = selectableFilteredList.some(p => selectedIds.has(p.proxyId))
 
   const handleToggleAll = () => {
     if (allFilteredSelected) {
       setSelectedIds(prev => {
         const next = new Set(prev)
-        filteredList.forEach(p => next.delete(p.proxyId))
+        selectableFilteredList.forEach(p => next.delete(p.proxyId))
         return next
       })
     } else {
       setSelectedIds(prev => {
         const next = new Set(prev)
-        filteredList.filter(p => !BUILTIN_PROXY_IDS.has(p.proxyId)).forEach(p => next.add(p.proxyId))
+        selectableFilteredList.forEach(p => next.add(p.proxyId))
         return next
       })
     }
@@ -1061,6 +1223,27 @@ export function ProxyPoolPage() {
       next.has(proxyId) ? next.delete(proxyId) : next.add(proxyId)
       return next
     })
+  }
+
+  const handleSelectCurrentQuickView = () => {
+    if (selectableFilteredList.length === 0) {
+      toast.info('当前视图没有可删除的代理')
+      return
+    }
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      selectableFilteredList.forEach(proxy => next.add(proxy.proxyId))
+      return next
+    })
+  }
+
+  const handleDeleteCurrentQuickView = () => {
+    if (selectableFilteredList.length === 0) {
+      toast.info('当前视图没有可删除的代理')
+      return
+    }
+    setSelectedIds(new Set(selectableFilteredList.map(proxy => proxy.proxyId)))
+    setBatchDeleteConfirmOpen(true)
   }
 
   const handleBatchDeleteConfirm = async () => {
@@ -1216,10 +1399,24 @@ export function ProxyPoolPage() {
     const result = ipHealthMap[record.proxyId]
     if (!result) return <span className="text-[var(--color-text-muted)] text-xs">-</span>
     if (!result.ok) {
+      const bucket = getIPHealthFailureBucket(result)
+      const reason = getIPHealthFailureText(result)
       return (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-red-500 truncate max-w-[120px]" title={result.error || '检测失败'}>失败</span>
-          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openIPHealthDetail(record.proxyId) }}>原始</Button>
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-red-600">失败</span>
+            <span className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] text-red-700">
+              {IP_HEALTH_FAILURE_LABELS[bucket]}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="block max-w-[220px] truncate text-left text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+            title={`${reason}；${IP_HEALTH_FAILURE_HINTS[bucket]}`}
+            onClick={(e) => { e.stopPropagation(); openIPHealthDetail(record.proxyId) }}
+          >
+            {reason}
+          </button>
         </div>
       )
     }
@@ -1233,7 +1430,7 @@ export function ProxyPoolPage() {
             {`fraud ${result.fraudScore} | ${result.isResidential ? '住宅' : '机房'}${location ? ` | ${location}` : ''}`}
           </div>
         </div>
-        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openIPHealthDetail(record.proxyId) }}>原始</Button>
+        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openIPHealthDetail(record.proxyId) }}>详情</Button>
       </div>
     )
   }
@@ -1416,7 +1613,7 @@ export function ProxyPoolPage() {
   const handleImportModeChange = (nextMode: ProxyImportMode) => {
     setImportMode(nextMode)
     setImportResolvedUrl('')
-    if (nextMode !== 'clash') {
+    if (nextMode !== 'clash' && nextMode !== 'subscription') {
       setImportUrl('')
       setImportDnsServers('')
     }
@@ -1431,32 +1628,104 @@ export function ProxyPoolPage() {
 
     setFetchingImportUrl(true)
     try {
-      const result = await fetchClashImportFromURL(targetURL)
-      const content = (result?.content || '').trim()
-      if (!content) {
-        throw new Error('订阅内容为空')
+      // 如果是订阅导入模式，直接调用后端导入
+      if (importMode === 'subscription') {
+        const result = await fetchSubscriptionImportFromURL(targetURL, importGroupName.trim() || '订阅代理')
+        setImportResolvedUrl(targetURL)
+        const importedProxies = result.allProxies || []
+        setProxies(importedProxies)
+        setImportUrl('')
+        setImportResolvedUrl('')
+        setImportGroupName('')
+        setImportDnsServers('')
+        setImportText('')
+        setImportNamePrefix('')
+        setImportModalOpen(false)
+        // 刷新分组列表
+        const grps = await fetchBrowserProxyGroups()
+        setGroups(grps)
+        toast.success(`订阅导入成功：新增 ${result.importedCount} 条代理` + (result.skippedCount > 0 ? `，跳过 ${result.skippedCount} 条已存在` : ''))
+        return
       }
 
-      setImportResolvedUrl((result?.url || targetURL).trim())
-      setImportText(content)
+      // Clash 模式：先尝试 Clash YAML 解析，失败则自动回退到订阅导入
+      try {
+        const result = await fetchClashImportFromURL(targetURL)
+        const content = (result?.content || '').trim()
+        if (!content) {
+          throw new Error('订阅内容为空')
+        }
 
-      if (!importDnsServers.trim() && typeof result?.dnsServers === 'string' && result.dnsServers.trim()) {
-        setImportDnsServers(result.dnsServers.trim())
-      }
-      if (!importGroupName.trim() && typeof result?.suggestedGroup === 'string' && result.suggestedGroup.trim()) {
-        setImportGroupName(result.suggestedGroup.trim())
-      }
+        setImportResolvedUrl((result?.url || targetURL).trim())
+        setImportText(content)
 
-      toast.success(`URL 获取成功，检测到 ${Math.max(0, Number(result?.proxyCount || 0))} 个代理`)
+        if (!importDnsServers.trim() && typeof result?.dnsServers === 'string' && result.dnsServers.trim()) {
+          setImportDnsServers(result.dnsServers.trim())
+        }
+        if (!importGroupName.trim() && typeof result?.suggestedGroup === 'string' && result.suggestedGroup.trim()) {
+          setImportGroupName(result.suggestedGroup.trim())
+        }
+
+        toast.success(`URL 获取成功，检测到 ${Math.max(0, Number(result?.proxyCount || 0))} 个代理`)
+      } catch (clashErr: any) {
+        // Clash 解析失败，自动尝试作为 base64 代理列表导入
+        console.log('Clash 解析失败，尝试订阅导入模式:', clashErr?.message)
+        const subResult = await fetchSubscriptionImportFromURL(targetURL, importGroupName.trim() || '订阅代理')
+        const importedProxies = subResult.allProxies || []
+        setProxies(importedProxies)
+        setImportUrl('')
+        setImportResolvedUrl('')
+        setImportGroupName('')
+        setImportDnsServers('')
+        setImportText('')
+        setImportNamePrefix('')
+        setImportModalOpen(false)
+        const grps = await fetchBrowserProxyGroups()
+        setGroups(grps)
+        toast.success(`订阅导入成功：新增 ${subResult.importedCount} 条代理` + (subResult.skippedCount > 0 ? `，跳过 ${subResult.skippedCount} 条已存在` : ''))
+        return
+      }
     } catch (error: any) {
-      setImportResolvedUrl('')
+      if (importMode !== 'subscription') {
+        setImportResolvedUrl('')
+      }
       toast.error(error?.message || 'URL 获取失败')
     } finally {
       setFetchingImportUrl(false)
     }
   }
 
-  const handleParseImport = () => {
+  const handleParseImport = async () => {
+    // 订阅导入模式直接通过 URL 导入
+    if (importMode === 'subscription') {
+      const targetURL = importUrl.trim()
+      if (!targetURL) {
+        toast.error('请输入订阅 URL')
+        return
+      }
+      setFetchingImportUrl(true)
+      try {
+        const result = await fetchSubscriptionImportFromURL(targetURL, importGroupName.trim() || '订阅代理')
+        const importedProxies2 = result.allProxies || []
+        setProxies(importedProxies2)
+        setImportUrl('')
+        setImportResolvedUrl('')
+        setImportGroupName('')
+        setImportDnsServers('')
+        setImportText('')
+        setImportNamePrefix('')
+        setImportModalOpen(false)
+        const grps2 = await fetchBrowserProxyGroups()
+        setGroups(grps2)
+        toast.success(`订阅导入成功：新增 ${result.importedCount} 条代理` + (result.skippedCount > 0 ? `，跳过 ${result.skippedCount} 条已存在` : ''))
+      } catch (error: any) {
+        toast.error(error?.message || '订阅导入失败')
+      } finally {
+        setFetchingImportUrl(false)
+      }
+      return
+    }
+
     try {
       const prefix = importNamePrefix.trim()
       const candidates = importMode === 'clash'
@@ -1534,7 +1803,9 @@ export function ProxyPoolPage() {
   }
 
   const selectedCount = selectedIds.size
-  const canParseImport = importMode === 'clash'
+  const canParseImport = importMode === 'subscription'
+    ? !!importUrl.trim()
+    : importMode === 'clash'
     ? !!importText.trim()
     : !!directImportForm.server.trim() && !!directImportForm.port.trim()
 
@@ -1543,7 +1814,7 @@ export function ProxyPoolPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">代理池配置</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">管理代理配置，支持 Clash 订阅、HTTP、HTTPS、SOCKS5</p>
+          <p className="text-sm text-[var(--color-text-muted)] mt-1">管理代理配置，支持订阅导入、Clash YAML、HTTP、HTTPS、SOCKS5</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -1586,8 +1857,8 @@ export function ProxyPoolPage() {
             <option value="all">全部分组</option>
             {groups.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
-          {(filterProtocol !== 'all' || filterKeyword || filterGroup !== 'all') && (
-            <Button size="sm" variant="ghost" onClick={() => { setFilterProtocol('all'); setFilterKeyword(''); setFilterGroup('all') }}>清除筛选</Button>
+          {(filterProtocol !== 'all' || filterKeyword || filterGroup !== 'all' || quickFilter !== 'all') && (
+            <Button size="sm" variant="ghost" onClick={() => { setFilterProtocol('all'); setFilterKeyword(''); setFilterGroup('all'); setQuickFilter('all') }}>清除筛选</Button>
           )}
           <div className="flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 py-1.5">
             <span className="text-xs text-[var(--color-text-muted)]">全局自动刷新</span>
@@ -1625,6 +1896,65 @@ export function ProxyPoolPage() {
             </Button>
           )}
         </div>
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)]/60 p-3 mb-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-[var(--color-text-primary)]">快速视图</div>
+              <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                当前：{activeQuickFilterOption.label}，{activeQuickFilterOption.description}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {quickFilter !== 'all' && (
+                <Button size="sm" variant="ghost" onClick={() => setQuickFilter('all')}>回到全部</Button>
+              )}
+              <Button size="sm" variant="secondary" onClick={handleSelectCurrentQuickView} disabled={selectableFilteredList.length === 0}>
+                选中当前视图
+              </Button>
+              {quickFilter !== 'all' && (
+                <Button size="sm" variant="danger" onClick={handleDeleteCurrentQuickView} disabled={selectableFilteredList.length === 0}>
+                  删除当前视图 ({selectableFilteredList.length})
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+            {QUICK_FILTER_OPTIONS.map(option => {
+              const active = quickFilter === option.value
+              const tone = QUICK_FILTER_TONE_CLASSES[option.tone]
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setQuickFilter(option.value)}
+                  className={`min-h-[72px] rounded-md border px-3 py-2 text-left transition-colors ${active ? tone.active : tone.inactive}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-medium leading-5">{option.label}</span>
+                    <span className={`tabular-nums text-lg font-semibold leading-5 ${active ? '' : tone.count}`}>
+                      {quickFilterCounts[option.value]}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] leading-4 opacity-80">{option.description}</div>
+                </button>
+              )
+            })}
+          </div>
+          {ipHealthFailureSummary.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3 text-xs">
+              <span className="text-[var(--color-text-muted)]">IP 健康失败原因</span>
+              {ipHealthFailureSummary.map(item => (
+                <span
+                  key={item.bucket}
+                  title={IP_HEALTH_FAILURE_HINTS[item.bucket]}
+                  className="rounded border border-red-500/25 bg-red-500/5 px-2 py-1 text-red-700"
+                >
+                  {item.label} {item.count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
         <Table
           columns={columns}
           data={filteredList}
@@ -1644,29 +1974,85 @@ export function ProxyPoolPage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setImportModalOpen(false)} disabled={fetchingImportUrl}>取消</Button>
-            <Button onClick={handleParseImport} disabled={fetchingImportUrl || !canParseImport}>解析</Button>
+            <Button onClick={handleParseImport} disabled={fetchingImportUrl || !canParseImport}>{importMode === 'subscription' ? '导入' : '解析'}</Button>
           </>
         }>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant={importMode === 'subscription' ? undefined : 'secondary'}
+              onClick={() => handleImportModeChange('subscription')}
+            >
+              订阅导入
+            </Button>
             <Button
               variant={importMode === 'clash' ? undefined : 'secondary'}
               onClick={() => handleImportModeChange('clash')}
             >
-              Clash 订阅 / YAML
+              Clash / YAML
             </Button>
             <Button
               variant={importMode === 'direct' ? undefined : 'secondary'}
               onClick={() => handleImportModeChange('direct')}
             >
-              HTTP / SOCKS5（测试中）
+              HTTP / SOCKS5
             </Button>
           </div>
           <p className="text-sm text-[var(--color-text-muted)]">
-            {importMode === 'clash'
+            {importMode === 'subscription'
+              ? '输入订阅 URL，系统自动拉取并导入 base64 编码的代理列表（支持 anytls/vmess/vless/trojan/ss/hysteria2/tuic 等协议），已存在的代理自动跳过'
+              : importMode === 'clash'
               ? '支持粘贴 Clash YAML，或通过订阅 URL 自动拉取并解析（含 proxies、dns、proxy-groups）'
               : '支持单条录入 HTTP / HTTPS / SOCKS5 代理，账号和密码均可留空，导入后直接生效，不走 Clash 桥接'}
           </p>
+          {importMode === 'subscription' && (
+            <>
+              <FormItem label="订阅 URL" required>
+                <div className="flex gap-2">
+                  <Input
+                    value={importUrl}
+                    onChange={e => {
+                      const next = e.target.value
+                      setImportUrl(next)
+                      if (importResolvedUrl.trim() && next.trim() !== importResolvedUrl.trim()) {
+                        setImportResolvedUrl('')
+                      }
+                    }}
+                    placeholder="https://example.com/subscription/token"
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={handleFetchImportURL}
+                    loading={fetchingImportUrl}
+                    disabled={!importUrl.trim()}
+                  >
+                    导入
+                  </Button>
+                </div>
+                {importResolvedUrl.trim() && (
+                  <p className="text-xs text-[var(--color-success)] mt-1 break-all">
+                    已导入：{importResolvedUrl}
+                  </p>
+                )}
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">支持 base64 编码的代理订阅链接，导入后以名称末尾的国旗 emoji 或地点信息标记归属地</p>
+              </FormItem>
+              <FormItem label="分组名称（可选）">
+                <Input
+                  value={importGroupName}
+                  onChange={e => setImportGroupName(e.target.value)}
+                  placeholder="默认为「订阅代理」"
+                  list="proxy-groups-datalist"
+                />
+                {groups.length > 0 && (
+                  <datalist id="proxy-groups-datalist">
+                    {groups.map(g => <option key={g} value={g} />)}
+                  </datalist>
+                )}
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">导入后所有代理归入该分组，可按分组筛选</p>
+              </FormItem>
+            </>
+          )}
           {importMode === 'clash' && (
             <>
               <FormItem label="订阅 URL（可选）">
@@ -1832,7 +2218,7 @@ export function ProxyPoolPage() {
       <Modal
         open={ipHealthDetailOpen}
         onClose={() => setIPHealthDetailOpen(false)}
-        title="IP健康原始返回"
+        title="IP健康详情"
         width="760px"
         footer={<Button variant="secondary" onClick={() => setIPHealthDetailOpen(false)}>关闭</Button>}
       >
@@ -1843,7 +2229,19 @@ export function ProxyPoolPage() {
                 代理ID：{currentIPHealthDetail.proxyId} | 来源：{currentIPHealthDetail.source} | 时间：{currentIPHealthDetail.updatedAt}
               </div>
               {!currentIPHealthDetail.ok && (
-                <div className="text-sm text-red-500">{currentIPHealthDetail.error || '检测失败'}</div>
+                <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3">
+                  <div className="text-sm font-medium text-red-700">
+                    {IP_HEALTH_FAILURE_LABELS[getIPHealthFailureBucket(currentIPHealthDetail)]}：{getIPHealthFailureText(currentIPHealthDetail)}
+                  </div>
+                  <div className="mt-1 text-xs text-red-700/80">
+                    {IP_HEALTH_FAILURE_HINTS[getIPHealthFailureBucket(currentIPHealthDetail)]}
+                  </div>
+                </div>
+              )}
+              {currentIPHealthDetail.ok && (
+                <div className="rounded-lg border border-green-500/25 bg-green-500/5 p-3 text-sm text-green-700">
+                  出口 IP 可用：{currentIPHealthDetail.ip || '-'}，{currentIPHealthDetail.isResidential ? '住宅 IP' : '机房/托管 IP'}，欺诈分 {currentIPHealthDetail.fraudScore}
+                </div>
               )}
               <pre className="max-h-[420px] overflow-auto text-xs leading-5 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-3">
                 {JSON.stringify(currentIPHealthDetail.rawData || {}, null, 2)}

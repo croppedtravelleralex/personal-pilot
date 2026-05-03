@@ -202,6 +202,26 @@ func decodeBase64String(raw string) ([]byte, error) {
 	return nil, fmt.Errorf("base64 解析失败")
 }
 
+func mapStringValue(m map[string]interface{}, key string) string {
+	return getMapString(m, key)
+}
+
+func mapBoolValue(m map[string]interface{}, key string) bool {
+	return getMapBool(m, key)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+
+
+
 // isUnsupportedProtocol 判断是否为不支持的协议（hysteria/hysteria2）
 func isUnsupportedProtocol(src string) bool {
 	l := strings.ToLower(strings.TrimSpace(src))

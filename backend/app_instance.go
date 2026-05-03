@@ -152,9 +152,14 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 	proxies := a.getLatestProxies()
 	acquiredXrayBridgeKey := ""
 	releaseXrayBridge := false
+	acquiredSingBoxBridgeKey := ""
+	releaseSingBoxBridge := false
 	defer func() {
 		if releaseXrayBridge && acquiredXrayBridgeKey != "" && a.xrayMgr != nil {
 			a.xrayMgr.ReleaseBridge(acquiredXrayBridgeKey)
+		}
+		if releaseSingBoxBridge && acquiredSingBoxBridgeKey != "" && a.singboxMgr != nil {
+			a.singboxMgr.ReleaseBridge(acquiredSingBoxBridgeKey)
 		}
 	}()
 
@@ -184,7 +189,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 
 	if proxy.IsSingBoxProtocol(resolvedProxyConfig) {
 		// hysteria2 / tuic → sing-box 桥接
-		socksURL, bridgeErr := a.singboxMgr.EnsureBridge(resolvedProxyConfig, proxies, profile.ProxyId)
+		socksURL, bridgeKey, bridgeErr := a.singboxMgr.AcquireBridge(resolvedProxyConfig, proxies, profile.ProxyId)
 		if bridgeErr != nil {
 			startErr := fmt.Errorf("实例启动失败：代理桥接启动失败（sing-box）。原因：%v。请检查代理节点配置、sing-box 可执行文件是否存在，以及本地端口是否被占用。", bridgeErr)
 			log.Error("代理桥接失败(sing-box)", logger.F("error", bridgeErr.Error()), logger.F("reason", startErr.Error()))
@@ -198,6 +203,8 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			}
 			return profile, startErr
 		}
+		acquiredSingBoxBridgeKey = bridgeKey
+		releaseSingBoxBridge = bridgeKey != ""
 		effectiveProxy = socksURL
 		log.Info("sing-box 桥接成功", logger.F("socks_url", socksURL))
 	} else if proxy.RequiresBridge(resolvedProxyConfig, proxies, profile.ProxyId) {
@@ -307,6 +314,10 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 				a.bindProfileXrayBridge(profileId, acquiredXrayBridgeKey)
 				releaseXrayBridge = false
 			}
+			if acquiredSingBoxBridgeKey != "" {
+				a.bindProfileSingBoxBridge(profileId, acquiredSingBoxBridgeKey)
+				releaseSingBoxBridge = false
+			}
 
 			log.Info("实例启动",
 				logger.F("profile_id", profileId),
@@ -365,6 +376,10 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		if acquiredXrayBridgeKey != "" {
 			a.bindProfileXrayBridge(profileId, acquiredXrayBridgeKey)
 			releaseXrayBridge = false
+		}
+		if acquiredSingBoxBridgeKey != "" {
+			a.bindProfileSingBoxBridge(profileId, acquiredSingBoxBridgeKey)
+			releaseSingBoxBridge = false
 		}
 
 		log.Warn("浏览器窗口已启动，但调试接口在等待窗口内未就绪，转入后台附着",
@@ -813,6 +828,7 @@ func (a *App) markProfileStoppedLocked(profileId string, profile *BrowserProfile
 	profile.LastStopAt = time.Now().Format(time.RFC3339)
 	delete(a.browserMgr.BrowserProcesses, profileId)
 	a.releaseProfileXrayBridge(profileId)
+	a.releaseProfileSingBoxBridge(profileId)
 	go a.stopBehaviorEngine(profileId)
 	if a.launchServer != nil {
 		a.launchServer.ClearActiveProfile(profileId)

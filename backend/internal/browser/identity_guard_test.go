@@ -54,15 +54,17 @@ func TestIdentityGuardRejectsAbsolutePathOutsideRoot(t *testing.T) {
 	cfg.Browser.UserDataRoot = filepath.Join(root, "data")
 	mgr := NewManager(cfg, root)
 
-	_, err := mgr.ResolveCanonicalUserDataDir(&Profile{
+	// 旧版本绝对路径指向外部目录时，自动迁移为 profileId 相对路径
+	canonical, err := mgr.ResolveCanonicalUserDataDir(&Profile{
 		ProfileId:   "outside",
 		UserDataDir: filepath.Join(root, "outside-profile"),
 	})
-	if err == nil {
-		t.Fatal("expected absolute path outside user-data root to be rejected")
+	if err != nil {
+		t.Fatalf("expected auto-migration to succeed, got: %v", err)
 	}
-	if !strings.Contains(strings.ToLower(err.Error()), "escapes") {
-		t.Fatalf("expected escapes-root error, got %v", err)
+	expected := filepath.Join(cfg.Browser.UserDataRoot, "outside")
+	if !strings.HasSuffix(canonicalPathKey(canonical), canonicalPathKey(expected)) {
+		t.Fatalf("expected fallback path to end with %q, got %q", expected, canonical)
 	}
 }
 

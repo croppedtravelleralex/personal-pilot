@@ -18,13 +18,15 @@ import (
 
 // SingBoxBridge sing-box 桥接进程
 type SingBoxBridge struct {
-	NodeKey   string
-	Port      int
-	Cmd       *exec.Cmd
-	Pid       int
-	Running   bool
-	Stopping  bool
-	LastError string
+	NodeKey    string
+	Port       int
+	Cmd        *exec.Cmd
+	Pid        int
+	Running    bool
+	Stopping   bool
+	LastError  string
+	RefCount   int
+	LastUsedAt time.Time
 }
 
 // SingBoxManager sing-box 桥接管理器
@@ -115,11 +117,12 @@ func (m *SingBoxManager) EnsureBridge(proxyConfig string, proxies []config.Brows
 		}
 
 		bridge := &SingBoxBridge{
-			NodeKey: key,
-			Port:    port,
-			Cmd:     cmd,
-			Pid:     cmd.Process.Pid,
-			Running: true,
+			NodeKey:    key,
+			Port:       port,
+			Cmd:        cmd,
+			Pid:        cmd.Process.Pid,
+			Running:    true,
+			LastUsedAt: time.Now(),
 		}
 		log.Info("sing-box 启动", logger.F("key", key[:8]), logger.F("pid", bridge.Pid), logger.F("port", port))
 
@@ -160,6 +163,69 @@ func (m *SingBoxManager) EnsureBridge(proxyConfig string, proxies []config.Brows
 }
 
 // StopAll 关闭所有 sing-box 桥接进程
+// AcquireBridge pins a sing-box bridge for a browser instance lifecycle.
+func (m *SingBoxManager) AcquireBridge(proxyConfig string, proxies []config.BrowserProxy, proxyId string) (string, string, error) {
+	src := strings.TrimSpace(proxyConfig)
+	if proxyId != "" {
+		for _, item := range proxies {
+			if strings.EqualFold(item.ProxyId, proxyId) {
+				src = strings.TrimSpace(item.ProxyConfig)
+				break
+			}
+		}
+	}
+	src = normalizeNodeScheme(src)
+	if src == "" {
+		return "", "", fmt.Errorf("proxy node is empty")
+	}
+
+	socksURL, err := m.EnsureBridge(proxyConfig, proxies, proxyId)
+	if err != nil {
+		return "", "", err
+	}
+	key := computeNodeKey(src)
+	if !m.pinBridge(key) {
+		return "", "", fmt.Errorf("sing-box bridge exited before it could be pinned")
+	}
+	return socksURL, key, nil
+}
+
+func (m *SingBoxManager) ReleaseBridge(key string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	bridge, ok := m.Bridges[key]
+	if !ok || bridge == nil {
+		return
+	}
+	if bridge.RefCount > 0 {
+		bridge.RefCount--
+	}
+	bridge.LastUsedAt = time.Now()
+}
+
+func (m *SingBoxManager) pinBridge(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	bridge, ok := m.Bridges[key]
+	if !ok || bridge == nil {
+		return false
+	}
+	alive := bridge.Running && bridge.Cmd != nil && bridge.Cmd.Process != nil && bridge.Cmd.ProcessState == nil
+	if !alive {
+		return false
+	}
+	bridge.RefCount++
+	bridge.LastUsedAt = time.Now()
+	return true
+}
+
 func (m *SingBoxManager) StopAll() {
 	m.mu.Lock()
 	bridges := make([]*SingBoxBridge, 0, len(m.Bridges))
@@ -184,6 +250,7 @@ func (m *SingBoxManager) tryReuseBridge(key string) (string, bool) {
 	if bridge, ok := m.Bridges[key]; ok && bridge != nil {
 		alive := bridge.Running && bridge.Cmd != nil && bridge.Cmd.Process != nil && bridge.Cmd.ProcessState == nil
 		if alive && waitPortReady("127.0.0.1", bridge.Port, 800*time.Millisecond) == nil {
+			bridge.LastUsedAt = time.Now()
 			socksURL := fmt.Sprintf("socks5://127.0.0.1:%d", bridge.Port)
 			m.mu.Unlock()
 			return socksURL, true
@@ -213,6 +280,7 @@ func (m *SingBoxManager) registerBridge(key string, bridge *SingBoxBridge) (stri
 
 		alive := existing.Running && existing.Cmd != nil && existing.Cmd.Process != nil && existing.Cmd.ProcessState == nil
 		if alive && waitPortReady("127.0.0.1", existing.Port, 800*time.Millisecond) == nil {
+			existing.LastUsedAt = time.Now()
 			duplicate = bridge
 			socksURL := fmt.Sprintf("socks5://127.0.0.1:%d", existing.Port)
 			m.mu.Unlock()
@@ -227,6 +295,7 @@ func (m *SingBoxManager) registerBridge(key string, bridge *SingBoxBridge) (stri
 		delete(m.Bridges, key)
 		duplicate = existing
 	}
+	bridge.LastUsedAt = time.Now()
 	m.Bridges[key] = bridge
 	m.mu.Unlock()
 

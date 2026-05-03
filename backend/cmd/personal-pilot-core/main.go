@@ -160,7 +160,8 @@ var allowedRPCMethods = map[string]struct{}{
 	"BrowserProxyBatchTestSpeed":           {},
 	"BrowserProxyCheckIPHealth":            {},
 	"BrowserProxyFetchClashByURL":          {},
-	"BrowserProxyImportFreeDirectProxies":  {},
+	"BrowserProxyFixNames":                 {},
+	"BrowserProxyImportSubscriptionByURL":  {},
 	"BrowserProxyList":                     {},
 	"BrowserProxyListByGroup":              {},
 	"BrowserProxyListGroups":               {},
@@ -251,8 +252,14 @@ var allowedRPCMethods = map[string]struct{}{
 	"WorkbenchCaptureScreenshot":           {},
 	"WorkbenchFingerprintHealthProfile":    {},
 	"WorkbenchFingerprintProfile":          {},
+	"WorkbenchGetUiState":                  {},
+	"WorkbenchListDetectionResults":        {},
+	"WorkbenchListDetectorSites":           {},
 	"WorkbenchNavigateProfile":             {},
 	"WorkbenchRefreshProfile":              {},
+	"WorkbenchRunDetectorSite":             {},
+	"WorkbenchSaveDetectionResult":         {},
+	"WorkbenchSaveUiState":                 {},
 }
 
 func main() {
@@ -289,7 +296,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("generate event token: %v", err)
 	}
-	server, bridgeURL, eventURL, err := startBridgeServer(app, hub, bridgeToken, eventToken, cancel)
+	server, bridgeURL, eventURL, err := startBridgeServer(ctx, app, hub, bridgeToken, eventToken, cancel)
 	if err != nil {
 		log.Fatalf("start bridge server: %v", err)
 	}
@@ -339,7 +346,7 @@ func generateBridgeToken() (string, error) {
 	return hex.EncodeToString(raw[:]), nil
 }
 
-func startBridgeServer(app *backend.App, hub *eventHub, bridgeToken string, eventToken string, cancel context.CancelFunc) (*http.Server, string, string, error) {
+func startBridgeServer(ctx context.Context, app *backend.App, hub *eventHub, bridgeToken string, eventToken string, cancel context.CancelFunc) (*http.Server, string, string, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", withCORS(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -397,6 +404,8 @@ func startBridgeServer(app *backend.App, hub *eventHub, bridgeToken string, even
 				fmt.Fprintf(w, "data: %s\n\n", b)
 				flusher.Flush()
 			case <-r.Context().Done():
+				return
+			case <-ctx.Done():
 				return
 			}
 		}

@@ -1,5 +1,14 @@
 # personal-pilot 当前状态主档
 
+## 2026-04-30 代理池免费代理与健康检测二次加固
+
+- 已完成：默认免费代理抓取源从原有少量 raw 列表扩展到 TheSpeedX、monosans、proxifly、roosterkid、vakhov 等可访问 raw 渠道；默认候选上限仍为 200、默认检测并发仍为 8，避免仅因源增加而放大 UI 卡顿风险。
+- 已完成：普通 IP 健康检测入口从单一 IPPure 升级为 `IPPure -> ip-api -> HTTPS canary`。IPPure 报错时会自动尝试 ip-api；元数据接口全部失败但真实 HTTPS canary 成功时，代理按可用处理，同时在 `error/rawData.metadataError` 保留第三方元数据失败原因。
+- 已完成：`ProxyPoolPage` 增加快速视图：全部、可用、高延迟、测速失败/超时、IP 健康失败、IP 未检测、未测速。每个视图显示数量，并复用现有全选和批量删除能力；内置 `direct/local` 仍不可删除。
+- 已完成：新增 `backend/internal/proxy/iphealth_test.go` 覆盖 IPPure 失败后 fallback 到 ip-api 的最小链路。
+- 已验证：`go test -count=1 ./backend/internal/proxy`、`go test -count=1 -timeout 8m ./backend/...`、`npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check` 均通过。
+- 边界：免费公开代理仍然天然低质量，更多抓取渠道只能增加候选池；真正入库仍以出口 IP 元数据和真实 HTTPS canary 的当前结果为准。
+
 ## 最后更新时间
 
 - 日期：2026-04-30

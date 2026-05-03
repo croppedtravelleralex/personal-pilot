@@ -149,6 +149,8 @@ export function BrowserProxyCheckIPHealth(arg1:string):Promise<backend.ProxyIPHe
 
 export function BrowserProxyFetchClashByURL(arg1:string):Promise<Record<string, any>>;
 
+export function BrowserProxyImportSubscriptionByURL(arg1:string,arg2:string):Promise<Record<string, any>>;
+
 export function BrowserProxyList():Promise<Array<config.BrowserProxy>>;
 
 export function BrowserProxyListByGroup(arg1:string):Promise<Array<config.BrowserProxy>>;

@@ -93,6 +93,20 @@ func (m *Manager) ResolveCanonicalUserDataDir(profile *Profile) (string, error) 
 	candidateAbs = filepath.Clean(candidateAbs)
 
 	if !pathInsideRoot(root, candidateAbs) {
+		// 自动迁移：旧版本绝对路径指向已被重命名的项目目录时，
+		// 降级为使用 profileId 作为相对路径，置于当前 root 下。
+		if raw == profileId {
+			// 纯 UUID 相对路径理论上一定在 root 内，这里不应失败。
+			// 若仍然失败说明 root 本身有问题，应明确报错。
+			return "", fmt.Errorf("identity safety gate: canonical user-data-dir escapes allowed root for profile %s", profileId)
+		}
+		fallback := profileId
+		fallbackAbs := filepath.Join(root, fallback)
+		fallbackAbs, _ = filepath.Abs(fallbackAbs)
+		fallbackAbs = filepath.Clean(fallbackAbs)
+		if pathInsideRoot(root, fallbackAbs) {
+			return canonicalPathForStorage(fallbackAbs), nil
+		}
 		return "", fmt.Errorf("identity safety gate: canonical user-data-dir escapes allowed root for profile %s", profileId)
 	}
 	if sameCanonicalPath(root, candidateAbs) {

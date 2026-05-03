@@ -9,22 +9,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// IsSingBoxProtocol 判断是否为 sing-box 支持的协议（hysteria2/tuic）
+// IsSingBoxProtocol reports whether a node should be bridged by sing-box.
 func IsSingBoxProtocol(proxyConfig string) bool {
 	l := strings.ToLower(strings.TrimSpace(proxyConfig))
-	if strings.HasPrefix(l, "hysteria2://") || strings.HasPrefix(l, "hysteria://") {
+	if strings.HasPrefix(l, "hysteria2://") || strings.HasPrefix(l, "hysteria://") || strings.HasPrefix(l, "anytls://") || strings.HasPrefix(l, "tuic://") {
 		return true
 	}
-	// Clash YAML 格式
+	// Clash YAML 鏍煎紡
 	if strings.Contains(l, "type: hysteria2") || strings.Contains(l, "type:hysteria2") ||
 		strings.Contains(l, "type: hysteria") || strings.Contains(l, "type:hysteria") ||
-		strings.Contains(l, "type: tuic") || strings.Contains(l, "type:tuic") {
+		strings.Contains(l, "type: tuic") || strings.Contains(l, "type:tuic") ||
+		strings.Contains(l, "type: anytls") || strings.Contains(l, "type:anytls") {
 		return true
 	}
 	return false
 }
 
-// BuildSingBoxOutbound 解析节点配置，返回 sing-box outbound map
+// BuildSingBoxOutbound 瑙ｆ瀽鑺傜偣閰嶇疆锛岃繑鍥?sing-box outbound map
 func BuildSingBoxOutbound(node string) (map[string]interface{}, error) {
 	src := strings.TrimSpace(node)
 	l := strings.ToLower(src)
@@ -33,25 +34,76 @@ func BuildSingBoxOutbound(node string) (map[string]interface{}, error) {
 		return parseHysteria2URI(src)
 	}
 
-	// Clash YAML 格式
+	if strings.HasPrefix(l, "anytls://") {
+		return parseAnytlsURI(src)
+	}
+
+	if strings.HasPrefix(l, "tuic://") {
+		return parseTUICURI(src)
+	}
+
+	// Clash YAML 鏍煎紡
 	if strings.Contains(l, "type:") || strings.Contains(l, "proxies:") {
 		return parseClashSingBoxNode(src)
 	}
 
-	return nil, fmt.Errorf("不支持的 sing-box 节点格式")
+	return nil, fmt.Errorf("涓嶆敮鎸佺殑 sing-box 鑺傜偣鏍煎紡")
 }
 
-// parseHysteria2URI 解析 hysteria2:// URI
-// 格式: hysteria2://password@host:port?sni=xxx&insecure=1
+// parseTUICURI parses tuic://uuid:password@host:port?sni=xxx&insecure=1.
+func parseTUICURI(node string) (map[string]interface{}, error) {
+	u, err := url.Parse(node)
+	if err != nil {
+		return nil, fmt.Errorf("tuic URI 鐟欙絾鐎芥径杈Е: %v", err)
+	}
+
+	host := u.Hostname()
+	port, _ := strconv.Atoi(u.Port())
+	uuid := u.User.Username()
+	password, _ := u.User.Password()
+	q := u.Query()
+	sni := firstNonEmpty(q.Get("sni"), q.Get("peer"))
+	insecure := q.Get("insecure") == "1" || strings.EqualFold(q.Get("insecure"), "true")
+	congestionControl := firstNonEmpty(q.Get("congestion_control"), q.Get("congestion-control"), "bbr")
+
+	if host == "" || port == 0 || uuid == "" {
+		return nil, fmt.Errorf("tuic 閼哄倻鍋ｆ穱鈩冧紖娑撳秴鐣弫? host=%s port=%d", host, port)
+	}
+
+	tls := map[string]interface{}{
+		"enabled":  true,
+		"insecure": insecure,
+	}
+	if sni != "" {
+		tls["server_name"] = sni
+	}
+	if alpn := q.Get("alpn"); alpn != "" {
+		tls["alpn"] = splitCSV(alpn)
+	}
+
+	return map[string]interface{}{
+		"type":               "tuic",
+		"tag":                "proxy-out",
+		"server":             host,
+		"server_port":        port,
+		"uuid":               uuid,
+		"password":           password,
+		"congestion_control": congestionControl,
+		"tls":                tls,
+	}, nil
+}
+
+// parseHysteria2URI 瑙ｆ瀽 hysteria2:// URI
+// 鏍煎紡: hysteria2://password@host:port?sni=xxx&insecure=1
 func parseHysteria2URI(node string) (map[string]interface{}, error) {
-	// 统一为 hysteria2://
+	// 缁熶竴涓?hysteria2://
 	if strings.HasPrefix(strings.ToLower(node), "hysteria://") {
 		node = "hysteria2://" + node[len("hysteria://"):]
 	}
 
 	u, err := url.Parse(node)
 	if err != nil {
-		return nil, fmt.Errorf("hysteria2 URI 解析失败: %v", err)
+		return nil, fmt.Errorf("hysteria2 URI 瑙ｆ瀽澶辫触: %v", err)
 	}
 
 	host := u.Hostname()
@@ -59,7 +111,7 @@ func parseHysteria2URI(node string) (map[string]interface{}, error) {
 	port, _ := strconv.Atoi(portStr)
 	password := u.User.Username()
 	if password == "" {
-		// 有些格式把密码放在 userinfo 里不带 @
+		// 鏈変簺鏍煎紡鎶婂瘑鐮佹斁鍦?userinfo 閲屼笉甯?@
 		password = strings.TrimPrefix(u.Host, "@")
 	}
 
@@ -72,7 +124,7 @@ func parseHysteria2URI(node string) (map[string]interface{}, error) {
 	obfsPassword := q.Get("obfs-password")
 
 	if host == "" || port == 0 {
-		return nil, fmt.Errorf("hysteria2 节点信息不完整: host=%s port=%d", host, port)
+		return nil, fmt.Errorf("hysteria2 鑺傜偣淇℃伅涓嶅畬鏁? host=%s port=%d", host, port)
 	}
 
 	out := map[string]interface{}{
@@ -101,17 +153,60 @@ func parseHysteria2URI(node string) (map[string]interface{}, error) {
 	return out, nil
 }
 
-// parseClashSingBoxNode 解析 Clash YAML 格式的 sing-box 节点
+// parseAnytlsURI 瑙ｆ瀽 anytls:// URI
+// 鏍煎紡: anytls://password@host:port?sni=xxx&insecure=1
+func parseAnytlsURI(node string) (map[string]interface{}, error) {
+	u, err := url.Parse(node)
+	if err != nil {
+		return nil, fmt.Errorf("anytls URI 瑙ｆ瀽澶辫触: %v", err)
+	}
+
+	host := u.Hostname()
+	portStr := u.Port()
+	port, _ := strconv.Atoi(portStr)
+	password := u.User.Username()
+
+	q := u.Query()
+	sni := q.Get("sni")
+	if sni == "" {
+		sni = q.Get("peer")
+	}
+	insecure := q.Get("insecure") == "1" || strings.ToLower(q.Get("insecure")) == "true"
+
+	if host == "" || port == 0 {
+		return nil, fmt.Errorf("anytls 鑺傜偣淇℃伅涓嶅畬鏁? host=%s port=%d", host, port)
+	}
+
+	out := map[string]interface{}{
+		"type":        "anytls",
+		"tag":         "proxy-out",
+		"server":      host,
+		"server_port": port,
+		"password":    password,
+		"tls": map[string]interface{}{
+			"enabled":  true,
+			"insecure": insecure,
+		},
+	}
+
+	if sni != "" {
+		out["tls"].(map[string]interface{})["server_name"] = sni
+	}
+
+	return out, nil
+}
+
+// parseClashSingBoxNode 瑙ｆ瀽 Clash YAML 鏍煎紡鐨?sing-box 鑺傜偣
 func parseClashSingBoxNode(src string) (map[string]interface{}, error) {
-	// 复用已有的 YAML 解析基础设施
+	// 澶嶇敤宸叉湁鐨?YAML 瑙ｆ瀽鍩虹璁炬柦
 	var payload interface{}
 	if err := yaml.Unmarshal([]byte(src), &payload); err != nil {
-		return nil, fmt.Errorf("YAML 解析失败: %v", err)
+		return nil, fmt.Errorf("YAML 瑙ｆ瀽澶辫触: %v", err)
 	}
 
 	nodeMap := pickClashNode(payload)
 	if nodeMap == nil {
-		return nil, fmt.Errorf("节点解析失败")
+		return nil, fmt.Errorf("鑺傜偣瑙ｆ瀽澶辫触")
 	}
 
 	nodeType := strings.ToLower(getMapString(nodeMap, "type"))
@@ -120,8 +215,10 @@ func parseClashSingBoxNode(src string) (map[string]interface{}, error) {
 		return buildSingBoxHysteria2FromClash(nodeMap)
 	case "tuic":
 		return buildSingBoxTUICFromClash(nodeMap)
+	case "anytls":
+		return buildSingBoxAnytlsFromClash(nodeMap)
 	default:
-		return nil, fmt.Errorf("不支持的 sing-box 节点类型: %s", nodeType)
+		return nil, fmt.Errorf("涓嶆敮鎸佺殑 sing-box 鑺傜偣绫诲瀷: %s", nodeType)
 	}
 }
 
@@ -136,7 +233,7 @@ func buildSingBoxHysteria2FromClash(node map[string]interface{}) (map[string]int
 	skipVerify := getMapBool(node, "skip-cert-verify")
 
 	if host == "" || port == 0 {
-		return nil, fmt.Errorf("hysteria2 节点信息不完整")
+		return nil, fmt.Errorf("incomplete hysteria2 node")
 	}
 
 	tls := map[string]interface{}{
@@ -156,7 +253,7 @@ func buildSingBoxHysteria2FromClash(node map[string]interface{}) (map[string]int
 		"tls":         tls,
 	}
 
-	// 带宽限制（可选）
+	// 甯﹀闄愬埗锛堝彲閫夛級
 	if up := getMapString(node, "up"); up != "" {
 		out["up_mbps"] = parseBandwidthMbps(up)
 	}
@@ -175,6 +272,41 @@ func buildSingBoxHysteria2FromClash(node map[string]interface{}) (map[string]int
 	return out, nil
 }
 
+func buildSingBoxAnytlsFromClash(node map[string]interface{}) (map[string]interface{}, error) {
+	host := getMapString(node, "server")
+	port := getMapInt(node, "port")
+	password := getMapString(node, "password")
+	if password == "" {
+		password = getMapString(node, "uuid")
+	}
+	sni := getMapString(node, "sni")
+	if sni == "" {
+		sni = getMapString(node, "servername")
+	}
+	skipVerify := getMapBool(node, "skip-cert-verify")
+
+	if host == "" || port == 0 {
+		return nil, fmt.Errorf("incomplete anytls node")
+	}
+
+	tls := map[string]interface{}{
+		"enabled":  true,
+		"insecure": skipVerify,
+	}
+	if sni != "" {
+		tls["server_name"] = sni
+	}
+
+	return map[string]interface{}{
+		"type":        "anytls",
+		"tag":         "proxy-out",
+		"server":      host,
+		"server_port": port,
+		"password":    password,
+		"tls":         tls,
+	}, nil
+}
+
 func buildSingBoxTUICFromClash(node map[string]interface{}) (map[string]interface{}, error) {
 	host := getMapString(node, "server")
 	port := getMapInt(node, "port")
@@ -184,7 +316,7 @@ func buildSingBoxTUICFromClash(node map[string]interface{}) (map[string]interfac
 	skipVerify := getMapBool(node, "skip-cert-verify")
 
 	if host == "" || port == 0 {
-		return nil, fmt.Errorf("tuic 节点信息不完整")
+		return nil, fmt.Errorf("incomplete tuic node")
 	}
 
 	tls := map[string]interface{}{
@@ -214,8 +346,8 @@ func buildSingBoxTUICFromClash(node map[string]interface{}) (map[string]interfac
 	}, nil
 }
 
-// parseBandwidthMbps 解析带宽字符串，返回 Mbps 整数
-// 支持: "100 Mbps", "100", "100M"
+// parseBandwidthMbps 瑙ｆ瀽甯﹀瀛楃涓诧紝杩斿洖 Mbps 鏁存暟
+// 鏀寔: "100 Mbps", "100", "100M"
 func parseBandwidthMbps(s string) int {
 	s = strings.TrimSpace(s)
 	s = strings.ToUpper(s)
@@ -227,7 +359,18 @@ func parseBandwidthMbps(s string) int {
 	return n
 }
 
-// toStringSlice 将 interface{} 转为 []string
+// toStringSlice 灏?interface{} 杞负 []string
+func splitCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
 func toStringSlice(v interface{}) []string {
 	if v == nil {
 		return nil

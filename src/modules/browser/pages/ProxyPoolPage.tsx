@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Switch, Table, Textarea, toast } from '../../../shared/components'
 import type { SortOrder, TableColumn } from '../../../shared/components/Table'
-import type { BrowserProxy, BrowserProxyImportFreeDirectProxiesResult, ProxyIPHealthResult } from '../types'
-import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, browserProxyImportFreeDirectProxies, fetchClashImportFromURL } from '../api'
+import type { BrowserProxy, ProxyIPHealthResult } from '../types'
+import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, fetchSubscriptionImportFromURL, fixBrowserProxyNames } from '../api'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import yaml from 'js-yaml'
 
@@ -39,7 +39,7 @@ interface ClashProxy {
   [key: string]: any
 }
 
-type ProxyImportMode = 'clash' | 'direct'
+type ProxyImportMode = 'clash' | 'subscription' | 'direct'
 
 interface DirectImportForm {
   proxyName: string
@@ -48,13 +48,6 @@ interface DirectImportForm {
   port: string
   username: string
   password: string
-}
-
-interface FreeProxyImportForm {
-  sourceUrls: string
-  groupName: string
-  limit: string
-  concurrency: string
 }
 
 const DIRECT_PROXY_PROTOCOL_OPTIONS = [
@@ -70,13 +63,6 @@ const INITIAL_DIRECT_IMPORT_FORM: DirectImportForm = {
   port: '',
   username: '',
   password: '',
-}
-
-const INITIAL_FREE_PROXY_IMPORT_FORM: FreeProxyImportForm = {
-  sourceUrls: '',
-  groupName: '免费代理',
-  limit: '200',
-  concurrency: '8',
 }
 
 interface ImportCandidate {
@@ -117,6 +103,10 @@ function parseProxyInfo(proxyConfig: string): { type: string; server: string; po
   const urlMatch = cfg.match(/^([a-zA-Z0-9+\-]+):\/\//)
   if (urlMatch) {
     const scheme = urlMatch[1].toLowerCase()
+    if (scheme === 'vmess') {
+      const info = parseVmessURLInfo(cfg)
+      if (info) return info
+    }
     try {
       const u = new URL(cfg)
       return { type: scheme, server: u.hostname, port: parseInt(u.port) || 0 }
@@ -130,6 +120,29 @@ function parseProxyInfo(proxyConfig: string): { type: string; server: string; po
     return { type: proxy?.type || '-', server: proxy?.server || '-', port: proxy?.port || 0 }
   } catch {
     return { type: '-', server: '-', port: 0 }
+  }
+}
+
+function decodeBase64Text(raw: string): string {
+  const compact = raw.trim().replace(/\s+/g, '')
+  const normalized = compact.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4)
+  const binary = atob(padded)
+  const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
+function parseVmessURLInfo(proxyConfig: string): { type: string; server: string; port: number } | null {
+  const payload = proxyConfig.trim().replace(/^vmess:\/\//i, '')
+  if (!payload) return null
+  try {
+    const decoded = decodeBase64Text(payload)
+    const parsed = JSON.parse(decoded) as { add?: unknown; port?: unknown }
+    const server = typeof parsed.add === 'string' && parsed.add.trim() ? parsed.add.trim() : '-'
+    const portValue = typeof parsed.port === 'number' ? parsed.port : Number.parseInt(String(parsed.port || ''), 10)
+    return { type: 'vmess', server, port: Number.isFinite(portValue) ? portValue : 0 }
+  } catch {
+    return null
   }
 }
 
@@ -724,35 +737,6 @@ function extractPersistedIPHealth(proxies: BrowserProxy[]): Record<string, Proxy
   return resultMap
 }
 
-function mapIPHealthResults(results: ProxyIPHealthResult[]): Record<string, ProxyIPHealthResult> {
-  const resultMap: Record<string, ProxyIPHealthResult> = {}
-  results.forEach(result => {
-    if (result?.proxyId) {
-      resultMap[result.proxyId] = result
-    }
-  })
-  return resultMap
-}
-
-function parseFreeProxySourceUrls(raw: string): string[] {
-  return raw
-    .split(/[\n,;]+/)
-    .map(item => item.trim())
-    .filter(Boolean)
-}
-
-function normalizePositiveIntInput(value: string, fallback: number, min: number, max: number): number {
-  const parsed = Number.parseInt(value, 10)
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.min(max, Math.max(min, parsed))
-}
-
-function truncateText(value: string, maxLength: number): string {
-  const text = value.trim()
-  if (text.length <= maxLength) return text
-  return `${text.slice(0, maxLength)}...`
-}
-
 export function ProxyPoolPage() {
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
   const [displayList, setDisplayList] = useState<ProxyDisplayInfo[]>([])
@@ -788,11 +772,7 @@ export function ProxyPoolPage() {
   const [removedPreviewProxyNames, setRemovedPreviewProxyNames] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
   const [fetchingImportUrl, setFetchingImportUrl] = useState(false)
-  const [freeProxyModalOpen, setFreeProxyModalOpen] = useState(false)
-  const [freeProxyForm, setFreeProxyForm] = useState<FreeProxyImportForm>(() => ({ ...INITIAL_FREE_PROXY_IMPORT_FORM }))
-  const [freeProxyImporting, setFreeProxyImporting] = useState(false)
-  const [freeProxyResult, setFreeProxyResult] = useState<BrowserProxyImportFreeDirectProxiesResult | null>(null)
-  const [freeProxySourceErrors, setFreeProxySourceErrors] = useState<string[]>([])
+  const [fixingNames, setFixingNames] = useState(false)
   const [refreshingAllSources, setRefreshingAllSources] = useState(false)
   const [refreshingSourceIds, setRefreshingSourceIds] = useState<Set<string>>(new Set())
   const [globalAutoRefreshEnabled, setGlobalAutoRefreshEnabled] = useState(false)
@@ -1524,10 +1504,35 @@ export function ProxyPoolPage() {
   const handleImportModeChange = (nextMode: ProxyImportMode) => {
     setImportMode(nextMode)
     setImportResolvedUrl('')
-    if (nextMode !== 'clash') {
+    if (nextMode !== 'clash' && nextMode !== 'subscription') {
       setImportUrl('')
       setImportDnsServers('')
     }
+  }
+
+  const importSubscriptionURL = async (targetURL: string) => {
+    const result = await fetchSubscriptionImportFromURL(targetURL, importGroupName.trim() || '订阅代理')
+    const proxyList = ensureBuiltinProxies(result.allProxies || [])
+    const validIds = new Set(proxyList.map(item => item.proxyId))
+    const persistedIPHealth = extractPersistedIPHealth(proxyList)
+
+    setProxies(proxyList)
+    setDisplayList(toDisplayList(proxyList))
+    setSelectedIds(prev => new Set(Array.from(prev).filter(id => validIds.has(id))))
+    setIPHealthMap(prev => ({ ...prev, ...persistedIPHealth }))
+    setImportUrl('')
+    setImportResolvedUrl('')
+    setImportGroupName('')
+    setImportDnsServers('')
+    setImportText('')
+    setImportNamePrefix('')
+    setDirectImportForm({ ...INITIAL_DIRECT_IMPORT_FORM })
+    setImportModalOpen(false)
+    const grps = await fetchBrowserProxyGroups()
+    setGroups(grps)
+
+    const skippedText = result.skippedCount > 0 ? `，跳过 ${result.skippedCount} 条已存在` : ''
+    toast.success(`订阅导入完成：新增 ${result.importedCount} 条${skippedText}`)
   }
 
   const handleFetchImportURL = async () => {
@@ -1539,7 +1544,36 @@ export function ProxyPoolPage() {
 
     setFetchingImportUrl(true)
     try {
+      if (importMode === 'subscription') {
+        await importSubscriptionURL(targetURL)
+        return
+      }
+
       const result = await fetchClashImportFromURL(targetURL)
+      if (result?.autoFallback) {
+        const proxyList = ensureBuiltinProxies(result.allProxies || [])
+        const validIds = new Set(proxyList.map(item => item.proxyId))
+        const persistedIPHealth = extractPersistedIPHealth(proxyList)
+        setProxies(proxyList)
+        setDisplayList(toDisplayList(proxyList))
+        setSelectedIds(prev => new Set(Array.from(prev).filter(id => validIds.has(id))))
+        setIPHealthMap(prev => ({ ...prev, ...persistedIPHealth }))
+        setImportUrl('')
+        setImportResolvedUrl('')
+        setImportGroupName('')
+        setImportDnsServers('')
+        setImportText('')
+        setImportNamePrefix('')
+        setDirectImportForm({ ...INITIAL_DIRECT_IMPORT_FORM })
+        setImportModalOpen(false)
+        const grps = await fetchBrowserProxyGroups()
+        setGroups(grps)
+        const importedCount = Number(result.importedCount || 0)
+        const skippedCount = Number(result.skippedCount || 0)
+        const skippedText = skippedCount > 0 ? `，跳过 ${skippedCount} 条已存在` : ''
+        toast.success(`订阅导入完成：新增 ${importedCount} 条${skippedText}`)
+        return
+      }
       const content = (result?.content || '').trim()
       if (!content) {
         throw new Error('订阅内容为空')
@@ -1557,6 +1591,16 @@ export function ProxyPoolPage() {
 
       toast.success(`URL 获取成功，检测到 ${Math.max(0, Number(result?.proxyCount || 0))} 个代理`)
     } catch (error: any) {
+      if (importMode === 'clash') {
+        try {
+          await importSubscriptionURL(targetURL)
+          return
+        } catch (fallbackError: any) {
+          setImportResolvedUrl('')
+          toast.error(fallbackError?.message || error?.message || 'URL 获取失败')
+          return
+        }
+      }
       setImportResolvedUrl('')
       toast.error(error?.message || 'URL 获取失败')
     } finally {
@@ -1564,7 +1608,24 @@ export function ProxyPoolPage() {
     }
   }
 
-  const handleParseImport = () => {
+  const handleParseImport = async () => {
+    if (importMode === 'subscription') {
+      const targetURL = importUrl.trim()
+      if (!targetURL) {
+        toast.error('请输入订阅 URL')
+        return
+      }
+      setFetchingImportUrl(true)
+      try {
+        await importSubscriptionURL(targetURL)
+      } catch (error: any) {
+        toast.error(error?.message || '订阅导入失败')
+      } finally {
+        setFetchingImportUrl(false)
+      }
+      return
+    }
+
     try {
       const prefix = importNamePrefix.trim()
       const candidates = importMode === 'clash'
@@ -1641,53 +1702,29 @@ export function ProxyPoolPage() {
     }
   }
 
-  const handleImportFreeProxies = async () => {
-    setFreeProxyImporting(true)
-    setFreeProxyResult(null)
-    setFreeProxySourceErrors([])
-
+  const handleFixNames = async () => {
+    setFixingNames(true)
     try {
-      const sourceUrls = parseFreeProxySourceUrls(freeProxyForm.sourceUrls)
-      const result = await browserProxyImportFreeDirectProxies({
-        sourceUrls: sourceUrls.length > 0 ? sourceUrls : undefined,
-        groupName: freeProxyForm.groupName.trim() || INITIAL_FREE_PROXY_IMPORT_FORM.groupName,
-        limit: normalizePositiveIntInput(freeProxyForm.limit, 200, 1, 5000),
-        concurrency: normalizePositiveIntInput(freeProxyForm.concurrency, 8, 1, 50),
-      })
-
-      const nextProxies = ensureBuiltinProxies(result.allProxies)
-      const validIds = new Set(nextProxies.map(item => item.proxyId))
-      const persistedHealth = extractPersistedIPHealth(nextProxies)
-      const healthResults = mapIPHealthResults(result.healthResults)
-      const sourceErrors = result.sourceErrors.map(item => item.trim()).filter(Boolean)
-
-      setProxies(nextProxies)
-      setDisplayList(toDisplayList(nextProxies))
-      setSelectedIds(prev => new Set(Array.from(prev).filter(id => validIds.has(id))))
-      setIPHealthMap(prev => ({ ...prev, ...persistedHealth, ...healthResults }))
-      setFreeProxyResult(result)
-      setFreeProxySourceErrors(sourceErrors)
-
-      const grps = await fetchBrowserProxyGroups()
-      setGroups(grps)
-
-      const summary = `抓取完成：导入 ${result.importedCount}，失败 ${result.failedCount}，跳过 ${result.skippedExistingCount}`
-      if (sourceErrors.length > 0) {
-        toast.warning(`${summary}；源错误 ${sourceErrors.length} 个：${truncateText(sourceErrors[0], 80)}`)
-      } else {
-        toast.success(summary)
+      const result = await fixBrowserProxyNames()
+      if (!result.ok) {
+        toast.error(result.error || '代理名称修复失败')
+        return
       }
+      await loadProxies()
+      toast.success(result.message || `已修复 ${result.fixed} 个代理名称`)
     } catch (error: any) {
-      toast.error(error?.message || '抓取免费代理失败')
+      toast.error(error?.message || '代理名称修复失败')
     } finally {
-      setFreeProxyImporting(false)
+      setFixingNames(false)
     }
   }
 
   const selectedCount = selectedIds.size
   const canParseImport = importMode === 'clash'
     ? !!importText.trim()
-    : !!directImportForm.server.trim() && !!directImportForm.port.trim()
+    : importMode === 'subscription'
+      ? !!importUrl.trim()
+      : !!directImportForm.server.trim() && !!directImportForm.port.trim()
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1700,11 +1737,11 @@ export function ProxyPoolPage() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => setFreeProxyModalOpen(true)}
-            loading={freeProxyImporting}
-            disabled={freeProxyImporting}
+            onClick={() => void handleFixNames()}
+            loading={fixingNames}
+            disabled={fixingNames || filteredList.length === 0}
           >
-            抓取免费代理
+            修复名称
           </Button>
           <Button
             size="sm"
@@ -1800,92 +1837,26 @@ export function ProxyPoolPage() {
         />
       </Card>
 
-      <Modal
-        open={freeProxyModalOpen}
-        onClose={() => {
-          if (!freeProxyImporting) setFreeProxyModalOpen(false)
-        }}
-        title="抓取免费代理"
-        width="560px"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setFreeProxyModalOpen(false)} disabled={freeProxyImporting}>取消</Button>
-            <Button onClick={handleImportFreeProxies} loading={freeProxyImporting}>开始抓取</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <FormItem label="Source URLs（可选）">
-            <Textarea
-              value={freeProxyForm.sourceUrls}
-              onChange={e => setFreeProxyForm(prev => ({ ...prev, sourceUrls: e.target.value }))}
-              rows={5}
-              placeholder="留空使用内置源；多个 URL 可换行填写"
-            />
-          </FormItem>
-          <FormItem label="分组名">
-            <Input
-              value={freeProxyForm.groupName}
-              onChange={e => setFreeProxyForm(prev => ({ ...prev, groupName: e.target.value }))}
-              placeholder="免费代理"
-              list="free-proxy-groups-datalist"
-            />
-            {groups.length > 0 && (
-              <datalist id="free-proxy-groups-datalist">
-                {groups.map(g => <option key={g} value={g} />)}
-              </datalist>
-            )}
-          </FormItem>
-          <div className="grid grid-cols-2 gap-3">
-            <FormItem label="最大候选数">
-              <Input
-                type="number"
-                min={1}
-                max={5000}
-                value={freeProxyForm.limit}
-                onChange={e => setFreeProxyForm(prev => ({ ...prev, limit: e.target.value }))}
-              />
-            </FormItem>
-            <FormItem label="并发数">
-              <Input
-                type="number"
-                min={1}
-                max={50}
-                value={freeProxyForm.concurrency}
-                onChange={e => setFreeProxyForm(prev => ({ ...prev, concurrency: e.target.value }))}
-              />
-            </FormItem>
-          </div>
-          {freeProxyResult && (
-            <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
-              抓取 {freeProxyResult.fetchedCount}，去重 {freeProxyResult.uniqueCount}，检测 {freeProxyResult.checkedCount}，导入 {freeProxyResult.importedCount}，失败 {freeProxyResult.failedCount}，跳过 {freeProxyResult.skippedExistingCount}
-            </div>
-          )}
-          {freeProxySourceErrors.length > 0 && (
-            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600 space-y-1">
-              {freeProxySourceErrors.slice(0, 3).map((error, index) => (
-                <div key={`${index}-${error}`}>{truncateText(error, 120)}</div>
-              ))}
-              {freeProxySourceErrors.length > 3 && <div>其余 {freeProxySourceErrors.length - 3} 个源错误已省略</div>}
-            </div>
-          )}
-        </div>
-      </Modal>
-
       <Modal open={importModalOpen} onClose={() => setImportModalOpen(false)} title="导入代理配置" width="600px"
         footer={
           <>
             <Button variant="secondary" onClick={() => setImportModalOpen(false)} disabled={fetchingImportUrl}>取消</Button>
-            <Button onClick={handleParseImport} disabled={fetchingImportUrl || !canParseImport}>解析</Button>
+            <Button onClick={() => void handleParseImport()} disabled={fetchingImportUrl || !canParseImport}>{importMode === 'subscription' ? '导入' : '解析'}</Button>
           </>
         }>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button
               variant={importMode === 'clash' ? undefined : 'secondary'}
               onClick={() => handleImportModeChange('clash')}
             >
               Clash 订阅 / YAML
+            </Button>
+            <Button
+              variant={importMode === 'subscription' ? undefined : 'secondary'}
+              onClick={() => handleImportModeChange('subscription')}
+            >
+              订阅 URL
             </Button>
             <Button
               variant={importMode === 'direct' ? undefined : 'secondary'}
@@ -1897,6 +1868,8 @@ export function ProxyPoolPage() {
           <p className="text-sm text-[var(--color-text-muted)]">
             {importMode === 'clash'
               ? '支持粘贴 Clash YAML，或通过订阅 URL 自动拉取并解析（含 proxies、dns、proxy-groups）'
+              : importMode === 'subscription'
+                ? '输入机场订阅 URL，系统会拉取并导入 vmess/vless/trojan/ss/anytls/hysteria2/tuic 等节点'
               : '支持单条录入 HTTP / HTTPS / SOCKS5 代理，账号和密码均可留空，导入后直接生效，不走 Clash 桥接'}
           </p>
           {importMode === 'clash' && (
@@ -1937,6 +1910,41 @@ export function ProxyPoolPage() {
                 rows={12}
                 placeholder={`proxies:\n  - name: vless-v6\n    type: vless\n    server: example.com\n    port: 443\n    uuid: your-uuid\n    ...`}
               />
+            </>
+          )}
+          {importMode === 'subscription' && (
+            <>
+              <FormItem label="订阅 URL" required>
+                <div className="flex gap-2">
+                  <Input
+                    value={importUrl}
+                    onChange={e => setImportUrl(e.target.value)}
+                    placeholder="https://example.com/api/subscription"
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={handleFetchImportURL}
+                    loading={fetchingImportUrl}
+                    disabled={!importUrl.trim()}
+                  >
+                    导入
+                  </Button>
+                </div>
+              </FormItem>
+              <FormItem label="分组名称（可选）">
+                <Input
+                  value={importGroupName}
+                  onChange={e => setImportGroupName(e.target.value)}
+                  placeholder="默认：订阅代理"
+                  list="subscription-proxy-groups-datalist"
+                />
+                {groups.length > 0 && (
+                  <datalist id="subscription-proxy-groups-datalist">
+                    {groups.map(g => <option key={g} value={g} />)}
+                  </datalist>
+                )}
+              </FormItem>
             </>
           )}
           {importMode === 'direct' && (

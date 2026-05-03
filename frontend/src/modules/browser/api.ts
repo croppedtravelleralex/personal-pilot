@@ -370,6 +370,45 @@ export interface ClashImportURLResult {
   suggestedGroup?: string
 }
 
+export interface SubscriptionImportResult {
+  url: string
+  importedCount: number
+  skippedCount: number
+  totalCount: number
+  groupName: string
+  allProxies: BrowserProxy[]
+}
+
+export async function fetchSubscriptionImportFromURL(targetURL: string, groupName: string): Promise<SubscriptionImportResult> {
+  const bindings: any = await getBindings()
+  if (bindings?.BrowserProxyImportSubscriptionByURL) {
+    const result = await bindings.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
+    return {
+      url: String(result?.url || targetURL),
+      importedCount: Number(result?.importedCount || 0),
+      skippedCount: Number(result?.skippedCount || 0),
+      totalCount: Number(result?.totalCount || 0),
+      groupName: String(result?.groupName || groupName),
+      allProxies: (result?.allProxies || []) as BrowserProxy[],
+    }
+  }
+
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.BrowserProxyImportSubscriptionByURL) {
+    const result = await goApp.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
+    return {
+      url: String(result?.url || targetURL),
+      importedCount: Number(result?.importedCount || 0),
+      skippedCount: Number(result?.skippedCount || 0),
+      totalCount: Number(result?.totalCount || 0),
+      groupName: String(result?.groupName || groupName),
+      allProxies: (result?.allProxies || []) as BrowserProxy[],
+    }
+  }
+
+  throw new Error('当前环境不支持订阅 URL 导入')
+}
+
 export async function fetchClashImportFromURL(targetURL: string): Promise<ClashImportURLResult> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProxyFetchClashByURL) {

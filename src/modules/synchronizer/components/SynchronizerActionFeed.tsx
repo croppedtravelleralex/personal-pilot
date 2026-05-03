@@ -1,10 +1,10 @@
-import { Camera, LayoutGrid, MousePointer2, Navigation, Play, RotateCw, Square } from 'lucide-react'
+import { LayoutGrid, MousePointer2, Navigation, Play, RotateCw, Square } from 'lucide-react'
 import { useSyncStore } from '../store'
 
 const OP_ICONS: Record<string, typeof Navigation> = {
   navigate: Navigation,
   refresh: RotateCw,
-  screenshot: Camera,
+  screenshot: Square,
   start: Play,
   stop: Square,
   activate: MousePointer2,
@@ -14,7 +14,7 @@ const OP_ICONS: Record<string, typeof Navigation> = {
 const OP_LABELS: Record<string, string> = {
   navigate: '导航',
   refresh: '刷新',
-  screenshot: '截图',
+  screenshot: '已禁用',
   start: '启动',
   stop: '停止',
   activate: '激活',

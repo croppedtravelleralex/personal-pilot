@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FolderOpen, Layers } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
@@ -18,6 +18,57 @@ function normalizeLaunchArgs(args: string[]): string[] {
 function resolveDefaultLaunchArgs(args: string[]): string[] {
   const normalized = normalizeLaunchArgs(args)
   return normalized.length > 0 ? normalized : fallbackLowLaunchArgs
+}
+
+function proxyDisplayName(proxy: BrowserProxy): string {
+  return proxy.proxyName || proxy.proxyId
+}
+
+function proxySortTuple(proxy: BrowserProxy): [number, number, number, string] {
+  const name = proxyDisplayName(proxy)
+  if (proxy.proxyConfig === 'direct://') return [0, 0, 0, name]
+  const testedAt = proxy.lastTestedAt ? new Date(proxy.lastTestedAt).getTime() : 0
+  if (proxy.lastTestOk && typeof proxy.lastLatencyMs === 'number' && proxy.lastLatencyMs >= 0) {
+    return [1, proxy.lastLatencyMs, -testedAt, name]
+  }
+  if (proxy.lastTestedAt) return [2, Number.MAX_SAFE_INTEGER, -testedAt, name]
+  return [3, Number.MAX_SAFE_INTEGER, 0, name]
+}
+
+function proxyLatencyLabel(proxy?: BrowserProxy): string {
+  if (!proxy?.lastTestedAt) return '未测速'
+  if (!proxy.lastTestOk || typeof proxy.lastLatencyMs !== 'number' || proxy.lastLatencyMs < 0) return '测速失败'
+  return `${proxy.lastLatencyMs} ms`
+}
+
+function proxyLatencyClass(proxy?: BrowserProxy): string {
+  if (!proxy?.lastTestedAt) return 'text-[var(--color-text-muted)]'
+  if (!proxy.lastTestOk || typeof proxy.lastLatencyMs !== 'number' || proxy.lastLatencyMs < 0) return 'text-red-500'
+  if (proxy.lastLatencyMs < 300) return 'text-green-600'
+  if (proxy.lastLatencyMs < 800) return 'text-yellow-600'
+  return 'text-red-500'
+}
+
+function proxyTestedAtLabel(value?: string): string {
+  if (!value) return '无测试记录'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function proxyOptionLabel(proxy: BrowserProxy): string {
+  const parts = [
+    proxyDisplayName(proxy),
+    proxyLatencyLabel(proxy),
+    `最近 ${proxyTestedAtLabel(proxy.lastTestedAt)}`,
+  ]
+  if (proxy.groupName) parts.push(proxy.groupName)
+  return parts.join(' | ')
 }
 
 export function BrowserEditPage() {
@@ -125,6 +176,24 @@ export function BrowserEditPage() {
   }
 
   const defaultCore = cores.find(c => c.isDefault)
+  const sortedProxies = useMemo(() => {
+    return [...proxies].sort((a, b) => {
+      const [rankA, latencyA, testedA, nameA] = proxySortTuple(a)
+      const [rankB, latencyB, testedB, nameB] = proxySortTuple(b)
+      if (rankA !== rankB) return rankA - rankB
+      if (latencyA !== latencyB) return latencyA - latencyB
+      if (testedA !== testedB) return testedA - testedB
+      return nameA.localeCompare(nameB, 'zh-CN')
+    })
+  }, [proxies])
+  const selectedProxy = useMemo(() => {
+    return proxies.find(proxy => proxy.proxyId === formData.proxyId)
+  }, [formData.proxyId, proxies])
+
+  const handleProxySelect = (proxy: BrowserProxy) => {
+    setProxies(prev => prev.map(item => item.proxyId === proxy.proxyId ? { ...item, ...proxy } : item))
+    handleChange('proxyId', proxy.proxyId)
+  }
 
   const handleOpenUserDataDir = async () => {
     if (!formData.userDataDir.trim()) {
@@ -212,7 +281,7 @@ export function BrowserEditPage() {
                 onChange={e => handleChange('proxyId', e.target.value)}
                 options={[
                   { value: '', label: '不使用代理池' },
-                  ...proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId })),
+                  ...sortedProxies.map(p => ({ value: p.proxyId, label: proxyOptionLabel(p) })),
                 ]}
                 className="flex-1"
               />
@@ -231,14 +300,24 @@ export function BrowserEditPage() {
           </FormItem>
         </div>
         {formData.proxyId && (
-          <p className="text-xs text-[var(--color-text-muted)] mt-2">已选择代理池代理，手动配置将被忽略</p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-text-muted)]">
+            <span>已选择代理池代理，手动配置将被忽略</span>
+            {selectedProxy && (
+              <>
+                <span className="text-[var(--color-text-secondary)]">{proxyDisplayName(selectedProxy)}</span>
+                <span className={proxyLatencyClass(selectedProxy)}>{proxyLatencyLabel(selectedProxy)}</span>
+                <span>最近 {proxyTestedAtLabel(selectedProxy.lastTestedAt)}</span>
+                {selectedProxy.groupName && <span>分组 {selectedProxy.groupName}</span>}
+              </>
+            )}
+          </div>
         )}
       </Card>
 
       <ProxyPickerModal
         open={proxyPickerOpen}
         currentProxyId={formData.proxyId}
-        onSelect={proxy => handleChange('proxyId', proxy.proxyId)}
+        onSelect={handleProxySelect}
         onClose={() => setProxyPickerOpen(false)}
       />
 
