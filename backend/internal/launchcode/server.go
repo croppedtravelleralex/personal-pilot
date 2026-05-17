@@ -330,6 +330,8 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/recording/", s.handleRecordingByID)
 	mux.HandleFunc("/api/behavior/presets", s.handleBehaviorPresets)
 	mux.HandleFunc("/api/behavior/presets/", s.handleBehaviorPresetByID)
+	mux.HandleFunc("/api/groups", s.handleGroups)
+	mux.HandleFunc("/api/groups/", s.handleGroupByID)
 	mux.HandleFunc("/", s.handleCDPProxy)
 	return mux
 }
