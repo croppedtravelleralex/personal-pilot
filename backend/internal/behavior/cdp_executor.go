@@ -571,6 +571,30 @@ func (e *CDPExecutor) ExecuteMutatedAction(action humanize.MutatedAction) error 
 	case humanize.MutatedExecuteJs:
 		return e.evaluateRaw(action.Script)
 
+	case humanize.MutatedScreenshot:
+		_, err := e.CaptureScreenshot()
+		return err
+
+	case humanize.MutatedGetHtml:
+		js := "document.documentElement.outerHTML"
+		if action.HTMLSelector != nil && *action.HTMLSelector != "" {
+			sel := *action.HTMLSelector
+			js = fmt.Sprintf("document.querySelector(%q).outerHTML", sel)
+		} else if action.Selector != "" {
+			js = fmt.Sprintf("document.querySelector(%q).outerHTML", action.Selector)
+		}
+		_, err := e.EvaluateJS(js)
+		return err
+
+	case humanize.MutatedGetText:
+		sel := action.Selector
+		if sel == "" {
+			sel = "body"
+		}
+		js := fmt.Sprintf("document.querySelector(%q).textContent", sel)
+		_, err := e.EvaluateJS(js)
+		return err
+
 	case humanize.MutatedCloseBrowser:
 		_, err := e.sendCommand("Browser.close", nil)
 		return err
