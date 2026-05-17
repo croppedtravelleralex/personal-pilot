@@ -332,9 +332,9 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/behavior/presets/", s.handleBehaviorPresetByID)
 	mux.HandleFunc("/api/groups", s.handleGroups)
 	mux.HandleFunc("/api/groups/", s.handleGroupByID)
-	mux.HandleFunc("/api/proxy/manual/list", s.handleManualProxyList)
-	mux.HandleFunc("/api/proxy/manual", s.handleManualProxyCreate)
-	mux.HandleFunc("/api/proxy/manual/", s.handleManualProxyByID)
+	mux.HandleFunc("/api/proxy/subscribe", s.handleSubscribe)
+	mux.HandleFunc("/api/proxy/subscribe/list", s.handleSubscribeList)
+	mux.HandleFunc("/api/proxy/subscribe/", s.handleSubscribeByID)
 	mux.HandleFunc("/", s.handleCDPProxy)
 	return mux
 }
