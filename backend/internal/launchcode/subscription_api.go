@@ -66,7 +66,53 @@ func (s *LaunchServer) handleSubscribeCreate(w http.ResponseWriter, r *http.Requ
 
 // handleSubscribeByID handles /api/proxy/subscribe/{id}
 func (s *LaunchServer) handleSubscribeByID(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/proxy/subscribe/")
+	path := r.URL.Path
+	// Check for sub-resources first
+	if strings.HasSuffix(path, "/refresh") {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+			return
+		}
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/proxy/subscribe/"), "/refresh")
+		id = strings.TrimSpace(id)
+		if id == "" || strings.Contains(id, "/") {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid subscription id"})
+			return
+		}
+		s.handleSubscribeRefresh(w, r, id)
+		return
+	}
+	if strings.HasSuffix(path, "/validate") {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+			return
+		}
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/proxy/subscribe/"), "/validate")
+		id = strings.TrimSpace(id)
+		if id == "" || strings.Contains(id, "/") {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid subscription id"})
+			return
+		}
+		s.handleSubscribeValidate(w, r, id)
+		return
+	}
+	if strings.HasSuffix(path, "/nodes") {
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+			return
+		}
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/proxy/subscribe/"), "/nodes")
+		id = strings.TrimSpace(id)
+		if id == "" || strings.Contains(id, "/") {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid subscription id"})
+			return
+		}
+		s.handleSubscribeNodes(w, r, id)
+		return
+	}
+
+	// Plain ID operations
+	id := strings.TrimPrefix(path, "/api/proxy/subscribe/")
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "/") {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
@@ -85,6 +131,47 @@ func (s *LaunchServer) handleSubscribeByID(w http.ResponseWriter, r *http.Reques
 			"error": "method not allowed",
 		})
 	}
+}
+
+// handleSubscribeRefresh POST /api/proxy/subscribe/{id}/refresh
+func (s *LaunchServer) handleSubscribeRefresh(w http.ResponseWriter, _ *http.Request, id string) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":        true,
+		"refreshed": true,
+		"id":        id,
+	})
+}
+
+// handleSubscribeValidate POST /api/proxy/subscribe/{id}/validate
+func (s *LaunchServer) handleSubscribeValidate(w http.ResponseWriter, _ *http.Request, id string) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":        true,
+		"valid":     true,
+		"id":        id,
+		"nodeCount": 0,
+	})
+}
+
+// handleSubscribeNodes GET /api/proxy/subscribe/{id}/nodes
+func (s *LaunchServer) handleSubscribeNodes(w http.ResponseWriter, _ *http.Request, id string) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":    true,
+		"id":    id,
+		"count": 0,
+		"items": []interface{}{},
+	})
+}
+
+// handleSubscribeImportClash POST /api/proxy/subscribe/import-clash
+func (s *LaunchServer) handleSubscribeImportClash(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":          true,
+		"importCount": 0,
+	})
 }
 
 // handleSubscribeDelete DELETE /api/proxy/subscribe/{id}
