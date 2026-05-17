@@ -42,6 +42,12 @@ func (s *LaunchServer) SetAPIAuthConfig(cfg APIAuthConfig) {
 	s.authMu.Unlock()
 }
 
+func (s *LaunchServer) SetRateLimiter(rl *RateLimiter) {
+	s.mu.Lock()
+	s.rateLimiter = rl
+	s.mu.Unlock()
+}
+
 func (s *LaunchServer) apiAuthConfig() APIAuthConfig {
 	s.authMu.RLock()
 	cfg := s.apiAuth

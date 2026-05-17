@@ -127,26 +127,79 @@ func (s *instanceWorkbenchStarter) WorkbenchActivateProfile(profileId string) er
 	return nil
 }
 
-func (s *instanceWorkbenchStarter) WorkbenchArrangeProfiles(profileIds []string, layout string) ([]launchcode.WorkbenchWindowPlacement, error) {
+func (s *instanceWorkbenchStarter) WorkbenchClickElement(_ string, _ string) error {
 	if s.workbenchErr != nil {
-		return nil, s.workbenchErr
+		return s.workbenchErr
 	}
-	s.arranged = append(s.arranged, profileIds...)
-	s.arrangeLayout = layout
-	placements := make([]launchcode.WorkbenchWindowPlacement, 0, len(profileIds))
-	for i, profileID := range profileIds {
-		placements = append(placements, launchcode.WorkbenchWindowPlacement{
-			ProfileID: profileID,
-			Pid:       9000 + i,
-			Found:     true,
-			X:         i * 100,
-			Y:         0,
-			Width:     100,
-			Height:    100,
-		})
-	}
-	return placements, nil
+	return nil
 }
+
+func (s *instanceWorkbenchStarter) WorkbenchTypeText(_ string, _ string, _ string) error {
+	if s.workbenchErr != nil {
+		return s.workbenchErr
+	}
+	return nil
+}
+
+func (s *instanceWorkbenchStarter) WorkbenchScrollPage(_ string, _ uint32) error {
+	if s.workbenchErr != nil {
+		return s.workbenchErr
+	}
+	return nil
+}
+
+func (s *instanceWorkbenchStarter) WorkbenchExecuteActions(_ string, actions []launchcode.ActionRequest) ([]launchcode.ActionResult, error) {
+		if s.workbenchErr != nil {
+			return nil, s.workbenchErr
+		}
+		results := make([]launchcode.ActionResult, 0, len(actions))
+		for _, a := range actions {
+			results = append(results, launchcode.ActionResult{Type: a.Type, OK: true})
+		}
+		return results, nil
+	}
+
+	func (s *instanceWorkbenchStarter) WorkbenchArrangeProfiles(profileIds []string, layout string) ([]launchcode.WorkbenchWindowPlacement, error) {
+		if s.workbenchErr != nil {
+			return nil, s.workbenchErr
+		}
+		s.arranged = append(s.arranged, profileIds...)
+		s.arrangeLayout = layout
+		placements := make([]launchcode.WorkbenchWindowPlacement, 0, len(profileIds))
+		for i, profileID := range profileIds {
+			placements = append(placements, launchcode.WorkbenchWindowPlacement{
+				ProfileID: profileID,
+				Pid:       9000 + i,
+				Found:     true,
+				X:         i * 100,
+				Y:         0,
+				Width:     100,
+				Height:    100,
+			})
+		}
+		return placements, nil
+	}
+
+	// Extended WorkbenchOperator methods
+	func (s *instanceWorkbenchStarter) IdentityReportProfile(_ string) (*browser.IdentityStrengthReport, error) {
+		return &browser.IdentityStrengthReport{Score: 90, Level: "strong"}, nil
+	}
+	func (s *instanceWorkbenchStarter) WorkbenchGetCookies(_ string) ([]map[string]interface{}, error) { return nil, nil }
+	func (s *instanceWorkbenchStarter) WorkbenchSetCookie(_ string, _ map[string]interface{}) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchClearCookies(_ string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchListTabs(_ string) ([]browser.Tab, error) { return []browser.Tab{}, nil }
+	func (s *instanceWorkbenchStarter) WorkbenchSwitchTab(_ string, _ string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchCloseTab(_ string, _ string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchNewTab(_ string, _ string) (string, error) { return "new-tab-id", nil }
+	func (s *instanceWorkbenchStarter) WorkbenchGetLocalStorage(_ string) (map[string]string, error) { return map[string]string{}, nil }
+	func (s *instanceWorkbenchStarter) WorkbenchSetLocalStorage(_ string, _ map[string]string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchBehaviorStart(_ string, _ string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchBehaviorStop(_ string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchBehaviorConfig(_ string, _ float64) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchNurtureStart(_ string, _ string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchNurtureStop(_ string) error { return nil }
+	func (s *instanceWorkbenchStarter) WorkbenchCheckProxy(_ string) (*browser.FingerprintHealthProfile, error) { return nil, nil }
+	func (s *instanceWorkbenchStarter) WorkbenchProxySpeedtest(_ string) (map[string]interface{}, error) { return map[string]interface{}{}, nil }
 
 func TestInstanceStopAPI(t *testing.T) {
 	t.Run("success", func(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 
 	"personal-pilot/backend/internal/behavior"
 	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/launchcode"
 )
 
 type recordingAppError struct {
@@ -595,6 +596,65 @@ func (a *App) CleanupStaleRecordingSessions() error {
 		}
 	}
 	return nil
+}
+
+// StoreActionBatch records a batch of workbench actions as a lightweight recording
+// when an active recorder exists for the profile. Silently no-ops if no recorder.
+func (a *App) StoreActionBatch(profileId string, actions []launchcode.ActionRequest, results []launchcode.ActionResult) error {
+	if len(actions) == 0 {
+		return nil
+	}
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil
+	}
+
+	a.recMu.Lock()
+	recorder, hasRecorder := a.recorders[profileId]
+	a.recMu.Unlock()
+	if !hasRecorder || recorder == nil {
+		return nil
+	}
+
+	events := make([]behavior.RecordedEvent, 0, len(actions))
+	for i, action := range actions {
+		eventType := actionTypeToEventType(action.Type)
+		events = append(events, behavior.RecordedEvent{
+			T:    time.Now().UnixMilli(),
+			Type: eventType,
+			Text: action.Text,
+			TargetPath: action.Selector,
+			InputType:  action.Type,
+		})
+		_ = results // keep for future use (e.g. result correlation)
+		_ = i
+	}
+
+	rec := &behavior.Recording{
+		ID:         fmt.Sprintf("actionbatch_%s_%d", profileId, time.Now().UnixMilli()),
+		Name:       fmt.Sprintf("动作批处理 %s", time.Now().Format("15:04:05")),
+		Events:     events,
+		EventCount: len(events),
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	return store.Save(rec)
+}
+
+func actionTypeToEventType(actionType string) string {
+	switch strings.ToLower(strings.TrimSpace(actionType)) {
+	case "click", "double-click", "right-click", "click-offset":
+		return "down"
+	case "type", "text":
+		return "key"
+	case "scroll":
+		return "scroll"
+	case "hover":
+		return "move"
+	case "navigate":
+		return "change"
+	default:
+		return "input"
+	}
 }
 
 func (a *App) ActiveRecordingStatus() (*behavior.ActiveRecordingStatus, error) {

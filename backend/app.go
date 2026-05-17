@@ -33,6 +33,17 @@ const (
 	quitModeAppOnly
 )
 
+// 编译期检查：App 实现了 launchcode 所需的接口
+var (
+	_ launchcode.BrowserStarter          = (*App)(nil)
+	_ launchcode.BrowserStopper          = (*App)(nil)
+	_ launchcode.BrowserStarterWithParams = (*App)(nil)
+	_ launchcode.RecordingAPI             = (*App)(nil)
+	_ launchcode.WorkbenchOperator        = (*App)(nil)
+	_ launchcode.InstanceOperator         = (*App)(nil)
+	_ launchcode.InstanceStater           = (*App)(nil)
+)
+
 // App 应用结构体
 type App struct {
 	ctx            context.Context
@@ -251,7 +262,6 @@ func (a *App) startup(ctx context.Context) {
 		)
 	}
 
-	a.InitLLMClient()
 
 	// 连接池失效通知
 	a.xrayMgr.OnBridgeDied = func(key string, err error) {
@@ -277,7 +287,7 @@ func (a *App) startup(ctx context.Context) {
 	a.speedScheduler = browser.NewProxySpeedScheduler(
 		a.browserMgr.ProxyDAO,
 		func(proxyId string) (bool, int64, string) {
-			r := proxy.SpeedTest(proxyId, a.getLatestProxies(), a.xrayMgr, a.singboxMgr, nil)
+			r := proxy.SpeedTest(context.Background(), proxyId, a.getLatestProxies(), a.bridgeManagers(), nil)
 			return r.Ok, r.LatencyMs, r.Error
 		},
 		5*time.Minute,
@@ -394,6 +404,11 @@ func (a *App) shutdown(ctx context.Context) {
 
 func (a *App) GetInterceptor() *logger.MethodInterceptor {
 	return a.interceptor
+}
+
+// BrowserMgr returns the browser manager for external orchestrators.
+func (a *App) BrowserMgr() *browser.Manager {
+	return a.browserMgr
 }
 
 // ForceQuit 设置强制退出标志并调用 runtime.Quit
@@ -863,14 +878,14 @@ func (a *App) TestProxyConnectivity(proxyId string, proxyConfig string) ProxyTes
 // 参考 Clash URLTest 策略：多 URL fallback + 复用桥接 + TCP ping 降级
 func (a *App) TestProxyRealConnectivity(proxyId string) ProxyTestResult {
 	proxies := a.getLatestProxies()
-	r := proxy.SpeedTest(proxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
+	r := proxy.SpeedTest(a.ctx, proxyId, proxies, a.bridgeManagers(), nil)
 	return ProxyTestResult{ProxyId: r.ProxyId, Ok: r.Ok, LatencyMs: r.LatencyMs, Error: r.Error}
 }
 
 // BrowserProxyTestSpeed 手动触发单个代理测速并持久化结果
 func (a *App) BrowserProxyTestSpeed(proxyId string) ProxyTestResult {
 	proxies := a.getLatestProxies()
-	r := proxy.SpeedTest(proxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
+	r := proxy.SpeedTest(a.ctx, proxyId, proxies, a.bridgeManagers(), nil)
 	if a.browserMgr.ProxyDAO != nil {
 		testedAt := time.Now().Format(time.RFC3339)
 		_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(proxyId, r.Ok, r.LatencyMs, testedAt)
@@ -911,7 +926,7 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				r := proxy.SpeedTest(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
+				r := proxy.SpeedTest(a.ctx, job.ProxyId, proxies, a.bridgeManagers(), nil)
 				if a.browserMgr.ProxyDAO != nil {
 					testedAt := time.Now().Format(time.RFC3339)
 					_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(job.ProxyId, r.Ok, r.LatencyMs, testedAt)
@@ -943,7 +958,7 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 // BrowserProxyCheckIPHealth 检测单个代理的出口 IP 健康信息（通过 IPPure 接口）
 func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 	proxies := a.getLatestProxies()
-	data, err := proxy.FetchProxyIPInfo(proxyId, proxies, a.xrayMgr, a.singboxMgr)
+	data, err := proxy.FetchProxyIPInfo(a.ctx, proxyId, proxies, a.bridgeManagers())
 	result := buildProxyIPHealthResult(proxyId, data, err)
 	result = a.withProxyHTTPSConnectivity(result, proxies)
 	a.persistProxyIPHealthResult(result)
@@ -983,7 +998,7 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				data, err := proxy.FetchProxyIPInfo(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr)
+				data, err := proxy.FetchProxyIPInfo(a.ctx, job.ProxyId, proxies, a.bridgeManagers())
 				result := buildProxyIPHealthResult(job.ProxyId, data, err)
 				result = a.withProxyHTTPSConnectivity(result, proxies)
 				a.persistProxyIPHealthResult(result)
@@ -1015,7 +1030,7 @@ func (a *App) withProxyHTTPSConnectivity(result ProxyIPHealthResult, proxies []B
 		}
 		return result
 	}
-	connectivity := proxy.CheckProxyHTTPSConnectivity(result.ProxyId, proxies, a.xrayMgr, a.singboxMgr, 8*time.Second)
+	connectivity := proxy.CheckProxyHTTPSConnectivity(a.ctx, result.ProxyId, proxies, a.bridgeManagers(), 8*time.Second)
 	result.RawData["realHttpsCheck"] = map[string]interface{}{
 		"ok":        connectivity.Ok,
 		"latencyMs": connectivity.LatencyMs,
@@ -1219,6 +1234,10 @@ func mapBool(m map[string]interface{}, key string) bool {
 }
 
 // getLatestProxies 获取最新的代理列表，优先从数据库读取
+func (a *App) bridgeManagers() []proxy.BridgeManager {
+	return []proxy.BridgeManager{a.xrayMgr, a.singboxMgr}
+}
+
 func (a *App) getLatestProxies() []BrowserProxy {
 	if a.browserMgr.ProxyDAO != nil {
 		if list, err := a.browserMgr.ProxyDAO.List(); err == nil && len(list) > 0 {

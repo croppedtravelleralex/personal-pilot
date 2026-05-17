@@ -107,13 +107,7 @@ const (
 	EventAutomationPlaybackFailed    = "automation:playback:failed"
 	EventAutomationPlaybackProgress  = "automation:playback:progress"
 
-	// ─── LLM Tasks ──────────────────────────────────────────────────────────────
 
-	EventLLMTaskPlanning  = "llm:task:planning"
-	EventLLMTaskPlanReady = "llm:task:plan-ready"
-	EventLLMTaskExecuting = "llm:task:executing"
-	EventLLMTaskStepDone  = "llm:task:step-done"
-	EventLLMTaskComplete  = "llm:task:complete"
 )
 
 // ─── Download ──────────────────────────────────────────────────────────────────

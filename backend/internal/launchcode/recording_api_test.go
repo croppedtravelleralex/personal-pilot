@@ -15,6 +15,7 @@ type recordingHTTPTestAPI struct {
 	startErr   error
 	detailErr  error
 	cleanupHit int
+	quickErr   error
 }
 
 func (a *recordingHTTPTestAPI) StartRecording(profileId string) error {
@@ -83,7 +84,18 @@ func (a *recordingHTTPTestAPI) StopPlayback(profileId string) error {
 }
 
 func (a *recordingHTTPTestAPI) QuickRecord(profileId string) (*behavior.Recording, error) {
-	return nil, errors.New("boom")
+	if a.quickErr != nil {
+		return nil, a.quickErr
+	}
+	return &behavior.Recording{
+		ID:         "quick-" + profileId,
+		EventCount: 1,
+		Events:     []behavior.RecordedEvent{{T: 0, Type: "click"}},
+		DurationMs: 50,
+		ViewportW:  1920,
+		ViewportH:  1080,
+		CreatedAt:  "2025-06-01T00:00:00Z",
+	}, nil
 }
 
 func (a *recordingHTTPTestAPI) CleanupStaleSessions() error {
@@ -102,6 +114,10 @@ func (a *recordingHTTPTestAPI) ActiveRecordingStatus() (*behavior.ActiveRecordin
 		ProfileID:  "profile-1",
 		ProfileIDs: []string{"profile-1"},
 	}, nil
+}
+
+func (a *recordingHTTPTestAPI) StoreActionBatch(_ string, _ []ActionRequest, _ []ActionResult) error {
+	return nil
 }
 
 type testHTTPStatusError struct {
@@ -290,7 +306,7 @@ func TestRecordingHTTPBusinessErrorStatusCodes(t *testing.T) {
 		},
 		{
 			name:   "internal",
-			api:    &recordingHTTPTestAPI{},
+			api:    &recordingHTTPTestAPI{quickErr: errors.New("boom")},
 			method: http.MethodPost,
 			path:   "/api/recording/quick",
 			body:   map[string]string{"profileId": "profile-1"},

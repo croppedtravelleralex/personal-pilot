@@ -31,16 +31,16 @@ var proxyIPInfoEndpoints = []proxyIPInfoEndpoint{
 }
 
 func FetchIPPureInfo(
+	ctx context.Context,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 ) (map[string]interface{}, error) {
 	src, err := findProxyConfig(proxyId, proxies)
 	if err != nil {
 		return nil, err
 	}
-	client, err := buildIPPureHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, legacyIPPureInfoTimeout)
+	client, err := buildIPPureHTTPClient(src, proxyId, proxies, managers, legacyIPPureInfoTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -48,16 +48,16 @@ func FetchIPPureInfo(
 }
 
 func FetchProxyIPInfo(
+	ctx context.Context,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 ) (map[string]interface{}, error) {
 	src, err := findProxyConfig(proxyId, proxies)
 	if err != nil {
 		return nil, err
 	}
-	client, err := buildIPPureHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, defaultProxyIPInfoTimeout)
+	client, err := buildIPPureHTTPClient(src, proxyId, proxies, managers, defaultProxyIPInfoTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func FetchProxyIPInfo(
 		metadataErrors[endpoint.source] = err.Error()
 	}
 
-	latency, statusCode, canaryErr := checkHTTPClientGET(context.Background(), client, defaultProxyHTTPSCanaryURL, "PersonalPilot/1.0")
+	latency, statusCode, canaryErr := checkHTTPClientGET(ctx, client, defaultProxyHTTPSCanaryURL, "PersonalPilot/1.0")
 	canaryData := map[string]interface{}{
 		"source":              "https-canary",
 		"metadataErrors":      metadataErrors,
@@ -99,11 +99,10 @@ func buildIPPureHTTPClient(
 	src string,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	timeout time.Duration,
 ) (*http.Client, error) {
-	return buildProxyHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, timeout)
+	return buildProxyHTTPClient(src, proxyId, proxies, managers, timeout)
 }
 
 func findProxyConfig(proxyId string, proxies []config.BrowserProxy) (string, error) {

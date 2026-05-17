@@ -2,6 +2,7 @@ package backend
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -24,6 +25,16 @@ import (
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+var validBackupTables = map[string]bool{
+	"browser_profiles": true, "browser_groups": true,
+	"browser_proxies": true, "browser_cores": true,
+	"browser_bookmarks": true, "launch_codes": true,
+}
+
+func isValidTableName(name string) bool {
+	return validBackupTables[name]
+}
 
 // BackupInitializeSystem 初始化系统到最开始状态。
 func (a *App) BackupInitializeSystem() (map[string]interface{}, error) {
@@ -123,9 +134,17 @@ func (a *App) backupExportPackageToPathLocked(savePath string) (map[string]inter
 		return nil, err
 	}
 
+	encPath := savePath + ".enc"
+	a.backupEmitExportProgress("encrypting", 95, "正在加密导出文件...")
+	if err := backup.EncryptFile(savePath, encPath); err != nil {
+		a.backupEmitExportProgress("error", 100, fmt.Sprintf("加密失败: %v", err))
+		return nil, fmt.Errorf("backup encrypt: %w", err)
+	}
+	os.Remove(savePath)
+
 	return map[string]interface{}{
 		"cancelled":       false,
-		"zipPath":         savePath,
+		"zipPath":         encPath,
 		"includedEntries": includedEntries,
 		"skippedEntries":  skippedEntries,
 		"fileCount":       fileCount,
@@ -787,7 +806,7 @@ func (a *App) backupReloadAfterMutation() error {
 		a.speedScheduler = browser.NewProxySpeedScheduler(
 			a.browserMgr.ProxyDAO,
 			func(proxyID string) (bool, int64, string) {
-				r := proxy.SpeedTest(proxyID, a.config.Browser.Proxies, a.xrayMgr, a.singboxMgr, nil)
+				r := proxy.SpeedTest(context.Background(), proxyID, a.config.Browser.Proxies, a.bridgeManagers(), nil)
 				return r.Ok, r.LatencyMs, r.Error
 			},
 			5*time.Minute,
@@ -1919,6 +1938,9 @@ func backupSrcTableExists(tx *sql.Tx, table string) (bool, error) {
 
 func backupCountRows(tx *sql.Tx, tableName string) (int, error) {
 	var cnt int
+	if !isValidTableName(tableName) {
+		return 0, fmt.Errorf("invalid table name: %s", tableName)
+	}
 	row := tx.QueryRow("SELECT COUNT(1) FROM " + tableName)
 	if err := row.Scan(&cnt); err != nil {
 		return 0, err

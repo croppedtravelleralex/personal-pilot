@@ -31,9 +31,9 @@ func TestFetchProxyIPInfoFallsBackToIPAPI(t *testing.T) {
 		proxyIPInfoEndpoints = originalEndpoints
 	}()
 
-	result, err := FetchProxyIPInfo("p1", []config.BrowserProxy{
+	result, err := FetchProxyIPInfo(nil, "p1", []config.BrowserProxy{
 		{ProxyId: "p1", ProxyConfig: "direct://"},
-	}, nil, nil)
+	}, nil)
 	if err != nil {
 		t.Fatalf("FetchProxyIPInfo returned error: %v", err)
 	}

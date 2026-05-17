@@ -1,8 +1,13 @@
 package launchcode
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+
+	"personal-pilot/backend/internal/browser"
 )
 
 type workbenchProfileRequest struct {
@@ -17,6 +22,22 @@ type workbenchNavigateRequest struct {
 type workbenchArrangeRequest struct {
 	ProfileIDs []string `json:"profileIds"`
 	Layout     string   `json:"layout"`
+}
+
+type workbenchClickRequest struct {
+	ProfileID string `json:"profileId"`
+	Selector  string `json:"selector"`
+}
+
+type workbenchTypeRequest struct {
+	ProfileID string `json:"profileId"`
+	Selector  string `json:"selector"`
+	Text      string `json:"text"`
+}
+
+type workbenchScrollRequest struct {
+	ProfileID string `json:"profileId"`
+	Distance  uint32 `json:"distance"`
 }
 
 func (s *LaunchServer) handleWorkbenchNavigate(w http.ResponseWriter, r *http.Request) {
@@ -219,6 +240,340 @@ func (s *LaunchServer) workbenchOperator(w http.ResponseWriter) (WorkbenchOperat
 	return operator, true
 }
 
+func (s *LaunchServer) handleWorkbenchClick(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+
+	var req workbenchClickRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	selector := strings.TrimSpace(req.Selector)
+	if profileID == "" || selector == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and selector are required"})
+		return
+	}
+	if err := operator.WorkbenchClickElement(profileID, selector); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "selector": selector, "clicked": true})
+}
+
+func (s *LaunchServer) handleWorkbenchType(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+
+	var req workbenchTypeRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	selector := strings.TrimSpace(req.Selector)
+	text := req.Text
+	if profileID == "" || selector == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and selector are required"})
+		return
+	}
+	if err := operator.WorkbenchTypeText(profileID, selector, text); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "selector": selector, "typed": true})
+}
+
+func (s *LaunchServer) handleWorkbenchScroll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+
+	var req workbenchScrollRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	distance := req.Distance
+	if distance == 0 {
+		distance = 500
+	}
+	if err := operator.WorkbenchScrollPage(profileID, distance); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "distance": distance, "scrolled": true})
+}
+
+// ─── New enhanced action endpoints (use unified ActionRequest) ────────────────
+
+type workbenchSingleActionRequest struct {
+	ProfileID string       `json:"profileId"`
+	Action    ActionRequest `json:"action"`
+	Actions   []ActionRequest `json:"actions"`
+}
+
+func (s *LaunchServer) handleWorkbenchHover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	res := s.executeSingleActionFromBody(w, r, operator, "hover")
+	if res == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "profileId": res["profileId"], "action": res["action"],
+		"hovered": true, "pageUrl": res["pageUrl"], "pageTitle": res["pageTitle"],
+	})
+}
+
+func (s *LaunchServer) handleWorkbenchDoubleClick(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	res := s.executeSingleActionFromBody(w, r, operator, "double-click")
+	if res == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "profileId": res["profileId"], "action": res["action"],
+		"doubleClicked": true, "pageUrl": res["pageUrl"], "pageTitle": res["pageTitle"],
+	})
+}
+
+func (s *LaunchServer) handleWorkbenchRightClick(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	res := s.executeSingleActionFromBody(w, r, operator, "right-click")
+	if res == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "profileId": res["profileId"], "action": res["action"],
+		"rightClicked": true, "pageUrl": res["pageUrl"], "pageTitle": res["pageTitle"],
+	})
+}
+
+func (s *LaunchServer) handleWorkbenchWait(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	res := s.executeSingleActionFromBody(w, r, operator, "wait")
+	if res == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "profileId": res["profileId"], "action": res["action"],
+		"waited": true, "pageUrl": res["pageUrl"], "pageTitle": res["pageTitle"],
+	})
+}
+
+func (s *LaunchServer) handleWorkbenchActions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+
+	var req workbenchSingleActionRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	if len(req.Actions) == 0 && req.Action.Type == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "actions or action is required"})
+		return
+	}
+
+	actions := req.Actions
+	if len(actions) == 0 && req.Action.Type != "" {
+		actions = []ActionRequest{req.Action}
+	}
+
+	// Check for streaming mode
+	if strings.ToLower(strings.TrimSpace(r.URL.Query().Get("stream"))) == "1" {
+		s.handleWorkbenchActionsStream(w, operator, profileID, actions)
+		return
+	}
+
+	results, err := operator.WorkbenchExecuteActions(profileID, actions)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{
+			"ok": false, "profileId": profileID, "error": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "profileId": profileID, "results": results,
+	})
+}
+
+// handleWorkbenchActionsStream streams action results as NDJSON (one JSON line per action).
+func (s *LaunchServer) handleWorkbenchActionsStream(w http.ResponseWriter, operator WorkbenchOperator, profileID string, actions []ActionRequest) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"ok": false, "error": "streaming not supported",
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	// Write header line
+	header := map[string]interface{}{
+		"type": "meta", "profileId": profileID, "total": len(actions),
+	}
+	_ = writeNDJSONLine(w, header)
+	flusher.Flush()
+
+	// Execute actions one at a time via the batch executor
+	// We must stream results as they come. Currently WorkbenchExecuteActions
+	// is all-or-nothing. For true streaming, we execute individual actions.
+	for i, action := range actions {
+		// Execute single action
+		singleActions := []ActionRequest{action}
+		results, err := operator.WorkbenchExecuteActions(profileID, singleActions)
+
+		var line map[string]interface{}
+		if err != nil {
+			line = map[string]interface{}{
+				"type": "action", "index": i, "ok": false,
+				"action": action, "error": err.Error(),
+			}
+		} else if len(results) > 0 {
+			line = map[string]interface{}{
+				"type": "action", "index": i, "ok": results[0].OK,
+				"action": action, "result": results[0],
+			}
+		} else {
+			line = map[string]interface{}{
+				"type": "action", "index": i, "ok": false,
+				"action": action, "error": "no result",
+			}
+		}
+		_ = writeNDJSONLine(w, line)
+		flusher.Flush()
+	}
+
+	// Write footer
+	footer := map[string]interface{}{
+		"type": "done", "profileId": profileID, "total": len(actions),
+	}
+	_ = writeNDJSONLine(w, footer)
+	flusher.Flush()
+}
+
+func writeNDJSONLine(w http.ResponseWriter, v interface{}) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("marshal ndjson: %w", err)
+	}
+	data = append(data, '\n')
+	_, err = w.Write(data)
+	return err
+}
+
+// executeSingleActionFromBody extracts a profileId + action from the JSON body,
+// executes it via WorkbenchExecuteActions, and returns a result map or nil on failure.
+// Used by hover/doubleClick/rightClick/wait handlers.
+func (s *LaunchServer) executeSingleActionFromBody(w http.ResponseWriter, r *http.Request, operator WorkbenchOperator, defaultType string) map[string]interface{} {
+	var req workbenchSingleActionRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return nil
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "error": "profileId is required",
+		})
+		return nil
+	}
+	action := req.Action
+	if action.Type == "" {
+		action.Type = defaultType
+	}
+
+	results, err := operator.WorkbenchExecuteActions(profileID, []ActionRequest{action})
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{
+			"ok": false, "profileId": profileID, "error": err.Error(),
+		})
+		return nil
+	}
+	if len(results) == 0 {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"ok": false, "profileId": profileID, "error": "no result returned",
+		})
+		return nil
+	}
+	res := results[0]
+	if !res.OK {
+		writeJSON(w, mapInstanceOperationErrorStatus(errors.New(res.Error)), map[string]interface{}{
+			"ok": false, "profileId": profileID, "error": res.Error, "errorCode": res.ErrorCode,
+		})
+		return nil
+	}
+	return map[string]interface{}{
+		"profileId": profileID, "action": action, "pageUrl": res.PageURL, "pageTitle": res.PageTitle,
+	}
+}
+
 func decodeWorkbenchProfileID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	var req workbenchProfileRequest
 	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
@@ -231,4 +586,501 @@ func decodeWorkbenchProfileID(w http.ResponseWriter, r *http.Request) (string, b
 		return "", false
 	}
 	return profileID, true
+}
+
+// ─── Identity Report ─────────────────────────────────────────────────────────
+
+func (s *LaunchServer) handleWorkbenchIdentityReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	report, err := operator.IdentityReportProfile(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":        true,
+		"profileId": profileID,
+		"report":    report,
+	})
+}
+
+// ─── Identity Consistency ────────────────────────────────────────────────────
+
+func (s *LaunchServer) handleWorkbenchIdentityConsistency(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	report, err := operator.IdentityReportProfile(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":             true,
+		"profileId":      profileID,
+		"coherenceScore": report.Subscores.Consistency,
+		"summary":        report.Summary,
+	})
+}
+
+// ─── Cookies ─────────────────────────────────────────────────────────────────
+
+func (s *LaunchServer) handleWorkbenchCookiesGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok2 := decodeWorkbenchProfileID(w, r)
+	if !ok2 {
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	cookies, err := operator.WorkbenchGetCookies(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	if cookies == nil {
+		cookies = []map[string]interface{}{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":        true,
+		"profileId": profileID,
+		"count":     len(cookies),
+		"cookies":   cookies,
+	})
+}
+
+type cookiesSetRequest struct {
+	ProfileID string                   `json:"profileId"`
+	Cookies   []map[string]interface{} `json:"cookies"`
+}
+
+func (s *LaunchServer) handleWorkbenchCookiesSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req cookiesSetRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	for _, cookie := range req.Cookies {
+		if err := operator.WorkbenchSetCookie(profileID, cookie); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "profileId": profileID, "error": "set cookie failed: " + err.Error()})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "set": len(req.Cookies)})
+}
+
+func (s *LaunchServer) handleWorkbenchCookiesClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	if err := operator.WorkbenchClearCookies(profileID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "cleared": true})
+}
+
+// ─── Tabs ────────────────────────────────────────────────────────────────────
+
+func (s *LaunchServer) handleWorkbenchTabsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	tabs, err := operator.WorkbenchListTabs(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	if tabs == nil {
+		tabs = []browser.Tab{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "count": len(tabs), "tabs": tabs})
+}
+
+type tabsActionRequest struct {
+	ProfileID string `json:"profileId"`
+	TabID     string `json:"tabId,omitempty"`
+	URL       string `json:"url,omitempty"`
+}
+
+func (s *LaunchServer) handleWorkbenchTabsSwitch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req tabsActionRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" || req.TabID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and tabId are required"})
+		return
+	}
+	if err := operator.WorkbenchSwitchTab(profileID, req.TabID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "switched": true})
+}
+
+func (s *LaunchServer) handleWorkbenchTabsClose(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req tabsActionRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" || req.TabID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and tabId are required"})
+		return
+	}
+	if err := operator.WorkbenchCloseTab(profileID, req.TabID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "closed": true})
+}
+
+func (s *LaunchServer) handleWorkbenchTabsNew(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req tabsActionRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	tabID, err := operator.WorkbenchNewTab(profileID, req.URL)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "tabId": tabID, "created": true})
+}
+
+// ─── Storage ─────────────────────────────────────────────────────────────────
+
+func (s *LaunchServer) handleWorkbenchStorageGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	items, err := operator.WorkbenchGetLocalStorage(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	if items == nil {
+		items = map[string]string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "count": len(items), "items": items})
+}
+
+type storageSetRequest struct {
+	ProfileID string            `json:"profileId"`
+	Items     map[string]string `json:"items"`
+}
+
+func (s *LaunchServer) handleWorkbenchStorageSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req storageSetRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	if err := operator.WorkbenchSetLocalStorage(profileID, req.Items); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "set": len(req.Items)})
+}
+
+// ─── Behavior Engine ─────────────────────────────────────────────────────────
+
+type behaviorStartRequest struct {
+	ProfileID string `json:"profileId"`
+	PresetID  string `json:"presetId,omitempty"`
+}
+
+func (s *LaunchServer) handleWorkbenchBehaviorStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req behaviorStartRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	if err := operator.WorkbenchBehaviorStart(profileID, req.PresetID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "behaviorStarted": true})
+}
+
+func (s *LaunchServer) handleWorkbenchBehaviorStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	if err := operator.WorkbenchBehaviorStop(profileID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "behaviorStopped": true})
+}
+
+type behaviorConfigRequest struct {
+	ProfileID string  `json:"profileId"`
+	Intensity float64 `json:"intensity"`
+}
+
+func (s *LaunchServer) handleWorkbenchBehaviorConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req behaviorConfigRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	if err := operator.WorkbenchBehaviorConfig(profileID, req.Intensity); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "intensity": req.Intensity})
+}
+
+// ─── Nurture ─────────────────────────────────────────────────────────────────
+
+type nurtureStartRequest struct {
+	ProfileID       string `json:"profileId"`
+	BehaviorPreset  string `json:"behaviorPreset,omitempty"`
+	DurationMinutes int    `json:"durationMinutes,omitempty"`
+}
+
+func (s *LaunchServer) handleWorkbenchNurtureStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req nurtureStartRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	if err := operator.WorkbenchNurtureStart(profileID, req.BehaviorPreset); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "nurtureStarted": true})
+}
+
+func (s *LaunchServer) handleWorkbenchNurtureStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	if err := operator.WorkbenchNurtureStop(profileID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "nurtureStopped": true})
+}
+
+// ─── Proxy ───────────────────────────────────────────────────────────────────
+
+func (s *LaunchServer) handleWorkbenchProxyCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	health, err := operator.WorkbenchCheckProxy(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":        true,
+		"profileId": profileID,
+		"health":    health,
+	})
+}
+
+func (s *LaunchServer) handleWorkbenchProxySpeedtest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	result, err := operator.WorkbenchProxySpeedtest(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":        true,
+		"profileId": profileID,
+		"result":    result,
+	})
 }

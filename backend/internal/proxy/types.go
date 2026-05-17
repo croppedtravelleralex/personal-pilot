@@ -3,6 +3,8 @@ package proxy
 import (
 	"os/exec"
 	"time"
+
+	"personal-pilot/backend/internal/config"
 )
 
 // XrayBridge Xray 桥接进程
@@ -23,3 +25,24 @@ type ProxyResult struct {
 	StandardProxy string                 // 标准代理 URL (http/socks5)
 	Outbound      map[string]interface{} // Xray outbound 配置
 }
+
+// BridgeManager 代理桥接管理器接口，统一 XrayManager 和 SingBoxManager。
+type BridgeManager interface {
+	EnsureBridge(proxyConfig string, proxies []config.BrowserProxy, proxyId string) (string, error)
+	AcquireBridge(proxyConfig string, proxies []config.BrowserProxy, proxyId string) (string, string, error)
+	ReleaseBridge(key string)
+	StopAll()
+	CanHandle(proxyConfig string) bool
+}
+
+// findBridgeManager 从 managers 中选取第一个能处理 proxyConfig 的管理器。
+func findBridgeManager(proxyConfig string, managers []BridgeManager) BridgeManager {
+	for _, m := range managers {
+		if m != nil && m.CanHandle(proxyConfig) {
+			return m
+		}
+	}
+	return nil
+}
+
+

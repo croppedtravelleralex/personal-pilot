@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeSanitize from 'rehype-sanitize'
 import { CheckCircle, ChevronRight, Copy, FileText } from 'lucide-react'
 import { toast } from '../../../shared/components'
 import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
@@ -1410,6 +1411,7 @@ function MarkdownContent({ content }: { content: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw, rehypeSanitize]}
       components={{
         h1: ({ children }) => (
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-6 pb-3 border-b border-[var(--color-border-default)]">

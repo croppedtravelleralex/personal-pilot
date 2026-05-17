@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -137,6 +138,7 @@ var allowedRPCMethods = map[string]struct{}{
 	"BrowserGetAllTags":                    {},
 	"BrowserGetCookies":                    {},
 	"BrowserInstanceGetTabs":               {},
+	"BrowserInstanceExecAction":            {},
 	"BrowserInstanceOpenUrl":               {},
 	"BrowserInstanceRestart":               {},
 	"BrowserInstanceStart":                 {},
@@ -179,6 +181,7 @@ var allowedRPCMethods = map[string]struct{}{
 	"CreateGroup":                          {},
 	"DeleteGroup":                          {},
 	"DeleteRecording":                      {},
+	"DeepSeekRegister":                     {},
 	"EventLogCount":                        {},
 	"EventLogExport":                       {},
 	"EventLogPrune":                        {},
@@ -199,14 +202,9 @@ var allowedRPCMethods = map[string]struct{}{
 	"GetRecordingDetail":                   {},
 	"GetRunningInstances":                  {},
 	"IdentityReportProfile":                {},
-	"InitLLMClient":                        {},
 	"ListGroups":                           {},
 	"ListRecordings":                       {},
 	"ListRecordingSummaries":               {},
-	"LLMExecuteTask":                       {},
-	"LLMGetOffsetLibrary":                  {},
-	"LLMHasKey":                            {},
-	"LLMPlanOnly":                          {},
 	"MoveInstancesToGroup":                 {},
 	"OpenCorePath":                         {},
 	"OpenUserDataDir":                      {},
@@ -249,6 +247,10 @@ var allowedRPCMethods = map[string]struct{}{
 	"ValidateProxyConfig":                  {},
 	"WorkbenchActivateProfile":             {},
 	"WorkbenchArrangeProfiles":             {},
+	"WorkbenchClickElement":                {},
+	"WorkbenchExecuteActions":              {},
+	"WorkbenchTypeText":                    {},
+	"WorkbenchScrollPage":                  {},
 	"WorkbenchCaptureScreenshot":           {},
 	"WorkbenchFingerprintHealthProfile":    {},
 	"WorkbenchFingerprintProfile":          {},
@@ -347,6 +349,7 @@ func generateBridgeToken() (string, error) {
 }
 
 func startBridgeServer(ctx context.Context, app *backend.App, hub *eventHub, bridgeToken string, eventToken string, cancel context.CancelFunc) (*http.Server, string, string, error) {
+	rpcLimiter := newBridgeRateLimiter()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", withCORS(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -355,6 +358,10 @@ func startBridgeServer(ctx context.Context, app *backend.App, hub *eventHub, bri
 		})
 	}))
 	mux.HandleFunc("/rpc", withCORS(requireBridgeToken(bridgeToken, func(w http.ResponseWriter, r *http.Request) {
+		if !rpcLimiter.allow(r.RemoteAddr, 60) {
+			writeJSON(w, http.StatusTooManyRequests, rpcResponse{OK: false, Error: "rate limit exceeded"})
+			return
+		}
 		if r.Method != http.MethodPost {
 			writeJSON(w, http.StatusMethodNotAllowed, rpcResponse{OK: false, Error: "method not allowed"})
 			return
@@ -434,7 +441,7 @@ func startBridgeServer(ctx context.Context, app *backend.App, hub *eventHub, bri
 		}
 	}()
 	bridgeURL := "http://" + ln.Addr().String()
-	return server, bridgeURL, bridgeURL + "/events?token=" + eventToken, nil
+	return server, bridgeURL, bridgeURL + "/events", nil
 }
 
 func requireBridgeToken(expected string, next http.HandlerFunc) http.HandlerFunc {
@@ -448,22 +455,19 @@ func requireBridgeToken(expected string, next http.HandlerFunc) http.HandlerFunc
 }
 
 func validBridgeToken(r *http.Request, expected string) bool {
-	if strings.TrimSpace(expected) == "" {
+	if expected == "" {
 		return false
 	}
 	token := strings.TrimSpace(r.Header.Get(bridgeTokenHeader))
-	return token == expected
+	return subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
 }
 
 func validEventToken(r *http.Request, expected string) bool {
-	if strings.TrimSpace(expected) == "" {
+	if expected == "" {
 		return false
 	}
 	token := strings.TrimSpace(r.Header.Get(eventTokenHeader))
-	if token == "" {
-		token = strings.TrimSpace(r.URL.Query().Get("token"))
-	}
-	return token == expected
+	return subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
 }
 
 func callAppMethod(app *backend.App, methodName string, rawArgs []json.RawMessage) (interface{}, error) {
@@ -557,6 +561,31 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "content-type, "+bridgeTokenHeader+", "+eventTokenHeader)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+}
+
+type bridgeRateLimiter struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func newBridgeRateLimiter() *bridgeRateLimiter {
+	brl := &bridgeRateLimiter{counts: make(map[string]int)}
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		for range ticker.C {
+			brl.mu.Lock()
+			brl.counts = make(map[string]int)
+			brl.mu.Unlock()
+		}
+	}()
+	return brl
+}
+
+func (brl *bridgeRateLimiter) allow(ip string, limit int) bool {
+	brl.mu.Lock()
+	defer brl.mu.Unlock()
+	brl.counts[ip]++
+	return brl.counts[ip] <= limit
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

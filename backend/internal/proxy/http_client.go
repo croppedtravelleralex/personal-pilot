@@ -21,8 +21,7 @@ func buildProxyHTTPClient(
 	src string,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	timeout time.Duration,
 ) (*http.Client, error) {
 	l := strings.ToLower(strings.TrimSpace(src))
@@ -30,24 +29,10 @@ func buildProxyHTTPClient(
 		return &http.Client{Timeout: timeout}, nil
 	}
 
-	if IsSingBoxProtocol(src) {
-		if singboxMgr == nil {
-			return nil, fmt.Errorf("sing-box 管理器未初始化")
-		}
-		socks5Addr, err := singboxMgr.EnsureBridge(src, proxies, proxyId)
+	if m := findBridgeManager(src, managers); m != nil {
+		socks5Addr, err := m.EnsureBridge(src, proxies, proxyId)
 		if err != nil {
-			return nil, fmt.Errorf("sing-box 桥接启动失败: %w", err)
-		}
-		return buildSocks5HTTPClient(strings.TrimPrefix(socks5Addr, "socks5://"), timeout)
-	}
-
-	if RequiresBridge(src, proxies, proxyId) {
-		if xrayMgr == nil {
-			return nil, fmt.Errorf("xray 管理器未初始化")
-		}
-		socks5Addr, err := xrayMgr.EnsureBridge(src, proxies, proxyId)
-		if err != nil {
-			return nil, fmt.Errorf("xray 桥接启动失败: %w", err)
+			return nil, fmt.Errorf("桥接启动失败: %w", err)
 		}
 		return buildSocks5HTTPClient(strings.TrimPrefix(socks5Addr, "socks5://"), timeout)
 	}
@@ -86,10 +71,10 @@ func buildProxyHTTPClient(
 }
 
 func CheckProxyHTTPSConnectivity(
+	ctx context.Context,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	timeout time.Duration,
 ) TestResult {
 	src := ""
@@ -103,11 +88,11 @@ func CheckProxyHTTPSConnectivity(
 		return TestResult{ProxyId: proxyId, Ok: false, Error: "代理配置为空"}
 	}
 
-	client, err := buildProxyHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, timeout)
+	client, err := buildProxyHTTPClient(src, proxyId, proxies, managers, timeout)
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, Error: err.Error()}
 	}
-	latency, statusCode, err := checkHTTPClientGET(context.Background(), client, defaultProxyHTTPSCanaryURL, "PersonalPilot/1.0")
+	latency, statusCode, err := checkHTTPClientGET(ctx, client, defaultProxyHTTPSCanaryURL, "PersonalPilot/1.0")
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, LatencyMs: latency, Error: err.Error()}
 	}

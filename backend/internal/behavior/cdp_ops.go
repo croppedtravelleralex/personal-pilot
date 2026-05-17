@@ -67,6 +67,16 @@ func ConnectPageCDP(debugPort int) (*websocket.Conn, error) {
 	return conn, err
 }
 
+// ListCDPTargets returns all CDP targets for the given debug port.
+func ListCDPTargets(debugPort int) ([]cdpTarget, error) {
+	return listCDPTargets(debugPort)
+}
+
+// ExecuteCDP sends a raw CDP command over an already-connected WebSocket.
+func ExecuteCDP(conn *websocket.Conn, method string, params interface{}) (json.RawMessage, error) {
+	return sendCDPCommandWS(conn, 0, method, params, 15*time.Second)
+}
+
 func connectPageCDPWithTarget(debugPort int) (*websocket.Conn, cdpTarget, []cdpTarget, error) {
 	targets, err := listCDPTargets(debugPort)
 	if err != nil {

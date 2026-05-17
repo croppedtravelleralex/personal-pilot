@@ -81,6 +81,99 @@ type WorkbenchOperator interface {
 	WorkbenchFingerprintHealthProfile(profileId string) (*browser.FingerprintHealthProfile, error)
 	WorkbenchActivateProfile(profileId string) error
 	WorkbenchArrangeProfiles(profileIds []string, layout string) ([]WorkbenchWindowPlacement, error)
+	WorkbenchClickElement(profileId string, selector string) error
+	WorkbenchTypeText(profileId string, selector string, text string) error
+	WorkbenchScrollPage(profileId string, distance uint32) error
+	WorkbenchExecuteActions(profileId string, actions []ActionRequest) ([]ActionResult, error)
+
+	// Extended workbench capabilities
+	IdentityReportProfile(profileId string) (*browser.IdentityStrengthReport, error)
+	WorkbenchGetCookies(profileId string) ([]map[string]interface{}, error)
+	WorkbenchSetCookie(profileId string, cookie map[string]interface{}) error
+	WorkbenchClearCookies(profileId string) error
+	WorkbenchListTabs(profileId string) ([]browser.Tab, error)
+	WorkbenchSwitchTab(profileId string, tabId string) error
+	WorkbenchCloseTab(profileId string, tabId string) error
+	WorkbenchNewTab(profileId string, url string) (string, error)
+	WorkbenchGetLocalStorage(profileId string) (map[string]string, error)
+	WorkbenchSetLocalStorage(profileId string, items map[string]string) error
+	WorkbenchBehaviorStart(profileId string, presetID string) error
+	WorkbenchBehaviorStop(profileId string) error
+	WorkbenchBehaviorConfig(profileId string, intensity float64) error
+	WorkbenchNurtureStart(profileId string, behaviorPreset string) error
+	WorkbenchNurtureStop(profileId string) error
+	WorkbenchCheckProxy(profileId string) (*browser.FingerprintHealthProfile, error)
+	WorkbenchProxySpeedtest(profileId string) (map[string]interface{}, error)
+}
+
+// InstanceOperator provides instance lifecycle operations.
+type InstanceOperator interface {
+	CreateProfile(input browser.ProfileInput) (*browser.Profile, error)
+	UpdateProfile(profileID string, input browser.ProfileInput) (*browser.Profile, error)
+	DeleteProfile(profileID string) error
+	StartInstance(profileId string) (*browser.Profile, error)
+	StopInstance(profileId string) (*browser.Profile, error)
+	CopyProfile(profileId string, newName string) (*browser.Profile, error)
+}
+
+// InstanceStater provides instance state queries.
+type InstanceStater interface {
+	GetInstanceStatus(profileId string) (*browser.Profile, error)
+}
+
+// ActionErrorCode 机器可读的工作台操作错误码
+type ActionErrorCode string
+
+const (
+	ErrElementNotFound   ActionErrorCode = "ELEMENT_NOT_FOUND"
+	ErrSelectorTimeout   ActionErrorCode = "SELECTOR_TIMEOUT"
+	ErrCDPDisconnected   ActionErrorCode = "CDP_DISCONNECTED"
+	ErrBrowserNotRunning ActionErrorCode = "BROWSER_NOT_RUNNING"
+	ErrInvalidSelector   ActionErrorCode = "INVALID_SELECTOR"
+	ErrActionFailed      ActionErrorCode = "ACTION_FAILED"
+)
+
+// BoundsInfo 元素的边界框
+type BoundsInfo struct {
+	X      int32  `json:"x"`
+	Y      int32  `json:"y"`
+	Width  uint32 `json:"width"`
+	Height uint32 `json:"height"`
+}
+
+// ActionRequest 工作台操作序列中的一个动作
+type ActionRequest struct {
+	Type              string `json:"type"`
+	Selector          string `json:"selector,omitempty"`
+	ByText            string `json:"byText,omitempty"`
+	ByXPath           string `json:"byXPath,omitempty"`
+	Frame             string `json:"frame,omitempty"`
+	Text              string `json:"text,omitempty"`
+	Distance          uint32 `json:"distance,omitempty"`
+	Direction         string `json:"direction,omitempty"`
+	OffsetX           *int   `json:"offsetX,omitempty"`
+	OffsetY           *int   `json:"offsetY,omitempty"`
+	PreWaitMs         int    `json:"preWaitMs,omitempty"`
+	PostWaitMs        int    `json:"postWaitMs,omitempty"`
+	WaitForSelector   string `json:"waitForSelector,omitempty"`
+	WaitTimeoutMs     int    `json:"waitTimeoutMs,omitempty"`
+	ClearFirst        *bool  `json:"clearFirst,omitempty"`
+	SubmitOnEnter     bool   `json:"submitOnEnter,omitempty"`
+	URL               string `json:"url,omitempty"`
+	Script            string `json:"script,omitempty"`
+	HumanizationLevel string `json:"humanizationLevel,omitempty"`
+}
+
+// ActionResult 单个动作的执行结果
+type ActionResult struct {
+	Type      string      `json:"type"`
+	OK        bool        `json:"ok"`
+	Error     string      `json:"error,omitempty"`
+	ErrorCode string      `json:"errorCode,omitempty"`
+	Bounds    *BoundsInfo `json:"bounds,omitempty"`
+	PageURL   string      `json:"pageUrl,omitempty"`
+	PageTitle string      `json:"pageTitle,omitempty"`
+	Value     string      `json:"value,omitempty"`
 }
 
 // LaunchCallRecord 接口调用记录
@@ -118,6 +211,7 @@ type LaunchServer struct {
 	activeName  string
 	activeAudit *browser.LaunchAuditSnapshot
 	apiAuth     APIAuthConfig
+	rateLimiter *RateLimiter
 }
 
 // NewLaunchServer 创建 LaunchServer
@@ -180,6 +274,12 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/profiles", s.handleProfiles)
 	mux.HandleFunc("/api/profiles/", s.handleProfileByID)
 	mux.HandleFunc("/api/instances/stop", s.handleInstanceStop)
+	mux.HandleFunc("/api/instances/status", s.handleInstanceStatus)
+	mux.HandleFunc("/api/instances/copy", s.handleInstanceCopy)
+	mux.HandleFunc("/api/instances/restart", s.handleInstanceRestart)
+	mux.HandleFunc("/api/instances/batch/start", s.handleInstanceBatchStart)
+	mux.HandleFunc("/api/instances/batch/stop", s.handleInstanceBatchStop)
+	mux.HandleFunc("/api/instances/", s.handleInstanceByID)
 	mux.HandleFunc("/api/launch", s.handleLaunchWithBody)
 	mux.HandleFunc("/api/launch/logs", s.handleLaunchLogs)
 	mux.HandleFunc("/api/launch/", s.handleLaunch)
@@ -188,8 +288,34 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/workbench/screenshot", s.handleWorkbenchScreenshot)
 	mux.HandleFunc("/api/workbench/fingerprint", s.handleWorkbenchFingerprint)
 	mux.HandleFunc("/api/workbench/fingerprint-health", s.handleWorkbenchFingerprintHealth)
+	mux.HandleFunc("/api/workbench/identity/report", s.handleWorkbenchIdentityReport)
+	mux.HandleFunc("/api/workbench/identity/consistency", s.handleWorkbenchIdentityConsistency)
+	mux.HandleFunc("/api/workbench/cookies/get", s.handleWorkbenchCookiesGet)
+	mux.HandleFunc("/api/workbench/cookies/set", s.handleWorkbenchCookiesSet)
+	mux.HandleFunc("/api/workbench/cookies/clear", s.handleWorkbenchCookiesClear)
+	mux.HandleFunc("/api/workbench/tabs/list", s.handleWorkbenchTabsList)
+	mux.HandleFunc("/api/workbench/tabs/switch", s.handleWorkbenchTabsSwitch)
+	mux.HandleFunc("/api/workbench/tabs/close", s.handleWorkbenchTabsClose)
+	mux.HandleFunc("/api/workbench/tabs/new", s.handleWorkbenchTabsNew)
+	mux.HandleFunc("/api/workbench/storage/local-storage", s.handleWorkbenchStorageGet)
+	mux.HandleFunc("/api/workbench/storage/set-local-storage", s.handleWorkbenchStorageSet)
+	mux.HandleFunc("/api/workbench/behavior/start", s.handleWorkbenchBehaviorStart)
+	mux.HandleFunc("/api/workbench/behavior/stop", s.handleWorkbenchBehaviorStop)
+	mux.HandleFunc("/api/workbench/behavior/config", s.handleWorkbenchBehaviorConfig)
+	mux.HandleFunc("/api/workbench/nurture/start", s.handleWorkbenchNurtureStart)
+	mux.HandleFunc("/api/workbench/nurture/stop", s.handleWorkbenchNurtureStop)
+	mux.HandleFunc("/api/workbench/proxy/check", s.handleWorkbenchProxyCheck)
+	mux.HandleFunc("/api/workbench/proxy/speedtest", s.handleWorkbenchProxySpeedtest)
 	mux.HandleFunc("/api/workbench/activate", s.handleWorkbenchActivate)
 	mux.HandleFunc("/api/workbench/arrange", s.handleWorkbenchArrange)
+	mux.HandleFunc("/api/workbench/click", s.handleWorkbenchClick)
+	mux.HandleFunc("/api/workbench/type", s.handleWorkbenchType)
+	mux.HandleFunc("/api/workbench/scroll", s.handleWorkbenchScroll)
+	mux.HandleFunc("/api/workbench/hover", s.handleWorkbenchHover)
+	mux.HandleFunc("/api/workbench/double-click", s.handleWorkbenchDoubleClick)
+	mux.HandleFunc("/api/workbench/right-click", s.handleWorkbenchRightClick)
+	mux.HandleFunc("/api/workbench/wait", s.handleWorkbenchWait)
+	mux.HandleFunc("/api/workbench/actions", s.handleWorkbenchActions)
 	// Recording & behavior endpoints
 	mux.HandleFunc("/api/recording/start", s.handleRecordingStart)
 	mux.HandleFunc("/api/recording/stop", s.handleRecordingStop)
@@ -210,6 +336,9 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 
 func (s *LaunchServer) buildHandler(includeLocalhost bool) http.Handler {
 	var handler http.Handler = s.buildMux()
+	if s.rateLimiter != nil {
+		handler = s.rateLimiter.Middleware(handler)
+	}
 	handler = s.apiAuthMiddleware(handler)
 	if includeLocalhost {
 		handler = s.localhostMiddleware(handler)

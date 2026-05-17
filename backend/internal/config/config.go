@@ -44,6 +44,12 @@ type LaunchServerAuthConfig struct {
 	Header  string `yaml:"header"`
 }
 
+// WebhookConfig Webhook 通知配置
+type WebhookConfig struct {
+	URL    string `yaml:"url" json:"url"`
+	Secret string `yaml:"secret" json:"secret"`
+}
+
 // Config 应用配置
 type Config struct {
 	Database     DatabaseConfig     `yaml:"database"`
@@ -52,7 +58,7 @@ type Config struct {
 	Logging      LoggingConfig      `yaml:"logging"`
 	Browser      BrowserConfig      `yaml:"browser"`
 	LaunchServer LaunchServerConfig `yaml:"launch_server"`
-	LLM          LLMConfig          `yaml:"llm"`
+	Webhook      WebhookConfig      `yaml:"webhook"`
 }
 
 // DatabaseConfig 数据库配置
@@ -420,6 +426,10 @@ func DefaultConfig() *Config {
 				SensitiveFields: []string{"password", "token", "secret"},
 			},
 		},
+		Webhook: WebhookConfig{
+			URL:    "",
+			Secret: "",
+		},
 		LaunchServer: LaunchServerConfig{
 			Port: DefaultLaunchServerPort,
 			Auth: LaunchServerAuthConfig{
@@ -428,7 +438,6 @@ func DefaultConfig() *Config {
 				Header:  DefaultLaunchServerAPIKeyHeader,
 			},
 		},
-		LLM: DefaultLLMConfig(),
 	}
 }
 

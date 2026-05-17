@@ -17,6 +17,12 @@ import (
 )
 
 // SingBoxBridge sing-box 桥接进程
+const (
+	singBoxBridgeIdleTTL         = 45 * time.Second
+	singBoxBridgeCleanupInterval = 15 * time.Second
+)
+
+// SingBoxBridge sing-box 桥接进程
 type SingBoxBridge struct {
 	NodeKey    string
 	Port       int
@@ -36,15 +42,20 @@ type SingBoxManager struct {
 	Bridges      map[string]*SingBoxBridge
 	OnBridgeDied func(key string, err error)
 	mu           sync.Mutex
+	stopCh       chan struct{}
+	stopOnce     sync.Once
 }
 
 // NewSingBoxManager 创建 sing-box 管理器
 func NewSingBoxManager(cfg *config.Config, appRoot string) *SingBoxManager {
-	return &SingBoxManager{
+	manager := &SingBoxManager{
 		Config:  cfg,
 		AppRoot: appRoot,
 		Bridges: make(map[string]*SingBoxBridge),
+		stopCh:  make(chan struct{}),
 	}
+	go manager.cleanupLoop()
+	return manager
 }
 
 // EnsureBridge 确保 sing-box 桥接进程运行，返回 socks5://127.0.0.1:port
@@ -102,15 +113,15 @@ func (m *SingBoxManager) EnsureBridge(proxyConfig string, proxies []config.Brows
 		hideWindow(cmd)
 		cmd.Dir = filepath.Dir(cfgPath)
 		stderrPath := filepath.Join(filepath.Dir(cfgPath), "singbox-stderr.log")
-		stderrFile, _ := os.Create(stderrPath)
-		if stderrFile != nil {
+		stderrFile, err := os.Create(stderrPath)
+		if err != nil {
+			log.Warn("sing-box stderr 文件创建失败", logger.F("error", err))
+		} else {
 			cmd.Stderr = stderrFile
+			defer stderrFile.Close()
 		}
 
 		if err := cmd.Start(); err != nil {
-			if stderrFile != nil {
-				stderrFile.Close()
-			}
 			log.Error("sing-box 启动失败", logger.F("error", err), logger.F("attempt", attempt))
 			lastErr = err
 			continue
@@ -127,9 +138,6 @@ func (m *SingBoxManager) EnsureBridge(proxyConfig string, proxies []config.Brows
 		log.Info("sing-box 启动", logger.F("key", key[:8]), logger.F("pid", bridge.Pid), logger.F("port", port))
 
 		if err := waitPortReady("127.0.0.1", port, 10*time.Second); err != nil {
-			if stderrFile != nil {
-				stderrFile.Close()
-			}
 			if content, readErr := os.ReadFile(stderrPath); readErr == nil && len(content) > 0 {
 				log.Error("sing-box stderr", logger.F("output", string(content)))
 			}
@@ -142,10 +150,6 @@ func (m *SingBoxManager) EnsureBridge(proxyConfig string, proxies []config.Brows
 			lastErr = err
 			time.Sleep(200 * time.Millisecond)
 			continue
-		}
-
-		if stderrFile != nil {
-			stderrFile.Close()
 		}
 
 		if socksURL, reused := m.registerBridge(key, bridge); reused {
@@ -226,7 +230,17 @@ func (m *SingBoxManager) pinBridge(key string) bool {
 	return true
 }
 
+var _ BridgeManager = (*SingBoxManager)(nil)
+
+func (m *SingBoxManager) CanHandle(proxyConfig string) bool {
+	return IsSingBoxProtocol(proxyConfig)
+}
+
 func (m *SingBoxManager) StopAll() {
+	m.stopOnce.Do(func() {
+		close(m.stopCh)
+	})
+
 	m.mu.Lock()
 	bridges := make([]*SingBoxBridge, 0, len(m.Bridges))
 	for key, bridge := range m.Bridges {
@@ -329,6 +343,56 @@ func (m *SingBoxManager) stopBridgeProcess(bridge *SingBoxBridge) {
 		return
 	}
 	_ = bridge.Cmd.Process.Kill()
+}
+
+// cleanupLoop 定期回收空闲桥接进程
+func (m *SingBoxManager) cleanupLoop() {
+	ticker := time.NewTicker(singBoxBridgeCleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.recycleIdleBridges()
+		case <-m.stopCh:
+			return
+		}
+	}
+}
+
+// recycleIdleBridges 回收引用计数为 0 且超过空闲 TTL 的桥接进程
+func (m *SingBoxManager) recycleIdleBridges() {
+	now := time.Now()
+	var stale []*SingBoxBridge
+
+	m.mu.Lock()
+	for key, bridge := range m.Bridges {
+		if bridge == nil {
+			delete(m.Bridges, key)
+			continue
+		}
+		if bridge.RefCount > 0 {
+			continue
+		}
+		if now.Sub(bridge.LastUsedAt) < singBoxBridgeIdleTTL {
+			continue
+		}
+
+		bridge.Stopping = true
+		stale = append(stale, bridge)
+		delete(m.Bridges, key)
+	}
+	m.mu.Unlock()
+
+	if len(stale) == 0 {
+		return
+	}
+
+	log := logger.New("SingBox")
+	for _, bridge := range stale {
+		log.Info("回收空闲桥接进程", logger.F("key", bridge.NodeKey), logger.F("pid", bridge.Pid))
+		m.stopBridgeProcess(bridge)
+	}
 }
 
 func (m *SingBoxManager) resolveBinary() (string, error) {
@@ -441,7 +505,7 @@ func (m *SingBoxManager) buildConfig(key string, outbound map[string]interface{}
 	}
 
 	cfgPath := filepath.Join(baseDir, "singbox-config.json")
-	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, data, 0600); err != nil {
 		return "", err
 	}
 	return cfgPath, nil

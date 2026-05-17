@@ -1,6 +1,7 @@
 package proxy_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -102,7 +103,7 @@ func TestSpeedTestWithMockProxies(t *testing.T) {
 	for _, p := range proxies {
 		t.Run(p.ProxyName, func(t *testing.T) {
 			// 不传 xrayMgr/singboxMgr，看会走到哪个分支
-			result := proxy.SpeedTest(p.ProxyId, proxies, nil, nil, nil)
+			result := proxy.SpeedTest(context.Background(), p.ProxyId, proxies, nil, nil)
 			fmt.Printf("\n=== SpeedTest %s ===\n", p.ProxyName)
 			fmt.Printf("  Ok:        %v\n", result.Ok)
 			fmt.Printf("  LatencyMs: %d\n", result.LatencyMs)

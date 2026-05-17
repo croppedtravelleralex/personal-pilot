@@ -63,13 +63,6 @@ browser:
 launch_server:
     port: 19876
     auth:
-        enabled: false
-        api_key: ""
+        enabled: true
+        api_key: "${LAUNCH_SERVER_API_KEY}"
         header: X-Personal-Pilot-Api-Key
-
-llm:
-    provider: "openai"
-    endpoint: "https://api.openai.com/v1"
-    api_key: ""
-    model: "gpt-4o"
-    timeout: 60s

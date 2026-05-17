@@ -173,6 +173,12 @@ func (m *XrayManager) ReleaseBridge(key string) {
 }
 
 // StopAll 关闭所有 xray 桥接进程。
+var _ BridgeManager = (*XrayManager)(nil)
+
+func (m *XrayManager) CanHandle(proxyConfig string) bool {
+	return RequiresBridge(proxyConfig, nil, "")
+}
+
 func (m *XrayManager) StopAll() {
 	m.stopOnce.Do(func() {
 		close(m.stopCh)
@@ -253,14 +259,14 @@ func (m *XrayManager) ensureBridge(proxyConfig string, proxies []config.BrowserP
 		hideWindow(cmd)
 		cmd.Dir = filepath.Dir(cfgPath)
 		stderrPath := filepath.Join(filepath.Dir(cfgPath), "xray-stderr.log")
-		stderrFile, _ := os.Create(stderrPath)
-		if stderrFile != nil {
+		stderrFile, err := os.Create(stderrPath)
+		if err != nil {
+			log.Warn("xray stderr 文件创建失败", logger.F("error", err))
+		} else {
 			cmd.Stderr = stderrFile
+			defer stderrFile.Close()
 		}
 		if err := cmd.Start(); err != nil {
-			if stderrFile != nil {
-				stderrFile.Close()
-			}
 			log.Error("xray 启动失败", logger.F("error", err), logger.F("attempt", attempt))
 			lastErr = err
 			continue
@@ -276,9 +282,6 @@ func (m *XrayManager) ensureBridge(proxyConfig string, proxies []config.BrowserP
 		}
 		log.Info("xray 启动", logger.F("key", key), logger.F("pid", bridge.Pid), logger.F("port", bridge.Port), logger.F("attempt", attempt))
 		if err := waitPortReady("127.0.0.1", port, 10*time.Second); err != nil {
-			if stderrFile != nil {
-				stderrFile.Close()
-			}
 			// 优先读 stderr，再读 xray-error.log
 			if stderrContent, readErr := os.ReadFile(stderrPath); readErr == nil && len(stderrContent) > 0 {
 				log.Error("xray stderr", logger.F("output", string(stderrContent)))
@@ -299,10 +302,6 @@ func (m *XrayManager) ensureBridge(proxyConfig string, proxies []config.BrowserP
 			time.Sleep(200 * time.Millisecond)
 			continue
 		}
-		if stderrFile != nil {
-			stderrFile.Close()
-		}
-
 		if socksURL, reused := m.registerBridge(key, bridge, pin); reused {
 			log.Info("复用已就绪桥接进程", logger.F("key", key), logger.F("socks_url", socksURL))
 			bridge.Stopping = true
@@ -648,7 +647,7 @@ func (m *XrayManager) buildRuntimeConfig(key string, outbound map[string]interfa
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, data, 0600); err != nil {
 		return "", err
 	}
 	return cfgPath, nil

@@ -40,10 +40,10 @@ var DefaultSpeedTestConfig = SpeedTestConfig{
 // 采用 unified-delay 策略：先建立连接（预热），再单独计时 HTTP 往返，
 // 与 Clash 客户端 unified-delay: true 的延迟结果一致。
 func SpeedTest(
+	ctx context.Context,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	cfg *SpeedTestConfig,
 ) TestResult {
 	log := logger.New("SpeedTest")
@@ -75,8 +75,8 @@ func SpeedTest(
 	}
 
 	// 将代理配置转换为 mihomo mapping
-	if RequiresBridge(src, proxies, proxyId) || IsSingBoxProtocol(src) {
-		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
+	if findBridgeManager(src, managers) != nil {
+		return httpClientDelayTest(ctx, proxyId, src, proxies, managers, testURL, cfg.Timeout)
 	}
 
 	mapping, err := proxyConfigToMapping(src)
@@ -85,7 +85,7 @@ func SpeedTest(
 			logger.F("proxy_id", proxyId),
 			logger.F("error", err.Error()),
 		)
-		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
+		return httpClientDelayTest(ctx, proxyId, src, proxies, managers, testURL, cfg.Timeout)
 	}
 
 	// 使用 mihomo adapter.ParseProxy 创建代理实例
@@ -96,7 +96,7 @@ func SpeedTest(
 			logger.F("error", err.Error()),
 			logger.F("type", mapping["type"]),
 		)
-		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
+		return httpClientDelayTest(ctx, proxyId, src, proxies, managers, testURL, cfg.Timeout)
 	}
 
 	// unified-delay 测速：分离连接建立和 HTTP 往返计时
@@ -105,19 +105,19 @@ func SpeedTest(
 
 // httpClientDelayTest 通过实际 HTTP 请求检测代理出口，避免把远端 TCP 可达误判为可用出口。
 func httpClientDelayTest(
+	ctx context.Context,
 	proxyId string,
 	src string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	testURL string,
 	timeout time.Duration,
 ) TestResult {
-	client, err := buildProxyHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, timeout)
+	client, err := buildProxyHTTPClient(src, proxyId, proxies, managers, timeout)
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, Error: err.Error()}
 	}
-	latency, statusCode, err := checkHTTPClientGET(context.Background(), client, testURL, "PersonalPilot/1.0")
+	latency, statusCode, err := checkHTTPClientGET(ctx, client, testURL, "PersonalPilot/1.0")
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, LatencyMs: latency, Error: err.Error()}
 	}

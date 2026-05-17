@@ -3,6 +3,7 @@ package launchcode
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -60,6 +61,7 @@ type RecordingAPI interface {
 	CleanupStaleSessions() error
 	ActiveRecordingStatus() (*behavior.ActiveRecordingStatus, error)
 	GetBehaviorPresets() []behavior.Profile
+	StoreActionBatch(profileId string, actions []ActionRequest, results []ActionResult) error
 }
 
 // ============================================================================
@@ -80,7 +82,7 @@ func (s *LaunchServer) handleRecordingStart(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var req recordingStartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid JSON: " + err.Error()})
 		return
 	}
@@ -114,7 +116,7 @@ func (s *LaunchServer) handleRecordingStop(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req recordingStopRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid JSON: " + err.Error()})
 		return
 	}
@@ -304,7 +306,7 @@ func (s *LaunchServer) handleRecordingPlay(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req recordingPlayRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid JSON: " + err.Error()})
 		return
 	}
@@ -348,7 +350,7 @@ func (s *LaunchServer) handleRecordingStopPlay(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var req recordingStopPlayRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid JSON: " + err.Error()})
 		return
 	}
@@ -381,7 +383,7 @@ func (s *LaunchServer) handleRecordingQuick(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var req recordingQuickRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "invalid JSON: " + err.Error()})
 		return
 	}
