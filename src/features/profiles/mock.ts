@@ -1,0 +1,190 @@
+import type { ProfileDetail, ProfileRow } from "./model";
+
+const NOW_SECONDS = Math.floor(Date.now() / 1000);
+
+function minutesAgo(value: number): string {
+  return String(NOW_SECONDS - value * 60);
+}
+
+export const FALLBACK_PROFILE_ROWS: ProfileRow[] = [
+  {
+    id: "pf-001",
+    code: "A-102",
+    name: "Prime Warmup East",
+    storeId: "store-amz-us-01",
+    platformId: "amazon",
+    platformLabel: "Amazon",
+    statusLabel: "active",
+    groupId: "grp-launch",
+    groupLabel: "Launch Pod",
+    groupLabels: ["Launch Pod"],
+    tags: ["Prime Day", "Warmup", "Video"],
+    browserLabel: "Chrome 124 / Win11",
+    proxyLabel: "Bright Data | US / Ashburn",
+    proxyProvider: "Bright Data",
+    proxyHealth: "healthy",
+    regionLabel: "US / Ashburn",
+    localeLabel: "en-US",
+    timezoneLabel: "America/New_York",
+    fingerprintLabel: "fp-stable-canvas",
+    runtimeStatus: "running",
+    continuityScore: 91,
+    activeSessionCount: 1,
+    pendingActionCount: 2,
+    lastActiveAt: minutesAgo(8),
+    lastOpenedAt: minutesAgo(12),
+    lastSyncedAt: minutesAgo(33),
+    updatedAt: minutesAgo(4),
+  },
+  {
+    id: "pf-002",
+    code: "A-119",
+    name: "Prime Launch North",
+    storeId: "store-amz-us-02",
+    platformId: "amazon",
+    platformLabel: "Amazon",
+    statusLabel: "active",
+    groupId: "grp-launch",
+    groupLabel: "Launch Pod",
+    groupLabels: ["Launch Pod"],
+    tags: ["Prime Day", "Boost"],
+    browserLabel: "Chrome 124 / Win11",
+    proxyLabel: "Netnut | US / Virginia",
+    proxyProvider: "Netnut",
+    proxyHealth: "healthy",
+    regionLabel: "US / Virginia",
+    localeLabel: "en-US",
+    timezoneLabel: "America/New_York",
+    fingerprintLabel: "fp-native-gpu",
+    runtimeStatus: "warming",
+    continuityScore: 84,
+    activeSessionCount: 0,
+    pendingActionCount: 4,
+    lastActiveAt: minutesAgo(27),
+    lastOpenedAt: minutesAgo(41),
+    lastSyncedAt: minutesAgo(90),
+    updatedAt: minutesAgo(19),
+  },
+  {
+    id: "pf-003",
+    code: "TT-058",
+    name: "TikTok Creator Seoul",
+    storeId: "store-tt-kr-01",
+    platformId: "tiktok",
+    platformLabel: "TikTok",
+    statusLabel: "draft",
+    groupId: "grp-growth",
+    groupLabel: "Growth EU",
+    groupLabels: ["Growth EU"],
+    tags: ["Content", "Korea", "Aged"],
+    browserLabel: "Chrome 123 / Win11",
+    proxyLabel: "Local pool | KR / Seoul",
+    proxyProvider: "Local pool",
+    proxyHealth: "warning",
+    regionLabel: "KR / Seoul",
+    localeLabel: "ko-KR",
+    timezoneLabel: "Asia/Seoul",
+    fingerprintLabel: "fp-canvas-noise",
+    runtimeStatus: "idle",
+    continuityScore: 72,
+    activeSessionCount: 0,
+    pendingActionCount: 1,
+    lastActiveAt: minutesAgo(143),
+    lastOpenedAt: minutesAgo(160),
+    lastSyncedAt: minutesAgo(220),
+    updatedAt: minutesAgo(101),
+  },
+  {
+    id: "pf-004",
+    code: "ET-016",
+    name: "Etsy Launch Madrid",
+    storeId: "store-etsy-es-01",
+    platformId: "etsy",
+    platformLabel: "Etsy",
+    statusLabel: "active",
+    groupId: "grp-aged",
+    groupLabel: "Aged Accounts",
+    groupLabels: ["Aged Accounts"],
+    tags: ["Launch", "EU"],
+    browserLabel: "Chrome 124 / Win11",
+    proxyLabel: "Shared pool | ES / Madrid",
+    proxyProvider: "Shared pool",
+    proxyHealth: "offline",
+    regionLabel: "ES / Madrid",
+    localeLabel: "es-ES",
+    timezoneLabel: "Europe/Madrid",
+    fingerprintLabel: "fp-gpu-shift",
+    runtimeStatus: "error",
+    continuityScore: 49,
+    activeSessionCount: 0,
+    pendingActionCount: 5,
+    lastActiveAt: minutesAgo(180),
+    lastOpenedAt: minutesAgo(190),
+    lastSyncedAt: minutesAgo(320),
+    updatedAt: minutesAgo(160),
+  },
+];
+
+export function getFallbackProfileRows(): ProfileRow[] {
+  return FALLBACK_PROFILE_ROWS.map((row) => ({
+    ...row,
+    groupLabels: [...row.groupLabels],
+    tags: [...row.tags],
+  }));
+}
+
+export function buildFallbackProfileDetail(profileId: string): ProfileDetail | null {
+  const profile = FALLBACK_PROFILE_ROWS.find((row) => row.id === profileId);
+  if (!profile) {
+    return null;
+  }
+
+  return {
+    profileId,
+    profile: {
+      ...profile,
+      groupLabels: [...profile.groupLabels],
+      tags: [...profile.tags],
+    },
+    credentialRef: `cred-${profile.id}`,
+    fingerprintProfileLabel: profile.fingerprintLabel,
+    behaviorProfileLabel: "behavior-default",
+    networkPolicyLabel: "network-default",
+    continuityPolicyLabel: "continuity-stable",
+    platformTemplateLabel: `${profile.platformLabel} baseline`,
+    storePlatformOverrideLabel: null,
+    proxyProvider: profile.proxyProvider,
+    proxyRegion: profile.regionLabel,
+    proxyCountry: profile.regionLabel.split("/")[0]?.trim() ?? null,
+    proxyResolutionStatus: profile.proxyHealth === "healthy" ? "resolved" : "needs_review",
+    proxyUsageMode: "sticky",
+    proxyLastVerifiedAt: profile.updatedAt,
+    proxyLastUsedAt: profile.lastActiveAt,
+    continuityStatus: profile.runtimeStatus === "error" ? "attention" : "stable",
+    continuityScore: profile.continuityScore,
+    activeSessionCount: profile.activeSessionCount,
+    loginRiskCount: profile.runtimeStatus === "error" ? 2 : 0,
+    lastEventType: profile.runtimeStatus === "running" ? "session_opened" : "idle_snapshot",
+    recentTasks: [
+      {
+        id: `task-${profile.id}-1`,
+        title: `${profile.platformLabel} warmup refresh`,
+        status: profile.runtimeStatus === "error" ? "failed" : "succeeded",
+        createdAt: profile.lastActiveAt,
+        finishedAt: profile.updatedAt,
+      },
+    ],
+    recentLogs: [
+      {
+        id: `log-${profile.id}-1`,
+        level: profile.runtimeStatus === "error" ? "ERROR" : "INFO",
+        message:
+          profile.runtimeStatus === "error"
+            ? "Fallback detail indicates proxy resolution drift."
+            : "Fallback detail indicates stable workbench snapshot.",
+        createdAt: profile.updatedAt,
+      },
+    ],
+    source: "fallback",
+  };
+}

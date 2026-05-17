@@ -1,0 +1,176 @@
+import type {
+  DesktopSyncLayoutState,
+  DesktopSyncWindowState,
+  DesktopSynchronizerSnapshot,
+} from "../../types/desktop";
+
+import { cloneSynchronizerSnapshot } from "./model";
+
+const NOW_SECONDS = Math.floor(Date.now() / 1000);
+
+function secondsAgo(seconds: number): string {
+  return String(NOW_SECONDS - seconds);
+}
+
+const MOCK_WINDOWS: DesktopSyncWindowState[] = [
+  {
+    windowId: "sync-win-001",
+    nativeHandle: "0x1001",
+    title: "Amazon Warmup | A-102",
+    status: "focused",
+    orderIndex: 0,
+    isMainWindow: true,
+    isFocused: true,
+    isMinimized: false,
+    isVisible: true,
+    profileId: "pf-001",
+    profileLabel: "Prime Warmup East",
+    storeId: "store-amz-east",
+    platformId: "amazon",
+    lastSeenAt: secondsAgo(6),
+    lastActionAt: secondsAgo(15),
+    bounds: {
+      x: 42,
+      y: 112,
+      width: 1010,
+      height: 742,
+    },
+  },
+  {
+    windowId: "sync-win-002",
+    nativeHandle: "0x1002",
+    title: "TikTok Creator | TT-061",
+    status: "ready",
+    orderIndex: 1,
+    isMainWindow: false,
+    isFocused: false,
+    isMinimized: false,
+    isVisible: true,
+    profileId: "pf-004",
+    profileLabel: "TikTok Shop Berlin",
+    storeId: "store-tt-eu-01",
+    platformId: "tiktok",
+    lastSeenAt: secondsAgo(8),
+    lastActionAt: secondsAgo(48),
+    bounds: {
+      x: 1068,
+      y: 112,
+      width: 1010,
+      height: 742,
+    },
+  },
+  {
+    windowId: "sync-win-003",
+    nativeHandle: "0x1003",
+    title: "Shopify Retarget | SP-020",
+    status: "busy",
+    orderIndex: 2,
+    isMainWindow: false,
+    isFocused: false,
+    isMinimized: false,
+    isVisible: true,
+    profileId: "pf-006",
+    profileLabel: "Shopify Retarget LA",
+    storeId: "store-shp-us-02",
+    platformId: "shopify",
+    lastSeenAt: secondsAgo(11),
+    lastActionAt: secondsAgo(32),
+    bounds: {
+      x: 42,
+      y: 874,
+      width: 1010,
+      height: 742,
+    },
+  },
+  {
+    windowId: "sync-win-004",
+    nativeHandle: "0x1004",
+    title: "Etsy Crafts | ET-027",
+    status: "ready",
+    orderIndex: 3,
+    isMainWindow: false,
+    isFocused: false,
+    isMinimized: false,
+    isVisible: true,
+    profileId: "pf-012",
+    profileLabel: "Etsy Crafts Toronto",
+    storeId: "store-etsy-ca-01",
+    platformId: "etsy",
+    lastSeenAt: secondsAgo(9),
+    lastActionAt: secondsAgo(56),
+    bounds: {
+      x: 1068,
+      y: 874,
+      width: 1010,
+      height: 742,
+    },
+  },
+  {
+    windowId: "sync-win-005",
+    nativeHandle: "0x1005",
+    title: "Amazon Seasonal | A-240",
+    status: "minimized",
+    orderIndex: 4,
+    isMainWindow: false,
+    isFocused: false,
+    isMinimized: true,
+    isVisible: false,
+    profileId: "pf-013",
+    profileLabel: "Amazon Seasonal Osaka",
+    storeId: "store-amz-jp-01",
+    platformId: "amazon",
+    lastSeenAt: secondsAgo(24),
+    lastActionAt: secondsAgo(124),
+    bounds: {
+      x: 2092,
+      y: 112,
+      width: 960,
+      height: 720,
+    },
+  },
+  {
+    windowId: "sync-win-006",
+    nativeHandle: null,
+    title: "TikTok Home | TT-101",
+    status: "missing",
+    orderIndex: 5,
+    isMainWindow: false,
+    isFocused: false,
+    isMinimized: false,
+    isVisible: false,
+    profileId: "pf-014",
+    profileLabel: "TikTok Home Warsaw",
+    storeId: "store-tt-pl-01",
+    platformId: "tiktok",
+    lastSeenAt: secondsAgo(160),
+    lastActionAt: secondsAgo(320),
+    bounds: null,
+  },
+];
+
+const MOCK_LAYOUT: DesktopSyncLayoutState = {
+  mode: "grid",
+  mainWindowId: "sync-win-001",
+  columns: 2,
+  rows: 3,
+  gapPx: 16,
+  overlapOffsetX: null,
+  overlapOffsetY: null,
+  uniformWidth: 1010,
+  uniformHeight: 742,
+  syncScroll: true,
+  syncNavigation: true,
+  syncInput: false,
+  updatedAt: secondsAgo(18),
+};
+
+const MOCK_SNAPSHOT: DesktopSynchronizerSnapshot = {
+  windows: MOCK_WINDOWS,
+  layout: MOCK_LAYOUT,
+  focusedWindowId: "sync-win-001",
+  updatedAt: secondsAgo(6),
+};
+
+export function createMockSynchronizerSnapshot(): DesktopSynchronizerSnapshot {
+  return cloneSynchronizerSnapshot(MOCK_SNAPSHOT);
+}
