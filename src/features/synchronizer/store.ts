@@ -758,9 +758,9 @@ export const synchronizerActions = {
         updatedAt: nowTs(),
       }),
       {
-        successInfo: `${plan.title} was recorded through the native synchronizer broadcast contract for ${targetCount} windows; adapter-specific replay remains explicit.`,
-        successCapabilityDetail: `${plan.title} recorded natively against ${targetCount} windows with ${mainWindowLabel} as controller context.`,
-        successFeedDetail: `${plan.scopeLabel} - ${targetCount} windows in scope - controller ${mainWindowLabel}. Native broadcast plan recorded for replay.`,
+        successInfo: `${plan.title} was executed through the native synchronizer broadcast contract for ${targetCount} windows; native physical window rearrangement was applied where supported.`,
+        successCapabilityDetail: `${plan.title} executed natively against ${targetCount} windows with ${mainWindowLabel} as controller context, including physical window placement.`,
+        successFeedDetail: `${plan.scopeLabel} - ${targetCount} windows in scope - controller ${mainWindowLabel}. Native broadcast plan executed with physical rearrangement.`,
       },
     );
 
