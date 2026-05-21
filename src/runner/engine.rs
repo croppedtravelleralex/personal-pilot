@@ -402,16 +402,15 @@ async fn change_proxy_ip_execution(
 ) -> RunnerExecutionResult {
     let now_ts = now_ts_string();
 
-    let proxy_id = change_proxy_ip_payload_string(payload, &["proxy_id", "proxyId"]);
-    if proxy_id.is_none() {
-        return change_proxy_ip_error_result(
+    let proxy_id_value = match change_proxy_ip_payload_string(payload, &["proxy_id", "proxyId"]) {
+        Some(id) => id,
+        None => return change_proxy_ip_error_result(
             None, None, None, None, None, None, None,
             "missing_proxy_id",
-            "change_proxy_ip requires a proxy_id in the payload",
+            "change_proxy_ip requires proxy_id in payload",
             false,
-        );
-    }
-    let proxy_id_value = proxy_id.as_deref().unwrap();
+        ),
+    };
 
     let mode = change_proxy_ip_payload_string(payload, &["mode", "rotation_mode", "rotationMode"])
         .unwrap_or_else(|| "provider_aware_rotate".to_string());
@@ -431,7 +430,7 @@ async fn change_proxy_ip_execution(
         r#"SELECT id, provider, region, status, source_label
            FROM proxies WHERE id = ?"#,
     )
-    .bind(proxy_id_value)
+    .bind(&proxy_id_value)
     .fetch_optional(&state.db)
     .await
     {
@@ -465,11 +464,22 @@ async fn change_proxy_ip_execution(
     let effective_region = requested_region.clone().or_else(|| proxy_region.clone());
 
     let provider_config_row = if let Some(source_label) = proxy_source_label.as_deref() {
-        sqlx::query(r#"SELECT config_json FROM proxy_harvest_sources WHERE source_label = ?"#)
+        match sqlx::query(r#"SELECT config_json FROM proxy_harvest_sources WHERE source_label = ?"#)
             .bind(source_label)
             .fetch_optional(&state.db)
             .await
-            .unwrap_or(None)
+        {
+            Ok(row) => row,
+            Err(err) => {
+                return change_proxy_ip_error_result(
+                    Some(proxy_id_value.to_string()), Some(&mode), requested_provider, requested_region,
+                    session_key, sticky_ttl_seconds, Some(&residency_status),
+                    "provider_config_db_error",
+                    &format!("database error querying provider config for source_label={source_label}: {err}"),
+                    true,
+                );
+            }
+        }
     } else {
         None
     };
@@ -482,7 +492,7 @@ async fn change_proxy_ip_execution(
     let provider_write = if let Some(config) = provider_config.as_ref() {
         crate::desktop::write_proxy_rotation_to_provider(
             config,
-            proxy_id_value,
+            &proxy_id_value,
             &mode,
             session_key.as_deref(),
             effective_provider.as_deref(),
@@ -546,7 +556,9 @@ async fn change_proxy_ip_execution(
     let cooldown_until = provider_write
         .cooldown_seconds
         .or(provider_write.retry_after_seconds)
-        .map(|seconds| (now_ts.parse::<i64>().unwrap_or(0) + seconds).to_string());
+        .map(|seconds| (now_ts.parse::<i64>().unwrap_or_else(|err| {
+            panic!("now_ts_string returned unparseable value {now_ts}: {err}");
+        }) + seconds).to_string());
 
     let message = format!(
         "change_proxy_ip task: {} provider_write_status={}",

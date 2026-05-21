@@ -611,7 +611,13 @@ pub(crate) async fn write_proxy_rotation_to_provider(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.trim().parse::<i64>().ok())
         .filter(|value| *value > 0);
-    let body = response.json::<Value>().await.unwrap_or(Value::Null);
+    let body = match response.json::<Value>().await {
+        Ok(body) => body,
+        Err(err) => {
+            eprintln!("provider rotation response body JSON parse failed: {err}");
+            Value::Null
+        }
+    };
     let provider_message = value_text(&body, "message")
         .or_else(|| value_text(&body, "detail"))
         .unwrap_or_else(|| status.to_string());
