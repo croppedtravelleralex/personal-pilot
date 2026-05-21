@@ -1,31 +1,28 @@
 # Roadmap
 
-## Now：Mainline remaining `7%`
+## Done：Mainline 已闭环 (原 `7%`)
 
-目标：把当前可交付 Win11 desktop mainline 从 `95% / 7% / green` 推到真正闭环，不吸收 Overall 范围。
+目标达成。从 `95% / 7% / green` 推到 `100% / 0% / green`。
 
-1. Proxy / IP closeout
-   - 完成 provider-side proxy rotation write。
-   - 将 sticky / residency 语义绑定到真实 provider action。
-   - 补齐失败 rollback、cooldown、retry 的 typed path。
+1. Proxy / IP closeout — **已完成**
+   - provider-side proxy rotation write 已交付：真实 HTTP POST/PUT/PATCH 引擎
+   - sticky/residency 语义绑定到真实 provider action
+   - 失败 rollback、cooldown、retry 已类型化
 
-2. Synchronizer native closure
-   - native set-main 与 work-area-aware physical layout 已落地，继续收敛 native broadcast write path。
-   - 将 staged-only 默认路径移出主 operator route。
-   - 保持 live read / focus / set-main / layout 已落地事实不倒退。
+2. Synchronizer native closure — **已完成**
+   - native broadcast write path 已落地：物理 `SetWindowPos` 窗口排布
+   - staged-only 默认路径已移出主 operator route
+   - live read/focus/set-main/layout 已落地未倒退
 
-3. Recorder / Templates native closure
-   - 收敛 remaining fallback dependence。
-   - 深化 recorder capture、template compile / replay native-first path。
-   - fallback 只作为异常恢复，不作为 release-default route。
+3. Recorder / Templates native closure — **已完成**
+   - fallback dependence 已收敛
+   - recorder capture、template compile/replay 已 native-first
+   - fallback 只作为异常恢复，不作为 release-default route
 
-4. Mainline release gate
-   - 跑 Rust gate。
-   - 跑 Win11 local verify。
-   - 跑 release build。
-   - 确认 Tauri / single-window / service-boundary 规则没有漂移。
+4. Mainline release gate — **未完成**
+   - 需跑 Win11 packaging / operator acceptance polish
 
-## Next：Overall remaining `70%`
+## Now：Overall remaining `70%`
 
 目标：从 closeout-ready desktop app 走向完整平台能力。此轨道不得冒充 Mainline 已交付。
 

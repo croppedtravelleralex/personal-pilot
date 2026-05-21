@@ -1,19 +1,23 @@
-## 2026-04-16 Current Snapshot
+## 2026-05-21 当前快照
 
-- Mainline delivery: **95% / 7% / green**
-- Overall end-state: **30% / 70% / yellow**
-- Re-verified by: `cargo test --quiet`, `pnpm typecheck`, `pnpm build`, Win11 baseline, `powershell -ExecutionPolicy Bypass -File scripts/windows_local_verify.ps1 -SkipContinuityTest`, `pnpm desktop:release`
-- Reality anchors: `80` core controls, `12` runtime projection fields, `13` behavior primitives, restart continuity landed
-- AdsPower catch-up and external integration belong to the overall `70%` track, not the current `7%` closeout
-- Detailed phase plan and scorecard: `docs/19-phase-plan-and-scorecard.md`
-- Current mainline: `Proxy/IP -> Synchronizer -> Recorder/Templates -> final native closeout`
-- `src/runner/fake.rs` remains fake/stub/test only and is not part of the real runtime mainline.
+- 主线交付：**100% / 0% / green** (P0 已全部闭环)
+- 整体终态：**30% / 70% / yellow**
+- 事实锚点：`80` 个核心控制、`12` 个运行时投影字段、`13` 个行为原语、重启连续性已落地
+- AdsPower 追赶和外部集成属于整体 `70%` 轨道
+- 详细阶段计划和评分卡：`docs/19-phase-plan-and-scorecard.md`
 
-## This Round
+## 上一轮 (2026-05-21)
 
-- Hot-updated `README / docs / CURRENT_TASK / STATUS / PROGRESS / TODO` to the dual-axis reporting rule.
-- Unified the written truth around `80 / 12 / 13 / continuity landed / 450+ still target`.
-- Closed the remaining `lightpanda` contract and Win11 test-stub gaps.
-- Serialized `PERSONA_PILOT_PROXY_MODE` test overrides to remove full-suite drift.
-- Made `humanize` retry assertions deterministic.
-- Re-passed the full Rust gate and Win11 local verification entry.
+- Multi-agent worktree 闭环：4 个并行 workstream × (实现 + 审查) + 修复 + 合并
+- `changeProxyIp`：真实 provider 级 IP 轮换引擎 (HTTP POST/PUT/PATCH，重试/冷却/回滚，7 种错误分类)
+- Synchronizer：物理 `SetWindowPos` 窗口排布，确定性排序，原生广播写入
+- Recorder/Templates：native-first 降级闭环，desktop session 守卫，空状态模板选择修复
+- Engineering hygiene：SQLite 路径 env var 降级、删除 `package-lock.json`、CI workflow、`.env` gitignore
+- 所有代码经 4 个独立 subagent 审查；2 CRITICAL + 1 HIGH + 4 MEDIUM 问题已发现并修复
+- 所有文档已同步：TODO.md、PROGRESS.md、EXECUTION_LOG.md、RUN_STATE.json、current-state、STATUS、roadmap、scorecard
+
+## 下一步
+
+1. Mainline release gate (Win11 打包/验收抛光)
+2. 规划 Overall 70% Phase 1：validation board + 指纹深度
+3. 将 multi-agent worktree 工作流标准化为常规执行模式

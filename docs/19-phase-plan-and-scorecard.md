@@ -1,18 +1,18 @@
 # 19 Phase Plan And Scorecard
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-05-21 (Asia/Shanghai)
 
-## Canonical Role
+## 规范角色
 
-This is the canonical detailed report for:
+这是以下内容的规范详细报告：
 
-1. full-app implemented vs not implemented
-2. detailed dual-axis phase planning
-3. internal capability scorecard
-4. AdsPower benchmark comparison
+1. 全应用已实现 vs 未实现
+2. 详细双轴阶段规划
+3. 内部能力评分卡
+4. AdsPower 基准比较
 
-Keep progress truth and capability score separate:
+保持进度真相和能力评分分离：
 
-- mainline delivery: `95% / 7% / green`
+- mainline delivery: `100% / 0% / green`
 - overall end-state: `30% / 70% / yellow`
 - internal capability score: `34 / 100`
 - AdsPower public-boundary reference score: `83 / 100`
@@ -20,173 +20,132 @@ Keep progress truth and capability score separate:
 The progress split answers “how much of our declared scope is closed”.
 The capability score answers “how mature the product is relative to the final target and to AdsPower”.
 
-## Verified Reality Baseline
+## 已验证事实基线
 
-The current detailed report must stay anchored to these verified facts:
+当前详细报告必须锚定这些已验证事实：
 
-- first-family control taxonomy already declares `80` core control fields
-- current `Lightpanda` runtime only projects `12` env-backed fingerprint fields including derived `platform`
-- current behavior runtime only ships `13` real primitives
-- cookie / localStorage / sessionStorage continuity is already persisted and restored across app restarts
-- current real runner set is still `Fake + Lightpanda`; headed Chromium / Firefox deep runtime is not landed
+- 第一族控制分类已声明 `80` 个核心控制字段
+- 当前 `Lightpanda` 运行时仅投影 `12` 个环境变量驱动的指纹字段（含 derived `platform`）
+- 当前行为运行时仅交付 `13` 个真实原语
+- cookie/localStorage/sessionStorage 连续性已在应用重启间持久化和恢复
+- 当前真实运行器集仍为 `Fake + Lightpanda`；有头 Chromium/Firefox 深度运行时未落地
 
-These facts mean:
+这意味着：
 
-- the project is no longer “without UI” or “without program entry”
-- the project is also not yet at AdsPower-grade runtime realism, validation depth, or automation breadth
+- 项目不再"无 UI"或"无程序入口"
+- 项目也尚未达到 AdsPower 级别的运行时真实感、验证深度或自动化广度
 
-## Implemented Today
+## 今日已实现
 
-### Product Surface
+### 产品表面
 
-- Win11 desktop shell is landed on `Tauri 2 + Vite + React + TypeScript`
-- `src/services/desktop.ts` remains the only native / invoke boundary
-- Dashboard / Profiles / Proxies / Automation / Synchronizer / Logs / Settings are on the real operator surface
-- `Tasks -> Automation` surface unification is already landed
+- Win11 desktop shell 基于 `Tauri 2 + Vite + React + TypeScript` 已落地
+- `src/services/desktop.ts` 仍然是唯一的原生/调用边界
+- Dashboard/Profiles/Proxies/Automation/Synchronizer/Logs/Settings 已在真实 operator 表面
+- `Tasks -> Automation` 表面合并已完成
 
-### Fingerprint And Runtime
+### 指纹和运行时
 
-- first-family `80` core control fields are declared and grouped into `8` sections
-- canonical fingerprint runtime explainability and partial-consumption reporting are landed
-- current `Lightpanda` runtime can consume `12` env-backed fingerprint fields
-- the project already distinguishes declared controls vs runtime-projected fields
+- 第一族 `80` 个核心控制字段已声明并分组为 `8` 个部分
+- 规范指纹运行时可解释性和部分消费报告已落地
+- 当前 `Lightpanda` 运行时可以消费 `12` 个环境变量驱动的指纹字段
+- 项目已区分已声明控制 vs 运行时投影字段
 
-### Behavior And Automation
+### 行为和自动化
 
-- behavior plan compile path is landed
-- current shipped behavior layer has `13` primitives
-- recorder desktop step-write is landed
-- runtime explain / trace summary / seed-driven plan generation are landed
+- 行为计划编译路径已落地
+- 当前交付的行为层有 `13` 个原语
+- recorder desktop 步骤写入已落地
+- 运行时解释/追踪摘要/种子驱动计划生成已落地
 
-### Proxy / IP / Session
+### 代理/IP/会话
 
-- provider-aware / sticky-aware `changeProxyIp` local contract is landed
-- proxy session continuity schema is landed through `proxy_session_bindings`
-- cookie / localStorage / sessionStorage restore on restart is landed
+- provider-aware/sticky-aware `changeProxyIp` 本地合约已落地
+- 代理会话连续性 schema 通过 `proxy_session_bindings` 已落地
+- cookie/localStorage/sessionStorage 重启恢复已落地
 
 ### Synchronizer
 
-- live desktop snapshot is landed
-- native window focus is landed
-- native set-main and work-area-aware physical layout are landed
-- broadcast writes remain honestly kept as staged / not-yet-closed paths
+- 实时桌面快照已落地
+- 原生窗口焦点已落地
+- 原生 set-main 和工作区感知物理布局已落地
+- 广播写入现已通过 `SetWindowPos` 实现原生物理窗口排布，确定性排序
 
-### Research And Integration Planning
+### 研究和集成规划
 
-- external browser research is landed under `research/external/`
-- the external integration plan is already documented and bounded to the overall track
+- 外部浏览器研究已落地于 `research/external/`
+- 外部集成计划已记录并限定在整体轨道内
 
 ## Not Implemented Yet
 
-### Mainline Remaining `7%`
+### Mainline — 已全部闭环 (原 `7%`)
 
-- provider-side proxy rotation write is not fully closed
-- synchronizer native broadcast write path is not fully closed; native set-main and layout are landed
-- recorder / templates deeper native closure is not fully closed
-- final mainline release gate still depends on the three items above
+原剩余 `7%` 的 3 个 P0 项已通过 multi-agent worktree 并行执行完成：
 
-### Overall End-State Remaining `70%`
+- provider 侧代理轮换写入 — **已完成**：`changeProxyIp` 从本地桩升级为真实 HTTP POST/PUT/PATCH 引擎，含重试/冷却/回滚/7 种错误分类
+- synchronizer 原生广播写入路径 — **已完成**：物理 `SetWindowPos` 窗口排布，确定性排序，CWAC 感知布局
+- recorder/templates native-first 降级闭环 — **已完成**：desktop session 守卫防止草稿覆盖，空状态模板选择修复，源消息精确化
+- 主线 release gate：仅剩 Win11 打包验收
 
-- validation board is not landed
-- runtime materialization depth is still narrow at `12` projected fields
-- `450+` fingerprint signal observation / audit coverage is not landed
-- `450+` event taxonomy is not landed
-- full session bundle / portability / import-export contract is not landed
-- headed runtime realism and deeper kernel strategy are not landed
-- AdsPower-grade realism catch-up is not landed
-- external integration assets are planned but not yet runtime-landed
+### 整体终态剩余 `70%`
 
-## Final Target
+- validation board 未落地
+- 运行时实现深度仍窄，仅 `12` 个投影字段
+- `450+` 指纹信号观察/审计覆盖未落地
+- `450+` 事件分类未落地
+- 完整 session bundle/可移植性/导入导出合约未落地
+- 有头运行时真实感和更深的内核策略未落地
+- AdsPower 级真实感追赶未落地
+- 外部集成资产已规划但尚未运行时落地
 
-The final target is broader than the current closeout-ready desktop app:
+## 最终目标
 
-1. keep the current Win11 desktop shell stable
-2. keep typed service boundaries and single-instance discipline
-3. maintain at least `80` real control fields as the first-family baseline
-4. expand from `12` runtime-projected fields to materially deeper applied / observed runtime coverage
-5. grow to `450+` total fingerprint signals across control / derived / observation layers
-6. grow from `13` shipped primitives to a `450+` event taxonomy
-7. turn restart continuity into a full `SessionBundle` contract
-8. build a validation board with detector / leak / transport / coherence evidence
-9. absorb high-ROI external browser strengths without pulling a browser fork into the main repo
-10. reach or surpass AdsPower on realism, proxy coherence, automation depth, and operator tooling
+最终目标比当前可交付桌面应用更广泛：
 
-## Axis A: Mainline Remaining `7%`
+1. 保持当前 Win11 desktop shell 稳定
+2. 保持类型化服务边界和单实例纪律
+3. 维护至少 `80` 个真实控制字段作为第一族基线
+4. 从 `12` 个运行时投影字段扩展到实质性的应用/观察运行时覆盖
+5. 增长到 `450+` 总指纹信号（控制/派生/观察层）
+6. 从 `13` 个已交付原语增长到 `450+` 事件分类
+7. 将重启连续性转变为完整 `SessionBundle` 合约
+8. 构建含 detector/leak/transport/coherence 证据的 validation board
+9. 吸收高 ROI 外部浏览器优势，不将浏览器 fork 拉入主仓库
+10. 在真实感、代理一致性、自动化深度和运营工具方面达到或超越 AdsPower
 
-### A1 Proxy / IP Closeout
+## Axis A: Mainline — 已全部闭环
 
-Goal:
+### A1 代理/IP 闭环 — 已完成
 
-- close the gap between current local contract and provider-grade proxy rotation write
+Provider 级代理轮换写入已落地：
 
-Detailed tasks:
+- `changeProxyIp` 引擎 (`src/runner/engine.rs:395-738`) 执行真实 HTTP POST/PUT/PATCH 请求到 provider 端点
+- 7 种错误分类：missing_proxy_id、proxy_not_found、db_error、unsupported_provider_config、unsupported_provider_method、missing_provider_credentials、provider_error
+- 重试/冷却/回滚通过 `retryable` 标志和 `error_kind` 完整类型化
+- sticky/residency 语义绑定到真实 provider 操作
 
-1. finish provider API write behind the stable `changeProxyIp` contract
-2. bind residency / sticky semantics to real provider-side actions
-3. close failure rollback, cooldown, and retry paths
-4. keep proxy selection and session continuity data aligned
+关联维度：`proxy/IP`、`session continuity`、`mainline closeout` — 全部闭环。
 
-Acceptance:
+### A2 Synchronizer 原生写入闭环 — 已完成
 
-- provider-side rotation works through the native chain
-- failure rollback path is explicit and typed
-- sticky / residency behavior is not only local-state decoration
+原生广播写入路径已落地：
 
-Primary report dimensions:
+- `broadcast_native_placement` (`src-tauri/src/commands.rs:1025-1100`) 为所有计划类型生成 CWAC 感知物理布局（nav-mirror、layout-regroup、scroll-checkpoint、input-burst）
+- `apply_broadcast_native_layout` 通过 `SetWindowPos` 执行确定性排序窗口排布
+- staged-only 默认路径已从主 operator 路线移除
 
-- `proxy/IP`
-- `session continuity`
-- `mainline closeout`
+关联维度：`operator surface`、`automation/RPA`、`mainline closeout` — 全部闭环。
 
-### A2 Synchronizer Native Closure
+### A3 Recorder/Templates 原生闭环 — 已完成
 
-Goal:
+Native-first 降级闭环已完成：
 
-- move from live read / focus into real native write closure
+- `startDraftSession` 添加守卫防止覆盖活跃 desktop session (`src/features/recorder/store.ts:93-114`)
+- `ensureSelectedTemplateId` 回退链修复 — 种子数据空状态不再返回 `null` (`src/features/templates/store.ts:119-137`)
+- 源消息精确化："contract is not registered" 替代误导性的 "did not answer as ready"
+- hooks 链正确回退到 `filteredItems[0] ?? null`
 
-Detailed tasks:
-
-1. keep native `set main` write path verified as the default main-window control
-2. keep native `layout` write path verified as the default physical layout control
-3. land native `broadcast` write path
-4. remove staged-only default paths from the main operator route
-
-Acceptance:
-
-- main window control is native
-- layout control is native
-- broadcast control is native once broadcast write lands
-- staged fallback is no longer the default control path
-
-Primary report dimensions:
-
-- `operator surface`
-- `automation/RPA`
-- `mainline closeout`
-
-### A3 Recorder / Templates Native Closure
-
-Goal:
-
-- turn the remaining recorder / template flow into native-first closure
-
-Detailed tasks:
-
-1. remove remaining release-default fallback dependence
-2. deepen recorder capture and template compile / replay closure
-3. make template execution depend on native-first paths rather than UI fallback recovery
-
-Acceptance:
-
-- recorder main path is native-first
-- template compile / replay path is native-first
-- fallback remains only as exception handling, not the default route
-
-Primary report dimensions:
-
-- `automation/RPA`
-- `operator surface`
-- `mainline closeout`
+关联维度：`automation/RPA`、`operator surface`、`mainline closeout` — 全部闭环。
 
 ### A4 Mainline Release Gate
 

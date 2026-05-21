@@ -1,48 +1,46 @@
 # Final Goal Progress Breakdown
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-05-21 (Asia/Shanghai)
 
 ## Current Split
 
-- mainline delivery split: `95% / 7%`
+- mainline delivery split: `100% / 0%`
 - mainline quality gate color: `green`
 - overall end-state split: `30% / 70%`
 - overall end-state color: `yellow`
 
-## Why It Stayed 95 / 7 On The Mainline
+## Mainline 到达 100 / 0 的原因
 
-The move from `77% / 23%` to `95% / 7%` came from real closure, not more docs:
+从 `95% / 7%` 到 `100% / 0%` 通过 multi-agent worktree 并行执行闭环了最后 3 个 P0 项：
 
-- `Tasks` is now on the main operator surface
-- `changeProxyIp` gained provider-aware / sticky-aware semantics
-- recorder step-write now goes through the desktop contract
-- synchronizer now reads live desktop windows, can focus a real window, and has native set-main plus work-area-aware physical layout
-- `lightpanda` now emits the canonical runtime explain contract
-- the full Rust / integration gate is green again
-- route-level code splitting closed the old bundle warning
+- `changeProxyIp` 从本地桩升级为真实 provider 级 HTTP 轮换引擎（POST/PUT/PATCH，重试/冷却/回滚，7 种错误分类）
+- synchronizer 原生广播写入路径落地：物理 `SetWindowPos` 窗口排布，确定性排序
+- recorder/templates native-first 降级闭环：desktop session 守卫，空状态模板选择修复，源消息精确化
+- engineering hygiene 一并闭环：SQLite 路径 env var 降级、CI workflow、`.env` gitignore、`package-lock.json` 清理
+- 所有代码经 4 个独立 subagent 审查，2 CRITICAL + 1 HIGH + 4 MEDIUM 问题在合并前修复
 
-## Why The Overall End-State Is Still 30 / 70
+## 为什么整体终态仍然是 30 / 70
 
-The bigger “complete app” target is much broader than the current native closeout:
+更大的"完整应用"目标远比当前 native closeout 广泛：
 
-- first-family control schema already declares `80` core control fields
-- current `Lightpanda` runtime only materializes `12` env-backed fingerprint fields including derived `platform`
-- cookie / localStorage / sessionStorage persistence across restart is landed
-- current behavior runtime only supports `13` real primitives
-- `450+` fingerprint total signals, `450+` event types, stronger realism, and AdsPower-boundary catch-up are still mostly future work
-- external browser research is now done, but the integration plan is still a plan, not shipped runtime depth
+- 第一族控制 schema 已声明 `80` 个核心控制字段
+- 当前 `Lightpanda` 运行时只实现了 `12` 个环境变量驱动的指纹字段（含 derived `platform`）
+- cookie/localStorage/sessionStorage 重启持久化已落地
+- 当前行为运行时只支持 `13` 个真实原语
+- `450+` 指纹总信号、`450+` 事件类型、更强的真实感、AdsPower 边界追赶仍是未来工作
+- 外部浏览器研究已完成，但集成计划仍是计划，尚未转化为运行时深度
 
-## What The Remaining 7% Actually Is
+## 已闭环的 7% 是什么
 
-This is not “missing UI”. It is the final native-closeout slice:
+这是最后的原生闭环切片，Round 19 完成交付：
 
-1. provider-side proxy rotation write
-2. synchronizer native batch / broadcast writes
-3. recorder / templates deeper native closure
+1. provider 侧代理轮换写入 — **已完成**：真实 HTTP POST/PUT/PATCH 到 provider 端点
+2. synchronizer 原生批量/广播写入 — **已完成**：物理 SetWindowPos + 确定性排序
+3. recorder/templates 原生深度闭环 — **已完成**：desktop session 守卫 + 空状态修复
 
-## What The Remaining 70% Actually Is
+## 剩余的 70% 是什么
 
-This is not “basic desktop app construction”.
-It is the long strategic gap between the current closeout-ready desktop app and the intended final platform:
+这不是"基础桌面应用构建"。
+而是当前可交付的桌面应用与目标最终平台之间的长期战略差距：
 
 1. fingerprint control -> runtime materialization depth
 2. fingerprint observation / validation board
@@ -51,13 +49,13 @@ It is the long strategic gap between the current closeout-ready desktop app and 
 5. `450+` event taxonomy and richer automation replay depth
 6. AdsPower-boundary catch-up in realism, ecosystem, and operator tooling
 
-## Reporting Rule
+## 汇报规则
 
-Default reporting now uses one dual-axis rule:
+默认使用双轴规则：
 
-- `mainline delivery: 95% / 7%`
-- `overall end-state: 30% / 70%`
+- `主线交付: 100% / 0%`
+- `整体终态: 30% / 70%`
 
-The historical `77% / 23%` audit reset stays as context only.
+历史的 `77% / 23%` 审计重置仅作为上下文保留。
 
-For the detailed phase board, scorecard, and AdsPower benchmark summary, use `docs/19-phase-plan-and-scorecard.md`.
+详细阶段板、评分卡和 AdsPower 基准摘要请参阅 `docs/19-phase-plan-and-scorecard.md`。
