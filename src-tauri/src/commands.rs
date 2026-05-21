@@ -51,12 +51,14 @@ use tauri::State;
 #[cfg(target_os = "windows")]
 use windows::Win32::{
     Foundation::{BOOL, HWND, LPARAM, RECT},
+    Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    },
     UI::WindowsAndMessaging::{
-        BringWindowToTop, EnumWindows, GetForegroundWindow, GetMonitorInfoW, GetSystemMetrics,
-        GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsIconic, IsWindow, IsWindowVisible,
-        MonitorFromWindow, SetForegroundWindow, SetWindowPos, ShowWindow, MONITORINFO,
-        MONITOR_DEFAULTTONEAREST, SM_CXSCREEN, SM_CYSCREEN, SWP_NOACTIVATE, SWP_NOZORDER,
-        SW_RESTORE,
+        BringWindowToTop, EnumWindows, GetForegroundWindow, GetSystemMetrics, GetWindowRect,
+        GetWindowTextLengthW, GetWindowTextW, IsIconic, IsWindow, IsWindowVisible,
+        SetForegroundWindow, SetWindowPos, ShowWindow, SM_CXSCREEN, SM_CYSCREEN, SWP_NOACTIVATE,
+        SWP_NOZORDER, SW_RESTORE,
     },
 };
 
@@ -998,6 +1000,161 @@ fn apply_native_window_layout(snapshot: &DesktopSynchronizerSnapshot) -> Result<
             .map_err(|error| {
                 format!(
                     "Failed to apply native physical layout to sync window {}: {error}",
+                    placement.window_id
+                )
+            })?;
+        }
+    }
+
+    Ok(placements.len())
+}
+
+#[cfg(target_os = "windows")]
+fn broadcast_native_placement(
+    controller_hwnd: HWND,
+    target_hwnds: &[(String, HWND)],
+    plan_id: &str,
+    work_area: &WorkArea,
+) -> Result<Vec<SyncWindowPlacement>, String> {
+    let gap = 8i64;
+    let target_count = target_hwnds.len() as i64;
+    let screen_width = work_area.width as i64;
+    let screen_height = work_area.height as i64;
+
+    match plan_id {
+        "nav-mirror" => {
+            let mut placements = Vec::with_capacity(target_hwnds.len() + 1);
+
+            let controller_width = (screen_width * 3 / 5).max(640);
+            let controller_height = (screen_height - gap * 2).max(480);
+            placements.push(SyncWindowPlacement {
+                window_id: "controller".to_string(),
+                hwnd: controller_hwnd,
+                x: offset_layout_position(work_area.x, gap),
+                y: offset_layout_position(work_area.y, gap),
+                width: clamp_layout_size(controller_width),
+                height: clamp_layout_size(controller_height),
+            });
+
+            if target_count > 0 {
+                let stack_width = (screen_width - controller_width - gap * 3).max(240);
+                let stack_height =
+                    ((screen_height - gap * (target_count + 1)) / target_count).max(120);
+                for (index, (window_id, hwnd)) in target_hwnds.iter().enumerate() {
+                    let index = index as i64;
+                    placements.push(SyncWindowPlacement {
+                        window_id: window_id.clone(),
+                        hwnd: *hwnd,
+                        x: offset_layout_position(work_area.x, gap * 2 + controller_width),
+                        y: offset_layout_position(work_area.y, gap + index * (stack_height + gap)),
+                        width: clamp_layout_size(stack_width),
+                        height: clamp_layout_size(stack_height),
+                    });
+                }
+            }
+
+            Ok(placements)
+        }
+        "layout-regroup" => {
+            let columns = (target_count as f64).sqrt().ceil() as i64;
+            let rows = ceil_div(target_count, columns);
+            let cell_width = ((screen_width - gap * (columns + 1)) / columns).max(240);
+            let cell_height = ((screen_height - gap * (rows + 1)) / rows).max(180);
+            let mut placements = Vec::with_capacity(target_hwnds.len() + 1);
+
+            placements.push(SyncWindowPlacement {
+                window_id: "controller".to_string(),
+                hwnd: controller_hwnd,
+                x: offset_layout_position(work_area.x, gap),
+                y: offset_layout_position(work_area.y, gap),
+                width: clamp_layout_size(cell_width),
+                height: clamp_layout_size(cell_height),
+            });
+
+            for (index, (window_id, hwnd)) in target_hwnds.iter().enumerate() {
+                let global_index = (index + 1) as i64;
+                let column = global_index % columns;
+                let row = global_index / columns;
+                placements.push(SyncWindowPlacement {
+                    window_id: window_id.clone(),
+                    hwnd: *hwnd,
+                    x: offset_layout_position(work_area.x, gap + column * (cell_width + gap)),
+                    y: offset_layout_position(work_area.y, gap + row * (cell_height + gap)),
+                    width: clamp_layout_size(cell_width),
+                    height: clamp_layout_size(cell_height),
+                });
+            }
+
+            Ok(placements)
+        }
+        "scroll-checkpoint" => {
+            let offset_x = 48i64;
+            let offset_y = 36i64;
+            let check_width = (screen_width * 4 / 5).max(640);
+            let check_height = (screen_height * 4 / 5).max(480);
+            let mut placements = Vec::with_capacity(target_hwnds.len() + 1);
+
+            placements.push(SyncWindowPlacement {
+                window_id: "controller".to_string(),
+                hwnd: controller_hwnd,
+                x: offset_layout_position(work_area.x, gap),
+                y: offset_layout_position(work_area.y, gap),
+                width: clamp_layout_size(check_width),
+                height: clamp_layout_size(check_height),
+            });
+
+            for (index, (window_id, hwnd)) in target_hwnds.iter().enumerate() {
+                let index = index as i64 + 1;
+                placements.push(SyncWindowPlacement {
+                    window_id: window_id.clone(),
+                    hwnd: *hwnd,
+                    x: offset_layout_position(work_area.x, gap + index * offset_x),
+                    y: offset_layout_position(work_area.y, gap + index * offset_y),
+                    width: clamp_layout_size(check_width),
+                    height: clamp_layout_size(check_height),
+                });
+            }
+
+            Ok(placements)
+        }
+        "input-burst" => Ok(vec![SyncWindowPlacement {
+            window_id: "controller".to_string(),
+            hwnd: controller_hwnd,
+            x: work_area.x,
+            y: work_area.y,
+            width: work_area.width,
+            height: work_area.height,
+        }]),
+        _ => Err(format!(
+            "unsupported broadcast plan for native physical placement: {plan_id}"
+        )),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_broadcast_native_layout(
+    plan_id: &str,
+    controller_hwnd: HWND,
+    target_hwnds: &[(String, HWND)],
+) -> Result<usize, String> {
+    let work_area = primary_work_area()?;
+    let placements =
+        broadcast_native_placement(controller_hwnd, target_hwnds, plan_id, &work_area)?;
+
+    for placement in &placements {
+        unsafe {
+            SetWindowPos(
+                placement.hwnd,
+                HWND(std::ptr::null_mut()),
+                placement.x,
+                placement.y,
+                placement.width,
+                placement.height,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+            .map_err(|error| {
+                format!(
+                    "Failed to apply native broadcast placement to window {}: {error}",
                     placement.window_id
                 )
             })?;
@@ -2132,10 +2289,11 @@ pub fn set_main_sync_window(
     snapshot.updated_at = now;
 
     synchronizer.snapshot = snapshot.clone();
+    let msg = format!("Set main sync window to {window_id}.");
     Ok(sync_action_result(
         "set_main_sync_window",
         snapshot,
-        &format!("Set main sync window to {window_id}."),
+        &msg,
     ))
 }
 
@@ -2163,19 +2321,17 @@ pub fn apply_window_layout(
     snapshot.layout.updated_at = now.clone();
     snapshot.updated_at = now;
 
+    let message = if changed {
+        format!("Updated synchronizer layout state and applied native physical layout to {applied_count} windows.")
+    } else {
+        format!("Layout update request produced no state delta; native physical layout was applied to {applied_count} windows.")
+    };
+
     synchronizer.snapshot = snapshot.clone();
     Ok(sync_action_result(
         "apply_window_layout",
         snapshot,
-        if changed {
-            &format!(
-        "Updated synchronizer layout state and applied native physical layout to {applied_count} windows."
-      )
-        } else {
-            &format!(
-        "Layout update request produced no state delta; native physical layout was applied to {applied_count} windows."
-      )
-        },
+        &message,
     ))
 }
 
@@ -2241,14 +2397,59 @@ pub fn apply_broadcast_plan(
     snapshot.updated_at = now;
 
     let target_count = unique_target_ids.len();
+
+    #[cfg(target_os = "windows")]
+    let applied_count: Result<usize, String> = {
+        let controller_hwnd = {
+            let window = snapshot
+                .windows
+                .iter()
+                .find(|w| w.window_id == controller_window_id)
+                .ok_or_else(|| "broadcast controller not in snapshot".to_string())?;
+            let handle_id = window
+                .native_handle
+                .as_deref()
+                .unwrap_or(window.window_id.as_str());
+            let handle = handle_id
+                .parse::<isize>()
+                .map_err(|_| format!("invalid controller handle: {controller_window_id}"))?;
+            HWND(handle as *mut _)
+        };
+
+        let target_hwnds: Result<Vec<(String, HWND)>, String> = snapshot
+            .windows
+            .iter()
+            .filter(|w| unique_target_ids.contains(&w.window_id))
+            .map(|window| {
+                let handle_id = window
+                    .native_handle
+                    .as_deref()
+                    .unwrap_or(window.window_id.as_str());
+                let handle = handle_id
+                    .parse::<isize>()
+                    .map(|v| HWND(v as *mut _))
+                    .map_err(|_| format!("invalid target handle: {}", window.window_id))?;
+                Ok((window.window_id.clone(), handle))
+            })
+            .collect();
+
+        apply_broadcast_native_layout(&plan_id, controller_hwnd, &target_hwnds?)
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let applied_count: Result<usize, String> =
+        Err("Native physical broadcast layout is not supported on this platform.".to_string());
+
     synchronizer.snapshot = snapshot.clone();
-    Ok(sync_action_result(
-        "apply_broadcast_plan",
-        snapshot,
-        &format!(
-            "Recorded native broadcast plan {plan_id} from controller {controller_window_id} for {target_count} target windows; execution is queued for adapter-specific replay."
+    let msg = match applied_count {
+        Ok(count) => format!(
+            "Broadcast plan {plan_id} applied: controller {controller_window_id}, {target_count} targets, native physical arrangement applied to {count} windows."
         ),
-    ))
+        Err(layout_err) => format!(
+            "Broadcast plan {plan_id} recorded for controller {controller_window_id} with {target_count} target windows. Native physical arrangement skipped: {layout_err}"
+        ),
+    };
+    Ok(sync_action_result("apply_broadcast_plan", snapshot, &msg))
 }
 
 #[tauri::command]
@@ -2264,9 +2465,10 @@ pub fn focus_sync_window(
         .map_err(|_| "Failed to lock synchronizer state".to_string())?;
     let snapshot = capture_live_synchronizer_snapshot(&synchronizer.snapshot)?;
     synchronizer.snapshot = snapshot.clone();
+    let msg = format!("Focused sync window {window_id}.");
     Ok(sync_action_result(
         "focus_sync_window",
         snapshot,
-        &format!("Focused sync window {window_id}."),
+        &msg,
     ))
 }
