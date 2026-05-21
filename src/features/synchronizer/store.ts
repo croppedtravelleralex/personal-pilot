@@ -766,7 +766,7 @@ export const synchronizerActions = {
 
     synchronizerStore.setState((state) => ({
       ...state,
-      stagedBroadcastPlanId: state.dataSource === "native" ? plan.id : state.stagedBroadcastPlanId,
+      stagedBroadcastPlanId: plan.id,
     }));
   },
   setAutoRefreshEnabled(autoRefreshEnabled: boolean) {

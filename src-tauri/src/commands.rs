@@ -1021,6 +1021,10 @@ fn broadcast_native_placement(
     let screen_width = work_area.width as i64;
     let screen_height = work_area.height as i64;
 
+    if target_hwnds.is_empty() {
+        return Ok(vec![]);
+    }
+
     match plan_id {
         "nav-mirror" => {
             let mut placements = Vec::with_capacity(target_hwnds.len() + 1);
@@ -2376,12 +2380,13 @@ pub fn apply_broadcast_plan(
             .collect()
     });
     let mut unique_target_ids = HashSet::new();
+    let mut ordered_target_ids = Vec::new();
     for window_id in target_window_ids {
         if !available_ids.contains(&window_id) {
             return Err(format!("broadcast target window not found: {window_id}"));
         }
-        if window_id != controller_window_id {
-            unique_target_ids.insert(window_id);
+        if window_id != controller_window_id && unique_target_ids.insert(window_id.clone()) {
+            ordered_target_ids.push(window_id);
         }
     }
 
@@ -2400,36 +2405,23 @@ pub fn apply_broadcast_plan(
 
     #[cfg(target_os = "windows")]
     let applied_count: Result<usize, String> = {
-        let controller_hwnd = {
-            let window = snapshot
-                .windows
-                .iter()
-                .find(|w| w.window_id == controller_window_id)
-                .ok_or_else(|| "broadcast controller not in snapshot".to_string())?;
-            let handle_id = window
-                .native_handle
-                .as_deref()
-                .unwrap_or(window.window_id.as_str());
-            let handle = handle_id
-                .parse::<isize>()
-                .map_err(|_| format!("invalid controller handle: {controller_window_id}"))?;
-            HWND(handle as *mut _)
-        };
-
-        let target_hwnds: Result<Vec<(String, HWND)>, String> = snapshot
+        let controller_window = snapshot
             .windows
             .iter()
-            .filter(|w| unique_target_ids.contains(&w.window_id))
-            .map(|window| {
-                let handle_id = window
-                    .native_handle
-                    .as_deref()
-                    .unwrap_or(window.window_id.as_str());
-                let handle = handle_id
-                    .parse::<isize>()
-                    .map(|v| HWND(v as *mut _))
-                    .map_err(|_| format!("invalid target handle: {}", window.window_id))?;
-                Ok((window.window_id.clone(), handle))
+            .find(|w| w.window_id == controller_window_id)
+            .ok_or_else(|| "broadcast controller not in snapshot".to_string())?;
+        let controller_hwnd = sync_window_hwnd(controller_window)?;
+
+        let target_hwnds: Result<Vec<(String, HWND)>, String> = ordered_target_ids
+            .iter()
+            .map(|window_id| {
+                let window = snapshot
+                    .windows
+                    .iter()
+                    .find(|w| w.window_id == *window_id)
+                    .ok_or_else(|| format!("target window not found: {window_id}"))?;
+                let hwnd = sync_window_hwnd(window)?;
+                Ok((window_id.clone(), hwnd))
             })
             .collect();
 
