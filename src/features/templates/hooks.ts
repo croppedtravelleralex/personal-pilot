@@ -57,6 +57,7 @@ export function useTemplatesViewModel(syncOptions: TemplateCompileSyncOptions = 
   const selectedTemplate =
     state.items.find((item) => item.id === state.selectedTemplateId) ??
     filteredItems.find((item) => item.dataSource === "desktop") ??
+    filteredItems[0] ??
     null;
 
   const selectedBindingDraft = selectedTemplate

@@ -92,6 +92,14 @@ export const recorderActions = {
   },
   startDraftSession(template: TemplateSummary, context?: { profileId?: string | null }) {
     recorderStore.setState((current) => {
+      if (current.snapshot?.source === "desktop") {
+        return {
+          ...current,
+          sourceMessage:
+            "A native desktop session is already active and cannot be replaced by a preview draft. Use the desktop stop/start contracts instead.",
+        };
+      }
+
       const snapshot = startFallbackSnapshot(current.snapshot, template, context);
 
       return {
@@ -157,7 +165,7 @@ export const recorderActions = {
           isLoading: false,
           error: null,
           sourceMessage:
-            "Recorder start command did not answer as ready. The workbench is using local preview capture only.",
+            "Recorder start contract is not registered in the desktop bridge. Using local preview capture only.",
         }));
         return;
       }
@@ -261,7 +269,7 @@ export const recorderActions = {
           isLoading: false,
           error: null,
           sourceMessage:
-            "Recorder stop command did not answer as ready, so only the local preview status was closed.",
+            "Recorder stop contract is not registered in the desktop bridge. Local preview status was closed as a fallback.",
         }));
         return;
       }
@@ -314,7 +322,7 @@ export const recorderActions = {
       if (isCommandNotReady(error)) {
         recorderStore.setState((current) => {
           const warning =
-            "Recorder append command did not answer as ready. No native capture was recorded; preview step data is separated from desktop source.";
+            "Recorder append contract is not registered in the desktop bridge. No native capture was recorded; preview step data is separated from desktop source.";
 
           if (!current.snapshot) {
             const fallback = appendNextFallbackRecorderStep(
@@ -448,8 +456,8 @@ export const recorderActions = {
           ? null
           : toErrorMessage(error, "Failed to load recorder snapshot"),
         sourceMessage: isCommandNotReady(error)
-          ? "Recorder read command did not answer as ready. Local preview snapshot remains available only as a placeholder."
-          : "Recorder snapshot read failed. Local preview snapshot remains available only as emergency context.",
+          ? "Recorder read contract is not registered in the desktop bridge. Preview snapshot is active as a fallback placeholder."
+          : "Recorder snapshot read failed through the native desktop contract. Preview snapshot is active as a fallback placeholder.",
       }));
     }
   },

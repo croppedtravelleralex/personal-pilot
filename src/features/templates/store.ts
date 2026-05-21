@@ -124,11 +124,16 @@ function ensureSelectedTemplateId(
     ? items.find((item) => item.id === currentSelectedId) ?? null
     : null;
 
-  if (currentSelection?.dataSource === "desktop") {
+  if (currentSelection && currentSelection.dataSource === "desktop") {
     return currentSelection.id;
   }
 
-  return items.find((item) => item.dataSource === "desktop")?.id ?? null;
+  const firstDesktop = items.find((item) => item.dataSource === "desktop");
+  if (firstDesktop) {
+    return firstDesktop.id;
+  }
+
+  return currentSelectedId ?? items[0]?.id ?? null;
 }
 
 export const templateActions = {
