@@ -14,11 +14,19 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Fix the remaining `cargo test --quiet` integration failures and stabilize the full Rust gate
 - [x] Clear the Vite chunk warning with route-level code splitting
 
-## Mainline Remaining 7%
+## Completed In This Round (Multi-Agent Closeout)
 
-- [ ] Finish provider-grade proxy API write behind the now-stable local `changeProxyIp` contract
-- [ ] Finish `Synchronizer` native batch / broadcast writes and move more staged paths out of the default route
-- [ ] Finish `Recorder / Templates` native-first de-fallback closure
+- [x] Finish provider-grade proxy API write behind the now-stable local `changeProxyIp` contract
+- [x] Finish `Synchronizer` native batch / broadcast writes and move more staged paths out of the default route
+- [x] Finish `Recorder / Templates` native-first de-fallback closure
+- [x] Fix hardcoded SQLite path with env var fallback
+- [x] Delete stale `package-lock.json` (pnpm project)
+- [x] Add `.env` to `.gitignore`
+- [x] Add CI workflow (`cargo test` + `cargo clippy` + `pnpm typecheck`)
+- [x] Fix review findings (DB error handling, div-by-zero, HWND validation, non-deterministic ordering)
+
+## Mainline Remaining
+
 - [ ] Tighten final Win11 packaging / operator acceptance polish without reopening scope
 
 ## Overall End-State 70%

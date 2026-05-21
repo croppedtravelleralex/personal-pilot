@@ -1,10 +1,10 @@
 # Current State
 
-Updated: 2026-04-16 (Asia/Shanghai)
+Updated: 2026-05-21 (Asia/Shanghai)
 
 ## 当前 live truth
 
-- Mainline delivery：`95% / 7% / green`
+- Mainline delivery：`100% / 0% / green` (3 P0 items closed)
 - Overall end-state：`30% / 70% / yellow`
 - 第一族控制 schema 已声明 `80` 个 core control fields。
 - 当前 runtime projection 仍是 `12` 个 env-backed fingerprint fields，包括 derived `platform`。
@@ -27,12 +27,12 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## 未完成边界
 
-### Mainline remaining `7%`
+### Mainline remaining
 
-- provider-side proxy rotation write 未完全闭环。
-- Synchronizer native broadcast write path 未完全闭环；native set-main / layout 已落地，不能再按 layout 未闭环汇报。
-- Recorder / Templates native-first de-fallback closure 未完全闭环。
-- 最终 Win11 packaging / operator acceptance polish 仍需在不重开 scope 的前提下完成。
+- provider-side proxy rotation write 已闭环 (multi-agent worktree closeout)。
+- Synchronizer native broadcast write path 已闭环 (physical SetWindowPos + deterministic ordering)。
+- Recorder / Templates native-first de-fallback closure 已闭环 (desktop session guard + empty-state fix)。
+- 最终 Win11 packaging / operator acceptance polish 仍需在不重开 scope 的前提下完成（本轮已收敛 Mainline P0）。
 
 ### Overall remaining `70%`
 
@@ -46,4 +46,7 @@ Updated: 2026-04-16 (Asia/Shanghai)
 
 ## 当前下一步
 
-先收敛 Mainline `7%`：provider 写入、Synchronizer native 写入、Recorder/Templates native-first closure，然后跑主线 release gate。Overall `70%` 可以规划，但不能阻塞 Mainline closeout。
+Mainline P0 已全部闭环。下一步方向：
+1. 跑主线 release gate (Win11 packaging / operator acceptance polish)
+2. 规划 Overall `70%` 阶段 1：validation board + fingerprint depth
+3. 将 Multi-Agent worktree 工作流标准化为常规执行模式
