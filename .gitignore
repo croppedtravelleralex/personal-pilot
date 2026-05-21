@@ -20,3 +20,6 @@ backend/SelfMadeToolpersonal-pilotdata/
 # Tauri / Rust build output
 target/
 src-tauri/target/
+
+# Environment variables / secrets
+.env
