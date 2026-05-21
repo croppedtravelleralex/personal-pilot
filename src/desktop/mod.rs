@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
@@ -440,6 +440,221 @@ fn derive_change_proxy_ip_status(rotation_mode: &str) -> String {
         "queued_sticky_rotation".to_string()
     } else {
         "queued_provider_rotation".to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ProxyRotationProviderConfig {
+    endpoint: String,
+    method: String,
+    token_env: Option<String>,
+    cooldown_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+struct ProxyRotationProviderWrite {
+    phase: String,
+    status: String,
+    provider_write_status: String,
+    message: String,
+    rollback_proxy_id: Option<String>,
+    cooldown_seconds: Option<i64>,
+    retry_after_seconds: Option<i64>,
+    retryable: bool,
+}
+
+fn value_text(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn value_i64(value: &Value, key: &str) -> Option<i64> {
+    value
+        .get(key)
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0)
+}
+
+fn parse_proxy_rotation_provider_config(
+    raw_config: Option<&str>,
+) -> Option<ProxyRotationProviderConfig> {
+    let root: Value = serde_json::from_str(raw_config?).ok()?;
+    let rotation = root
+        .get("providerRotation")
+        .or_else(|| root.get("provider_rotation"))
+        .unwrap_or(&root);
+    let endpoint = value_text(rotation, "endpoint")
+        .or_else(|| value_text(rotation, "rotationEndpoint"))
+        .or_else(|| value_text(rotation, "rotation_endpoint"))?;
+    let method = value_text(rotation, "method")
+        .unwrap_or_else(|| "POST".to_string())
+        .to_ascii_uppercase();
+    let token_env = value_text(rotation, "tokenEnv")
+        .or_else(|| value_text(rotation, "token_env"))
+        .or_else(|| value_text(rotation, "authTokenEnv"))
+        .or_else(|| value_text(rotation, "auth_token_env"));
+    let cooldown_seconds =
+        value_i64(rotation, "cooldownSeconds").or_else(|| value_i64(rotation, "cooldown_seconds"));
+
+    Some(ProxyRotationProviderConfig {
+        endpoint,
+        method,
+        token_env,
+        cooldown_seconds,
+    })
+}
+
+async fn write_proxy_rotation_to_provider(
+    config: &ProxyRotationProviderConfig,
+    proxy_id: &str,
+    rotation_mode: &str,
+    session_key: Option<&str>,
+    requested_provider: Option<&str>,
+    requested_region: Option<&str>,
+    sticky_ttl_seconds: Option<i64>,
+    residency_status: &str,
+) -> ProxyRotationProviderWrite {
+    if !matches!(config.method.as_str(), "POST" | "PUT" | "PATCH") {
+        return ProxyRotationProviderWrite {
+            phase: "error".to_string(),
+            status: "unsupported_provider_method".to_string(),
+            provider_write_status: "unsupported_provider_method".to_string(),
+            message: format!(
+                "provider rotation method {} is not supported",
+                config.method
+            ),
+            rollback_proxy_id: None,
+            cooldown_seconds: config.cooldown_seconds,
+            retry_after_seconds: None,
+            retryable: false,
+        };
+    }
+
+    let mut request = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+    {
+        Ok(client) => client
+            .request(
+                config.method.parse().unwrap_or(reqwest::Method::POST),
+                &config.endpoint,
+            )
+            .json(&serde_json::json!({
+                "proxyId": proxy_id,
+                "mode": rotation_mode,
+                "sessionKey": session_key,
+                "requestedProvider": requested_provider,
+                "requestedRegion": requested_region,
+                "stickyTtlSeconds": sticky_ttl_seconds,
+                "residencyStatus": residency_status,
+            })),
+        Err(error) => {
+            return ProxyRotationProviderWrite {
+                phase: "error".to_string(),
+                status: "provider_client_unavailable".to_string(),
+                provider_write_status: "provider_client_unavailable".to_string(),
+                message: format!("provider rotation HTTP client could not be built: {error}"),
+                rollback_proxy_id: None,
+                cooldown_seconds: config.cooldown_seconds,
+                retry_after_seconds: config.cooldown_seconds,
+                retryable: true,
+            };
+        }
+    };
+
+    if let Some(token_env) = config.token_env.as_deref() {
+        match env::var(token_env) {
+            Ok(token) if !token.trim().is_empty() => {
+                request = request.bearer_auth(token);
+            }
+            _ => {
+                return ProxyRotationProviderWrite {
+                    phase: "blocked".to_string(),
+                    status: "missing_provider_credentials".to_string(),
+                    provider_write_status: "missing_provider_credentials".to_string(),
+                    message: format!(
+                        "provider rotation credential environment variable {token_env} is not set"
+                    ),
+                    rollback_proxy_id: None,
+                    cooldown_seconds: config.cooldown_seconds,
+                    retry_after_seconds: None,
+                    retryable: true,
+                };
+            }
+        }
+    }
+
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(error) => {
+            return ProxyRotationProviderWrite {
+                phase: "error".to_string(),
+                status: "provider_write_failed".to_string(),
+                provider_write_status: "request_failed".to_string(),
+                message: format!("provider rotation request failed: {error}"),
+                rollback_proxy_id: None,
+                cooldown_seconds: config.cooldown_seconds,
+                retry_after_seconds: config.cooldown_seconds,
+                retryable: true,
+            };
+        }
+    };
+
+    let status = response.status();
+    let retry_after_seconds = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|value| *value > 0);
+    let body = response.json::<Value>().await.unwrap_or(Value::Null);
+    let provider_message = value_text(&body, "message")
+        .or_else(|| value_text(&body, "detail"))
+        .unwrap_or_else(|| status.to_string());
+    let rollback_proxy_id =
+        value_text(&body, "rollbackProxyId").or_else(|| value_text(&body, "rollback_proxy_id"));
+    let body_cooldown_seconds =
+        value_i64(&body, "cooldownSeconds").or_else(|| value_i64(&body, "cooldown_seconds"));
+
+    if status.is_success() {
+        return ProxyRotationProviderWrite {
+            phase: "success".to_string(),
+            status: "committed".to_string(),
+            provider_write_status: "committed".to_string(),
+            message: provider_message,
+            rollback_proxy_id,
+            cooldown_seconds: body_cooldown_seconds.or(config.cooldown_seconds),
+            retry_after_seconds: None,
+            retryable: false,
+        };
+    }
+
+    let retryable = status.is_server_error() || status.as_u16() == 408 || status.as_u16() == 429;
+    ProxyRotationProviderWrite {
+        phase: if retryable { "blocked" } else { "error" }.to_string(),
+        status: if retryable {
+            "provider_retry_required"
+        } else {
+            "provider_write_rejected"
+        }
+        .to_string(),
+        provider_write_status: if retryable {
+            "retryable_provider_error"
+        } else {
+            "provider_rejected"
+        }
+        .to_string(),
+        message: provider_message,
+        rollback_proxy_id,
+        cooldown_seconds: retry_after_seconds
+            .or(body_cooldown_seconds)
+            .or(config.cooldown_seconds),
+        retry_after_seconds,
+        retryable,
     }
 }
 
@@ -2563,9 +2778,34 @@ pub struct DesktopProxyChangeIpRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DesktopProxyChangeIpRollback {
+    pub available: bool,
+    pub rollback_proxy_id: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopProxyChangeIpCooldown {
+    pub required: bool,
+    pub cooldown_until: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopProxyChangeIpRetry {
+    pub retryable: bool,
+    pub requires: String,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopProxyChangeIpResult {
     pub proxy_id: String,
     pub status: String,
+    pub phase: String,
     pub mode: String,
     pub session_key: Option<String>,
     pub requested_provider: Option<String>,
@@ -2574,6 +2814,12 @@ pub struct DesktopProxyChangeIpResult {
     pub note: String,
     pub residency_status: String,
     pub rotation_mode: String,
+    pub rotation_status: String,
+    pub provider_config_status: String,
+    pub provider_write_status: String,
+    pub rollback: DesktopProxyChangeIpRollback,
+    pub cooldown: DesktopProxyChangeIpCooldown,
+    pub retry: DesktopProxyChangeIpRetry,
     pub tracking_task_id: String,
     pub expires_at: Option<String>,
     pub updated_at: String,
@@ -2658,6 +2904,8 @@ pub struct DesktopLaunchTemplateRunRequest {
     pub launch_note: Option<String>,
     pub source_run_id: Option<String>,
     pub recorder_session_id: Option<String>,
+    pub recorder_step_count: Option<i64>,
+    pub recorder_native_required: Option<bool>,
     pub target_scope: Option<String>,
 }
 
@@ -5561,7 +5809,18 @@ pub async fn launch_desktop_template_run(
     let launch_mode = request.mode.unwrap_or_else(|| "queue".to_string());
     let launch_note = request.launch_note.clone();
     let source_run_id = request.source_run_id.clone();
-    let recorder_session_id = request.recorder_session_id.clone();
+    let recorder_session_id = normalized_optional_text(request.recorder_session_id.clone());
+    let recorder_step_count = request.recorder_step_count.unwrap_or(0).max(0);
+    if request.recorder_native_required.unwrap_or(true) && recorder_session_id.is_none() {
+        return Err(anyhow::anyhow!(
+            "native recorder session evidence is required before launching template run"
+        ));
+    }
+    if request.recorder_native_required.unwrap_or(true) && recorder_step_count <= 0 {
+        return Err(anyhow::anyhow!(
+            "native recorder session must contain at least one captured step before launching template run"
+        ));
+    }
     let target_scope = request.target_scope.clone();
     let variable_bindings = request.variable_bindings.clone();
     let template =
@@ -5596,6 +5855,7 @@ pub async fn launch_desktop_template_run(
             "launch_note": launch_note.clone(),
             "source_run_id": source_run_id.clone(),
             "recorder_session_id": recorder_session_id.clone(),
+            "recorder_step_count": recorder_step_count,
             "target_scope": target_scope.clone(),
             "variable_bindings": variable_bindings.clone(),
             "timeout_seconds": 180,
@@ -5653,6 +5913,7 @@ pub async fn launch_desktop_template_run(
                 "launchMode": launch_mode.clone(),
                 "sourceRunId": source_run_id.clone(),
                 "recorderSessionId": recorder_session_id.clone(),
+                "recorderStepCount": recorder_step_count,
             })
             .to_string(),
         )
@@ -6407,7 +6668,7 @@ pub async fn change_desktop_proxy_ip(
         return Err(anyhow::anyhow!("proxy_id is required"));
     }
     let proxy_row = sqlx::query(
-        r#"SELECT id, provider, region, status
+        r#"SELECT id, provider, region, status, source_label
            FROM proxies
            WHERE id = ?"#,
     )
@@ -6421,6 +6682,7 @@ pub async fn change_desktop_proxy_ip(
     let proxy_provider: Option<String> = proxy_row.get("provider");
     let proxy_region: Option<String> = proxy_row.get("region");
     let proxy_status: String = proxy_row.get("status");
+    let proxy_source_label: Option<String> = proxy_row.get("source_label");
     let requested_mode = normalized_optional_text(request.mode.clone());
     let requested_session_key = normalized_optional_text(request.session_key.clone());
     let requested_provider = normalized_optional_text(request.requested_provider.clone());
@@ -6526,44 +6788,145 @@ pub async fn change_desktop_proxy_ip(
         .or_else(|| sticky_ttl_seconds_from_expires_at(expires_at.as_deref(), now_ts));
     let status = derive_change_proxy_ip_status(&rotation_mode);
     let task_id = format!("desktop-proxy-change-{}", Uuid::new_v4());
+    let provider_config_row = if let Some(source_label) = proxy_source_label.as_deref() {
+        sqlx::query(r#"SELECT config_json FROM proxy_harvest_sources WHERE source_label = ?"#)
+            .bind(source_label)
+            .fetch_optional(db)
+            .await?
+    } else {
+        None
+    };
+    let provider_config_json = provider_config_row
+        .as_ref()
+        .and_then(|row| row.get::<Option<String>, _>("config_json"));
+    let provider_config = parse_proxy_rotation_provider_config(provider_config_json.as_deref());
+
+    let provider_write = if let Some(config) = provider_config.as_ref() {
+        write_proxy_rotation_to_provider(
+            config,
+            &proxy_id,
+            &rotation_mode,
+            session_key.as_deref(),
+            requested_provider.as_deref(),
+            requested_region.as_deref(),
+            sticky_ttl_seconds,
+            &residency_status,
+        )
+        .await
+    } else {
+        ProxyRotationProviderWrite {
+            phase: "blocked".to_string(),
+            status: "unsupported_provider_config".to_string(),
+            provider_write_status: "unsupported_provider_config".to_string(),
+            message: "provider rotation adapter/config is not available".to_string(),
+            rollback_proxy_id: None,
+            cooldown_seconds: None,
+            retry_after_seconds: None,
+            retryable: true,
+        }
+    };
+    let provider_config_status = if provider_config.is_some() {
+        "configured".to_string()
+    } else {
+        "unsupported_provider_config".to_string()
+    };
+    let provider_write_status = provider_write.provider_write_status.clone();
+    let cooldown_until = provider_write
+        .cooldown_seconds
+        .or(provider_write.retry_after_seconds)
+        .map(|seconds| (now_ts + seconds).to_string());
+    let rollback = DesktopProxyChangeIpRollback {
+        available: provider_write.rollback_proxy_id.is_some(),
+        rollback_proxy_id: provider_write.rollback_proxy_id.clone(),
+        reason: if provider_write.rollback_proxy_id.is_some() {
+            "provider returned rollback handle".to_string()
+        } else if provider_write.phase == "success" {
+            "provider committed rotation without rollback handle".to_string()
+        } else {
+            provider_write.message.clone()
+        },
+    };
+    let cooldown = DesktopProxyChangeIpCooldown {
+        required: cooldown_until.is_some() && provider_write.phase != "success",
+        cooldown_until: cooldown_until.clone(),
+        reason: if cooldown_until.is_some() {
+            provider_write.message.clone()
+        } else {
+            "provider did not require cooldown".to_string()
+        },
+    };
+    let retry = DesktopProxyChangeIpRetry {
+        retryable: provider_write.retryable,
+        requires: if provider_config.is_some() {
+            if provider_write.retryable {
+                "cooldown_or_provider_recovery".to_string()
+            } else {
+                "none".to_string()
+            }
+        } else {
+            "provider_rotation_config".to_string()
+        },
+        next_action: if provider_config.is_some() {
+            if provider_write.retryable {
+                "wait for cooldown or provider recovery before retry".to_string()
+            } else {
+                "review provider response before retry".to_string()
+            }
+        } else {
+            "configure provider rotation endpoint and credentials before retry".to_string()
+        },
+    };
     let note = format!(
         "Prepared {rotation_mode} with residency {residency_status}; session={}, requested provider={}, requested region={}.",
         session_key.as_deref().unwrap_or("none"),
         requested_provider.as_deref().unwrap_or("inherit"),
         requested_region.as_deref().unwrap_or("inherit"),
     );
-    let message = format!(
-        "Queued provider-aware change-IP task {task_id}. Confirm provider-side exit IP movement via later health/detail refresh."
-    );
+    let message = match provider_write.phase.as_str() {
+        "success" => format!(
+            "Committed provider-aware change-IP task {task_id}: {}.",
+            provider_write.message
+        ),
+        "blocked" => format!(
+            "Blocked provider-aware change-IP task {task_id}: {}. Local proxy selection is unchanged.",
+            provider_write.message
+        ),
+        _ => format!(
+            "Provider-aware change-IP task {task_id} failed: {}. Local proxy selection is unchanged.",
+            provider_write.message
+        ),
+    };
 
-    if let Some(session_key_value) = session_key.as_deref() {
-        sqlx::query(
-            r#"INSERT INTO proxy_session_bindings (
-                   session_key, proxy_id, provider, region, requested_region, requested_provider,
-                   last_used_at, expires_at, created_at, updated_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(session_key) DO UPDATE SET
-                 proxy_id = excluded.proxy_id,
-                 provider = COALESCE(excluded.provider, proxy_session_bindings.provider),
-                 region = COALESCE(excluded.region, proxy_session_bindings.region),
-                 requested_region = COALESCE(excluded.requested_region, proxy_session_bindings.requested_region),
-                 requested_provider = COALESCE(excluded.requested_provider, proxy_session_bindings.requested_provider),
-                 last_used_at = excluded.last_used_at,
-                 expires_at = COALESCE(excluded.expires_at, proxy_session_bindings.expires_at),
-                 updated_at = excluded.updated_at"#,
-        )
-        .bind(session_key_value)
-        .bind(&proxy_id)
-        .bind(requested_provider.as_deref().or(proxy_provider.as_deref()))
-        .bind(requested_region.as_deref().or(proxy_region.as_deref()))
-        .bind(&requested_region)
-        .bind(&requested_provider)
-        .bind(&updated_at)
-        .bind(&expires_at)
-        .bind(&updated_at)
-        .bind(&updated_at)
-        .execute(db)
-        .await?;
+    if provider_write.phase == "success" {
+        if let Some(session_key_value) = session_key.as_deref() {
+            sqlx::query(
+                r#"INSERT INTO proxy_session_bindings (
+                       session_key, proxy_id, provider, region, requested_region, requested_provider,
+                       last_used_at, expires_at, created_at, updated_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(session_key) DO UPDATE SET
+                     proxy_id = excluded.proxy_id,
+                     provider = COALESCE(excluded.provider, proxy_session_bindings.provider),
+                     region = COALESCE(excluded.region, proxy_session_bindings.region),
+                     requested_region = COALESCE(excluded.requested_region, proxy_session_bindings.requested_region),
+                     requested_provider = COALESCE(excluded.requested_provider, proxy_session_bindings.requested_provider),
+                     last_used_at = excluded.last_used_at,
+                     expires_at = COALESCE(excluded.expires_at, proxy_session_bindings.expires_at),
+                     updated_at = excluded.updated_at"#,
+            )
+            .bind(session_key_value)
+            .bind(&proxy_id)
+            .bind(requested_provider.as_deref().or(proxy_provider.as_deref()))
+            .bind(requested_region.as_deref().or(proxy_region.as_deref()))
+            .bind(&requested_region)
+            .bind(&requested_provider)
+            .bind(&updated_at)
+            .bind(&expires_at)
+            .bind(&updated_at)
+            .bind(&updated_at)
+            .execute(db)
+            .await?;
+        }
     }
 
     let input_json = serde_json::json!({
@@ -6578,11 +6941,29 @@ pub async fn change_desktop_proxy_ip(
         "residency_status": residency_status.clone(),
         "rotation_mode": rotation_mode.clone(),
         "expires_at": expires_at.clone(),
+        "provider_config_status": provider_config_status.clone(),
+        "provider_write_status": provider_write_status.clone(),
+        "provider_intent": {
+            "proxy_id": proxy_id.clone(),
+            "mode": rotation_mode.clone(),
+            "requested_provider": requested_provider.clone(),
+            "requested_region": requested_region.clone(),
+            "session_key": session_key.clone(),
+            "sticky_ttl_seconds": sticky_ttl_seconds,
+            "residency_status": residency_status.clone(),
+            "rotation_status": status.clone(),
+            "provider_config_status": provider_config_status.clone(),
+            "provider_write_status": provider_write_status.clone(),
+        },
+        "rollback": &rollback,
+        "cooldown": &cooldown,
+        "retry": &retry,
         "note": note.clone(),
     });
     let result_json = serde_json::json!({
         "proxyId": proxy_id.clone(),
-        "status": status.clone(),
+        "status": provider_write.status.clone(),
+        "phase": provider_write.phase.clone(),
         "mode": rotation_mode.clone(),
         "sessionKey": session_key.clone(),
         "requestedProvider": requested_provider.clone(),
@@ -6591,21 +6972,47 @@ pub async fn change_desktop_proxy_ip(
         "note": note.clone(),
         "residencyStatus": residency_status.clone(),
         "rotationMode": rotation_mode.clone(),
+        "rotationStatus": status.clone(),
+        "providerConfigStatus": provider_config_status.clone(),
+        "providerWriteStatus": provider_write_status.clone(),
+        "providerIntent": {
+            "proxyId": proxy_id.clone(),
+            "mode": rotation_mode.clone(),
+            "requestedProvider": requested_provider.clone(),
+            "requestedRegion": requested_region.clone(),
+            "sessionKey": session_key.clone(),
+            "stickyTtlSeconds": sticky_ttl_seconds,
+            "residencyStatus": residency_status.clone(),
+            "rotationStatus": status.clone(),
+            "providerConfigStatus": provider_config_status.clone(),
+            "providerWriteStatus": provider_write_status.clone(),
+        },
+        "rollback": &rollback,
+        "cooldown": &cooldown,
+        "retry": &retry,
+        "message": message.clone(),
         "trackingTaskId": task_id.clone(),
         "expiresAt": expires_at.clone(),
         "updatedAt": updated_at.clone(),
     });
 
+    let task_status = match provider_write.phase.as_str() {
+        "success" => "succeeded",
+        "blocked" => "blocked",
+        _ => "failed",
+    };
+    let task_error_message = (provider_write.phase != "success").then_some(message.as_str());
     sqlx::query(
         r#"INSERT INTO tasks (
                id, kind, status, input_json, priority, created_at, queued_at, result_json, error_message
-           ) VALUES (?, 'change_proxy_ip', 'queued', ?, 5, ?, ?, ?, NULL)"#,
+           ) VALUES (?, 'change_proxy_ip', ?, ?, 5, ?, NULL, ?, ?)"#,
     )
     .bind(&task_id)
+    .bind(task_status)
     .bind(input_json.to_string())
     .bind(&updated_at)
-    .bind(&updated_at)
     .bind(result_json.to_string())
+    .bind(task_error_message)
     .execute(db)
     .await?;
 
@@ -6613,21 +7020,46 @@ pub async fn change_desktop_proxy_ip(
         db,
         &task_id,
         None,
-        "INFO",
-        &format!("change proxy IP request accepted; {note}"),
+        if provider_write.phase == "success" {
+            "INFO"
+        } else {
+            "WARN"
+        },
+        &format!("change proxy IP request {}; {note}", provider_write.phase),
         &updated_at,
     )
     .await?;
 
-    sqlx::query(r#"UPDATE proxies SET updated_at = ? WHERE id = ?"#)
+    if provider_write.phase == "success" {
+        sqlx::query(
+            r#"UPDATE proxies
+               SET updated_at = ?, last_used_at = ?, cooldown_until = NULL,
+                   success_count = success_count + 1
+               WHERE id = ?"#,
+        )
+        .bind(&updated_at)
         .bind(&updated_at)
         .bind(&proxy_id)
         .execute(db)
         .await?;
+    } else {
+        sqlx::query(
+            r#"UPDATE proxies
+               SET updated_at = ?, cooldown_until = COALESCE(?, cooldown_until),
+                   failure_count = failure_count + 1
+               WHERE id = ?"#,
+        )
+        .bind(&updated_at)
+        .bind(&cooldown_until)
+        .bind(&proxy_id)
+        .execute(db)
+        .await?;
+    }
 
     Ok(DesktopProxyChangeIpResult {
         proxy_id,
-        status,
+        status: provider_write.status,
+        phase: provider_write.phase,
         mode: rotation_mode.clone(),
         session_key,
         requested_provider,
@@ -6636,6 +7068,12 @@ pub async fn change_desktop_proxy_ip(
         note,
         residency_status,
         rotation_mode,
+        rotation_status: status,
+        provider_config_status: provider_config_status.to_string(),
+        provider_write_status: provider_write_status.to_string(),
+        rollback,
+        cooldown,
+        retry,
         tracking_task_id: task_id,
         expires_at,
         updated_at,
@@ -6721,6 +7159,133 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn change_proxy_ip_blocks_unsupported_provider_config_with_retry_metadata() {
+        let db_url = format!(
+            "sqlite:///tmp/persona_pilot_proxy_rotation_semantics_{}.db",
+            Uuid::new_v4()
+        );
+        let db = init_db(&db_url).await.expect("init db");
+        sqlx::query(
+            r#"INSERT INTO proxies (
+                   id, scheme, host, port, provider, region, country, status, score,
+                   success_count, failure_count, created_at, updated_at
+               ) VALUES (
+                   'proxy-rotation-test', 'http', '127.0.0.1', 8080, 'provider-a', 'us-east',
+                   'US', 'active', 0.9, 0, 0, '2000000000', '2000000000'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed proxy");
+
+        let result = change_desktop_proxy_ip(
+            &db,
+            DesktopProxyChangeIpRequest {
+                proxy_id: "proxy-rotation-test".to_string(),
+                mode: Some("sticky".to_string()),
+                session_key: Some("session-rotation-test".to_string()),
+                requested_provider: Some("provider-b".to_string()),
+                requested_region: Some("us-west".to_string()),
+                sticky_ttl_seconds: Some(300),
+            },
+        )
+        .await
+        .expect("change proxy ip");
+
+        assert_eq!(result.proxy_id, "proxy-rotation-test");
+        assert_eq!(result.phase, "blocked");
+        assert_eq!(result.status, "unsupported_provider_config");
+        assert_eq!(result.provider_config_status, "unsupported_provider_config");
+        assert_eq!(result.provider_write_status, "unsupported_provider_config");
+        assert_eq!(result.rotation_mode, "sticky");
+        assert_eq!(result.residency_status, "provider_override_pending");
+        assert_eq!(result.session_key.as_deref(), Some("session-rotation-test"));
+        assert_eq!(result.requested_provider.as_deref(), Some("provider-b"));
+        assert_eq!(result.requested_region.as_deref(), Some("us-west"));
+        assert_eq!(result.sticky_ttl_seconds, Some(300));
+        assert!(!result.rollback.available);
+        assert_eq!(result.rollback.rollback_proxy_id, None);
+        assert!(!result.cooldown.required);
+        assert_eq!(result.cooldown.cooldown_until, None);
+        assert!(result.retry.retryable);
+        assert_eq!(result.retry.requires, "provider_rotation_config");
+        assert!(result
+            .message
+            .contains("Blocked provider-aware change-IP task"));
+
+        let task_row = sqlx::query(
+            r#"SELECT status, input_json, result_json, error_message
+               FROM tasks
+               WHERE id = ?"#,
+        )
+        .bind(&result.tracking_task_id)
+        .fetch_one(&db)
+        .await
+        .expect("load change proxy ip task");
+        let task_status: String = task_row.get("status");
+        let input_json: String = task_row.get("input_json");
+        let result_json: String = task_row.get("result_json");
+        let error_message: String = task_row.get("error_message");
+        let input_value: serde_json::Value =
+            serde_json::from_str(&input_json).expect("parse input json");
+        let result_value: serde_json::Value =
+            serde_json::from_str(&result_json).expect("parse result json");
+
+        assert_eq!(task_status, "blocked");
+        assert_eq!(error_message, result.message);
+        assert_eq!(
+            input_value["provider_config_status"],
+            "unsupported_provider_config"
+        );
+        assert_eq!(
+            input_value["provider_write_status"],
+            "unsupported_provider_config"
+        );
+        assert_eq!(input_value["rollback"]["available"], false);
+        assert_eq!(input_value["cooldown"]["required"], false);
+        assert_eq!(input_value["retry"]["retryable"], true);
+        assert_eq!(input_value["retry"]["requires"], "provider_rotation_config");
+        assert_eq!(result_value["phase"], "blocked");
+        assert_eq!(result_value["status"], "unsupported_provider_config");
+        assert_eq!(
+            result_value["providerConfigStatus"],
+            "unsupported_provider_config"
+        );
+        let proxy_row = sqlx::query(
+            r#"SELECT success_count, failure_count, cooldown_until
+               FROM proxies
+               WHERE id = ?"#,
+        )
+        .bind("proxy-rotation-test")
+        .fetch_one(&db)
+        .await
+        .expect("load proxy counters");
+        assert_eq!(proxy_row.get::<i64, _>("success_count"), 0);
+        assert_eq!(proxy_row.get::<i64, _>("failure_count"), 1);
+        assert_eq!(proxy_row.get::<Option<String>, _>("cooldown_until"), None);
+    }
+
+    #[test]
+    fn parses_provider_rotation_config_from_harvest_source_json() {
+        let config = parse_proxy_rotation_provider_config(Some(
+            r#"{
+                "providerRotation": {
+                    "endpoint": "https://provider.example/rotate",
+                    "method": "POST",
+                    "tokenEnv": "PROVIDER_TOKEN",
+                    "cooldownSeconds": 60
+                }
+            }"#,
+        ))
+        .expect("parse provider rotation config");
+
+        assert_eq!(config.endpoint, "https://provider.example/rotate");
+        assert_eq!(config.method, "POST");
+        assert_eq!(config.token_env.as_deref(), Some("PROVIDER_TOKEN"));
+        assert_eq!(config.cooldown_seconds, Some(60));
+    }
+
+    #[tokio::test]
     async fn launch_template_run_exposes_fanout_summary_and_read_run_detail_tracks_artifacts_and_logs(
     ) {
         let db_url = format!(
@@ -6743,6 +7308,8 @@ mod tests {
                 launch_note: Some("smoke launch".to_string()),
                 source_run_id: Some("source-run-001".to_string()),
                 recorder_session_id: Some("recorder-session-001".to_string()),
+                recorder_step_count: Some(1),
+                recorder_native_required: Some(true),
                 target_scope: Some("profile".to_string()),
             },
         )

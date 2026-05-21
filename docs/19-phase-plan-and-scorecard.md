@@ -68,7 +68,8 @@ These facts mean:
 
 - live desktop snapshot is landed
 - native window focus is landed
-- unsupported writes are honestly kept as staged / not-yet-closed paths
+- native set-main and work-area-aware physical layout are landed
+- broadcast writes remain honestly kept as staged / not-yet-closed paths
 
 ### Research And Integration Planning
 
@@ -80,7 +81,7 @@ These facts mean:
 ### Mainline Remaining `7%`
 
 - provider-side proxy rotation write is not fully closed
-- synchronizer native batch / layout / broadcast write path is not fully closed
+- synchronizer native broadcast write path is not fully closed; native set-main and layout are landed
 - recorder / templates deeper native closure is not fully closed
 - final mainline release gate still depends on the three items above
 
@@ -145,8 +146,8 @@ Goal:
 
 Detailed tasks:
 
-1. land native `set main` write path
-2. land native `layout` write path
+1. keep native `set main` write path verified as the default main-window control
+2. keep native `layout` write path verified as the default physical layout control
 3. land native `broadcast` write path
 4. remove staged-only default paths from the main operator route
 
@@ -154,7 +155,7 @@ Acceptance:
 
 - main window control is native
 - layout control is native
-- broadcast control is native
+- broadcast control is native once broadcast write lands
 - staged fallback is no longer the default control path
 
 Primary report dimensions:

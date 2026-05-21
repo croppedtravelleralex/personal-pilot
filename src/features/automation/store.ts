@@ -46,25 +46,25 @@ const CONTRACT_GAPS: AutomationContractGap[] = [
     contract: "compileTemplateRun",
     status: "Ready",
     detail:
-      "Native compile is live and now writes a local manifest for accepted profiles. The remaining gap is launchTemplateRun, not compileTemplateRun.",
+      "Native compile is live and writes a local manifest for accepted profiles.",
   },
   {
     contract: "launchTemplateRun",
-    status: "Missing",
+    status: "Ready",
     detail:
-      "Prepared launch drafts are ready, but no native launch command can enqueue them into the runtime yet.",
+      "Native launch is expected in this desktop build and dispatches prepared manifests into the local runtime.",
   },
   {
     contract: "readRunDetail",
-    status: "Missing",
+    status: "Ready",
     detail:
-      "Run detail still relies on live run rows plus recorder/template adapters because per-run timeline and artifact detail are unavailable.",
+      "Native run detail is expected in this desktop build and reads timeline, artifacts, failure reason, and manual gate state.",
   },
   {
     contract: "readRecorderSnapshot / startBehaviorRecording / stopBehaviorRecording",
     status: "Ready",
     detail:
-      "Recorder main path now uses native read/start/stop contracts first, while local draft capture remains a bounded fallback for missing write depth.",
+      "Recorder main path uses native read/start/stop contracts first; local draft capture is preview/emergency only.",
   },
 ];
 

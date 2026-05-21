@@ -15,7 +15,7 @@ The move from `77% / 23%` to `95% / 7%` came from real closure, not more docs:
 - `Tasks` is now on the main operator surface
 - `changeProxyIp` gained provider-aware / sticky-aware semantics
 - recorder step-write now goes through the desktop contract
-- synchronizer now reads live desktop windows and can focus a real window
+- synchronizer now reads live desktop windows, can focus a real window, and has native set-main plus work-area-aware physical layout
 - `lightpanda` now emits the canonical runtime explain contract
 - the full Rust / integration gate is green again
 - route-level code splitting closed the old bundle warning

@@ -1,3 +1,9 @@
+import type {
+  DesktopProxyChangeIpCooldown,
+  DesktopProxyChangeIpRetry,
+  DesktopProxyChangeIpRollback,
+} from "../../types/desktop";
+
 export type ProxyHealthState =
   | "healthy"
   | "warning"
@@ -101,7 +107,7 @@ export interface ProxyBatchCheckState {
 
 export interface ProxyIpChangeFeedback {
   proxyId: string;
-  phase: "running" | "success" | "error";
+  phase: "running" | "success" | "blocked" | "error";
   message: string;
   status: string | null;
   mode: string | null;
@@ -112,6 +118,12 @@ export interface ProxyIpChangeFeedback {
   note: string | null;
   residencyStatus: string | null;
   rotationMode: string | null;
+  rotationStatus: string | null;
+  providerConfigStatus: string | null;
+  providerWriteStatus: string | null;
+  rollback: DesktopProxyChangeIpRollback | null;
+  cooldown: DesktopProxyChangeIpCooldown | null;
+  retry: DesktopProxyChangeIpRetry | null;
   trackingTaskId: string | null;
   expiresAt: string | null;
   updatedAt: string | null;

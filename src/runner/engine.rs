@@ -382,6 +382,115 @@ fn no_eligible_proxy_execution(
     }
 }
 
+fn change_proxy_ip_payload_string(payload: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| payload.get(*key).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn change_proxy_ip_payload_i64(payload: &Value, keys: &[&str]) -> Option<i64> {
+    keys.iter()
+        .find_map(|key| payload.get(*key).and_then(Value::as_i64))
+}
+
+fn change_proxy_ip_unsupported_provider_execution(payload: &Value) -> RunnerExecutionResult {
+    let proxy_id = change_proxy_ip_payload_string(payload, &["proxy_id", "proxyId"]);
+    let mode = change_proxy_ip_payload_string(payload, &["mode", "rotation_mode", "rotationMode"])
+        .unwrap_or_else(|| "provider_aware_rotate".to_string());
+    let requested_provider =
+        change_proxy_ip_payload_string(payload, &["requested_provider", "requestedProvider"]);
+    let requested_region =
+        change_proxy_ip_payload_string(payload, &["requested_region", "requestedRegion"]);
+    let session_key = change_proxy_ip_payload_string(payload, &["session_key", "sessionKey"]);
+    let sticky_ttl_seconds =
+        change_proxy_ip_payload_i64(payload, &["sticky_ttl_seconds", "stickyTtlSeconds"]);
+    let residency_status =
+        change_proxy_ip_payload_string(payload, &["residency_status", "residencyStatus"])
+            .unwrap_or_else(|| "unknown".to_string());
+    let expires_at = change_proxy_ip_payload_string(payload, &["expires_at", "expiresAt"]);
+    let message = "unsupported_provider_config: change_proxy_ip requires provider rotation endpoint/credentials; current schema does not define them".to_string();
+
+    RunnerExecutionResult {
+        status: RunnerOutcomeStatus::Failed,
+        result_json: Some(json!({
+            "status": "failed",
+            "phase": "completed",
+            "error_kind": "unsupported_provider_config",
+            "failure_scope": "provider_rotation",
+            "execution_stage": "provider_write",
+            "message": message.clone(),
+            "proxy_id": proxy_id,
+            "proxyId": proxy_id,
+            "mode": mode,
+            "rotation_mode": mode,
+            "rotationMode": mode,
+            "requested_provider": requested_provider,
+            "requestedProvider": requested_provider,
+            "requested_region": requested_region,
+            "requestedRegion": requested_region,
+            "session_key": session_key,
+            "sessionKey": session_key,
+            "sticky_ttl_seconds": sticky_ttl_seconds,
+            "stickyTtlSeconds": sticky_ttl_seconds,
+            "residency_status": residency_status,
+            "residencyStatus": residency_status,
+            "expires_at": expires_at,
+            "expiresAt": expires_at,
+            "rotation_status": "unsupported_provider_config",
+            "rotationStatus": "unsupported_provider_config",
+            "provider_write_status": "unsupported_provider_config",
+            "providerWriteStatus": "unsupported_provider_config",
+            "provider_result": {
+                "status": "unsupported",
+                "error_kind": "unsupported_provider_config",
+                "message": message,
+            },
+            "providerResult": {
+                "status": "unsupported",
+                "errorKind": "unsupported_provider_config",
+                "message": message,
+            },
+            "rollback": {
+                "available": false,
+                "rollback_proxy_id": Value::Null,
+                "reason": "no provider write was attempted"
+            },
+            "cooldown": {
+                "required": false,
+                "cooldown_until": Value::Null,
+                "reason": "provider write unsupported before execution"
+            },
+            "retry": {
+                "retryable": true,
+                "requires": "provider_rotation_config",
+                "next_action": "configure provider rotation endpoint and credentials before retry"
+            },
+            "guard": {
+                "browser_runner_bypassed": true,
+                "fake_runner_bypassed": true,
+                "lightpanda_runner_bypassed": true
+            },
+            "payload": payload.clone(),
+        })),
+        error_message: Some(message.clone()),
+        summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
+            category: crate::runner::types::SummaryArtifactCategory::Summary,
+            key: "change_proxy_ip.execution".to_string(),
+            source: "provider_rotation".to_string(),
+            severity: crate::runner::types::SummaryArtifactSeverity::Error,
+            title: "change_proxy_ip execution summary".to_string(),
+            summary: format!(
+                "kind=change_proxy_ip status=failed error_kind=unsupported_provider_config message={message}"
+            ),
+        }],
+        session_cookies: None,
+        session_local_storage: None,
+        session_session_storage: None,
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct RunnerSessionContext {
     session_key: Option<String>,
@@ -3283,6 +3392,8 @@ where
                 session_session_storage: None,
             },
         }
+    } else if task_kind == "change_proxy_ip" {
+        change_proxy_ip_unsupported_provider_execution(&payload)
     } else if let Some(preflight_execution) = preflight_execution {
         preflight_execution
     } else if proxy_required_for_browser && proxy.is_none() {

@@ -47,6 +47,7 @@ function getCooldownWindowSeconds(result: ProxyIpChangeFeedback): number {
   switch (result.phase) {
     case "success":
       return 5 * 60;
+    case "blocked":
     case "error":
       return 15 * 60;
     default:
@@ -95,7 +96,11 @@ function toErrorMessage(error: unknown): string {
 
 function toChangeIpErrorMessage(error: unknown): string {
   if (error instanceof DesktopServiceError && error.code === "desktop_command_not_ready") {
-    return "Native changeProxyIp is not ready yet. The proxy rotation panel stays on the local tracked request path until the desktop contract lands.";
+    if (error.message.includes("provider_rotation_unavailable")) {
+      return error.message;
+    }
+
+    return "Native changeProxyIp is not ready yet. The proxy rotation panel keeps local proxy selection intact until the desktop provider command contract lands.";
   }
 
   return toErrorMessage(error);
@@ -227,7 +232,15 @@ export function useProxiesViewModel() {
         const result = await runProxyChangeIp(
           targetRow ? buildChangeIpRequestForRow(targetRow) : { proxyId },
         );
-        proxyActions.recordChangeIpSuccess(requestId, proxyId, result);
+        if (
+          result.phase === "blocked" ||
+          result.providerConfigStatus === "unsupported_provider_config" ||
+          result.providerWriteStatus === "unsupported_provider_config"
+        ) {
+          proxyActions.recordChangeIpResult(requestId, proxyId, "blocked", result);
+        } else {
+          proxyActions.recordChangeIpResult(requestId, proxyId, "success", result);
+        }
       } catch (error) {
         proxyActions.recordChangeIpFailure(
           requestId,
@@ -349,7 +362,7 @@ export function useProxiesViewModel() {
       (result) => result.phase === "success",
     ).length;
     const localRotationFailures = Object.values(state.changeIp.results).filter(
-      (result) => result.phase === "error",
+      (result) => result.phase === "error" || result.phase === "blocked",
     ).length;
     const localRotationRunning = Object.values(state.changeIp.results).filter(
       (result) => result.phase === "running",

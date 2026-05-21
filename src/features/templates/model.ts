@@ -534,7 +534,7 @@ const SEED_TEMPLATE_CATALOG: TemplateSummary[] = [
       toEpochSeconds("2026-04-15T16:46:00+08:00"),
     ),
     summary:
-      "Reserve launch structure for a publish flow while compile and queue contracts are still missing.",
+      "Preview launch structure for a publish flow while native metadata is not populated yet.",
     compilerState: "Compile contract blocked",
     coverageLabel: "Write path placeholder",
     allowedRegions: ["CN", "US"],
@@ -933,16 +933,20 @@ export function buildTemplateCompileRequestDraft(
   if (recorderSource !== "desktop") {
     warnings.push(
       recorderSource === "adapter_fallback"
-        ? "Recorder session is using adapter fallback data instead of a native capture session."
+        ? "Recorder session is using preview adapter data instead of a native capture session."
         : "Recorder session is not attached yet.",
     );
   }
   if ((syncOptions.recorderStepCount ?? 0) === 0) {
     warnings.push("Recorder timeline is empty, compile preview only includes template outline.");
   }
+  if (template.dataSource !== "desktop") {
+    warnings.push("Seed template metadata is preview-only and cannot be launched until native metadata loads.");
+  }
   if (template.status !== "ready") {
     warnings.push(`Template readiness is still ${template.status}.`);
   }
+  const isDesktopRecorderEvidence = recorderSource === "desktop";
 
   return {
     templateId: template.id,
@@ -959,7 +963,11 @@ export function buildTemplateCompileRequestDraft(
     recorderSource,
     recorderStepCount: syncOptions.recorderStepCount ?? 0,
     warnings,
-    ready: missingRequiredKeys.length === 0 && targetProfileIds.length > 0,
+    ready:
+      template.dataSource === "desktop" &&
+      isDesktopRecorderEvidence &&
+      missingRequiredKeys.length === 0 &&
+      targetProfileIds.length > 0,
     generatedAt: String(Math.floor(Date.now() / 1000)),
   };
 }

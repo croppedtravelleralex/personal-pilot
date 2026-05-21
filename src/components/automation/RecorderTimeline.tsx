@@ -57,7 +57,7 @@ export function RecorderTimeline({
       ? "Recorder session profile does not match the currently selected run persona."
       : null,
     snapshot && snapshot.source !== "desktop"
-      ? "Recorder is currently using adapter-fallback data, so the compile manifest is still useful but queue launch remains a staged operator step."
+      ? "Recorder is using preview adapter data only; native desktop capture remains the production source for launch evidence."
       : null,
   ].filter((item): item is string => Boolean(item));
   const isRecording = snapshot?.status === "recording";
@@ -88,7 +88,7 @@ export function RecorderTimeline({
       {!snapshot ? (
         <EmptyState
           title="No recorder snapshot"
-          detail="Select a template to load recorder state from the desktop read model first, with adapter-fallback draft capture only when native capture is unavailable."
+          detail="Select a template to load recorder state from the desktop read model first. Preview draft capture is reserved for emergency fallback."
         />
       ) : (
         <div className="page-stack">

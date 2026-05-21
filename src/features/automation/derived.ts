@@ -47,11 +47,20 @@ function countKeywordOverlap(left: string[], right: string[]): number {
   return left.filter((item) => rightSet.has(item)).length;
 }
 
+interface TemplateMatchCandidate {
+  template: TemplateSummary;
+  score: number;
+  platformMatch: boolean;
+  keywordOverlap: number;
+}
+
 export function getRecommendedTemplate(
   selectedRun: DesktopTaskItem | null,
   templates: TemplateSummary[],
 ): AutomationTemplateRecommendation | null {
-  if (!selectedRun || templates.length === 0) {
+  const nativeTemplates = templates.filter((template) => template.dataSource === "desktop");
+
+  if (!selectedRun || nativeTemplates.length === 0) {
     return null;
   }
 
@@ -62,16 +71,7 @@ export function getRecommendedTemplate(
     ...tokenize(selectedRun.platformId),
   ];
 
-  let bestMatch:
-    | {
-        template: TemplateSummary;
-        score: number;
-        platformMatch: boolean;
-        keywordOverlap: number;
-      }
-    | null = null;
-
-  templates.forEach((template) => {
+  const bestMatch = nativeTemplates.reduce<TemplateMatchCandidate | null>((currentBest, template) => {
     const templateKeywords = [
       ...tokenize(template.name),
       ...tokenize(template.category),
@@ -87,16 +87,15 @@ export function getRecommendedTemplate(
       keywordOverlap * 18 +
       (template.status === "ready" ? 12 : 0) +
       (template.readinessLevel === "ready" ? 8 : 0);
+    const candidate = {
+      template,
+      score,
+      platformMatch,
+      keywordOverlap,
+    };
 
-    if (!bestMatch || score > bestMatch.score) {
-      bestMatch = {
-        template,
-        score,
-        platformMatch,
-        keywordOverlap,
-      };
-    }
-  });
+    return !currentBest || score > currentBest.score ? candidate : currentBest;
+  }, null);
 
   if (!bestMatch || bestMatch.score <= 0) {
     return null;
@@ -233,6 +232,10 @@ export function buildAutomationChainSummary(input: {
     blockers.push("Select a template before preparing recorder bindings and launch context.");
   }
 
+  if (selectedTemplate?.dataSource !== "desktop") {
+    blockers.push("Native template metadata is required before launch; seed rows are preview-only placeholders.");
+  }
+
   if (compileDraft?.missingRequiredKeys.length) {
     blockers.push(
       `Fill the required bindings first: ${compileDraft.missingRequiredKeys.join(", ")}.`,
@@ -245,7 +248,7 @@ export function buildAutomationChainSummary(input: {
 
   if (recorderSnapshot && recorderSnapshot.source !== "desktop") {
     warnings.push(
-      "Recorder is still using an adapter-fallback session. Review the draft before dispatching.",
+      "Recorder is using preview adapter data. Review it before dispatching through the native launch path.",
     );
   }
 
@@ -375,7 +378,7 @@ export function buildAutomationChainSummary(input: {
   return {
     tone: "danger",
     headline: "The automation chain still has blocking issues.",
-    detail: blockers[0],
+    detail: blockers[0] ?? "The automation chain still has blocking issues.",
     blockers,
     warnings,
   };

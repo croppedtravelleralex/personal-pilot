@@ -780,6 +780,12 @@ export interface DesktopSynchronizerSnapshot {
   updatedAt: string;
 }
 
+export interface DesktopSynchronizerBroadcastRequest {
+  planId: string;
+  targetWindowIds?: string[] | null;
+  controllerWindowId?: string | null;
+}
+
 export interface DesktopCreateProfileInput {
   id: string;
   storeId: string;
@@ -877,9 +883,28 @@ export interface DesktopProxyChangeIpRequest {
   stickyTtlSeconds?: number | null;
 }
 
+export interface DesktopProxyChangeIpRollback {
+  available: boolean;
+  rollbackProxyId: string | null;
+  reason: string;
+}
+
+export interface DesktopProxyChangeIpCooldown {
+  required: boolean;
+  cooldownUntil: string | null;
+  reason: string;
+}
+
+export interface DesktopProxyChangeIpRetry {
+  retryable: boolean;
+  requires: string;
+  nextAction: string;
+}
+
 export interface DesktopProxyChangeIpResult {
   proxyId: string;
   status: string;
+  phase: string;
   mode: string;
   sessionKey: string | null;
   requestedProvider: string | null;
@@ -888,6 +913,12 @@ export interface DesktopProxyChangeIpResult {
   note: string;
   residencyStatus: string;
   rotationMode: string;
+  rotationStatus: string;
+  providerConfigStatus: string;
+  providerWriteStatus: string;
+  rollback: DesktopProxyChangeIpRollback;
+  cooldown: DesktopProxyChangeIpCooldown;
+  retry: DesktopProxyChangeIpRetry;
   trackingTaskId: string;
   expiresAt: string | null;
   updatedAt: string;
@@ -960,6 +991,8 @@ export interface DesktopLaunchTemplateRunRequest {
   launchNote?: string | null;
   sourceRunId?: string | null;
   recorderSessionId?: string | null;
+  recorderStepCount?: number | null;
+  recorderNativeRequired?: boolean | null;
   targetScope?: string | null;
 }
 

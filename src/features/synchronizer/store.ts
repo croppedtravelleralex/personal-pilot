@@ -332,8 +332,118 @@ async function runSynchronizerAction(
   }
 }
 
+async function runBroadcastPlanAction(
+  fallbackTitle: string,
+  fallbackDetail: string,
+  invokeAction: () => Promise<DesktopSynchronizerSnapshot>,
+  updater: (snapshot: DesktopSynchronizerSnapshot) => DesktopSynchronizerSnapshot,
+  options?: {
+    successInfo?: string;
+    successCapabilityDetail?: string;
+    successFeedDetail?: string;
+  },
+) {
+  synchronizerStore.setState((current) => ({
+    ...current,
+    error: null,
+  }));
+
+  try {
+    const snapshot = await invokeAction();
+    synchronizerStore.setState((current) => ({
+      ...setSnapshot(
+        current,
+        snapshot,
+        "native",
+        options?.successInfo ?? "Broadcast plan was recorded through the native desktop service.",
+        null,
+      ),
+      capabilities: updateCapability(
+        current.capabilities,
+        "broadcastPlan",
+        "native_live",
+        options?.successCapabilityDetail ??
+          "Broadcast plan was recorded through the desktop synchronizer contract.",
+      ),
+      actionFeed: appendFeed(
+        current.actionFeed,
+        createFeedItem(
+          "broadcastPlan",
+          fallbackTitle,
+          options?.successFeedDetail ?? "Recorded through native sync contract.",
+          "success",
+          "native_live",
+        ),
+      ),
+    }));
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to record synchronizer broadcast plan";
+    const current = synchronizerStore.getState();
+    const isCommandPending =
+      error instanceof desktop.DesktopServiceError &&
+      error.code === "desktop_command_not_ready";
+
+    if (isCommandPending || current.dataSource === "mock") {
+      synchronizerStore.setState((state) => {
+        const nextSnapshot = updater(cloneSynchronizerSnapshot(state.snapshot));
+        return {
+          ...setSnapshot(
+            state,
+            nextSnapshot,
+            state.dataSource,
+            isCommandPending
+              ? "This desktop build does not expose the requested broadcast command yet. Local console state has been updated so operators can keep staging."
+              : "Native broadcast recording failed, but the local console state is still available for planning.",
+            isCommandPending ? null : message,
+          ),
+          capabilities: updateCapability(
+            state.capabilities,
+            "broadcastPlan",
+            "local_staged",
+            fallbackDetail,
+          ),
+          actionFeed: appendFeed(
+            state.actionFeed,
+            createFeedItem(
+              "broadcastPlan",
+              fallbackTitle,
+              fallbackDetail,
+              isCommandPending ? "warning" : "info",
+              "local_staged",
+            ),
+          ),
+        };
+      });
+      return;
+    }
+
+    synchronizerStore.setState((state) => ({
+      ...state,
+      error: message,
+      info: "Synchronizer broadcast plan did not land on the native desktop service.",
+      capabilities: updateCapability(
+        state.capabilities,
+        "broadcastPlan",
+        "local_fallback",
+        message,
+      ),
+      actionFeed: appendFeed(
+        state.actionFeed,
+        createFeedItem("broadcastPlan", "Broadcast plan failed", message, "error", "local_fallback"),
+      ),
+    }));
+  }
+}
+
 function buildPlatformOptions(windows: DesktopSyncWindowState[]): SynchronizerFilterOption[] {
-  const values = [...new Set(windows.map((window) => window.platformId).filter(Boolean))];
+  const values = [
+    ...new Set(
+      windows
+        .map((window) => window.platformId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
   return [
     { value: "all", label: "All platforms" },
     ...values.map((value) => ({ value, label: value })),
@@ -615,36 +725,49 @@ export const synchronizerActions = {
       filters: DEFAULT_SYNCHRONIZER_FILTERS,
     }));
   },
-  stageBroadcastPlan(plan: SynchronizerBroadcastPlanTemplate) {
-    synchronizerStore.setState((current) => {
-      const summary = getSynchronizerSummary(current);
-      const mainWindowLabel = getWindowLabel(summary.mainWindow, "main window not pinned");
-      const targetCount = summary.filteredWindows.filter(
-        (window) => window.status !== "missing",
-      ).length;
+  async stageBroadcastPlan(plan: SynchronizerBroadcastPlanTemplate) {
+    const current = synchronizerStore.getState();
+    const summary = getSynchronizerSummary(current);
+    const mainWindowLabel = getWindowLabel(summary.mainWindow, "main window not pinned");
+    const targetWindows = summary.filteredWindows.filter(
+      (window) => window.status !== "missing" && !window.isMainWindow,
+    );
+    const targetCount = targetWindows.length;
 
-      return {
-        ...current,
-        stagedBroadcastPlanId: plan.id,
-        info: `${plan.title} is staged locally for ${targetCount} windows. No vendor-grade broadcast command is wired in this build yet.`,
-        capabilities: updateCapability(
-          current.capabilities,
-          "broadcastPlan",
-          "local_staged",
-          `${plan.title} staged locally against ${targetCount} windows with ${mainWindowLabel} as controller context.`,
+    await runBroadcastPlanAction(
+      `${plan.title} staged`,
+      `${plan.title} staged locally against ${targetCount} windows with ${mainWindowLabel} as controller context.`,
+      async () => {
+        const result = await desktop.applyBroadcastPlan({
+          planId: plan.id,
+          controllerWindowId: summary.mainWindow?.windowId ?? current.snapshot.layout.mainWindowId,
+          targetWindowIds: targetWindows.map((window) => window.windowId),
+        });
+        return result.snapshot;
+      },
+      (snapshot) => ({
+        ...snapshot,
+        windows: snapshot.windows.map((window) =>
+          window.status !== "missing"
+            ? {
+                ...window,
+                lastActionAt: nowTs(),
+              }
+            : window,
         ),
-        actionFeed: appendFeed(
-          current.actionFeed,
-          createFeedItem(
-            "broadcastPlan",
-            `${plan.title} staged`,
-            `${plan.scopeLabel} - ${targetCount} windows in scope - controller ${mainWindowLabel}. Execution remains local staged only.`,
-            "warning",
-            "local_staged",
-          ),
-        ),
-      };
-    });
+        updatedAt: nowTs(),
+      }),
+      {
+        successInfo: `${plan.title} was recorded through the native synchronizer broadcast contract for ${targetCount} windows; adapter-specific replay remains explicit.`,
+        successCapabilityDetail: `${plan.title} recorded natively against ${targetCount} windows with ${mainWindowLabel} as controller context.`,
+        successFeedDetail: `${plan.scopeLabel} - ${targetCount} windows in scope - controller ${mainWindowLabel}. Native broadcast plan recorded for replay.`,
+      },
+    );
+
+    synchronizerStore.setState((state) => ({
+      ...state,
+      stagedBroadcastPlanId: plan.id,
+    }));
   },
   setAutoRefreshEnabled(autoRefreshEnabled: boolean) {
     synchronizerStore.setState((current) => {
@@ -758,9 +881,9 @@ export const synchronizerActions = {
       }),
       {
         successCapabilityDetail:
-          "Layout state was written through the native synchronizer contract. Physical window repositioning is still pending.",
+          "Layout state was written through the native synchronizer contract and native physical repositioning was requested.",
         successFeedDetail:
-          "Native synchronizer layout state updated (state-only write, no physical window rearrangement yet).",
+          "Native synchronizer layout state updated and physical window layout applied where supported.",
       },
     );
   },
@@ -793,9 +916,9 @@ export const synchronizerActions = {
       }),
       {
         successCapabilityDetail:
-          "Layout sync guardrails were written through the native synchronizer contract. Physical window repositioning is still pending.",
+          "Layout sync guardrails were written through the native synchronizer contract and the current native physical layout was reapplied where supported.",
         successFeedDetail:
-          "Native synchronizer layout guardrail updated (state-only write, no physical window rearrangement yet).",
+          "Native synchronizer layout guardrail updated and physical window layout reapplied where supported.",
       },
     );
   },

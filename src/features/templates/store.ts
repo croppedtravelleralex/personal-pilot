@@ -37,7 +37,7 @@ const SEED_ITEMS = createSeedTemplates();
 
 const templatesStore = createStore<TemplatesState>({
   items: SEED_ITEMS,
-  selectedTemplateId: SEED_ITEMS[0]?.id ?? null,
+  selectedTemplateId: null,
   searchInput: "",
   appliedSearch: "",
   bindingDrafts: buildBindingDrafts(SEED_ITEMS),
@@ -46,15 +46,15 @@ const templatesStore = createStore<TemplatesState>({
   requestId: 0,
   source: "seed",
   sourceMessage:
-    "Template catalog starts from seed rows and upgrades to the desktop read model when it responds.",
+    "Template catalog is waiting for the desktop read model; seed rows are preview-only empty-state placeholders.",
 });
 
 function isCommandNotReady(error: unknown): error is DesktopServiceError {
-  return (
-    Boolean(error) &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: string }).code === "desktop_command_not_ready"
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "desktop_command_not_ready",
   );
 }
 
@@ -70,7 +70,7 @@ function mergeTemplateCatalog(page: DesktopTemplateMetadataPage): TemplateSummar
     if (!existingIds.has(seed.id)) {
       merged.push({
         ...seed,
-        dataSource: "adapter_fallback",
+        dataSource: "seed",
       });
     }
   }
@@ -120,11 +120,15 @@ function ensureSelectedTemplateId(
   items: TemplateSummary[],
   currentSelectedId: string | null,
 ): string | null {
-  if (currentSelectedId && items.some((item) => item.id === currentSelectedId)) {
-    return currentSelectedId;
+  const currentSelection = currentSelectedId
+    ? items.find((item) => item.id === currentSelectedId) ?? null
+    : null;
+
+  if (currentSelection?.dataSource === "desktop") {
+    return currentSelection.id;
   }
 
-  return items[0]?.id ?? null;
+  return items.find((item) => item.dataSource === "desktop")?.id ?? null;
 }
 
 export const templateActions = {
@@ -286,7 +290,7 @@ export const templateActions = {
         error: null,
         source: "desktop",
         sourceMessage:
-          "Desktop template read model is primary; the adapter still fills missing flow depth and binding scaffolding.",
+          "Desktop template read model is primary; seed rows only fill preview empty states when native metadata has no matching row.",
       }));
     } catch (error) {
       if (templatesStore.getState().requestId !== requestId) {
@@ -302,8 +306,8 @@ export const templateActions = {
         error: isCommandNotReady(error) ? null : normalizedMessage,
         source: "adapter_fallback",
         sourceMessage: isCommandNotReady(error)
-          ? "This desktop build does not expose template metadata yet. The adapter catalog stays available."
-          : "Desktop template read failed, so the adapter catalog remains available as fallback.",
+          ? "Template metadata command did not answer as ready. Seed catalog remains preview-only until native metadata loads."
+          : "Desktop template read failed. Seed catalog remains preview/emergency only until native metadata loads.",
       }));
     }
   },

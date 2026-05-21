@@ -56,7 +56,7 @@ export function useTemplatesViewModel(syncOptions: TemplateCompileSyncOptions = 
 
   const selectedTemplate =
     state.items.find((item) => item.id === state.selectedTemplateId) ??
-    filteredItems[0] ??
+    filteredItems.find((item) => item.dataSource === "desktop") ??
     null;
 
   const selectedBindingDraft = selectedTemplate
@@ -72,7 +72,9 @@ export function useTemplatesViewModel(syncOptions: TemplateCompileSyncOptions = 
         )
       : null;
 
-  const readyCount = state.items.filter((item) => item.status === "ready").length;
+  const readyCount = state.items.filter(
+    (item) => item.dataSource === "desktop" && item.status === "ready",
+  ).length;
 
   return {
     state,

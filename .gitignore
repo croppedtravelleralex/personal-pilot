@@ -1,0 +1,22 @@
+# Local dependencies and build output
+node_modules/
+dist/
+build/
+RunBuild/
+bin/
+
+# Local browser/runtime state
+chrome/
+data/
+backend/data/
+backend/SelfMadeToolpersonal-pilotdata/
+.playwright-mcp/
+.claude/
+
+# Generated binaries and logs
+*.exe
+*.log
+
+# Tauri / Rust build output
+target/
+src-tauri/target/

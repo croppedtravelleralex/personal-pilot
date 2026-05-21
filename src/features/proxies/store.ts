@@ -10,6 +10,7 @@ import {
   type ProxyDetailSnapshot,
   type ProxyFilterState,
   type ProxyHealthState,
+  type ProxyIpChangeFeedback,
   type ProxyRowModel,
   type ProxySortField,
   type ProxyTableState,
@@ -18,7 +19,7 @@ import {
 const DEFAULT_BATCH_MESSAGE =
   "Batch check is wired to the native verify-batch command and refreshes the workbench after each run.";
 const DEFAULT_CHANGE_IP_MESSAGE =
-  "Change IP is ready at the feature layer and will execute through the shared desktop contract when the native command is available.";
+  "Change IP requires a native provider adapter. Local proxy selection stays available, but provider rotation reports an explicit unavailable/blocked result until credentials and adapters are configured.";
 
 export interface ProxiesState {
   rows: ProxyRowModel[];
@@ -276,6 +277,62 @@ function syncSelectedRowDetail(rows: ProxyRowModel[], detail: ProxyDetailSnapsho
   );
 
   return { rows: nextRows, detail };
+}
+
+function toChangeIpFeedback(
+  proxyId: string,
+  phase: "success" | "blocked" | "error",
+  result: DesktopProxyChangeIpResult,
+): ProxyIpChangeFeedback {
+  return {
+    proxyId,
+    phase,
+    message: result.message,
+    status: result.status,
+    mode: result.mode,
+    sessionKey: result.sessionKey,
+    requestedProvider: result.requestedProvider,
+    requestedRegion: result.requestedRegion,
+    stickyTtlSeconds: result.stickyTtlSeconds,
+    note: result.note,
+    residencyStatus: result.residencyStatus,
+    rotationMode: result.rotationMode,
+    rotationStatus: result.rotationStatus,
+    providerConfigStatus: result.providerConfigStatus,
+    providerWriteStatus: result.providerWriteStatus,
+    rollback: result.rollback,
+    cooldown: result.cooldown,
+    retry: result.retry,
+    trackingTaskId: result.trackingTaskId,
+    expiresAt: result.expiresAt,
+    updatedAt: result.updatedAt,
+  };
+}
+
+function createRunningChangeIpFeedback(proxyId: string, message: string): ProxyIpChangeFeedback {
+  return {
+    proxyId,
+    phase: "running",
+    message,
+    status: null,
+    mode: null,
+    sessionKey: null,
+    requestedProvider: null,
+    requestedRegion: null,
+    stickyTtlSeconds: null,
+    note: null,
+    residencyStatus: null,
+    rotationMode: null,
+    rotationStatus: null,
+    providerConfigStatus: null,
+    providerWriteStatus: null,
+    rollback: null,
+    cooldown: null,
+    retry: null,
+    trackingTaskId: null,
+    expiresAt: null,
+    updatedAt: null,
+  };
 }
 
 export const proxyActions = {
@@ -588,23 +645,7 @@ export const proxyActions = {
           results: Object.fromEntries(
             targetIds.map((proxyId) => [
               proxyId,
-              {
-                proxyId,
-                phase: "running" as const,
-                message: "Queued for IP change.",
-                status: null,
-                mode: null,
-                sessionKey: null,
-                requestedProvider: null,
-                requestedRegion: null,
-                stickyTtlSeconds: null,
-                note: null,
-                residencyStatus: null,
-                rotationMode: null,
-                trackingTaskId: null,
-                expiresAt: null,
-                updatedAt: null,
-              },
+              createRunningChangeIpFeedback(proxyId, "Queued for IP change."),
             ]),
           ),
         },
@@ -628,31 +669,16 @@ export const proxyActions = {
           lastMessage: message,
           results: {
             ...current.changeIp.results,
-            [proxyId]: {
-              proxyId,
-              phase: "running",
-              message,
-              status: null,
-              mode: null,
-              sessionKey: null,
-              requestedProvider: null,
-              requestedRegion: null,
-              stickyTtlSeconds: null,
-              note: null,
-              residencyStatus: null,
-              rotationMode: null,
-              trackingTaskId: null,
-              expiresAt: null,
-              updatedAt: null,
-            },
+            [proxyId]: createRunningChangeIpFeedback(proxyId, message),
           },
         },
       };
     });
   },
-  recordChangeIpSuccess(
+  recordChangeIpResult(
     requestId: number,
     proxyId: string,
+    phase: "success" | "blocked" | "error",
     result: DesktopProxyChangeIpResult,
   ) {
     proxiesStore.setState((current) => {
@@ -665,29 +691,14 @@ export const proxyActions = {
         changeIp: {
           ...current.changeIp,
           completedCount: current.changeIp.completedCount + 1,
-          succeededCount: current.changeIp.succeededCount + 1,
-          feedbackTone: "success",
+          succeededCount: phase === "success" ? current.changeIp.succeededCount + 1 : current.changeIp.succeededCount,
+          failedCount: phase === "success" ? current.changeIp.failedCount : current.changeIp.failedCount + 1,
+          feedbackTone: phase === "success" ? "success" : phase === "blocked" ? "warning" : "error",
           lastMessage: result.message,
           lastFinishedAt: result.updatedAt,
           results: {
             ...current.changeIp.results,
-            [proxyId]: {
-              proxyId,
-              phase: "success",
-              message: result.message,
-              status: result.status,
-              mode: result.mode,
-              sessionKey: result.sessionKey,
-              requestedProvider: result.requestedProvider,
-              requestedRegion: result.requestedRegion,
-              stickyTtlSeconds: result.stickyTtlSeconds,
-              note: result.note,
-              residencyStatus: result.residencyStatus,
-              rotationMode: result.rotationMode,
-              trackingTaskId: result.trackingTaskId,
-              expiresAt: result.expiresAt,
-              updatedAt: result.updatedAt,
-            },
+            [proxyId]: toChangeIpFeedback(proxyId, phase, result),
           },
         },
       };
@@ -728,6 +739,12 @@ export const proxyActions = {
               note: null,
               residencyStatus: null,
               rotationMode: null,
+              rotationStatus: null,
+              providerConfigStatus: null,
+              providerWriteStatus: null,
+              rollback: null,
+              cooldown: null,
+              retry: null,
               trackingTaskId: null,
               expiresAt: null,
               updatedAt: finishedAt,

@@ -154,6 +154,8 @@ export function RunLauncher({
   const compileSourceSummary = compileDraft
     ? `${compileDraft.targetSource} target / ${compileDraft.recorderSource} recorder`
     : "waiting for manifest context";
+  const isDesktopTemplateSelected = selectedTemplate?.dataSource === "desktop";
+  const isDesktopRecorderEvidence = compileDraft?.recorderSource === "desktop";
   const canLaunch = Boolean(lastPreparedLaunch?.ready && onLaunch && !isPreparingLaunch);
   const launchStateLabel = isLaunching
     ? "dispatching"
@@ -168,9 +170,11 @@ export function RunLauncher({
     },
     {
       label: "Template",
-      status: selectedTemplate ? "ready" : "blocked",
+      status: selectedTemplate ? (isDesktopTemplateSelected ? "ready" : "blocked") : "blocked",
       detail: selectedTemplate
-        ? `${selectedTemplate.name} / ${selectedTemplate.status} / ${selectedTemplate.platformId}`
+        ? isDesktopTemplateSelected
+          ? `${selectedTemplate.name} / ${selectedTemplate.status} / ${selectedTemplate.platformId}`
+          : `${selectedTemplate.name} is ${selectedTemplate.dataSource} metadata; refresh native templates before launch.`
         : "Choose a template before binding variables and reviewing compile posture.",
     },
     {
@@ -198,15 +202,12 @@ export function RunLauncher({
     },
     {
       label: "Recorder",
-      status:
-        recorderSnapshot?.source === "desktop"
-          ? "ready"
-          : recorderSnapshot
-            ? "review"
-            : "pending",
+      status: isDesktopRecorderEvidence ? "ready" : "blocked",
       detail: recorderSnapshot
-        ? `${recorderSnapshot.source} / ${recorderSnapshot.status} / ${recorderSnapshot.stepCount} steps`
-        : "Recorder context is optional, but step evidence and variable hydration stay thinner without it.",
+        ? isDesktopRecorderEvidence
+          ? `${recorderSnapshot.source} / ${recorderSnapshot.status} / ${recorderSnapshot.stepCount} steps`
+          : `${recorderSnapshot.source} recorder data is preview-only; capture a native desktop session before launch.`
+        : "Native desktop recorder evidence is required before runtime launch.",
     },
     {
       label: "Compile manifest",
@@ -255,7 +256,7 @@ export function RunLauncher({
             <small>
               {recorderSnapshot
                 ? `${recorderSnapshot.source} / ${recorderSnapshot.stepCount} steps`
-                : "Optional but useful for evidence and variable hydration"}
+                : "Native desktop evidence required before launch"}
             </small>
           </article>
           <article className="automation-metric-strip__item">
@@ -315,7 +316,9 @@ export function RunLauncher({
           >
             {templates.map((template) => (
               <option key={template.id} value={template.id}>
-                {template.name}
+                {template.dataSource === "desktop"
+                  ? template.name
+                  : `${template.name} (${template.dataSource} preview - launch blocked)`}
               </option>
             ))}
           </select>
@@ -630,8 +633,8 @@ export function RunLauncher({
 
         {!onLaunch && lastPreparedLaunch?.ready ? (
           <div className="banner banner--warning">
-            Launch staging is ready, but the execution write path still depends on the desktop
-            `launchTemplateRun` command being present in this build.
+            Launch staging is ready, but this frontend did not receive a launch handler. The native
+            `launchTemplateRun` command is expected in the desktop build.
           </div>
         ) : null}
 

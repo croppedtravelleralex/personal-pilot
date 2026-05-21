@@ -26,15 +26,15 @@ const recorderStore = createStore<RecorderState>({
   error: null,
   requestId: 0,
   sourceMessage:
-    "Recorder desktop read/start/stop contracts are primary; local draft capture only fills missing step depth.",
+    "Recorder desktop read/start/stop/append contracts are primary; local draft capture is preview/emergency only.",
 });
 
 function isCommandNotReady(error: unknown): error is DesktopServiceError {
-  return (
-    Boolean(error) &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: string }).code === "desktop_command_not_ready"
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "desktop_command_not_ready",
   );
 }
 
@@ -100,7 +100,7 @@ export const recorderActions = {
         selectedStepId: snapshot.steps[0]?.id ?? current.selectedStepId,
         error: null,
         sourceMessage:
-          "Recorder stayed on local draft capture because no desktop start contract is available.",
+          "Recorder is using local preview capture only; native desktop capture remains the production path.",
       };
     });
   },
@@ -140,7 +140,7 @@ export const recorderActions = {
         isLoading: false,
         error: null,
         sourceMessage:
-          "Recorder desktop session is active. Local draft capture only fills missing step depth.",
+          "Recorder desktop session is active. Preview draft capture is reserved for emergency fallback only.",
       }));
     } catch (error) {
       if (recorderStore.getState().requestId !== requestId) {
@@ -157,7 +157,7 @@ export const recorderActions = {
           isLoading: false,
           error: null,
           sourceMessage:
-            "This desktop build does not expose recorder start yet. The workbench stays on local draft capture.",
+            "Recorder start command did not answer as ready. The workbench is using local preview capture only.",
         }));
         return;
       }
@@ -185,7 +185,7 @@ export const recorderActions = {
         },
         sourceMessage:
           current.snapshot.source === "desktop"
-            ? "Desktop recorder session stays primary. Pause is still a local marker until a native pause command lands."
+            ? "Desktop recorder session stays primary. Pause is recorded as a local preview marker only."
             : current.sourceMessage,
       };
     });
@@ -201,8 +201,8 @@ export const recorderActions = {
         snapshot: stopFallbackSnapshot(current.snapshot),
         sourceMessage:
           current.snapshot.source === "desktop"
-            ? "Recorder session closed locally after desktop stop fallback."
-            : "Local draft recorder session stopped.",
+            ? "Recorder stop did not update native state; local status is preview-only."
+            : "Local preview recorder session stopped.",
       };
     });
   },
@@ -216,7 +216,7 @@ export const recorderActions = {
       recorderStore.setState((current) => ({
         ...current,
         snapshot: current.snapshot ? stopFallbackSnapshot(current.snapshot) : null,
-        sourceMessage: "Local draft recorder session stopped.",
+        sourceMessage: "Local preview recorder session stopped.",
       }));
       return;
     }
@@ -261,7 +261,7 @@ export const recorderActions = {
           isLoading: false,
           error: null,
           sourceMessage:
-            "This desktop build does not expose recorder stop yet, so the current session was closed locally.",
+            "Recorder stop command did not answer as ready, so only the local preview status was closed.",
         }));
         return;
       }
@@ -313,6 +313,9 @@ export const recorderActions = {
 
       if (isCommandNotReady(error)) {
         recorderStore.setState((current) => {
+          const warning =
+            "Recorder append command did not answer as ready. No native capture was recorded; preview step data is separated from desktop source.";
+
           if (!current.snapshot) {
             const fallback = appendNextFallbackRecorderStep(
               createFallbackRecorderSession(template, {
@@ -326,9 +329,18 @@ export const recorderActions = {
               snapshot: fallback,
               selectedStepId: fallback.steps.at(-1)?.id ?? null,
               isLoading: false,
-              error: null,
+              error: warning,
+              sourceMessage: "Recorder timeline is using preview-only adapter data until native append is available.",
+            };
+          }
+
+          if (current.snapshot.source === "desktop") {
+            return {
+              ...current,
+              isLoading: false,
+              error: warning,
               sourceMessage:
-                "Recorder timeline is using adapter-assisted capture because no native step-write command exists yet.",
+                "Desktop recorder session remains unchanged. Capture preview did not write a native step.",
             };
           }
 
@@ -337,6 +349,9 @@ export const recorderActions = {
             return {
               ...current,
               isLoading: false,
+              error: warning,
+              sourceMessage:
+                "Preview capture could not add another step; native desktop session was not changed.",
             };
           }
 
@@ -345,11 +360,8 @@ export const recorderActions = {
             snapshot: nextSnapshot,
             selectedStepId: nextSnapshot.steps.at(-1)?.id ?? current.selectedStepId,
             isLoading: false,
-            error: null,
-            sourceMessage:
-              current.snapshot.source === "desktop"
-                ? "Desktop recorder session stays primary. 'Capture next step' adds an adapter-assisted preview until a native step-write command lands."
-                : current.sourceMessage,
+            error: warning,
+            sourceMessage: "Preview-only adapter step was added; it is not a desktop capture result.",
           };
         });
         return;
@@ -436,8 +448,8 @@ export const recorderActions = {
           ? null
           : toErrorMessage(error, "Failed to load recorder snapshot"),
         sourceMessage: isCommandNotReady(error)
-          ? "This desktop build cannot read recorder state for the current context, so the local draft session remains available."
-          : "Recorder snapshot fell back to a local draft session after desktop loading failed.",
+          ? "Recorder read command did not answer as ready. Local preview snapshot remains available only as a placeholder."
+          : "Recorder snapshot read failed. Local preview snapshot remains available only as emergency context.",
       }));
     }
   },

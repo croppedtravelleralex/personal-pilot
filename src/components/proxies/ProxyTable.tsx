@@ -103,7 +103,7 @@ function getCooldownRemainingLabel(changeIpFeedback: ProxyIpChangeFeedback | nul
   const windowSeconds =
     changeIpFeedback.phase === "success"
       ? 5 * 60
-      : changeIpFeedback.phase === "error"
+      : changeIpFeedback.phase === "error" || changeIpFeedback.phase === "blocked"
         ? 15 * 60
         : 0;
 
@@ -201,11 +201,21 @@ function getRotationPosture(
     };
   }
 
+  if (changeIpFeedback.phase === "blocked") {
+    return {
+      badge: "badge badge--failed",
+      label: "Provider blocked",
+      detail:
+        changeIpFeedback.retry?.nextAction ??
+        "Provider-side rotation is unavailable, so local proxy selection is unchanged.",
+    };
+  }
+
   if (changeIpFeedback.phase === "error") {
     return {
       badge: "badge badge--failed",
       label: "Rotation failed",
-      detail: "Local request failed or was blocked. Provider-side IP movement is unconfirmed.",
+      detail: "Local request failed. Provider-side IP movement is unconfirmed.",
     };
   }
 

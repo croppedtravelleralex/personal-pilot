@@ -33,6 +33,7 @@ function getResultBadge(result: ProxyIpChangeFeedback): string {
   switch (result.phase) {
     case "success":
       return "badge badge--succeeded";
+    case "blocked":
     case "error":
       return "badge badge--failed";
     default:
@@ -44,6 +45,8 @@ function getResultLabel(result: ProxyIpChangeFeedback): string {
   switch (result.phase) {
     case "success":
       return result.status ?? "Local success";
+    case "blocked":
+      return result.status ?? "Blocked";
     case "error":
       return result.status ?? "Needs review";
     default:
@@ -137,6 +140,12 @@ export function ProxyOperationsSummary({
                 <div>
                   <strong>{result.proxyId}</strong>
                   <p className="record-card__subline">{result.message}</p>
+                  {result.phase === "blocked" || result.phase === "error" ? (
+                    <p className="record-card__subline">
+                      Provider: {result.providerConfigStatus ?? "unknown"} / {result.providerWriteStatus ?? "unknown"}
+                      {result.retry?.retryable ? ` · Retry requires ${result.retry.requires}` : ""}
+                    </p>
+                  ) : null}
                 </div>
                 <span className={getResultBadge(result)}>{getResultLabel(result)}</span>
               </div>

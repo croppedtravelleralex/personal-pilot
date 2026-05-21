@@ -52,11 +52,39 @@ function getResultBadge(result: ProxyIpChangeFeedback): string {
   switch (result.phase) {
     case "success":
       return "badge badge--succeeded";
+    case "blocked":
     case "error":
       return "badge badge--failed";
     default:
       return "badge badge--warning";
   }
+}
+
+function getResultLabel(result: ProxyIpChangeFeedback): string {
+  switch (result.phase) {
+    case "success":
+      return result.status ?? "Local success";
+    case "blocked":
+      return result.status ?? "Blocked";
+    case "error":
+      return result.status ?? "Failed";
+    default:
+      return "Running";
+  }
+}
+
+function getFailureMetadata(result: ProxyIpChangeFeedback): string | null {
+  if (result.phase !== "blocked" && result.phase !== "error") {
+    return null;
+  }
+
+  const statuses = [result.providerConfigStatus, result.providerWriteStatus]
+    .filter(Boolean)
+    .join(" / ");
+  const retry = result.retry?.retryable ? `Retry: ${result.retry.requires}` : null;
+  const rollback = result.rollback ? `Rollback: ${result.rollback.reason}` : null;
+
+  return [statuses || null, retry, rollback].filter(Boolean).join(" · ") || null;
 }
 
 export function ProxyChangeToolbar({
@@ -171,9 +199,12 @@ export function ProxyChangeToolbar({
                   <p className="record-card__subline">{result.message}</p>
                 </div>
                 <span className={getResultBadge(result)}>
-                  {result.status ?? getPhaseLabel(result.phase === "error" ? "error" : "running")}
+                  {getResultLabel(result)}
                 </span>
               </div>
+              {getFailureMetadata(result) ? (
+                <p className="record-card__subline">{getFailureMetadata(result)}</p>
+              ) : null}
               <div className="record-card__footer">
                 <span>{formatRelativeTimestamp(result.updatedAt)}</span>
                 <span>{result.phase}</span>

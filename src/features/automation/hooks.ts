@@ -2,7 +2,11 @@ import { useEffect, useMemo } from "react";
 
 import * as desktopServices from "../../services/desktop";
 import { useStore } from "../../store/createStore";
-import type { DesktopJsonValue } from "../../types/desktop";
+import type {
+  DesktopJsonValue,
+  DesktopManualGateActionRequest,
+  DesktopReadRunDetailQuery,
+} from "../../types/desktop";
 import { useRecorderViewModel } from "../recorder/hooks";
 import { buildTemplateCompileRequestDraft } from "../templates/model";
 import { useTemplatesViewModel } from "../templates/hooks";
@@ -34,6 +38,8 @@ type LaunchTemplateRunRequest = {
   note?: string;
   sourceRunId?: string | null;
   recorderSessionId?: string | null;
+  recorderStepCount?: number | null;
+  recorderNativeRequired?: boolean | null;
 };
 
 type LaunchTemplateRunResult = {
@@ -62,21 +68,21 @@ type ReadRunDetailResult = {
 
 type AutomationDesktopBridge = typeof desktopServices & {
   launchTemplateRun: (request: LaunchTemplateRunRequest) => Promise<LaunchTemplateRunResult>;
-  readRunDetail: (runId: string) => Promise<ReadRunDetailResult>;
+  readRunDetail: (query: DesktopReadRunDetailQuery) => Promise<ReadRunDetailResult>;
   retryTask: (taskId: string) => Promise<unknown>;
   cancelTask: (taskId: string) => Promise<unknown>;
-  confirmManualGate: (requestId: string) => Promise<unknown>;
-  rejectManualGate: (requestId: string) => Promise<unknown>;
+  confirmManualGate: (request: DesktopManualGateActionRequest) => Promise<unknown>;
+  rejectManualGate: (request: DesktopManualGateActionRequest) => Promise<unknown>;
 };
 
 const automationDesktop = desktopServices as AutomationDesktopBridge;
 
 function isCommandNotReady(error: unknown): boolean {
-  return (
-    Boolean(error) &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: string }).code === "desktop_command_not_ready"
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "desktop_command_not_ready",
   );
 }
 
@@ -511,7 +517,7 @@ export function useAutomationCenterViewModel() {
 
     if (!hasDesktopCommand("readRunDetail")) {
       automationActions.runDetailFailed(
-        "This desktop build does not expose readRunDetail yet.",
+        "The readRunDetail bridge is unavailable in this frontend bundle, although the native command is expected in the desktop build.",
         true,
       );
       return;
@@ -519,7 +525,7 @@ export function useAutomationCenterViewModel() {
 
     automationActions.runDetailStarted();
     try {
-      const detail = await automationDesktop.readRunDetail(runId);
+      const detail = await automationDesktop.readRunDetail({ runId });
       automationActions.runDetailSucceeded(normalizeRunDetail(detail));
     } catch (error) {
       automationActions.runDetailFailed(
@@ -538,9 +544,25 @@ export function useAutomationCenterViewModel() {
       return;
     }
 
+    if (templates.selectedTemplate.dataSource !== "desktop") {
+      automationActions.launchFailed(
+        "Launch is blocked because the selected template is still a seed preview row. Refresh native metadata and prepare again.",
+        true,
+      );
+      return;
+    }
+
+    if (compileDraft.recorderSource !== "desktop") {
+      automationActions.launchFailed(
+        "Launch is blocked until recorder evidence comes from a native desktop capture session.",
+        true,
+      );
+      return;
+    }
+
     if (!hasDesktopCommand("launchTemplateRun")) {
       automationActions.launchFailed(
-        "This desktop build does not expose launchTemplateRun yet. The prepared manifest is kept locally.",
+        "The launchTemplateRun bridge is unavailable in this frontend bundle, although the native command is expected in the desktop build. The prepared manifest is kept locally.",
         true,
       );
       return;
@@ -562,6 +584,8 @@ export function useAutomationCenterViewModel() {
         note: automation.launcherDraft.launchNote || compileDraft.note,
         sourceRunId: selectedRun?.id ?? null,
         recorderSessionId: compileDraft.recorderSessionId,
+        recorderStepCount: compileDraft.recorderStepCount,
+        recorderNativeRequired: true,
       });
 
       const outcome = normalizeLaunchOutcome(result, "queued");
@@ -571,7 +595,7 @@ export function useAutomationCenterViewModel() {
         if (hasDesktopCommand("readRunDetail")) {
           automationActions.runDetailStarted();
           try {
-            const detail = await automationDesktop.readRunDetail(outcome.runId);
+            const detail = await automationDesktop.readRunDetail({ runId: outcome.runId });
             automationActions.runDetailSucceeded(normalizeRunDetail(detail));
           } catch (error) {
             const message = isCommandNotReady(error)
@@ -581,7 +605,7 @@ export function useAutomationCenterViewModel() {
           }
         } else {
           automationActions.runDetailFailed(
-            "Run dispatched successfully, but this desktop build does not expose readRunDetail yet.",
+            "Run dispatched successfully, but the readRunDetail bridge is unavailable in this frontend bundle.",
             true,
           );
         }
@@ -589,7 +613,7 @@ export function useAutomationCenterViewModel() {
     } catch (error) {
       automationActions.launchFailed(
         isCommandNotReady(error)
-          ? "This desktop build does not expose launchTemplateRun yet. The prepared manifest remains staged locally."
+          ? "The native launch command is expected but did not answer as ready. The prepared manifest remains staged locally for retry."
           : toErrorMessage(error),
         isCommandNotReady(error),
       );
@@ -659,7 +683,7 @@ export function useAutomationCenterViewModel() {
 
     automationActions.taskWriteStarted("confirm_manual_gate");
     try {
-      await automationDesktop.confirmManualGate(requestId);
+      await automationDesktop.confirmManualGate({ manualGateRequestId: requestId });
       automationActions.taskWriteFinished();
       await refreshRunDetailInternal();
     } catch (error) {
@@ -686,7 +710,7 @@ export function useAutomationCenterViewModel() {
 
     automationActions.taskWriteStarted("reject_manual_gate");
     try {
-      await automationDesktop.rejectManualGate(requestId);
+      await automationDesktop.rejectManualGate({ manualGateRequestId: requestId });
       automationActions.taskWriteFinished();
       await refreshRunDetailInternal();
     } catch (error) {
@@ -778,6 +802,26 @@ export function useAutomationCenterViewModel() {
             blockers,
             warnings: [...compileDraft.warnings],
           };
+        } else if (templates.selectedTemplate.dataSource !== "desktop") {
+          compilePreview = {
+            status: "blocked",
+            kind: "preflight_blocked",
+            message: "Blocked before compile: selected template is a seed preview row, not native metadata.",
+            acceptedProfileCount: 0,
+            compiledAtLabel: null,
+            blockers: ["Refresh template metadata and select a desktop-backed template before launch."],
+            warnings: [...compileDraft.warnings],
+          };
+        } else if (compileDraft.recorderSource !== "desktop") {
+          compilePreview = {
+            status: "blocked",
+            kind: "preflight_blocked",
+            message: "Blocked before compile: recorder evidence must come from a native desktop capture session.",
+            acceptedProfileCount: 0,
+            compiledAtLabel: null,
+            blockers: ["Capture or refresh native desktop recorder evidence before launch."],
+            warnings: [...compileDraft.warnings],
+          };
         } else if (compileDraft.targetProfileIds.length === 0) {
           compilePreview = {
             status: "blocked",
@@ -822,7 +866,7 @@ export function useAutomationCenterViewModel() {
                   compiledAtLabel: null,
                   blockers: [
                     "Upgrade the desktop shared base to a build that includes compileTemplateRun.",
-                    "Launch queue command is also still missing, so this request can only stay in prepared state.",
+                    "Launch queue command is expected in the native bridge, so retry after the compile contract is available.",
                   ],
                   warnings: [...compileDraft.warnings],
                 }

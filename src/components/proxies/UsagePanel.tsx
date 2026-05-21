@@ -94,6 +94,13 @@ function getRotationPosture(
     };
   }
 
+  if (changeIpFeedback.phase === "blocked") {
+    return {
+      label: "Provider rotation blocked",
+      detail: changeIpFeedback.retry?.nextAction ?? "Provider-side rotation is unavailable, so local proxy selection remains unchanged.",
+    };
+  }
+
   if (changeIpFeedback.phase === "error") {
     return {
       label: "Local rotation failed",
@@ -127,7 +134,7 @@ function getCooldownLabel(changeIpFeedback: ProxyIpChangeFeedback | null): strin
   const windowSeconds =
     changeIpFeedback.phase === "success"
       ? 5 * 60
-      : changeIpFeedback.phase === "error"
+      : changeIpFeedback.phase === "error" || changeIpFeedback.phase === "blocked"
         ? 15 * 60
         : 0;
 
@@ -201,7 +208,7 @@ export function UsagePanel({
           {changeIpFeedback ? (
             <div
               className={`banner${
-                changeIpFeedback.phase === "error"
+                changeIpFeedback.phase === "error" || changeIpFeedback.phase === "blocked"
                   ? " banner--error"
                   : ""
               } usage-panel__banner`}
@@ -308,7 +315,37 @@ export function UsagePanel({
                 {changeIpFeedback?.trackingTaskId ?? proxy.rotation.trackingTaskId ?? "no-tracking-task"}
               </dd>
             </div>
+            <div className="details-grid__item">
+              <dt>Provider config / write</dt>
+              <dd>
+                {changeIpFeedback?.providerConfigStatus ?? "not-requested"}
+                <br />
+                {changeIpFeedback?.providerWriteStatus ?? "not-requested"}
+              </dd>
+            </div>
+            <div className="details-grid__item">
+              <dt>Rollback / retry</dt>
+              <dd>
+                {changeIpFeedback?.rollback?.available
+                  ? (changeIpFeedback.rollback.rollbackProxyId ?? "rollback available")
+                  : (changeIpFeedback?.rollback?.reason ?? "no rollback state")}
+                <br />
+                {changeIpFeedback?.retry?.retryable
+                  ? `${changeIpFeedback.retry.requires}: ${changeIpFeedback.retry.nextAction}`
+                  : "no retry metadata"}
+              </dd>
+            </div>
           </dl>
+
+          {changeIpFeedback?.cooldown ? (
+            <div className="banner usage-panel__banner">
+              Cooldown metadata: {changeIpFeedback.cooldown.required ? "required" : "not required"}
+              {changeIpFeedback.cooldown.cooldownUntil
+                ? ` until ${formatRelativeTimestamp(changeIpFeedback.cooldown.cooldownUntil)}`
+                : ""}
+              . {changeIpFeedback.cooldown.reason}
+            </div>
+          ) : null}
 
           <div className="usage-panel__notes">
             <strong>
