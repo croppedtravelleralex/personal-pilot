@@ -46,8 +46,10 @@ async fn main() -> Result<()> {
         }
     }
 
-    let database_url = "sqlite://data/persona_pilot.db";
-    let db = init_db(database_url).await?;
+    let database_url = std::env::var("PERSONA_PILOT_DATABASE_URL")
+        .ok()
+        .unwrap_or_else(|| "sqlite://data/persona_pilot.db".to_string());
+    let db = init_db(&database_url).await?;
     let api_key = std::env::var("PERSONA_PILOT_API_KEY")
         .ok()
         .map(|value| value.trim().to_string())
