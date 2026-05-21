@@ -344,7 +344,7 @@ fn build_like_term(raw: Option<String>) -> Option<String> {
         .map(|value| format!("%{value}%"))
 }
 
-fn normalized_optional_text(raw: Option<String>) -> Option<String> {
+pub(crate) fn normalized_optional_text(raw: Option<String>) -> Option<String> {
     raw.map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
@@ -444,26 +444,26 @@ fn derive_change_proxy_ip_status(rotation_mode: &str) -> String {
 }
 
 #[derive(Debug, Clone)]
-struct ProxyRotationProviderConfig {
-    endpoint: String,
-    method: String,
-    token_env: Option<String>,
-    cooldown_seconds: Option<i64>,
+pub(crate) struct ProxyRotationProviderConfig {
+    pub(crate) endpoint: String,
+    pub(crate) method: String,
+    pub(crate) token_env: Option<String>,
+    pub(crate) cooldown_seconds: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
-struct ProxyRotationProviderWrite {
-    phase: String,
-    status: String,
-    provider_write_status: String,
-    message: String,
-    rollback_proxy_id: Option<String>,
-    cooldown_seconds: Option<i64>,
-    retry_after_seconds: Option<i64>,
-    retryable: bool,
+pub(crate) struct ProxyRotationProviderWrite {
+    pub(crate) phase: String,
+    pub(crate) status: String,
+    pub(crate) provider_write_status: String,
+    pub(crate) message: String,
+    pub(crate) rollback_proxy_id: Option<String>,
+    pub(crate) cooldown_seconds: Option<i64>,
+    pub(crate) retry_after_seconds: Option<i64>,
+    pub(crate) retryable: bool,
 }
 
-fn value_text(value: &Value, key: &str) -> Option<String> {
+pub(crate) fn value_text(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
         .and_then(Value::as_str)
@@ -479,7 +479,7 @@ fn value_i64(value: &Value, key: &str) -> Option<i64> {
         .filter(|value| *value > 0)
 }
 
-fn parse_proxy_rotation_provider_config(
+pub(crate) fn parse_proxy_rotation_provider_config(
     raw_config: Option<&str>,
 ) -> Option<ProxyRotationProviderConfig> {
     let root: Value = serde_json::from_str(raw_config?).ok()?;
@@ -508,7 +508,7 @@ fn parse_proxy_rotation_provider_config(
     })
 }
 
-async fn write_proxy_rotation_to_provider(
+pub(crate) async fn write_proxy_rotation_to_provider(
     config: &ProxyRotationProviderConfig,
     proxy_id: &str,
     rotation_mode: &str,

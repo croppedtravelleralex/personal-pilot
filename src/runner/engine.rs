@@ -395,8 +395,24 @@ fn change_proxy_ip_payload_i64(payload: &Value, keys: &[&str]) -> Option<i64> {
         .find_map(|key| payload.get(*key).and_then(Value::as_i64))
 }
 
-fn change_proxy_ip_unsupported_provider_execution(payload: &Value) -> RunnerExecutionResult {
+async fn change_proxy_ip_execution(
+    state: &AppState,
+    payload: &Value,
+    task_id: &str,
+) -> RunnerExecutionResult {
+    let now_ts = now_ts_string();
+
     let proxy_id = change_proxy_ip_payload_string(payload, &["proxy_id", "proxyId"]);
+    if proxy_id.is_none() {
+        return change_proxy_ip_error_result(
+            None, None, None, None, None, None, None,
+            "missing_proxy_id",
+            "change_proxy_ip requires a proxy_id in the payload",
+            false,
+        );
+    }
+    let proxy_id_value = proxy_id.as_deref().unwrap();
+
     let mode = change_proxy_ip_payload_string(payload, &["mode", "rotation_mode", "rotationMode"])
         .unwrap_or_else(|| "provider_aware_rotate".to_string());
     let requested_provider =
@@ -410,17 +426,248 @@ fn change_proxy_ip_unsupported_provider_execution(payload: &Value) -> RunnerExec
         change_proxy_ip_payload_string(payload, &["residency_status", "residencyStatus"])
             .unwrap_or_else(|| "unknown".to_string());
     let expires_at = change_proxy_ip_payload_string(payload, &["expires_at", "expiresAt"]);
-    let message = "unsupported_provider_config: change_proxy_ip requires provider rotation endpoint/credentials; current schema does not define them".to_string();
 
+    let proxy_row = match sqlx::query(
+        r#"SELECT id, provider, region, status, source_label
+           FROM proxies WHERE id = ?"#,
+    )
+    .bind(proxy_id_value)
+    .fetch_optional(&state.db)
+    .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return change_proxy_ip_error_result(
+                Some(proxy_id_value.to_string()), Some(&mode), requested_provider, requested_region,
+                session_key, sticky_ttl_seconds, Some(&residency_status),
+                "proxy_not_found",
+                &format!("proxy not found: {proxy_id_value}"),
+                true,
+            );
+        }
+        Err(err) => {
+            return change_proxy_ip_error_result(
+                Some(proxy_id_value.to_string()), Some(&mode), requested_provider, requested_region,
+                session_key, sticky_ttl_seconds, Some(&residency_status),
+                "db_error",
+                &format!("database error looking up proxy: {err}"),
+                true,
+            );
+        }
+    };
+
+    let proxy_provider: Option<String> = proxy_row.get("provider");
+    let proxy_region: Option<String> = proxy_row.get("region");
+    let _proxy_status: String = proxy_row.get("status");
+    let proxy_source_label: Option<String> = proxy_row.get("source_label");
+
+    let effective_provider = requested_provider.clone().or_else(|| proxy_provider.clone());
+    let effective_region = requested_region.clone().or_else(|| proxy_region.clone());
+
+    let provider_config_row = if let Some(source_label) = proxy_source_label.as_deref() {
+        sqlx::query(r#"SELECT config_json FROM proxy_harvest_sources WHERE source_label = ?"#)
+            .bind(source_label)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None)
+    } else {
+        None
+    };
+    let provider_config_json = provider_config_row
+        .as_ref()
+        .and_then(|row| row.get::<Option<String>, _>("config_json"));
+    let provider_config =
+        crate::desktop::parse_proxy_rotation_provider_config(provider_config_json.as_deref());
+
+    let provider_write = if let Some(config) = provider_config.as_ref() {
+        crate::desktop::write_proxy_rotation_to_provider(
+            config,
+            proxy_id_value,
+            &mode,
+            session_key.as_deref(),
+            effective_provider.as_deref(),
+            effective_region.as_deref(),
+            sticky_ttl_seconds,
+            &residency_status,
+        )
+        .await
+    } else {
+        crate::desktop::ProxyRotationProviderWrite {
+            phase: "blocked".to_string(),
+            status: "unsupported_provider_config".to_string(),
+            provider_write_status: "unsupported_provider_config".to_string(),
+            message: "provider rotation adapter/config is not available".to_string(),
+            rollback_proxy_id: None,
+            cooldown_seconds: None,
+            retry_after_seconds: None,
+            retryable: true,
+        }
+    };
+
+    if let Err(err) = insert_log(
+        state,
+        &format!("log-{}", uuid::Uuid::new_v4()),
+        task_id,
+        None,
+        if provider_write.phase == "success" {
+            "info"
+        } else {
+            "warn"
+        },
+        &format!(
+            "change_proxy_ip proxy={} mode={} phase={} message={}",
+            proxy_id_value, mode, provider_write.phase, provider_write.message
+        ),
+    )
+    .await
+    {
+        eprintln!("change_proxy_ip log insert failed: {err}");
+    }
+
+    let provider_config_status = if provider_config.is_some() {
+        "configured"
+    } else {
+        "unsupported_provider_config"
+    };
+    let provider_write_status = &provider_write.provider_write_status;
+    let execution_status = match provider_write.phase.as_str() {
+        "success" => RunnerOutcomeStatus::Succeeded,
+        _ => RunnerOutcomeStatus::Failed,
+    };
+
+    let rotation_status = if provider_write.phase == "success" {
+        "committed"
+    } else if provider_write.phase == "blocked" {
+        "blocked"
+    } else {
+        "failed"
+    };
+
+    let cooldown_until = provider_write
+        .cooldown_seconds
+        .or(provider_write.retry_after_seconds)
+        .map(|seconds| (now_ts.parse::<i64>().unwrap_or(0) + seconds).to_string());
+
+    let message = format!(
+        "change_proxy_ip task: {} provider_write_status={}",
+        provider_write.message, provider_write_status,
+    );
+
+    let summary_artifacts = vec![crate::runner::types::RunnerSummaryArtifact {
+        category: crate::runner::types::SummaryArtifactCategory::Summary,
+        key: "change_proxy_ip.execution".to_string(),
+        source: "provider_rotation".to_string(),
+        severity: if provider_write.phase == "success" {
+            crate::runner::types::SummaryArtifactSeverity::Info
+        } else {
+            crate::runner::types::SummaryArtifactSeverity::Error
+        },
+        title: "change_proxy_ip execution summary".to_string(),
+        summary: format!(
+            "kind=change_proxy_ip proxy_id={proxy_id_value} mode={mode} phase={} provider_write_status={provider_write_status} message={}",
+            provider_write.phase, provider_write.message
+        ),
+    }];
+
+    RunnerExecutionResult {
+        status: execution_status,
+        result_json: Some(json!({
+            "status": if provider_write.phase == "success" { "committed" } else { &provider_write.status },
+            "phase": provider_write.phase,
+            "error_kind": if provider_write.phase == "success" { Value::Null } else { json!(provider_write_status) },
+            "failure_scope": if provider_write.phase == "success" { Value::Null } else { json!("provider_rotation") },
+            "execution_stage": if provider_write.phase == "success" { Value::Null } else { json!("provider_write") },
+            "message": message,
+            "proxy_id": proxy_id_value,
+            "proxyId": proxy_id_value,
+            "mode": mode,
+            "rotation_mode": mode,
+            "rotationMode": mode,
+            "requested_provider": effective_provider,
+            "requestedProvider": effective_provider,
+            "requested_region": effective_region,
+            "requestedRegion": effective_region,
+            "session_key": session_key,
+            "sessionKey": session_key,
+            "sticky_ttl_seconds": sticky_ttl_seconds,
+            "stickyTtlSeconds": sticky_ttl_seconds,
+            "residency_status": residency_status,
+            "residencyStatus": residency_status,
+            "expires_at": expires_at,
+            "expiresAt": expires_at,
+            "rotation_status": rotation_status,
+            "rotationStatus": rotation_status,
+            "provider_config_status": provider_config_status,
+            "providerConfigStatus": provider_config_status,
+            "provider_write_status": provider_write_status,
+            "providerWriteStatus": provider_write_status,
+            "provider_result": {
+                "status": provider_write.status,
+                "error_kind": if provider_write.phase == "success" { Value::Null } else { json!(provider_write_status) },
+                "phase": provider_write.phase,
+                "message": provider_write.message,
+            },
+            "providerResult": {
+                "status": provider_write.status,
+                "errorKind": if provider_write.phase == "success" { Value::Null } else { json!(provider_write_status) },
+                "phase": provider_write.phase,
+                "message": provider_write.message,
+            },
+            "rollback": {
+                "available": provider_write.rollback_proxy_id.is_some(),
+                "rollback_proxy_id": provider_write.rollback_proxy_id,
+                "reason": if provider_write.phase == "success" { "provider committed rotation" } else { "provider write did not succeed" },
+            },
+            "cooldown": {
+                "required": cooldown_until.is_some(),
+                "cooldown_until": cooldown_until,
+                "reason": if cooldown_until.is_some() { "provider requested cooldown period" } else { "no cooldown required" },
+            },
+            "retry": {
+                "retryable": provider_write.retryable,
+                "requires": if provider_write.retryable { "cooldown_or_provider_recovery" } else { "none" },
+                "next_action": if provider_write.retryable { "wait for cooldown or provider recovery before retry" } else { "review provider response before retry" },
+            },
+            "guard": {
+                "browser_runner_bypassed": true,
+                "fake_runner_bypassed": true,
+                "lightpanda_runner_bypassed": true
+            },
+            "payload": payload.clone(),
+        })),
+        error_message: (provider_write.phase != "success")
+            .then_some(message.clone()),
+        summary_artifacts,
+        session_cookies: None,
+        session_local_storage: None,
+        session_session_storage: None,
+    }
+}
+
+fn change_proxy_ip_error_result(
+    proxy_id: Option<String>,
+    mode: Option<&str>,
+    requested_provider: Option<String>,
+    requested_region: Option<String>,
+    session_key: Option<String>,
+    sticky_ttl_seconds: Option<i64>,
+    residency_status: Option<&str>,
+    error_kind: &str,
+    message: &str,
+    retryable: bool,
+) -> RunnerExecutionResult {
+    let mode = mode.unwrap_or("provider_aware_rotate");
+    let residency_status = residency_status.unwrap_or("unknown");
+    let status = if retryable { "retryable_error" } else { "failed" };
     RunnerExecutionResult {
         status: RunnerOutcomeStatus::Failed,
         result_json: Some(json!({
-            "status": "failed",
+            "status": status,
             "phase": "completed",
-            "error_kind": "unsupported_provider_config",
+            "error_kind": error_kind,
             "failure_scope": "provider_rotation",
             "execution_stage": "provider_write",
-            "message": message.clone(),
+            "message": message,
             "proxy_id": proxy_id,
             "proxyId": proxy_id,
             "mode": mode,
@@ -436,20 +683,20 @@ fn change_proxy_ip_unsupported_provider_execution(payload: &Value) -> RunnerExec
             "stickyTtlSeconds": sticky_ttl_seconds,
             "residency_status": residency_status,
             "residencyStatus": residency_status,
-            "expires_at": expires_at,
-            "expiresAt": expires_at,
-            "rotation_status": "unsupported_provider_config",
-            "rotationStatus": "unsupported_provider_config",
-            "provider_write_status": "unsupported_provider_config",
-            "providerWriteStatus": "unsupported_provider_config",
+            "rotation_status": error_kind,
+            "rotationStatus": error_kind,
+            "provider_config_status": if error_kind == "unsupported_provider_config" { "unsupported_provider_config" } else { "configured" },
+            "providerConfigStatus": if error_kind == "unsupported_provider_config" { "unsupported_provider_config" } else { "configured" },
+            "provider_write_status": error_kind,
+            "providerWriteStatus": error_kind,
             "provider_result": {
-                "status": "unsupported",
-                "error_kind": "unsupported_provider_config",
+                "status": "error",
+                "error_kind": error_kind,
                 "message": message,
             },
             "providerResult": {
-                "status": "unsupported",
-                "errorKind": "unsupported_provider_config",
+                "status": "error",
+                "errorKind": error_kind,
                 "message": message,
             },
             "rollback": {
@@ -460,30 +707,28 @@ fn change_proxy_ip_unsupported_provider_execution(payload: &Value) -> RunnerExec
             "cooldown": {
                 "required": false,
                 "cooldown_until": Value::Null,
-                "reason": "provider write unsupported before execution"
+                "reason": "provider write not attempted due to error"
             },
             "retry": {
-                "retryable": true,
-                "requires": "provider_rotation_config",
-                "next_action": "configure provider rotation endpoint and credentials before retry"
+                "retryable": retryable,
+                "requires": if retryable { "provider_recovery" } else { "manual_intervention" },
+                "next_action": if retryable { "retry after cooldown or provider recovery" } else { "review error before retry" }
             },
             "guard": {
                 "browser_runner_bypassed": true,
                 "fake_runner_bypassed": true,
                 "lightpanda_runner_bypassed": true
             },
-            "payload": payload.clone(),
+            "payload": Value::Null,
         })),
-        error_message: Some(message.clone()),
+        error_message: Some(message.to_string()),
         summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
             category: crate::runner::types::SummaryArtifactCategory::Summary,
             key: "change_proxy_ip.execution".to_string(),
             source: "provider_rotation".to_string(),
             severity: crate::runner::types::SummaryArtifactSeverity::Error,
             title: "change_proxy_ip execution summary".to_string(),
-            summary: format!(
-                "kind=change_proxy_ip status=failed error_kind=unsupported_provider_config message={message}"
-            ),
+            summary: format!("kind=change_proxy_ip status=failed error_kind={error_kind} message={message}"),
         }],
         session_cookies: None,
         session_local_storage: None,
@@ -3393,7 +3638,7 @@ where
             },
         }
     } else if task_kind == "change_proxy_ip" {
-        change_proxy_ip_unsupported_provider_execution(&payload)
+        change_proxy_ip_execution(state, &payload, &task_id).await
     } else if let Some(preflight_execution) = preflight_execution {
         preflight_execution
     } else if proxy_required_for_browser && proxy.is_none() {
