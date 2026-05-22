@@ -11,7 +11,7 @@
 
 ## 默认事实
 
-- Mainline：`95% / 7% / green`
+- Mainline：`100% / 0% / green`
 - Overall：`30% / 70% / yellow`
 - Fingerprint：`80` declared controls / `12` runtime projected fields / `450+` target-only
 - Behavior：`13` shipped primitives / `450+` target-only
@@ -20,7 +20,7 @@
 ## 汇报规则
 
 - 先说明当前结论，再给证据。
-- Mainline remaining `7%` 与 Overall remaining `70%` 必须分开写。
+- Mainline remaining `0%` 与 Overall remaining `70%` 必须分开写。
 - 不把 AdsPower catch-up、`50+`、`450+` 写成当前 shipped runtime depth。
 - 不复活 `77% / 23%` 或 `82% / 18%` 作为 live truth。
 - 报告尽量短，优先列 landed result、当前阻塞、下一步。

@@ -13,6 +13,7 @@ Canonical status now lives in `/docs/02-current-state.md`.
 - AdsPower 追赶、`50+`、`450+` 属于整体轨道
 - 详细阶段计划和评分卡见 `/docs/19-phase-plan-and-scorecard.md`
 - `运行时存活` 不等同于交付闭环
+- gateway upstream guardrail：`upstream_configured=false` 代表真实 upstream 验收仍被当前运行时状态阻塞
 
 ## Follow These Docs
 

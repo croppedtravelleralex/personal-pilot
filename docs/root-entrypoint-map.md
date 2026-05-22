@@ -1,6 +1,6 @@
 # Root Entrypoint Map
 
-Updated: 2026-04-16
+Updated: 2026-05-22
 
 ## Purpose
 
@@ -12,7 +12,7 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
 - `/docs/README.md`
   - project-level reading order and dual-axis reporting frame
 - `/docs/02-current-state.md`
-  - runtime, build, verification reality, and the current `95 / 7 / green` vs `30 / 70 / yellow` truth
+  - runtime, build, verification reality, and the current `100 / 0 / green` vs `30 / 70 / yellow` truth
 - `/docs/17-full-app-audit-progress-reset.md`
   - historical `77 / 23` audit-reset context; not the live source
 - `/docs/03-roadmap.md`
@@ -48,7 +48,7 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
 
 Use one dual-axis rule everywhere:
 
-1. current shipped app / closeout / native mainline -> `95% / 7% / green`
+1. current shipped app / closeout / native mainline -> `100% / 0% / green`
 2. complete app / AdsPower catch-up / `50+` control / `450+` fingerprint or event target -> `30% / 70% / yellow`
 
 Use `/docs/13-adspower-deep-comparison.md` and `/docs/18-external-browser-integration-plan.md` only for the second route.

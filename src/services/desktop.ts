@@ -1,3 +1,5 @@
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+
 import type {
   DesktopAppendBehaviorRecordingStepRequest,
   DesktopBrowserEnvironmentPolicyDraft,
@@ -143,6 +145,7 @@ interface IpcMessage {
 interface DesktopWindow extends Window {
   __TAURI__?: TauriGlobal;
   __TAURI_IPC__?: (message: IpcMessage) => void;
+  __TAURI_INTERNALS__?: unknown;
 }
 
 const desktopWindow = window as DesktopWindow;
@@ -201,6 +204,10 @@ const commandArgNames: Record<string, string[]> = {
 };
 
 function getInvoke(): DesktopInvoke {
+  if (desktopWindow.__TAURI_INTERNALS__) {
+    return tauriInvoke as DesktopInvoke;
+  }
+
   const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI__?.invoke;
   if (invoke) {
     return invoke;

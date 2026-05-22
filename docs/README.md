@@ -14,7 +14,7 @@
 
 ## 当前报告口径
 
-- Mainline delivery：`95% / 7% / green`
+- Mainline delivery：`100% / 0% / green`
 - Overall end-state：`30% / 70% / yellow`
 - Fingerprint：`80` declared controls / `12` runtime projected fields / `450+` target-only
 - Behavior：`13` shipped primitives / `450+` target-only
