@@ -1,6 +1,6 @@
 # Personal Pilot — Email API Exposure & Automation Design
 
-> `internal/email` 模块已有完整实现，但未暴露为 REST API。本文设计 API 化方案 + 自动化注册流水线。
+> `internal/email` 模块已从内部调用推进到部分 REST API 暴露。本文记录当前已落地能力与剩余自动化注册流水线缺口。
 > Part of the "缺口补全" initiative (CAPTCHA + SMS + Email API exposure).
 
 ---
@@ -15,6 +15,8 @@
 | `mailtm.go` | mail.tm 直接 API 客户端 | 337 |
 | `names.go` | 人类化邮箱名/密码生成器 | 116 |
 | `credstore.go` | AES-GCM 加密凭证存储 | 134 |
+| `provider.go` | Provider 接口抽象 | 已新增 |
+| `service.go` | EmailService + session store | 已新增 |
 | `email_test.go` | 综合测试套 | 1046 |
 
 ### 当前能力
@@ -26,13 +28,15 @@
 - ✅ HTML 清洗 + 多优先级正则匹配
 - ✅ 人类化名称 (firstname.lastnameNN@domain)
 - ✅ 凭证加密存储
+- ✅ REST API 部分暴露：创建/查询/释放 inbox、等待验证码
+- ⚠️ 邮箱会话表 `email_sessions` 已由 `EmailService` 初始化；当前持久化失败只记录日志并继续返回，可靠性仍需加固
 
 ### 缺口
 
-- ❌ **无 REST API** — 模块仅被 DeepSeek 注册内部调用
+- ⚠️ **REST API 未完全覆盖** — 邮件列表、单封邮件详情、配置读写、统计仍未落地
 - ❌ **无通用自动化注册流水线** — 邮箱创建→验证码轮询→自动填充 未作为通用服务暴露
-- ❌ **无持久化邮箱会话** — 创建的邮箱地址不保存，无法复用
-- ❌ **无多平台适配器接口** — 当前硬编码 mail.tm + Cloudflare Worker
+- ⚠️ **持久化邮箱会话部分落地** — session store 已有，保存失败目前是 best-effort 日志，不会阻止创建响应；仍缺完整消息缓存/复用策略
+- ⚠️ **多平台适配器接口已落地** — 当前 provider 抽象已存在，仍需更多 provider 实现与配置面
 
 ---
 
@@ -69,11 +73,11 @@
 
 ```
 backend/internal/email/
-├── service.go              # [NEW] Email Service (统一入口 + 会话管理)
-├── provider.go             # [NEW] Provider 接口抽象
+├── service.go              # [DONE] Email Service (统一入口 + 会话管理)
+├── provider.go             # [DONE] Provider 接口抽象
 
 backend/internal/launchcode/
-├── email_api.go            # [NEW] REST API handler (7 个端点)
+├── email_api.go            # [DONE] REST API handler (inbox + wait-code 核心端点)
 ```
 
 ### 3.2 Provider 接口 (解耦具体服务)
@@ -110,7 +114,7 @@ type MailFilter struct {
 type EmailService struct {
     primary    Provider
     fallback   Provider
-    store      *SessionStore   // 邮箱会话持久化
+    store      *SessionStore   // 邮箱会话持久化；当前 CreateInbox 保存失败为 best-effort 日志
     credStore  *CredStore      // 已有凭证存储
 }
 
@@ -165,15 +169,15 @@ func (s *SessionStore) Delete(id string) error
 
 | 端点 | 方法 | 功能 | 优先级 |
 |------|------|------|--------|
-| `/api/email/inbox` | POST | 创建临时收件箱 | P1 |
-| `/api/email/inbox/{id}` | GET | 收件箱详情(邮件列表) | P1 |
-| `/api/email/inbox/{id}` | DELETE | 释放/删除收件箱 | P1 |
-| `/api/email/inbox/{id}/wait-code` | POST | 等待验证码(阻塞轮询) | P1 |
-| `/api/email/inbox/{id}/mails` | GET | 获取收件箱邮件列表 | P2 |
-| `/api/email/inbox/{id}/mails/{mailId}` | GET | 获取单封邮件详情 | P2 |
-| `/api/email/config` | GET | 邮件服务配置 | P2 |
-| `/api/email/config` | PUT | 更新邮件服务配置 | P2 |
-| `/api/email/stats` | GET | 使用统计 | P2 |
+| `/api/email/inbox` | POST | 创建临时收件箱 | 已落地 |
+| `/api/email/inbox/{id}` | GET | 收件箱详情 | 已落地 |
+| `/api/email/inbox/{id}` | DELETE | 释放/删除收件箱 | 已落地 |
+| `/api/email/inbox/{id}/wait-code` | POST | 等待验证码(阻塞轮询) | 已落地 |
+| `/api/email/inbox/{id}/mails` | GET | 获取收件箱邮件列表 | 未落地 |
+| `/api/email/inbox/{id}/mails/{mailId}` | GET | 获取单封邮件详情 | 未落地 |
+| `/api/email/config` | GET | 邮件服务配置 | 未落地 |
+| `/api/email/config` | PUT | 更新邮件服务配置 | 未落地 |
+| `/api/email/stats` | GET | 使用统计 | 未落地 |
 
 ### 4.2 请求/响应体
 

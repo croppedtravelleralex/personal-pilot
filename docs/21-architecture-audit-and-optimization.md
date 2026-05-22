@@ -9,11 +9,11 @@
 
 | 维度 | 数据 | 健康度 |
 |------|------|--------|
-| Go 后端 | 60+ 根目录文件 + 18 internal 包 ~150+ 文件 | ⚠️ 根目录膨胀 |
+| Go 后端 | 64 根目录 Go 文件 + 194 internal Go 文件 | ⚠️ 根目录仍偏胖，但 backup/browser 已部分拆分 |
 | Rust 重写 (src/) | 51 文件, 53,761 行, 无生产使用 | 🔴 僵住 |
 | Tauri Shell (src-tauri/) | 4 文件, ~2300 行 | ✅ 轻量 |
 | TypeScript 前端 | 241 node_modules 包, Vite + React + Tailwind | ✅ 正常 |
-| .claude/worktrees/ | 39 个陈旧 worktree, 42 GB | 🔴 需清理 |
+| .claude/worktrees/ | 12 个 worktree | ⚠️ 已少于旧审计，仍需定期 prune |
 | go.mod | 11 direct deps, 127 transitive deps | ⚠️ mihomo 拖累 |
 | 配置源 | 6+ 处分散 | 🔴 无单一真相源 |
 | 生成代码 | 13,307 行 (事件系统) | ⚠️ 可优化 |
@@ -22,16 +22,16 @@
 
 ## 二、Critical 问题
 
-### 2.1 39 个陈旧 Agent Worktree — 42 GB 磁盘浪费
+### 2.1 Agent Worktree 残留 — 需定期清理
 
-**.claude/worktrees/** 目录下有 39 个 locked worktree，每个 codex agent 会话创建后未清理。
+**.claude/worktrees/** 当前仍有约 12 个 worktree。旧审计中的 39 个 / 42 GB 状态已不再准确，但临时 worktree 仍可能积累。
 
-**影响:** 42 GB 磁盘占用，构建脚本可能意外引入混乱。
+**影响:** 磁盘占用增加，构建/搜索可能误扫隔离工作区。
 
 **修复:**
 ```powershell
 git worktree prune
-Remove-Item -Recurse -Force ".claude/worktrees"
+# 如确认无需保留 agent 工作区，再删除 .claude/worktrees 下已合并分支
 ```
 
 ---
@@ -141,13 +141,17 @@ func LoadConfig(path string) (*AppConfig, error) {
 
 ### 2.5 Go 后端根目录文件膨胀
 
-`backend/` 根目录 60+ .go 文件，超 800 行的大文件需拆分：
+`backend/` 根目录仍有 64 个 Go 文件，但备份与浏览器启动/进程监控已部分拆分：
 
-| 文件 | 行数 | 建议 |
-|------|------|------|
-| `app_backup_ops.go` | 1,798 | 拆分: 备份策略 / 执行 / 历史 三个文件 |
-| `app.go` | 1,471 | 拆分: App struct / Wails 绑定 / 生命周期 |
-| `app_instance.go` | 988 | 拆分: CRUD / 操作逻辑 |
+| 文件 | 行数 | 当前状态 / 建议 |
+|------|------|----------------|
+| `app_backup_ops.go` | 68 | 已拆薄为操作入口 |
+| `app_backup_core.go` | 269 | 备份核心逻辑 |
+| `app_backup_import.go` | 535 | 导入/恢复逻辑，后续可继续拆测试 |
+| `app_backup_merge.go` | 679 | 合并逻辑，仍偏大 |
+| `app_backup_utils.go` | 452 | 工具逻辑 |
+| `app.go` | 1,471 | 仍建议拆分 App struct / Wails 绑定 / 生命周期 |
+| `app_instance.go` | 988 | 仍建议拆分 CRUD / 操作逻辑 |
 | `app_launchcode.go` | 878 | 可接受 |
 | `app_deepseek_register.go` | 822 | 可接受 |
 
@@ -157,8 +161,8 @@ func LoadConfig(path string) (*AppConfig, error) {
 |----------|----------|
 | `browser_runtime_state.go` | `internal/browser/` |
 | `browser_start_settings.go` | `internal/browser/` |
-| `browser_process_monitor.go` | `internal/browser/` |
-| `browser_launch_args.go` | `internal/browser/` |
+| `browser_process_monitor.go` | ✅ 已迁移到 `internal/browser/process_monitor.go` |
+| `browser_launch_args.go` | ✅ 已迁移到 `internal/browser/launch_args.go` |
 | `window_control_*.go` | `internal/wininput/` 或新建 `internal/winctrl` |
 | `sysproc_*.go` | `internal/proxy/` |
 | `residual_processes_*.go` | `internal/browser/` |
@@ -256,7 +260,7 @@ type CrashTracker struct {
 
 ```
 Phase 0 — 立即 (1 小时内)
-├── git worktree prune + Remove-Item .claude/worktrees/ → 释放 42 GB
+├── git worktree prune + 清理已合并/无需保留的 .claude/worktrees
 └── go.mod 移除 mihomo → 构建 2min → 30s
 
 Phase 1 — 第 1 周
@@ -267,8 +271,8 @@ Phase 1 — 第 1 周
 
 Phase 2 — 第 2-3 周
 ├── 配置统一: config.yaml 单一真相源 + env override + startup validation
-├── 拆分大文件: app.go / app_backup_ops.go
-├── Go 根目录文件归位 → internal/ 包
+├── 继续拆分大文件: app.go / app_instance.go / app_backup_merge.go
+├── Go 根目录剩余文件归位 → internal/ 包
 └── 事件系统生成方向反转: schema.yaml → code
 
 Phase 3 — 第 4-6 周

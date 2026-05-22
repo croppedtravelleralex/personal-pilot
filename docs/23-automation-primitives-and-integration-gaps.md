@@ -1,13 +1,13 @@
 # Personal Pilot — 自动化原语与集成缺口
 
 > 首次全量盘点浏览器自动化基础原语缺失 + 外部集成缺口 + UX/管理缺口。
-> 配合 docs/20-captcha-solving-design.md, docs/20-sms-verification-design.md, docs/20-email-api-exposure.md 一起阅读。
+> 配合 docs/20-captcha-solving-design.md, docs/20-sms-verification-design.md, docs/20-email-api-exposure.md 一起阅读；这三项当前是“后端/API 部分落地，自动化闭环待验证”，不是全缺。
 
 ---
 
 ## 一、总览
 
-本次审计在已规划的 CAPTCHA/SMS/Email 之外，新发现 **10 项缺口**，涵盖:
+本次审计在已部分落地的 CAPTCHA/SMS/Email handler/route 与服务代码边界之外，新发现 **10 项缺口**，涵盖:
 
 | 类别 | 数量 | 优先级分布 |
 |------|------|-----------|

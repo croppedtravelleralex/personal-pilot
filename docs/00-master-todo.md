@@ -255,9 +255,9 @@
 
 ### 集成外部系统
 
-- [ ] **验证码打码集成** — 2Captcha/Capsolver/Anti-Captcha
-- [ ] **SMS 验证码集成** — Twilio/5sim/sms-activate
-- [ ] **临时邮箱集成自动化** — 创建邮箱→轮询验证码→自动填充
+- [ ] **验证码打码自动化闭环** — 2Captcha/Capsolver solver 代码与 handler/route 已部分落地；仍需 production manager wiring/config、CDP 检测、截图/sitekey 抽取、回填、Anti-Captcha/本地 OCR 可选扩展
+- [ ] **SMS 验证码自动化闭环** — 5sim/SMSPool provider 代码与 handler/route 已部分落地；仍需 production manager wiring/config、真实验收、finish/prices/config/stats、CDP 填号/填码、sms-activate/HeroSMS 可选扩展
+- [ ] **临时邮箱自动化闭环** — inbox/wait-code REST API 已部分落地；session persistence 仍是 best-effort，仍需邮件列表/详情/config/stats 和注册流水线自动填充
 - [ ] **浏览器扩展自动注入** — 预装扩展到配置
 
 ### AI/ML 基础

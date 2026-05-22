@@ -9,23 +9,17 @@
 
 ### 1.1 🔴 启动配置加载失败静默降级
 
-`backend/app.go:135-139`:
+`backend/app.go:136-139` 当前仍会在 `LoadConfig` 失败后使用默认配置：
 ```go
 cfg, err := LoadConfig(a.resolveAppPath("config.yaml"))
 if err != nil {
-    cfg = config.DefaultConfig()     // 静默使用默认值
+    cfg = config.DefaultConfig()
 }
 ```
 
 **影响:** config.yaml 损坏或格式错误时，应用正常启动但行为异常，用户无感知。
 
-**修复:**
-```go
-cfg, err := LoadConfig(a.resolveAppPath("config.yaml"))
-if err != nil {
-    log.Fatalf("FATAL: failed to load config: %v", err)  // fail-fast
-}
-```
+**修复:** 在桌面入口中把配置加载错误提升为可见 fatal/error，不要静默回落；备份/测试路径使用 `DefaultConfig()` 不属于此问题。
 
 ### 1.2 🔴 Rust Heartbeat 错误静默丢弃
 
@@ -40,13 +34,13 @@ let _ = sqlx::query(...).execute(&state.db).await;
 
 ### 1.3 🟠 CDP Executor `default: return nil`
 
-`backend/internal/behavior/cdp_executor.go:602`:
+`backend/internal/behavior/cdp_executor.go:602` 当前仍会静默跳过未知 mutation：
 ```go
 default:
     return nil
 ```
 
-未识别的操作类型返回 nil，调用方无法区分"操作成功执行"和"操作被静默跳过"。
+未识别的操作类型返回 nil，调用方无法区分“操作成功执行”和“操作被静默跳过”。
 
 ### 1.4 🟡 `now_ts_string()` 时钟错误返回 "0"
 
@@ -98,7 +92,7 @@ fmt.Printf("log rotate error: %v", err)
 
 ### 3.1 🔴 Rust N+1 查询 (proxy selection)
 
-`src/runner/engine.rs:1529-1629`:
+`src/runner/engine.rs:1529-1629`（如保留 Rust 重写）：
 ```
 fetch_ranked_auto_selection_candidates()  → 1 次查询获取 16 候选
   └── compute_proxy_selection_explain()   → 每候选 3 次 SQL 查询
@@ -111,7 +105,7 @@ fetch_ranked_auto_selection_candidates()  → 1 次查询获取 16 候选
 
 **修复:** 将三个子查询 JOIN 进主查询，一次获取全部。
 
-### 3.2 🟠 超大 `Value` 克隆
+### 3.2 🟠 超大 `Value` 克隆（Rust 重写路径）
 
 `src/runner/engine.rs:1804,3549,3638+`:
 

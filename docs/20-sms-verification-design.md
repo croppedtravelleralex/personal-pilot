@@ -9,12 +9,12 @@
 
 | 维度 | 当前状态 | 缺口 |
 |------|----------|------|
-| 邮箱验证码 | ✅ 已实现 (`internal/email/`) | 完整可用 |
-| 验证码提取 | ✅ 已实现 (smartExtractCode) | 仅限邮件场景 |
-| **SMS 接码** | ❌ 无 | **全部需要新建** |
-| **号码池管理** | ❌ 无 | 需设计号码生命周期 |
-| **OTP 提取** | ⚠️ 部分 | 可复用 email regex，需适配 SMS 场景 |
-| **接码平台集成** | ❌ 无 | 5sim/SMSPool/HeroSMS 均未接入 |
+| 邮箱验证码 | ✅ 已实现 (`internal/email/`) | 可通过新 Email API 暴露 |
+| 验证码提取 | ✅ 已实现 | email regex 已有，SMS 模块也具备提取逻辑 |
+| **SMS 接码** | ⚠️ 部分落地 (`backend/internal/sms/`) | 已有 Manager、5sim、SMSPool、handler/route；仍缺 production manager wiring/config、真实服务验收与自动化填入闭环 |
+| **号码池管理** | ⚠️ 部分落地 | 已有 NumberPool/Blacklist/Metrics；预取策略和持久化仍需强化 |
+| **OTP 提取** | ⚠️ 部分落地 | 已覆盖基础 SMS 文本，需更多国家/平台样本验证 |
+| **接码平台集成** | ⚠️ 部分落地 | 5sim/SMSPool 代码已接入；HeroSMS/sms-activate 未落地；运行时 manager 尚未初始化 |
 
 ---
 
@@ -47,13 +47,13 @@
 ### Provider 选用策略
 
 ```
-主用: 5sim (成本最低, 覆盖 180+ 国家)
+主用: 5sim (代码已落地，成本低, 覆盖 180+ 国家)
  │
  ├── 5sim 余额不足 / 号码售罄
- │   └── SMSPool (成功率最高, non-VoIP)
+ │   └── SMSPool (代码已落地，non-VoIP 成功率高)
  │
- ├── 特定服务 5sim 无库存
- │   └── HeroSMS (sms-activate 生态)
+ ├── 特定服务库存不足
+ │   └── HeroSMS / sms-activate (未落地，后续可选)
  │
  └── 全部不可用
      └── 上报错误 + 人工介入
@@ -67,14 +67,15 @@
 
 ```
 backend/internal/sms/
-├── sms.go                     # 核心接口 + SMS Manager
+├── sms.go                     # 核心接口 + SMS Manager + NumberPool/Blacklist/Metrics
 ├── provider_5sim.go           # 5sim.net 适配器
 ├── provider_smspool.go        # SMSPool 适配器
-├── provider_herosms.go        # HeroSMS (sms-activate 兼容) 适配器
-├── number_pool.go             # 号码池管理 (预取/缓存/黑名单)
-├── otp_extractor.go           # OTP 提取器 (多语言 regex)
-├── sms_test.go                # 测试
-└── README.md                  # 预留
+└── sms_test.go                # 测试
+
+尚未落地：
+├── provider_herosms.go        # HeroSMS / sms-activate 兼容适配器
+├── 持久化号码池/订单历史
+└── CDP 自动填号/填码集成层
 ```
 
 ### 3.2 核心接口
@@ -366,15 +367,15 @@ func (f *SMSFiller) WaitAndFillOTP(ctx context.Context, number *sms.Number, time
 
 | 端点 | 方法 | 功能 | 优先级 |
 |------|------|------|--------|
-| `/api/sms/number` | POST | 购买号码 | P1 |
-| `/api/sms/number/{id}/status` | GET | 查询号码状态 | P1 |
-| `/api/sms/number/{id}/cancel` | POST | 取消/释放号码 | P1 |
-| `/api/sms/number/{id}/finish` | POST | 确认完成 | P1 |
-| `/api/sms/balance` | GET | 查询接码余额 | P2 |
-| `/api/sms/prices` | GET | 查询各服务价格 | P2 |
-| `/api/sms/config` | GET | 接码配置 | P2 |
-| `/api/sms/config` | PUT | 更新接码配置 | P2 |
-| `/api/sms/stats` | GET | 接码统计(成功率/花费) | P2 |
+| `/api/sms/number` | POST | 购买号码 | handler/route 已有，manager wiring 未接入 |
+| `/api/sms/number/{id}/status` | GET | 查询号码状态 | handler/route 已有，manager wiring 未接入 |
+| `/api/sms/number/{id}/cancel` | POST | 取消/释放号码 | handler/route 已有，manager wiring 未接入 |
+| `/api/sms/number/{id}/finish` | POST | 确认完成 | 未落地 |
+| `/api/sms/balance` | GET | 查询接码余额 | handler/route 已有，manager wiring 未接入 |
+| `/api/sms/prices` | GET | 查询各服务价格 | 未落地 |
+| `/api/sms/config` | GET | 接码配置 | 未落地 |
+| `/api/sms/config` | PUT | 更新接码配置 | 未落地 |
+| `/api/sms/stats` | GET | 接码统计(成功率/花费) | 未落地 |
 
 ### 请求/响应体
 
@@ -543,15 +544,15 @@ sms:
 
 ## 十一、实施计划
 
-| 阶段 | 内容 | 工时 | 优先级 |
-|------|------|------|--------|
-| **Phase 1** | 核心接口 + 5sim 适配器 + OTP 提取器 | 2d | P1 |
-| **Phase 2** | Number Pool 预取 + SMS Manager + 配置API | 2d | P1 |
-| **Phase 3** | SMSPool 适配器(兜底) + 统计 | 1d | P2 |
-| **Phase 4** | CDP 集成 + 注册自动化流程闭环 | 2d | P2 |
-| **Phase 5** | HeroSMS 适配器 + 余额告警 + 看板 | 1d | P2 |
+| 阶段 | 内容 | 当前状态 | 后续重点 |
+|------|------|----------|----------|
+| **Phase 1** | 核心接口 + 5sim 适配器 + OTP 提取器 | 代码已落地 | 接入 production wiring/config，用真实账号/沙箱验证失败路径 |
+| **Phase 2** | Number Pool 预取 + SMS Manager + 配置API | 部分落地 | 配置 API、持久化订单历史 |
+| **Phase 3** | SMSPool 适配器(兜底) + 统计 | 代码已落地 | 统计 API、成本/成功率看板 |
+| **Phase 4** | CDP 集成 + 注册自动化流程闭环 | 未落地 | 填号、触发发送、轮询、填码 |
+| **Phase 5** | HeroSMS 适配器 + 余额告警 + 看板 | 未落地 | sms-activate 兼容层与告警 |
 
-**总计: ~8d** (其中核心 4d 即可上线可用版本)
+当前已具备后端服务边界，尚不能宣称完整账号注册接码闭环。
 
 ## 十二、风险与缓解
 

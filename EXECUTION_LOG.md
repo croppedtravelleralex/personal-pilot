@@ -1,3 +1,20 @@
+## Round 20 — Integration/API documentation sync (2026-05-22)
+
+### Type: doc_sync
+
+### Actions
+- 校正 CAPTCHA/SMS/Email 设计文档：从“全缺/无 REST API”改为“handler/route 与服务代码边界部分落地，生产 wiring 与自动化闭环待验证”。
+- 同步架构审计：backup 已拆分、browser launch/process monitor 已迁移、worktree 数量和根目录统计已刷新。
+- 更新 TODO、PROGRESS、RUN_STATE、Current State，记录本轮 service/API boundary 与剩余验证。
+
+### Results
+- CAPTCHA: 2Captcha/Capsolver + `/api/captcha/solve|solve-token|config|balance` handler/route 已记录为部分完成，manager wiring/config 未完成。
+- SMS: 5sim/SMSPool + buy/status/cancel/balance handler/route 已记录为部分完成，manager wiring/config 未完成。
+- Email: `EmailService` + inbox/wait-code API 已记录为部分完成，session persistence 仍是 best-effort。
+- 剩余边界明确为 CDP 检测/填入、真实 provider 验收、operator UI、stats/config/finish 等 API 完整化。
+
+### Verdict: success
+
 ## Round 19 — Multi-Agent Mainline Closeout (2026-05-21)
 
 ### Type: build

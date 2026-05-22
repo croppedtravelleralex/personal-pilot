@@ -6,9 +6,9 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 3,
   "consecutive_failures": 0,
-  "current_focus": "Mainline closeout completed",
-  "current_objective": "Mainline P0 已全部闭环，准备 release gate",
-  "last_result_summary": "4 个 multi-agent worktree 并行实现 + 4 个 review agent 审查 + 修复 CRITICAL/HIGH 问题 + 无冲突合并。changeProxyIp provider 级实现、Synchronizer 物理窗口排布、Recorder/Templates de-fallback 闭环、engineering hygiene (SQLite/CI/gitignore/cleanup) 全部完成",
+  "current_focus": "Integration/API follow-up documented",
+  "current_objective": "CAPTCHA/SMS/Email handler/route 与服务代码边界已部分落地，下一步做 production wiring、release gate 与自动化闭环验证",
+  "last_result_summary": "在 Mainline closeout 之后，补充并同步记录 CAPTCHA/SMS/Email handler/route 与 service/provider code boundary、backup 拆分、browser internal 迁移；文档已校正为部分落地而非全缺，并标明 CAPTCHA/SMS manager wiring 尚未接入",
   "next_action_hint": "跑主线 release gate + 规划 Overall 70% Phase 1",
   "next_suggestions": [
     {
@@ -18,9 +18,9 @@
       "kind": "feature"
     },
     {
-      "title": "规划 Overall 70% Phase 1: validation board + fingerprint",
+      "title": "CAPTCHA/SMS/Email 自动化闭环验证",
       "priority": 2,
-      "rationale": "下一个里程碑: detector/leak/DNS/WebRTC/... validation board + 扩展 fingerprint runtime",
+      "rationale": "handler/route 与服务代码边界已部分落地，仍需 production manager wiring/config、CDP 检测、填入、真实 provider 验收与 UI/operator flow",
       "kind": "feature"
     },
     {

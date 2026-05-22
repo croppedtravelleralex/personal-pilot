@@ -10,11 +10,11 @@
 | 维度 | 当前状态 | 缺口 |
 |------|----------|------|
 | Turnstile Token 提取 | ✅ 已实现 (`app_deepseek_register.go`) | 仅限隐藏 token，无交互式点击 |
-| 事件检测 | ✅ 已实现 (4 个 captcha 事件) | 无实际的解决动作绑定 |
+| 事件检测 | ✅ 已实现 (4 个 captcha 事件) | 自动化动作绑定仍需验证 |
 | 文本验证码提取 | ✅ 已实现 (email 模块 regex) | 仅限邮件场景 |
-| **视觉 CAPTCHA 解决** | ❌ 无 | **OCR + 第三方打码服务全缺** |
-| **打码服务集成** | ❌ 无 | 2Captcha/Capsolver/Anti-Captcha 均未接入 |
-| **reCAPTCHA/hCaptcha/GeeTest** | ❌ 无 | 不识别不解决 |
+| **视觉 CAPTCHA 解决** | ⚠️ 部分落地 (`backend/internal/captcha/`) | 已有 2Captcha/Capsolver 适配与 handler/route；缺 production manager wiring/config、本地 OCR、页面截图/填入闭环 |
+| **打码服务集成** | ⚠️ 部分落地 | 2Captcha/Capsolver 代码已接入；Anti-Captcha 未接入；运行时 manager 尚未初始化 |
+| **reCAPTCHA/hCaptcha/GeeTest/Turnstile** | ⚠️ token solver 代码部分落地 | 仍缺 manager wiring、CDP 检测、sitekey 抽取、回填与端到端验证 |
 | **CAPTCHA 难度预测** | ❌ 无 | 仅有文档提及 |
 | **打码结果缓存** | ❌ 无 | 重复遇到同图浪费成本 |
 
@@ -44,15 +44,16 @@
      └────────────────────────────────────────┘
 ```
 
-### 三层自动降级策略
+### 三层演进策略
 
 ```
-Layer 1 (免费) : ddddocr 本地 OCR → 纯文本验证码
-    ↓ 失败 / 非文本
-Layer 2 (AI)   : Capsolver API → reCAPTCHA/Turnstile/hCaptcha
-    ↓ 失败 / 超时
-Layer 3 (兜底) : 2Captcha API → 人工辅助
+已落地      : Capsolver / 2Captcha solver 代码 + launchcode handler/route
+下一步      : production manager wiring/config → 端点不再 service unavailable
+再下一步    : CDP 检测/截图/sitekey 抽取 → 自动提交 solver
+后续可选    : ddddocr 本地 OCR、Anti-Captcha、Turnstile 深度交互
 ```
+
+当前 release truth：`backend/internal/captcha` 已能作为代码边界存在，`launchcode` handler/route 已存在；但 manager 尚未在生产启动路径接入，因此还不是可用的浏览器内自动解题闭环。
 
 ---
 
@@ -63,13 +64,15 @@ Layer 3 (兜底) : 2Captcha API → 人工辅助
 ```
 backend/internal/captcha/
 ├── captcha.go             # 核心接口 + 管理器
-├── solver_ddddocr.go      # ddddocr 本地 OCR 适配器
 ├── solver_capsolver.go    # Capsolver API 适配器
 ├── solver_2captcha.go     # 2Captcha API 适配器
-├── solver_anticaptcha.go  # Anti-Captcha API 适配器（可选）
+└── captcha_test.go        # 单元测试 + mock 服务
+
+尚未落地：
+├── solver_ddddocr.go      # ddddocr 本地 OCR 适配器
+├── solver_anticaptcha.go  # Anti-Captcha API 适配器
 ├── solver_turnstile.go    # Turnstile 深度处理（CDP 交互）
-├── captcha_test.go        # 单元测试 + mock 服务
-└── README.md              # 预留
+└── CDP 截图/检测/回填层
 ```
 
 ### 3.2 核心接口
@@ -367,13 +370,13 @@ func (d *CaptchaDetector) FillCaptcha(ctx context.Context, info *CaptchaInfo, re
 
 | 端点 | 方法 | 功能 | 优先级 |
 |------|------|------|--------|
-| `/api/captcha/solve` | POST | 提交验证码图片/base64 并获取结果 | P1 |
-| `/api/captcha/solve/token` | POST | 提交 reCAPTCHA/Turnstile 信息获取 token | P1 |
-| `/api/captcha/balance` | GET | 查询打码服务余额 | P2 |
-| `/api/captcha/config` | GET | 当前打码配置 | P2 |
-| `/api/captcha/config` | PUT | 更新打码配置 | P2 |
-| `/api/captcha/stats` | GET | 打码统计(成功率/花费/次数) | P2 |
-| `/api/captcha/report-incorrect` | POST | 上报错误结果(部分服务退款) | P2 |
+| `/api/captcha/solve-token` | POST | 提交 reCAPTCHA/Turnstile/hCaptcha 信息获取 token | handler/route 已有，manager wiring 未接入 |
+| `/api/captcha/solve` | POST | 提交验证码图片/base64 并获取结果 | handler/route 已有，manager wiring 未接入 |
+| `/api/captcha/balance` | GET | 查询打码服务余额 | handler/route 已有，manager wiring 未接入 |
+| `/api/captcha/config` | GET | 当前打码配置 | handler/route 已有，manager wiring 未接入 |
+| `/api/captcha/config` | PUT | 更新打码配置 | 未落地 |
+| `/api/captcha/stats` | GET | 打码统计(成功率/花费/次数) | 未落地 |
+| `/api/captcha/report-incorrect` | POST | 上报错误结果(部分服务退款) | 未落地 |
 
 ### 6.2 请求/响应体
 
