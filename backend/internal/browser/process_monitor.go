@@ -1,4 +1,4 @@
-package backend
+package browser
 
 import (
 	"bufio"
@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	browserStderrTailMaxLines = 40
-	browserStderrTailMaxBytes = 4 * 1024
+	BrowserStderrTailMaxLines = 40
+	BrowserStderrTailMaxBytes = 4 * 1024
 )
 
-type browserProcessExitResult struct {
+type BrowserProcessExitResult struct {
 	Err        error
 	StderrTail string
 }
 
-type browserProcessMonitor struct {
+type BrowserProcessMonitor struct {
 	cmd        *exec.Cmd
 	stderr     io.ReadCloser
 	stderrTail *tailTextBuffer
@@ -29,11 +29,11 @@ type browserProcessMonitor struct {
 	waitDone   chan struct{}
 
 	mu        sync.Mutex
-	result    browserProcessExitResult
+	result    BrowserProcessExitResult
 	debugPort int
 }
 
-func newBrowserProcessMonitor(cmd *exec.Cmd) (*browserProcessMonitor, error) {
+func NewBrowserProcessMonitor(cmd *exec.Cmd) (*BrowserProcessMonitor, error) {
 	if cmd == nil {
 		return nil, fmt.Errorf("browser command is nil")
 	}
@@ -43,25 +43,25 @@ func newBrowserProcessMonitor(cmd *exec.Cmd) (*browserProcessMonitor, error) {
 		return nil, err
 	}
 
-	return &browserProcessMonitor{
+	return &BrowserProcessMonitor{
 		cmd:        cmd,
 		stderr:     stderr,
-		stderrTail: newTailTextBuffer(browserStderrTailMaxLines, browserStderrTailMaxBytes),
+		stderrTail: newTailTextBuffer(BrowserStderrTailMaxLines, BrowserStderrTailMaxBytes),
 		stderrDone: make(chan struct{}),
 		waitDone:   make(chan struct{}),
 	}, nil
 }
 
-func (m *browserProcessMonitor) Start() {
+func (m *BrowserProcessMonitor) Start() {
 	go m.captureStderr()
 	go m.waitForExit()
 }
 
-func (m *browserProcessMonitor) Done() <-chan struct{} {
+func (m *BrowserProcessMonitor) Done() <-chan struct{} {
 	return m.waitDone
 }
 
-func (m *browserProcessMonitor) HasExited() bool {
+func (m *BrowserProcessMonitor) HasExited() bool {
 	select {
 	case <-m.waitDone:
 		return true
@@ -70,7 +70,7 @@ func (m *browserProcessMonitor) HasExited() bool {
 	}
 }
 
-func (m *browserProcessMonitor) Result() browserProcessExitResult {
+func (m *BrowserProcessMonitor) Result() BrowserProcessExitResult {
 	<-m.waitDone
 
 	m.mu.Lock()
@@ -78,11 +78,11 @@ func (m *browserProcessMonitor) Result() browserProcessExitResult {
 	return m.result
 }
 
-func (m *browserProcessMonitor) Wait() error {
+func (m *BrowserProcessMonitor) Wait() error {
 	return m.Result().Err
 }
 
-func (m *browserProcessMonitor) DebugPort() (int, bool) {
+func (m *BrowserProcessMonitor) DebugPort() (int, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.debugPort <= 0 {
@@ -91,7 +91,7 @@ func (m *browserProcessMonitor) DebugPort() (int, bool) {
 	return m.debugPort, true
 }
 
-func (m *browserProcessMonitor) SetDebugPort(port int) {
+func (m *BrowserProcessMonitor) SetDebugPort(port int) {
 	if port <= 0 {
 		return
 	}
@@ -103,7 +103,7 @@ func (m *browserProcessMonitor) SetDebugPort(port int) {
 	m.mu.Unlock()
 }
 
-func (m *browserProcessMonitor) captureStderr() {
+func (m *BrowserProcessMonitor) captureStderr() {
 	defer close(m.stderrDone)
 
 	if m.stderr == nil {
@@ -116,7 +116,7 @@ func (m *browserProcessMonitor) captureStderr() {
 	for scanner.Scan() {
 		line := scanner.Text()
 		m.stderrTail.Append(line)
-		if port, ok := parseBrowserDebugPortFromStderrLine(line); ok {
+		if port, ok := ParseBrowserDebugPortFromStderrLine(line); ok {
 			m.SetDebugPort(port)
 		}
 	}
@@ -125,12 +125,12 @@ func (m *browserProcessMonitor) captureStderr() {
 	}
 }
 
-func (m *browserProcessMonitor) waitForExit() {
+func (m *BrowserProcessMonitor) waitForExit() {
 	err := m.cmd.Wait()
 	<-m.stderrDone
 
 	m.mu.Lock()
-	m.result = browserProcessExitResult{
+	m.result = BrowserProcessExitResult{
 		Err:        err,
 		StderrTail: m.stderrTail.String(),
 	}
@@ -191,7 +191,7 @@ func (b *tailTextBuffer) String() string {
 	return strings.Join(b.lines, "\n")
 }
 
-func parseBrowserDebugPortFromStderrLine(line string) (int, bool) {
+func ParseBrowserDebugPortFromStderrLine(line string) (int, bool) {
 	const marker = "DevTools listening on "
 
 	idx := strings.Index(line, marker)

@@ -87,10 +87,10 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			return profile, startErr
 		}
 	}
-	sanitizedProfileLaunchArgs, managedProfileArgs := sanitizeManagedLaunchArgs(profile.LaunchArgs)
-	sanitizedExtraLaunchArgs, managedExtraArgs := sanitizeManagedLaunchArgs(normalizedExtraLaunchArgs)
-	logManagedLaunchArgOverrides(log, profileId, "profile.launchArgs", managedProfileArgs)
-	logManagedLaunchArgOverrides(log, profileId, "start.extraLaunchArgs", managedExtraArgs)
+	sanitizedProfileLaunchArgs, managedProfileArgs := browser.SanitizeManagedLaunchArgs(profile.LaunchArgs)
+	sanitizedExtraLaunchArgs, managedExtraArgs := browser.SanitizeManagedLaunchArgs(normalizedExtraLaunchArgs)
+	browser.LogManagedLaunchArgOverrides(log, profileId, "profile.launchArgs", managedProfileArgs)
+	browser.LogManagedLaunchArgOverrides(log, profileId, "start.extraLaunchArgs", managedExtraArgs)
 
 	proxyChanged := a.browserMgr.ApplyDefaults(profile)
 	if proxyChanged {
@@ -278,7 +278,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 
 	cmd := exec.Command(chromeBinaryPath, args...)
 	cmd.Dir = filepath.Dir(chromeBinaryPath)
-	monitor, err := newBrowserProcessMonitor(cmd)
+	monitor, err := browser.NewBrowserProcessMonitor(cmd)
 	if err != nil {
 		startErr := fmt.Errorf("实例启动失败：无法建立浏览器错误输出捕获。可执行文件：%s。原因：%v。", chromeBinaryPath, err)
 		log.Error("浏览器错误输出捕获初始化失败", logger.F("profile_id", profileId), logger.F("chrome", chromeBinaryPath), logger.F("error", err.Error()), logger.F("reason", startErr.Error()))
@@ -618,7 +618,7 @@ func (a *App) BrowserInstanceGetTabs(profileId string) []BrowserTab {
 	}
 }
 
-func (a *App) waitBrowserProcess(profileId string, monitor *browserProcessMonitor) {
+func (a *App) waitBrowserProcess(profileId string, monitor *browser.BrowserProcessMonitor) {
 	err := monitor.Wait()
 
 	log := logger.New("Browser")
@@ -852,8 +852,8 @@ func (a *App) openBrowserWindowForRunningProfile(profile *BrowserProfile, extraL
 	args := []string{
 		fmt.Sprintf("--user-data-dir=%s", userDataDir),
 	}
-	sanitizedExtraLaunchArgs, managedExtraArgs := sanitizeManagedLaunchArgs(extraLaunchArgs)
-	logManagedLaunchArgOverrides(logger.New("Browser"), profile.ProfileId, "running-window.extraLaunchArgs", managedExtraArgs)
+	sanitizedExtraLaunchArgs, managedExtraArgs := browser.SanitizeManagedLaunchArgs(extraLaunchArgs)
+	browser.LogManagedLaunchArgOverrides(logger.New("Browser"), profile.ProfileId, "running-window.extraLaunchArgs", managedExtraArgs)
 	args = append(args, sanitizedExtraLaunchArgs...)
 	if len(startURLs) > 0 {
 		args = append(args, startURLs...)

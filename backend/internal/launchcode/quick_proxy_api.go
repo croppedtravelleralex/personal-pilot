@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"personal-pilot/backend/internal/proxy"
 )
 
 // QuickAddRequest POST /api/proxy/quick-add 的请求体
@@ -70,7 +72,7 @@ func (s *LaunchServer) handleQuickAddProxy(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":          true,
-		"proxyConfig": proxyConfig,
+		"proxyConfig": proxy.RedactProxyURL(proxyConfig),
 		"format":      format,
 		"name":        name,
 	})
@@ -131,7 +133,7 @@ func (s *LaunchServer) handleParseProxy(w http.ResponseWriter, r *http.Request) 
 			"host":        parsed.Hostname(),
 			"port":        port,
 			"hasAuth":     hasAuth,
-			"proxyConfig": raw,
+			"proxyConfig": proxy.RedactProxyURL(raw),
 		})
 		return
 	}
@@ -140,7 +142,7 @@ func (s *LaunchServer) handleParseProxy(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":          true,
 		"format":      format,
-		"proxyConfig": raw,
+		"proxyConfig": proxy.RedactProxyURL(raw),
 	})
 }
 

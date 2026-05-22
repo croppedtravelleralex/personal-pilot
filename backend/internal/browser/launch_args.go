@@ -1,4 +1,4 @@
-package backend
+package browser
 
 import (
 	"personal-pilot/backend/internal/logger"
@@ -18,7 +18,7 @@ var managedLaunchArgSpecs = []managedLaunchArgSpec{
 	{prefix: "--proxy-server", takesValue: true},
 }
 
-func sanitizeManagedLaunchArgs(args []string) ([]string, []string) {
+func SanitizeManagedLaunchArgs(args []string) ([]string, []string) {
 	if len(args) == 0 {
 		return nil, nil
 	}
@@ -59,7 +59,7 @@ func matchManagedLaunchArg(arg string) (managedLaunchArgSpec, bool) {
 	return managedLaunchArgSpec{}, false
 }
 
-func logManagedLaunchArgOverrides(log *logger.Logger, profileId string, source string, managedArgs []string) {
+func LogManagedLaunchArgOverrides(log *logger.Logger, profileId string, source string, managedArgs []string) {
 	if log == nil || len(managedArgs) == 0 {
 		return
 	}

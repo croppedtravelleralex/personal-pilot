@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"personal-pilot/backend/internal/browser"
 	"personal-pilot/backend/internal/events"
 	"personal-pilot/backend/internal/logger"
 )
@@ -182,7 +183,7 @@ func (a *App) validateProfileCDPOwnership(profile *BrowserProfile) error {
 	return a.browserMgr.ValidateProfileLaunchAudit(profile)
 }
 
-func shouldKeepBrowserRunningPendingDebugReady(debugPort int, monitor *browserProcessMonitor) bool {
+func shouldKeepBrowserRunningPendingDebugReady(debugPort int, monitor *browser.BrowserProcessMonitor) bool {
 	return debugPort > 0 && monitor != nil && !monitor.HasExited()
 }
 

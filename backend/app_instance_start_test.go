@@ -181,7 +181,7 @@ func TestWaitBrowserDebugPortStableDiscoversPortFromStderr(t *testing.T) {
 	defer server.Close()
 
 	cmd := stderrPortCommand(server.port, 2*time.Second)
-	monitor, err := newBrowserProcessMonitor(cmd)
+	monitor, err := browser.NewBrowserProcessMonitor(cmd)
 	if err != nil {
 		t.Fatalf("初始化浏览器进程监控失败: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestWaitBrowserDebugPortStableReturnsProcessExitDetail(t *testing.T) {
 	t.Parallel()
 
 	cmd := stderrFailingCommand("missing libEGL.dll")
-	monitor, err := newBrowserProcessMonitor(cmd)
+	monitor, err := browser.NewBrowserProcessMonitor(cmd)
 	if err != nil {
 		t.Fatalf("初始化浏览器进程监控失败: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestWaitBrowserDebugPortStableAllowsDebugPortAfterLauncherExit(t *testing.T
 
 	port := freeLoopbackPort(t)
 	cmd := shortLivedCommand()
-	monitor, err := newBrowserProcessMonitor(cmd)
+	monitor, err := browser.NewBrowserProcessMonitor(cmd)
 	if err != nil {
 		t.Fatalf("初始化浏览器进程监控失败: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestWaitBrowserProcessKeepsRunningWhileDebugPortAlive(t *testing.T) {
 	app.browserMgr.BrowserProcesses = make(map[string]*exec.Cmd)
 
 	cmd := shortLivedCommand()
-	monitor, err := newBrowserProcessMonitor(cmd)
+	monitor, err := browser.NewBrowserProcessMonitor(cmd)
 	if err != nil {
 		t.Fatalf("初始化测试进程监控失败: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestWaitForBrowserDebugReadyMarksProfileReady(t *testing.T) {
 func TestSanitizeManagedLaunchArgsRemovesSystemManagedFlags(t *testing.T) {
 	t.Parallel()
 
-	got, removed := sanitizeManagedLaunchArgs([]string{
+	got, removed := browser.SanitizeManagedLaunchArgs([]string{
 		"--lang=en-US",
 		"--remote-debugging-port=9222",
 		"--user-data-dir", "D:\\profiles\\demo",
@@ -425,7 +425,7 @@ func TestSanitizeManagedLaunchArgsRemovesSystemManagedFlags(t *testing.T) {
 
 	wantArgs := []string{"--lang=en-US", "https://example.com"}
 	if !reflect.DeepEqual(got, wantArgs) {
-		t.Fatalf("sanitizeManagedLaunchArgs args mismatch: got=%v want=%v", got, wantArgs)
+		t.Fatalf("SanitizeManagedLaunchArgs args mismatch: got=%v want=%v", got, wantArgs)
 	}
 
 	wantRemoved := []string{
@@ -435,7 +435,7 @@ func TestSanitizeManagedLaunchArgsRemovesSystemManagedFlags(t *testing.T) {
 		"--remote-debugging-pipe",
 	}
 	if !reflect.DeepEqual(removed, wantRemoved) {
-		t.Fatalf("sanitizeManagedLaunchArgs removed mismatch: got=%v want=%v", removed, wantRemoved)
+		t.Fatalf("SanitizeManagedLaunchArgs removed mismatch: got=%v want=%v", removed, wantRemoved)
 	}
 }
 
@@ -443,12 +443,12 @@ func TestSanitizeManagedLaunchArgsKeepsUnmanagedFlags(t *testing.T) {
 	t.Parallel()
 
 	input := []string{"--lang=en-US", "--disable-sync", "https://example.com"}
-	got, removed := sanitizeManagedLaunchArgs(input)
+	got, removed := browser.SanitizeManagedLaunchArgs(input)
 	if !reflect.DeepEqual(got, input) {
-		t.Fatalf("sanitizeManagedLaunchArgs should preserve unmanaged args: got=%v want=%v", got, input)
+		t.Fatalf("SanitizeManagedLaunchArgs should preserve unmanaged args: got=%v want=%v", got, input)
 	}
 	if len(removed) != 0 {
-		t.Fatalf("sanitizeManagedLaunchArgs should not report managed args, got=%v", removed)
+		t.Fatalf("SanitizeManagedLaunchArgs should not report managed args, got=%v", removed)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"personal-pilot/backend/internal/proxy"
 )
 
 // ManualProxyRequest 手动添加代理的请求体
@@ -129,7 +130,7 @@ func (s *LaunchServer) handleManualProxyCreate(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":          true,
 		"proxyId":     proxyID,
-		"proxyConfig": proxyConfig,
+		"proxyConfig": proxy.RedactProxyURL(proxyConfig),
 	})
 }
 
@@ -231,7 +232,7 @@ func (s *LaunchServer) handleManualProxyBatch(w http.ResponseWriter, r *http.Req
 		proxyConfig := buildManualProxyConfigFromItem(item)
 		results = append(results, map[string]interface{}{
 			"proxyId":     proxyID,
-			"proxyConfig": proxyConfig,
+			"proxyConfig": proxy.RedactProxyURL(proxyConfig),
 		})
 	}
 
@@ -245,11 +246,11 @@ func (s *LaunchServer) handleManualProxyBatch(w http.ResponseWriter, r *http.Req
 // handleManualProxyTest POST /api/proxy/manual/{id}/test
 func (s *LaunchServer) handleManualProxyTest(w http.ResponseWriter, _ *http.Request, id string) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":         true,
-		"tested":     true,
-		"id":         id,
-		"reachable":  true,
-		"latencyMs":  123,
+		"ok":        true,
+		"tested":    true,
+		"id":        id,
+		"reachable": true,
+		"latencyMs": 123,
 	})
 }
 
@@ -279,7 +280,7 @@ func (s *LaunchServer) handleManualProxyUpdate(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":          true,
 		"proxyId":     proxyID,
-		"proxyConfig": proxyConfig,
+		"proxyConfig": proxy.RedactProxyURL(proxyConfig),
 	})
 }
 

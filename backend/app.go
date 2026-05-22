@@ -13,6 +13,7 @@ import (
 	"personal-pilot/backend/internal/browser"
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/database"
+	"personal-pilot/backend/internal/email"
 	"personal-pilot/backend/internal/events"
 	"personal-pilot/backend/internal/launchcode"
 	"personal-pilot/backend/internal/logger"
@@ -35,8 +36,8 @@ const (
 
 // 编译期检查：App 实现了 launchcode 所需的接口
 var (
-	_ launchcode.BrowserStarter          = (*App)(nil)
-	_ launchcode.BrowserStopper          = (*App)(nil)
+	_ launchcode.BrowserStarter           = (*App)(nil)
+	_ launchcode.BrowserStopper           = (*App)(nil)
 	_ launchcode.BrowserStarterWithParams = (*App)(nil)
 	_ launchcode.RecordingAPI             = (*App)(nil)
 	_ launchcode.WorkbenchOperator        = (*App)(nil)
@@ -253,6 +254,12 @@ func (a *App) startup(ctx context.Context) {
 		APIKey:  a.config.LaunchServer.Auth.APIKey,
 		Header:  a.config.LaunchServer.Auth.Header,
 	})
+	a.launchServer.SetEmailService(email.NewEmailService(
+		email.NewCloudflareProvider(nil),
+		email.NewMailTMProvider(nil),
+		a.db.GetConn(),
+		nil,
+	))
 	if err := a.launchServer.Start(); err != nil {
 		log.Error("LaunchServer 启动失败", logger.F("error", err))
 	} else {
@@ -261,7 +268,6 @@ func (a *App) startup(ctx context.Context) {
 			logger.F("preferred_port", port),
 		)
 	}
-
 
 	// 连接池失效通知
 	a.xrayMgr.OnBridgeDied = func(key string, err error) {

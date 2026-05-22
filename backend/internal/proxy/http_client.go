@@ -40,7 +40,7 @@ func buildProxyHTTPClient(
 	if strings.HasPrefix(l, "socks5://") {
 		u, err := url.Parse(src)
 		if err != nil {
-			return nil, fmt.Errorf("SOCKS5 地址解析失败: %w", err)
+			return nil, fmt.Errorf("SOCKS5 地址解析失败: %s", RedactProxyURL(src))
 		}
 		var auth *xproxy.Auth
 		if u.User != nil {
@@ -64,7 +64,7 @@ func buildProxyHTTPClient(
 
 	proxyURL, err := url.Parse(src)
 	if err != nil {
-		return nil, fmt.Errorf("代理地址解析失败: %w", err)
+		return nil, fmt.Errorf("代理地址解析失败: %s", RedactProxyURL(src))
 	}
 	transport := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
 	return &http.Client{Transport: transport, Timeout: timeout}, nil
