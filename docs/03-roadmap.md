@@ -19,17 +19,21 @@
    - recorder capture、template compile/replay 已 native-first
    - fallback 只作为异常恢复，不作为 release-default route
 
-4. Mainline release gate — **未完成**
-   - 需跑 Win11 packaging / operator acceptance polish
+4. Mainline release gate — **已完成自动化门禁**
+   - 2026-05-23 已通过 `scripts/windows_local_verify.ps1 -SkipContinuityTest`
+   - 覆盖 typecheck、Vite build、Win11 baseline、Rust lib/full tests、Tauri release build
+   - 生成 Win11 NSIS installer：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`
+   - 后续发布前可追加人工 operator smoke 和 continuity integration test
 
 ## Now：Overall remaining `70%`
 
 目标：从 closeout-ready desktop app 走向完整平台能力。此轨道不得冒充 Mainline 已交付。
 
 1. Validation foundation
-   - 建 validation board。
+   - Validation Board 前端 MVP 已落地。
    - 形成 detector / leak / DNS / WebRTC / canvas / audio / worker / transport evidence。
    - 区分 declared / applied / observed。
+   - 下一步接入真实 observed 采集命令、持久化报告和 profile-level evidence export。
 
 2. Fingerprint runtime depth
    - 从 `80` declared controls 和 `12` runtime projected fields 继续加深 applied / observed coverage。

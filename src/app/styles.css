@@ -60,6 +60,7 @@ textarea {
 }
 
 .shell__main {
+  min-width: 0;
   padding: 32px;
 }
 
@@ -111,6 +112,7 @@ textarea {
 }
 
 .nav-rail {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -522,6 +524,79 @@ textarea {
   margin: 0;
   color: #13253b;
   word-break: break-word;
+}
+
+.validation-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.validation-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(17, 34, 54, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.validation-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.validation-card__header h3 {
+  margin: 0 0 6px;
+}
+
+.validation-card__header p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.validation-layers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.validation-layer {
+  display: grid;
+  gap: 8px;
+  min-height: 148px;
+  padding: 14px;
+  border: 1px solid rgba(17, 34, 54, 0.08);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.validation-layer__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.validation-layer__top > span:first-child {
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.validation-layer strong {
+  color: #13253b;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.validation-layer p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
 }
 
 .details-grid__value {
@@ -1862,6 +1937,7 @@ textarea {
   .synchronizer-layout,
   .synchronizer-toolbar__metrics,
   .synchronizer-toolbar__body,
+  .validation-board,
   .window-matrix,
   .window-card__stats,
   .settings-form,
@@ -1916,16 +1992,22 @@ textarea {
   }
 
   .nav-rail {
+    width: 100%;
     border-right: 0;
     border-bottom: 1px solid rgba(17, 34, 54, 0.08);
   }
 
   .shell__main {
+    width: 100%;
     padding: 20px;
   }
 
   .shell__header {
     flex-direction: column;
+  }
+
+  .shell__header-chip {
+    white-space: normal;
   }
 
   .logs-toolbar__header,
@@ -1948,6 +2030,8 @@ textarea {
   .synchronizer-layout,
   .synchronizer-toolbar__metrics,
   .synchronizer-toolbar__body,
+  .validation-board,
+  .validation-layers,
   .window-matrix,
   .window-card__stats,
   .settings-form,

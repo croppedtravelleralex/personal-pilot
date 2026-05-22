@@ -1,6 +1,6 @@
 # Current State
 
-Updated: 2026-05-22 (Asia/Shanghai)
+Updated: 2026-05-23 (Asia/Shanghai)
 
 ## 当前 live truth
 
@@ -21,8 +21,9 @@ Updated: 2026-05-22 (Asia/Shanghai)
 
 ## Build Status
 
-- Type check、Vite production build、Win11 Tauri baseline check、Tauri release packaging 是当前 meaningful code change 的最低门禁。
-- 最近一次审查确认这些门禁可通过；后续每次代码改动仍需重新跑。
+- 2026-05-23 已通过 `scripts/windows_local_verify.ps1 -SkipContinuityTest`：type check、Vite production build、Win11 Tauri baseline、`cargo test --lib -- --test-threads=1`、Tauri release build、`cargo test --quiet`。
+- Tauri release installer 已生成：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`。
+- 后续 meaningful code change 仍需重新跑对应门禁；operator manual smoke 和 continuity integration test 可按发布需要追加。
 
 ## Reporting Rule From Now On
 
@@ -45,6 +46,7 @@ Updated: 2026-05-22 (Asia/Shanghai)
 - SMS 后端 handler/route 与 provider 代码边界已部分落地：`internal/sms`、5sim、SMSPool、`/api/sms/*` 核心端点；生产 manager wiring/config 尚未接入。
 - Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API。
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
+- Validation Board MVP 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；当前 observed 仍是 board-level 占位，不代表真实 detector 闭环。
 
 ## 未完成边界
 
@@ -57,7 +59,7 @@ Updated: 2026-05-22 (Asia/Shanghai)
 
 ### Overall remaining `70%`
 
-- validation board 未落地。
+- Validation Board 已有前端 MVP；后续需接入真实采集命令、持久化报告和 profile-level evidence export。
 - CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地，尚未完成 production manager wiring、CDP 自动化检测、填入、真实 provider 验收和 operator UI 闭环。
 - runtime materialization depth 仍窄，当前只应报告 `12` projected fields。
 - `450+` fingerprint signal observation / audit coverage 未落地。
@@ -68,7 +70,7 @@ Updated: 2026-05-22 (Asia/Shanghai)
 
 ## 当前下一步
 
-Mainline P0 已全部闭环。下一步方向：
-1. 跑主线 release gate (Win11 packaging / operator acceptance polish)
-2. 规划 Overall `70%` 阶段 1：validation board + fingerprint depth
-3. 将 Multi-Agent worktree 工作流标准化为常规执行模式
+Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
+1. 将 Validation Board observed 层接入真实采集命令和可重复 report
+2. 扩展 fingerprint runtime depth，并保持 declared / applied / observed 三层分离
+3. CAPTCHA/SMS/Email production manager wiring/config 只作为下一条集成切片，不宣称自动化闭环

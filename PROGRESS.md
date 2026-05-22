@@ -19,6 +19,20 @@ Progress must be reported with the dual-axis rule:
 - `450+` fingerprint signals, `450+` event taxonomy, and richer AdsPower-grade realism remain future overall-track work
 - detailed phase plan, scorecard, and benchmark summary live in `/docs/19-phase-plan-and-scorecard.md`
 
+## 2026-05-23 Release gate evidence
+
+- `scripts/windows_local_verify.ps1 -SkipContinuityTest` 已通过。
+- 覆盖：`pnpm typecheck`、`pnpm build`、Win11 Tauri baseline enforcement、`cargo test --lib -- --test-threads=1`、`pnpm desktop:release`、`cargo test --quiet`。
+- Win11 NSIS installer 已生成：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`。
+- 下一阶段主线切到 Overall `70%` 的 Validation Board MVP，不提高 capability score，直到有 observed evidence。
+
+## 2026-05-23 Validation Board MVP
+
+- 新增 `Validation` 桌面页面与导航入口。
+- 已覆盖 8 类 evidence：detector、leak、DNS、WebRTC、canvas、audio、worker、transport。
+- Board 明确拆分 `declared / applied / observed`，避免把 declared controls 误报成 runtime-applied fields。
+- 当前 observed 层仍是前端 board-level 状态，下一步接真实采集命令、持久化 report、profile-level export。
+
 ## 2026-05-22 Integration/API follow-up
 
 - CAPTCHA 后端 handler/route 与 solver 代码边界已部分落地：`internal/captcha`、2Captcha、Capsolver、`/api/captcha/solve`、`/api/captcha/solve-token`、config/balance；生产 manager wiring/config 尚未接入，当前端点可能返回 service unavailable。

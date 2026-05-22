@@ -24,6 +24,10 @@ const TITLES: Record<AppRoute, { title: string; detail: string }> = {
     title: "Synchronizer",
     detail: "Control local browser window layout, focus, and multi-window alignment.",
   },
+  validation: {
+    title: "Validation",
+    detail: "Track declared, applied, and observed evidence across runtime surfaces.",
+  },
   logs: {
     title: "Logs",
     detail: "Runtime and action log surfaces with paged loading and debounced filtering.",

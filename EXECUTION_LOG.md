@@ -1,3 +1,41 @@
+## Round 22 — Validation Board MVP (2026-05-23)
+
+### Type: feature
+
+### Actions
+- 新增 `Validation` 路由、导航项和页面。
+- 新增 `features/validation` 模型与 hook，生成 detector / leak / DNS / WebRTC / canvas / audio / worker / transport evidence board。
+- Board 显示 declared / applied / observed 三层状态，不把 observed 占位当成真实采集结果。
+- 修复新增页面在 390px 移动视口下的横向溢出。
+
+### Results
+- `pnpm typecheck` 通过。
+- `pnpm build` 通过。
+- Win11 Tauri baseline enforcement 通过。
+- `pnpm desktop:release` 通过。
+- Playwright 验证 `#validation` 页面：桌面与 390px 移动视口无横向溢出，8 个 evidence card 正常渲染。
+
+### Verdict: success
+
+## Round 21 — Release gate evidence (2026-05-23)
+
+### Type: verify
+
+### Actions
+- 修正 `docs/04-improvement-backlog.md` 中旧的 Mainline `7%` 口径。
+- 清理 `src-tauri/Cargo.toml` 无内容 diff 噪音。
+- 执行 `scripts/windows_local_verify.ps1 -SkipContinuityTest`。
+
+### Results
+- `pnpm typecheck` 通过。
+- `pnpm build` 通过。
+- Win11 Tauri baseline enforcement 通过。
+- `cargo test --lib -- --test-threads=1` 通过，118 tests passed。
+- `pnpm desktop:release` 通过，生成 NSIS installer。
+- `cargo test --quiet` 通过。
+
+### Verdict: success
+
 ## Round 20 — Integration/API documentation sync (2026-05-22)
 
 ### Type: doc_sync

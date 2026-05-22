@@ -30,6 +30,11 @@ const SynchronizerPage = lazy(() =>
     default: module.SynchronizerPage,
   })),
 );
+const ValidationPage = lazy(() =>
+  import("../pages/ValidationPage").then((module) => ({
+    default: module.ValidationPage,
+  })),
+);
 const LogsPage = lazy(() =>
   import("../pages/LogsPage").then((module) => ({
     default: module.LogsPage,
@@ -47,6 +52,7 @@ const ROUTE_COMPONENTS: Record<AppRoute, ComponentType> = {
   proxies: ProxiesPage,
   automation: AutomationPage,
   synchronizer: SynchronizerPage,
+  validation: ValidationPage,
   logs: LogsPage,
   settings: SettingsPage,
 };

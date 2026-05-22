@@ -1,33 +1,33 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 19,
+  "loop_iteration": 21,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 3,
   "consecutive_failures": 0,
-  "current_focus": "Integration/API follow-up documented",
-  "current_objective": "CAPTCHA/SMS/Email handler/route 与服务代码边界已部分落地，下一步做 production wiring、release gate 与自动化闭环验证",
-  "last_result_summary": "在 Mainline closeout 之后，补充并同步记录 CAPTCHA/SMS/Email handler/route 与 service/provider code boundary、backup 拆分、browser internal 迁移；文档已校正为部分落地而非全缺，并标明 CAPTCHA/SMS manager wiring 尚未接入",
-  "next_action_hint": "跑主线 release gate + 规划 Overall 70% Phase 1",
+  "current_focus": "Validation Board MVP landed",
+  "current_objective": "将 Validation Board observed 层接入真实采集命令、可重复 report 和 profile-level evidence export",
+  "last_result_summary": "Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。Validation 页面覆盖 8 类 evidence，并按 declared/applied/observed 分层展示；当前 observed 仍需接真实采集",
+  "next_action_hint": "接入 Validation Board native observed collectors + report persistence",
   "next_suggestions": [
     {
-      "title": "跑主线 release gate (Win11 packaging polish)",
+      "title": "Connect Validation Board observed collectors",
       "priority": 1,
-      "rationale": "Mainline P0 已闭环，需验证 Win11 打包和 operator acceptance",
+      "rationale": "前端 board 已落地，下一步需要真实采集命令和可重复 report，避免 evidence 只停留在 UI 状态",
       "kind": "feature"
     },
     {
-      "title": "CAPTCHA/SMS/Email 自动化闭环验证",
+      "title": "Deepen fingerprint runtime with evidence split",
       "priority": 2,
-      "rationale": "handler/route 与服务代码边界已部分落地，仍需 production manager wiring/config、CDP 检测、填入、真实 provider 验收与 UI/operator flow",
+      "rationale": "必须把 declared / applied / observed 分开，避免把 80 declared controls 误报为 runtime applied",
       "kind": "feature"
     },
     {
-      "title": "标准化 Multi-Agent worktree 工作流",
+      "title": "CAPTCHA/SMS/Email production manager wiring",
       "priority": 3,
-      "rationale": "本轮 worktree 分离 + 并行 subagent 效果显著，应标准化为常规执行模式",
-      "kind": "refactor"
+      "rationale": "handler/route 已部分落地，下一步先让 production wiring/config 清晰失败或可测，不直接宣称自动化闭环",
+      "kind": "feature"
     },
     {
       "title": "补前端测试覆盖",
@@ -48,6 +48,18 @@
       "kind": "build",
       "status": "success",
       "note": "4 worktree × (impl + review) + fixes + merge. 3 P0 items closed."
+    },
+    {
+      "title": "Release gate evidence",
+      "kind": "verify",
+      "status": "success",
+      "note": "windows_local_verify -SkipContinuityTest passed: typecheck, build, Win11 baseline, Rust tests, Tauri release."
+    },
+    {
+      "title": "Validation Board MVP",
+      "kind": "feature",
+      "status": "success",
+      "note": "Validation route/page/model landed with declared/applied/observed evidence split and Playwright viewport checks."
     }
   ],
   "blocked_reason": "",

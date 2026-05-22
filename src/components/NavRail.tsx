@@ -6,6 +6,7 @@ const ITEMS: Array<{ route: AppRoute; label: string; detail: string }> = [
   { route: "proxies", label: "Proxies", detail: "Proxy center" },
   { route: "automation", label: "Automation", detail: "Runs, tasks, and recorder" },
   { route: "synchronizer", label: "Synchronizer", detail: "Window matrix" },
+  { route: "validation", label: "Validation", detail: "Evidence board" },
   { route: "logs", label: "Logs", detail: "Runtime and actions" },
   { route: "settings", label: "Settings", detail: "Local control" },
 ];

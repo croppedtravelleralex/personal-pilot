@@ -6,6 +6,7 @@ export type AppRoute =
   | "proxies"
   | "automation"
   | "synchronizer"
+  | "validation"
   | "logs"
   | "settings";
 
@@ -15,6 +16,7 @@ const VALID_ROUTES: AppRoute[] = [
   "proxies",
   "automation",
   "synchronizer",
+  "validation",
   "logs",
   "settings",
 ];

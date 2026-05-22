@@ -33,13 +33,16 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Split backup implementation away from the old `app_backup_ops.go` monolith
 - [x] Move browser launch args and process monitor into `backend/internal/browser/`
 
-## Mainline Remaining
+## Mainline Release Evidence
 
-- [ ] Tighten final Win11 packaging / operator acceptance polish without reopening scope
+- [x] Run Win11 local release gate without reopening scope (`scripts/windows_local_verify.ps1 -SkipContinuityTest`)
+- [ ] Optional: run manual operator smoke before external distribution
 
 ## Overall End-State 70%
 
-- [ ] Build the validation board for detector, leak, DNS, WebRTC, canvas, audio, worker, and transport evidence
+- [x] Build Validation Board MVP for detector, leak, DNS, WebRTC, canvas, audio, worker, and transport evidence
+- [x] Keep Validation Board reports split into declared / applied / observed
+- [ ] Connect Validation Board observed layer to native collection commands and repeatable reports
 - [ ] Deepen fingerprint runtime from `80` declared controls and `12` projected fields toward broader applied / observed coverage
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
 - [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy
