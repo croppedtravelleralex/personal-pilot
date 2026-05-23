@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "SessionBundle import preflight and restore contract",
-  "current_objective": "继续推进 P2 profile portability 和 behavior/provider closure；真实 restore write path 尚未落地",
-  "last_result_summary": "Profile-scoped SessionBundle export、import preflight、restore contract 已落地；preflight 检查 schema/ref/conflict，restore 当前 non-destructive 且不写 DB；真实 portability 仍需后续验收",
-  "next_action_hint": "Move to P2 behavior/provider closure slice after checking SessionBundle gates",
+  "current_focus": "Provider production readiness contract",
+  "current_objective": "继续推进 P2 behavior/provider closure；真实 CAPTCHA/SMS/Email manager wiring、CDP automation、operator UI 仍未闭环",
+  "last_result_summary": "Provider production readiness contract 已落地，可报告 CAPTCHA/SMS/Email 的 credentials、manager wiring、CDP automation、operator UI blockers；不会把 provider credentials 误报为生产闭环",
+  "next_action_hint": "After provider readiness gates pass, move to P3 runtime adapter/benchmark/release smoke contract",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -102,6 +102,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Import preflight checks schema/reference/conflict state and restore returns a non-destructive contract with writePerformed=false."
+    },
+    {
+      "title": "Provider production readiness contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "CAPTCHA/SMS/Email readiness now reports credential, manager wiring, CDP automation, operator UI blockers without claiming production closure."
     }
   ],
   "blocked_reason": "",

@@ -17,6 +17,7 @@ import type {
   DesktopSessionBundleImportPreflightRequest,
   DesktopSessionBundleRestoreRequest,
   DesktopSessionBundleRestoreResult,
+  DesktopProviderProductionReadiness,
   DesktopLaunchTemplateRunRequest,
   DesktopLaunchTemplateRunResult,
   DesktopLocalApiMutationResult,
@@ -493,6 +494,10 @@ export const restoreSessionBundle = (
   request: DesktopSessionBundleRestoreRequest,
 ): Promise<DesktopSessionBundleRestoreResult> =>
   invokeDesktop("restore_session_bundle", { request });
+
+export const readProviderProductionReadiness =
+  (): Promise<DesktopProviderProductionReadiness> =>
+    invokeDesktop("read_provider_production_readiness");
 
 export const openLocalAssetEntry = (entryId: DesktopLocalAssetEntryId): Promise<void> =>
   invokeDesktop("open_local_asset_entry", { entryId });

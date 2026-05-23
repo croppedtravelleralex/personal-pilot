@@ -445,6 +445,33 @@ pub struct DesktopSessionBundleRestoreResult {
     pub summary: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopProviderReadinessItem {
+    pub domain: String,
+    pub status: String,
+    pub provider_count: usize,
+    pub configured_provider_count: usize,
+    pub manager_wiring_status: String,
+    pub config_status: String,
+    pub credential_status: String,
+    pub cdp_automation_status: String,
+    pub operator_ui_status: String,
+    pub blockers: Vec<String>,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopProviderProductionReadiness {
+    pub generated_at: String,
+    pub status: String,
+    pub ready_count: usize,
+    pub blocked_count: usize,
+    pub items: Vec<DesktopProviderReadinessItem>,
+    pub summary: String,
+}
+
 fn now_ts_string() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2276,6 +2303,130 @@ pub async fn restore_desktop_session_bundle(
         preflight,
         summary,
     })
+}
+
+fn env_any_present(keys: &[&str]) -> bool {
+    keys.iter()
+        .any(|key| env::var(key).is_ok_and(|value| !value.trim().is_empty()))
+}
+
+fn provider_readiness_item(
+    domain: &str,
+    provider_names: &[&str],
+    credential_env_keys: &[&str],
+    manager_wiring_status: &str,
+    cdp_automation_status: &str,
+    operator_ui_status: &str,
+) -> DesktopProviderReadinessItem {
+    let credential_present = env_any_present(credential_env_keys);
+    let credential_status = if credential_present {
+        "configured"
+    } else {
+        "missing_credentials"
+    };
+    let config_status = if credential_present {
+        "provider_credentials_present"
+    } else {
+        "provider_credentials_missing"
+    };
+    let mut blockers = Vec::new();
+    if !credential_present {
+        blockers.push(format!(
+            "missing provider credential env: {}",
+            credential_env_keys.join("|")
+        ));
+    }
+    if manager_wiring_status != "wired" {
+        blockers.push("production manager wiring is not connected to runtime flow".to_string());
+    }
+    if cdp_automation_status != "wired" {
+        blockers.push("CDP detect/fill automation is not wired".to_string());
+    }
+    if operator_ui_status != "wired" {
+        blockers.push("operator UI closure is not wired".to_string());
+    }
+
+    let status = if blockers.is_empty() {
+        "ready"
+    } else if credential_present {
+        "configured_but_blocked"
+    } else {
+        "blocked"
+    }
+    .to_string();
+    let next_action = if blockers.is_empty() {
+        "run real provider acceptance smoke".to_string()
+    } else {
+        blockers[0].clone()
+    };
+
+    DesktopProviderReadinessItem {
+        domain: domain.to_string(),
+        status,
+        provider_count: provider_names.len(),
+        configured_provider_count: usize::from(credential_present),
+        manager_wiring_status: manager_wiring_status.to_string(),
+        config_status: config_status.to_string(),
+        credential_status: credential_status.to_string(),
+        cdp_automation_status: cdp_automation_status.to_string(),
+        operator_ui_status: operator_ui_status.to_string(),
+        blockers,
+        next_action,
+    }
+}
+
+pub fn read_desktop_provider_production_readiness() -> DesktopProviderProductionReadiness {
+    let generated_at = now_ts_string();
+    let items = vec![
+        provider_readiness_item(
+            "captcha",
+            &["2captcha", "capsolver"],
+            &[
+                "TWOCAPTCHA_API_KEY",
+                "CAPSOLVER_API_KEY",
+                "ANTICAPTCHA_API_KEY",
+            ],
+            "contract_only",
+            "not_wired",
+            "not_wired",
+        ),
+        provider_readiness_item(
+            "sms",
+            &["5sim", "smspool"],
+            &["FIVESIM_API_KEY", "SMSPOOL_API_KEY", "HEROSMS_API_KEY"],
+            "contract_only",
+            "not_wired",
+            "not_wired",
+        ),
+        provider_readiness_item(
+            "email",
+            &["mailtm", "cloudflare_worker"],
+            &["MAILTM_API_TOKEN", "EMAIL_WORKER_URL", "EMAIL_WORKER_TOKEN"],
+            "service_api_available",
+            "not_wired",
+            "not_wired",
+        ),
+    ];
+    let ready_count = items.iter().filter(|item| item.status == "ready").count();
+    let blocked_count = items.len().saturating_sub(ready_count);
+    let status = if blocked_count == 0 {
+        "ready"
+    } else {
+        "blocked"
+    }
+    .to_string();
+    let summary = format!(
+        "Provider production readiness: {ready_count} ready, {blocked_count} blocked; real provider acceptance is required before closure."
+    );
+
+    DesktopProviderProductionReadiness {
+        generated_at,
+        status,
+        ready_count,
+        blocked_count,
+        items,
+        summary,
+    }
 }
 
 pub fn resolve_desktop_local_asset_entry_path(
@@ -7998,6 +8149,50 @@ mod tests {
                 .await
                 .expect("count restored profile");
         assert_eq!(restored_count, 0);
+    }
+
+    #[test]
+    fn provider_production_readiness_reports_contract_blocks_without_claiming_closure() {
+        for key in [
+            "TWOCAPTCHA_API_KEY",
+            "CAPSOLVER_API_KEY",
+            "ANTICAPTCHA_API_KEY",
+            "FIVESIM_API_KEY",
+            "SMSPOOL_API_KEY",
+            "HEROSMS_API_KEY",
+            "MAILTM_API_TOKEN",
+            "EMAIL_WORKER_URL",
+            "EMAIL_WORKER_TOKEN",
+        ] {
+            env::remove_var(key);
+        }
+
+        let readiness = read_desktop_provider_production_readiness();
+        assert_eq!(readiness.status, "blocked");
+        assert_eq!(readiness.ready_count, 0);
+        assert_eq!(readiness.blocked_count, 3);
+        assert_eq!(readiness.items.len(), 3);
+        assert!(readiness.items.iter().all(|item| item.status == "blocked"));
+        assert!(readiness
+            .items
+            .iter()
+            .all(|item| item.configured_provider_count == 0));
+
+        env::set_var("CAPSOLVER_API_KEY", "test-key");
+        let with_captcha_credential = read_desktop_provider_production_readiness();
+        let captcha = with_captcha_credential
+            .items
+            .iter()
+            .find(|item| item.domain == "captcha")
+            .expect("captcha readiness item");
+        assert_eq!(captcha.credential_status, "configured");
+        assert_eq!(captcha.status, "configured_but_blocked");
+        assert!(captcha
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("production manager wiring")));
+        assert_eq!(with_captcha_credential.ready_count, 0);
+        env::remove_var("CAPSOLVER_API_KEY");
     }
 
     #[test]

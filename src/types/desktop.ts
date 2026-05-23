@@ -408,6 +408,29 @@ export interface DesktopSessionBundleRestoreResult {
   summary: string;
 }
 
+export interface DesktopProviderReadinessItem {
+  domain: string;
+  status: string;
+  providerCount: number;
+  configuredProviderCount: number;
+  managerWiringStatus: string;
+  configStatus: string;
+  credentialStatus: string;
+  cdpAutomationStatus: string;
+  operatorUiStatus: string;
+  blockers: string[];
+  nextAction: string;
+}
+
+export interface DesktopProviderProductionReadiness {
+  generatedAt: string;
+  status: string;
+  readyCount: number;
+  blockedCount: number;
+  items: DesktopProviderReadinessItem[];
+  summary: string;
+}
+
 export type DesktopJsonValue =
   | string
   | number

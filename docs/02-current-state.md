@@ -43,9 +43,9 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - Synchronizer live desktop snapshot、native focus、native set-main、work-area-aware native physical layout 已落地。
 - full Rust / integration gate 已恢复 green。
 - route-level code splitting 已清掉旧 Vite chunk warning。
-- CAPTCHA 后端 handler/route 与 solver 代码边界已部分落地：`internal/captcha`、2Captcha、Capsolver、`/api/captcha/*` 核心端点；生产 manager wiring/config 尚未接入。
-- SMS 后端 handler/route 与 provider 代码边界已部分落地：`internal/sms`、5sim、SMSPool、`/api/sms/*` 核心端点；生产 manager wiring/config 尚未接入。
-- Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API。
+- CAPTCHA 后端 handler/route 与 solver 代码边界已部分落地：`internal/captcha`、2Captcha、Capsolver、`/api/captcha/*` 核心端点；生产 readiness contract 已接入桌面 API，但 manager wiring/CDP 填入/operator UI 闭环仍 blocked。
+- SMS 后端 handler/route 与 provider 代码边界已部分落地：`internal/sms`、5sim、SMSPool、`/api/sms/*` 核心端点；生产 readiness contract 已接入桌面 API，但 manager wiring/CDP 填号填码/operator UI 闭环仍 blocked。
+- Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API；生产 readiness contract 已接入桌面 API，但自动化流程和 operator UI 闭环仍 blocked。
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
 - Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。
 
@@ -61,7 +61,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ### Overall remaining `70%`
 
 - Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list 和 profile-level evidence export；后续需在真实 Lightpanda/CDP 环境下做 operator smoke，把 FakeRunner warning stub 替换为真实 profile runtime evidence。
-- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地，尚未完成 production manager wiring、CDP 自动化检测、填入、真实 provider 验收和 operator UI 闭环。
+- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地，并已有 production readiness contract 可报告凭证、manager wiring、CDP 自动化、operator UI blocker；尚未完成真实 provider 验收和自动化闭环。
 - runtime materialization depth 已从 `12` 扩到 `26` projected fields；仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal observation / audit coverage 未落地。
 - `450+` event taxonomy 未落地。

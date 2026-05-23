@@ -42,6 +42,7 @@ pub fn run() {
       commands::export_session_bundle,
       commands::preflight_session_bundle_import,
       commands::restore_session_bundle,
+      commands::read_provider_production_readiness,
       commands::open_local_asset_entry,
       commands::open_local_directory,
       commands::read_local_runtime_status,

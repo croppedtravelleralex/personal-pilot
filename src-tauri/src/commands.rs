@@ -19,6 +19,7 @@ use persona_pilot::desktop::{
     load_desktop_proxy_page, load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
     load_desktop_template_metadata_page, open_desktop_profiles,
     read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
+    read_desktop_provider_production_readiness,
     read_desktop_local_api_snapshot, read_desktop_local_asset_workspace, read_desktop_run_detail,
     read_desktop_settings, reject_desktop_manual_gate, resolve_desktop_local_asset_entry_path,
     preflight_desktop_session_bundle_import, restore_desktop_browser_environment_policy_defaults,
@@ -34,7 +35,7 @@ use persona_pilot::desktop::{
     DesktopLogPage, DesktopLogQuery, DesktopManualGateActionRequest,
     DesktopProfileBatchActionRequest, DesktopProfileBatchActionResult, DesktopProfileDetail,
     DesktopProfileMutationResult, DesktopProfilePage, DesktopProfilePageQuery,
-    DesktopProxyBatchCheckRequest, DesktopProxyBatchCheckResponse, DesktopProxyChangeIpRequest,
+    DesktopProviderProductionReadiness, DesktopProxyBatchCheckRequest, DesktopProxyBatchCheckResponse, DesktopProxyChangeIpRequest,
     DesktopProxyChangeIpResult, DesktopProxyHealth, DesktopProxyPage, DesktopProxyPageQuery,
     DesktopProxyUsageItem, DesktopReadRunDetailQuery, DesktopRecorderSnapshot,
     DesktopRecorderSnapshotQuery, DesktopRunDetail, DesktopRuntimeSettingsDraft,
@@ -2069,6 +2070,11 @@ pub async fn restore_session_bundle(
     restore_desktop_session_bundle(&state.db, request)
         .await
         .map_err(normalize_error)
+}
+
+#[tauri::command]
+pub fn read_provider_production_readiness() -> Result<DesktopProviderProductionReadiness, String> {
+    Ok(read_desktop_provider_production_readiness())
 }
 
 #[tauri::command]
