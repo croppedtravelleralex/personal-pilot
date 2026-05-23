@@ -455,8 +455,13 @@ export interface DesktopReleaseSmokeContract {
   releaseArtifactPresent: boolean;
   win11BaselineStatus: string;
   coldStartTargetMs: number;
+  measuredColdStartMs: number | null;
   idleRssTargetMb: number;
+  measuredIdleRssMb: number | null;
   processCountTarget: number;
+  measuredProcessCount: number | null;
+  measurementStatus: string;
+  measurementNotes: string[];
   adapterContracts: DesktopRuntimeAdapterContractItem[];
   warnings: string[];
   summary: string;

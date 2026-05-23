@@ -55,6 +55,7 @@
 
 5. Runtime adapter and external integration
    - Runtime adapter / release smoke contract 已接入，覆盖 Fake、Lightpanda、headed_external 边界和 release artifact 检查。
+   - P11 已新增 release measurement target vs measured pending 字段，并在 Overview 暴露 adapter boundary；真实 cold start/RSS/process count smoke 仍需 operator 执行。
    - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
    - AdsPower benchmark refresh 等 B1-B5 有证据后再做。

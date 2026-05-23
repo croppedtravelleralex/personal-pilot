@@ -49,7 +49,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
 - Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。P5 已通过 WSL2 Lightpanda nightly 真实 CDP smoke：`validation_lightpanda_smoke --use-wsl-lightpanda` 双次复跑 `status=passed`。P6 已收敛 validation evidence schema：signals 显式携带 `collectorScope`、`runtimeAdapter`、`targetProfileBrowser`、`failureReason`，旧报告读取时从 legacy `detail` 自动补齐 metadata。P7 已新增 fingerprint observation audit：只从 WebRTC/canvas/audio/leak observed signals 统计真实观察覆盖，不把 `80` declared controls、`26` runtime projected fields 或 `450+` target-only signals 计入 observed proof。
 - Automation 已接入 P10 behavior audit contract：报告 `13` shipped primitives、`8` page archetypes、workflow graph/debug trace/manual gate/recovery semantics 覆盖状态，并明确 `450+` event taxonomy 仍是 target-only。
-- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；真实 Lightpanda/CDP operator smoke 与冷启动/RSS/进程数测量仍需单独执行。
+- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；真实 Lightpanda/CDP operator smoke 与冷启动/RSS/进程数测量仍需单独执行。
 
 ## 未完成边界
 
@@ -68,12 +68,12 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - `450+` fingerprint signal taxonomy / full observation coverage 未落地；当前 P7 只是 WebRTC/canvas/audio/leak observed audit，不是 450+ 全量采集。
 - `450+` event taxonomy 未落地；P10 只新增 audit contract 和 Automation surface，不是全量 replay taxonomy 交付。
 - `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；跨机器 profile portability 仍需真实环境验收。
-- headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前仅有 adapter/release smoke contract，不是 headed runtime 实现。
+- headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前仅有 adapter/release measurement contract 和 Overview 可见性，不是 headed runtime 实现。
 - external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。
 
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. P11 推进 runtime adapter/headed realism/performance measurement，不托管 Chromium/Firefox fork
-2. P12 AdsPower boundary refresh 只在 B1-B5 有新证据后执行
-3. P13 external distribution readiness / manual smoke / release notes / known limitations
+1. P12 AdsPower boundary refresh 只在 B1-B5 有新证据后执行
+2. P13 external distribution readiness / manual smoke / release notes / known limitations
+3. 清理 docs/final-goal-progress-breakdown 和 docs/19-phase-plan-and-scorecard 的阶段口径，确保 P5-P13 事实同步

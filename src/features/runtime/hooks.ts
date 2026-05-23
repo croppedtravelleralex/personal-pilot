@@ -39,6 +39,7 @@ export function useRuntimeViewModel() {
       state.autoRefreshEnabled,
       state.refreshIntervalMs,
     ),
+    releaseSmoke: state.releaseSmoke,
     actions: runtimeActions,
   };
 }

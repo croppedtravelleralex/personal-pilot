@@ -497,8 +497,13 @@ pub struct DesktopReleaseSmokeContract {
     pub release_artifact_present: bool,
     pub win11_baseline_status: String,
     pub cold_start_target_ms: i64,
+    pub measured_cold_start_ms: Option<i64>,
     pub idle_rss_target_mb: i64,
+    pub measured_idle_rss_mb: Option<i64>,
     pub process_count_target: i64,
+    pub measured_process_count: Option<i64>,
+    pub measurement_status: String,
+    pub measurement_notes: Vec<String>,
     pub adapter_contracts: Vec<DesktopRuntimeAdapterContractItem>,
     pub warnings: Vec<String>,
     pub summary: String,
@@ -2760,6 +2765,12 @@ pub fn read_desktop_release_smoke_contract(
         .join("nsis")
         .join("PersonaPilot_0.1.0_x64-setup.exe");
     let release_artifact_present = release_artifact_path.exists();
+    let measurement_status = "pending_operator_measurement".to_string();
+    let measurement_notes = vec![
+        "release artifact exists check is automated; cold start, idle RSS, and process count still require a measured operator smoke".to_string(),
+        "performance assessment must use release artifacts, not dev-mode metrics".to_string(),
+        "headed_external must remain an adapter contract and must not turn this repository into a Chromium/Firefox fork host".to_string(),
+    ];
     let adapter_contracts = vec![
         DesktopRuntimeAdapterContractItem {
             adapter_id: "fake".to_string(),
@@ -2825,8 +2836,13 @@ pub fn read_desktop_release_smoke_contract(
         release_artifact_present,
         win11_baseline_status: "enforced_by_template_script".to_string(),
         cold_start_target_ms: 2000,
+        measured_cold_start_ms: None,
         idle_rss_target_mb: 220,
+        measured_idle_rss_mb: None,
         process_count_target: 4,
+        measured_process_count: None,
+        measurement_status,
+        measurement_notes,
         adapter_contracts,
         warnings,
         summary,
@@ -8665,8 +8681,12 @@ mod tests {
     fn release_smoke_contract_tracks_adapter_boundary_without_kernel_fork_claims() {
         let contract = read_desktop_release_smoke_contract(None);
         assert_eq!(contract.cold_start_target_ms, 2000);
+        assert_eq!(contract.measured_cold_start_ms, None);
         assert_eq!(contract.idle_rss_target_mb, 220);
+        assert_eq!(contract.measured_idle_rss_mb, None);
         assert_eq!(contract.process_count_target, 4);
+        assert_eq!(contract.measured_process_count, None);
+        assert_eq!(contract.measurement_status, "pending_operator_measurement");
         assert_eq!(contract.adapter_contracts.len(), 3);
         let fake = contract
             .adapter_contracts
@@ -8698,6 +8718,10 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("AdsPower boundary must not be refreshed")));
+        assert!(contract
+            .measurement_notes
+            .iter()
+            .any(|note| note.contains("release artifacts, not dev-mode metrics")));
     }
 
     #[test]

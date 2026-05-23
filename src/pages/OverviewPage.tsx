@@ -325,6 +325,24 @@ export function OverviewPage() {
                 {runtimeSnapshot?.stderrPath ?? "No stderr path"}
               </dd>
             </article>
+            <article className="details-grid__item">
+              <dt>Release performance</dt>
+              <dd>
+                {runtime.releaseSmoke?.measurementStatus ?? "No release smoke contract"}
+                <br />
+                Cold start {runtime.releaseSmoke?.measuredColdStartMs ?? "pending"}/{runtime.releaseSmoke?.coldStartTargetMs ?? "target n/a"}ms,
+                RSS {runtime.releaseSmoke?.measuredIdleRssMb ?? "pending"}/{runtime.releaseSmoke?.idleRssTargetMb ?? "target n/a"}MB,
+                processes {runtime.releaseSmoke?.measuredProcessCount ?? "pending"}/{runtime.releaseSmoke?.processCountTarget ?? "target n/a"}
+              </dd>
+            </article>
+            <article className="details-grid__item">
+              <dt>Adapter boundary</dt>
+              <dd>
+                {runtime.releaseSmoke
+                  ? runtime.releaseSmoke.adapterContracts.map((item) => `${item.adapterId}:${item.status}`).join("; ")
+                  : "No adapter contract loaded"}
+              </dd>
+            </article>
           </div>
         </Panel>
       </div>

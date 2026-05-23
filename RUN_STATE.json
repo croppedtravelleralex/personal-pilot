@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P10 behavior taxonomy and workflow audit",
-  "current_objective": "Behavior audit contract 已接入 Automation 页面，明确 13 shipped primitives、8 page archetypes 和 450+ target-only event taxonomy 的边界",
-  "last_result_summary": "Behavior audit 现在报告 workflow graph、debug trace、manual gate、recovery semantics、target taxonomy 覆盖状态，并用测试锁定 13/8/450+ 不能混报",
-  "next_action_hint": "Run P10 full gates, commit/push, then start P11 runtime adapter/headed realism/performance measurement",
+  "current_focus": "P11 runtime adapter and release measurement contract",
+  "current_objective": "Release smoke contract 已扩展 measured/pending 字段并在 Overview 暴露 adapter boundary；真实 cold start/RSS/process 测量仍需 operator smoke",
+  "last_result_summary": "Runtime posture 现在展示 release performance target vs measured pending、adapter statuses 和 no Chromium/Firefox fork boundary；测试锁定不能用 dev metrics 冒充 release measurement",
+  "next_action_hint": "Run P11 full gates, commit/push, then start P12 AdsPower boundary refresh only if B1-B5 evidence exists",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -156,6 +156,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Automation now exposes a behavior audit contract for shipped primitives, page archetypes, workflow/debug/manual-gate/recovery coverage, and target-only 450+ taxonomy boundaries."
+    },
+    {
+      "title": "P11 runtime adapter and release measurement contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "Release smoke contract now separates performance targets from pending measurements and exposes adapter boundary in Overview without claiming headed runtime implementation or browser fork hosting."
     }
   ],
   "blocked_reason": "",
