@@ -599,6 +599,32 @@ textarea {
   font-size: 0.9rem;
 }
 
+
+.validation-error {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  border-radius: 12px;
+  background: rgba(180, 35, 24, 0.08);
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.validation-report {
+  display: grid;
+  gap: 16px;
+}
+
+.validation-report__summary {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.validation-signal-list {
+  display: grid;
+  gap: 12px;
+}
+
 .details-grid__value {
   margin-bottom: 14px !important;
 }

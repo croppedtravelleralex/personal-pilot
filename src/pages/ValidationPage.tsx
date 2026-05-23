@@ -25,7 +25,14 @@ function statusTone(status: ValidationEvidenceStatus) {
 }
 
 export function ValidationPage() {
-  const { snapshot, summary } = useValidationBoardViewModel();
+  const {
+    collectObservedEvidence,
+    error,
+    isCollecting,
+    report,
+    snapshot,
+    summary,
+  } = useValidationBoardViewModel();
 
   return (
     <div className="page-stack">
@@ -51,15 +58,26 @@ export function ValidationPage() {
         <StatCard
           label="Observed"
           value={String(summary.observedCount)}
-          hint="Repeatable evidence pending"
-          tone="danger"
+          hint={report ? "Latest report loaded" : "Repeatable evidence pending"}
+          tone={report ? "success" : "danger"}
         />
       </div>
 
       <Panel
         title="Validation Board"
         subtitle={`Generated ${new Date(snapshot.generatedAt).toLocaleString()}`}
+        actions={
+          <button
+            className="button"
+            disabled={isCollecting}
+            type="button"
+            onClick={() => void collectObservedEvidence()}
+          >
+            {isCollecting ? "Collecting" : "Collect evidence"}
+          </button>
+        }
       >
+        {error ? <p className="validation-error">{error}</p> : null}
         <div className="validation-board">
           {snapshot.categories.map((category) => (
             <article className="validation-card" key={category.id}>
@@ -90,6 +108,55 @@ export function ValidationPage() {
             </article>
           ))}
         </div>
+      </Panel>
+
+      <Panel
+        title="Latest Observed Report"
+        subtitle={report ? report.reportId : "No report collected in this session"}
+      >
+        {report ? (
+          <div className="validation-report">
+            <div className="details-grid">
+              <div>
+                <span>Collector</span>
+                <strong>{report.collectorVersion}</strong>
+              </div>
+              <div>
+                <span>Categories</span>
+                <strong>{report.categories.join(", ")}</strong>
+              </div>
+              <div>
+                <span>Report path</span>
+                <strong>{report.reportPath}</strong>
+              </div>
+            </div>
+            <p className="validation-report__summary">{report.summary}</p>
+            <div className="validation-signal-list">
+              {report.signals.map((signal) => (
+                <article className="record-card record-card--compact" key={signal.id}>
+                  <div className="record-card__top">
+                    <div>
+                      <strong>{signal.label}</strong>
+                      <p className="record-card__subline">{signal.summary}</p>
+                    </div>
+                    <span className={`badge badge--${signal.status}`}>{signal.status}</span>
+                  </div>
+                  <div className="record-card__footer">
+                    <span>{signal.category}</span>
+                    <span>
+                      {signal.durationMs == null ? "duration n/a" : `${signal.durationMs}ms`}
+                    </span>
+                  </div>
+                  {signal.detail ? <p className="record-card__content">{signal.detail}</p> : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="record-card__content--muted">
+            DNS and transport observed evidence will appear after collection.
+          </p>
+        )}
       </Panel>
     </div>
   );

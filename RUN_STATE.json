@@ -1,45 +1,39 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 21,
+  "loop_iteration": 22,
   "stage": "summarize",
   "bug_cycle_interval": 3,
-  "completed_since_bug_cycle": 3,
+  "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Validation Board MVP landed",
-  "current_objective": "将 Validation Board observed 层接入真实采集命令、可重复 report 和 profile-level evidence export",
-  "last_result_summary": "Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。Validation 页面覆盖 8 类 evidence，并按 declared/applied/observed 分层展示；当前 observed 仍需接真实采集",
-  "next_action_hint": "接入 Validation Board native observed collectors + report persistence",
+  "current_focus": "Validation observed collectors v1 landed",
+  "current_objective": "扩展 Validation Board observed collectors 到 WebRTC/canvas/audio/leak，并补 report history 与 profile-level evidence export",
+  "last_result_summary": "Validation Board 已从前端 MVP 推进到首批 observed 证据闭环：DNS/transport native collector、typed desktop wrapper、本地 JSON report 和页面展示已落地；完整 detector/leak/WebRTC/canvas/audio 仍待扩展",
+  "next_action_hint": "扩展 Validation observed collectors: WebRTC + canvas/audio + report history/profile export",
   "next_suggestions": [
     {
-      "title": "Connect Validation Board observed collectors",
+      "title": "Extend observed collectors to WebRTC and leak checks",
       "priority": 1,
-      "rationale": "前端 board 已落地，下一步需要真实采集命令和可重复 report，避免 evidence 只停留在 UI 状态",
+      "rationale": "DNS/transport 已有最小闭环，下一步要覆盖最容易暴露环境不一致的 WebRTC/leak",
+      "kind": "feature"
+    },
+    {
+      "title": "Add validation report history and profile export",
+      "priority": 2,
+      "rationale": "当前页面只展示本会话最近 report，需要可翻历史和按 profile 导出 evidence",
+      "kind": "feature"
+    },
+    {
+      "title": "Add canvas/audio observed collectors",
+      "priority": 3,
+      "rationale": "指纹真实性需要从声明/应用推进到可重复观察证据",
       "kind": "feature"
     },
     {
       "title": "Deepen fingerprint runtime with evidence split",
-      "priority": 2,
-      "rationale": "必须把 declared / applied / observed 分开，避免把 80 declared controls 误报为 runtime applied",
-      "kind": "feature"
-    },
-    {
-      "title": "CAPTCHA/SMS/Email production manager wiring",
-      "priority": 3,
-      "rationale": "handler/route 已部分落地，下一步先让 production wiring/config 清晰失败或可测，不直接宣称自动化闭环",
-      "kind": "feature"
-    },
-    {
-      "title": "补前端测试覆盖",
       "priority": 4,
-      "rationale": "当前前端零测试，应至少补核心 feature 的 smoke test",
-      "kind": "test"
-    },
-    {
-      "title": "治理 unwrap/expect 生产路径",
-      "priority": 5,
-      "rationale": "仍有 300+ unwrap/expect 在 Rust 生产代码中，分批治理",
-      "kind": "refactor"
+      "rationale": "继续保持 declared / applied / observed 分层，避免误报 runtime depth",
+      "kind": "feature"
     }
   ],
   "last_executed_actions": [
@@ -60,6 +54,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Validation route/page/model landed with declared/applied/observed evidence split and Playwright viewport checks."
+    },
+    {
+      "title": "Validation observed collectors v1",
+      "kind": "feature",
+      "status": "success",
+      "note": "DNS/transport observed collectors and local JSON report persistence landed through Tauri desktop service."
     }
   ],
   "blocked_reason": "",

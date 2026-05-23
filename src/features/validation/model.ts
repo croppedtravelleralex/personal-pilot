@@ -1,3 +1,5 @@
+import type { DesktopValidationReport } from "../../types/desktop";
+
 export type ValidationEvidenceLayer = "declared" | "applied" | "observed";
 
 export type ValidationEvidenceStatus = "ready" | "partial" | "missing";
@@ -124,9 +126,59 @@ function buildEvidenceItem(
   };
 }
 
-export function buildValidationBoardSnapshot(): ValidationBoardSnapshot {
+function observedStatusFromReport(
+  categoryId: string,
+  report?: DesktopValidationReport | null,
+): ValidationEvidenceStatus | null {
+  const signals = report?.signals.filter((signal) => signal.category === categoryId) ?? [];
+  if (signals.length === 0) return null;
+  if (signals.every((signal) => signal.status === "succeeded")) return "ready";
+  if (signals.some((signal) => signal.status !== "failed")) return "partial";
+  return "missing";
+}
+
+function observedSummaryFromReport(
+  categoryId: string,
+  report?: DesktopValidationReport | null,
+): string | null {
+  const signals = report?.signals.filter((signal) => signal.category === categoryId) ?? [];
+  if (signals.length === 0) return null;
+  return signals.map((signal) => signal.summary).join(" ");
+}
+
+function applyObservedReport(
+  snapshot: ValidationBoardSnapshot,
+  report?: DesktopValidationReport | null,
+): ValidationBoardSnapshot {
+  if (!report) return snapshot;
   return {
-    generatedAt: new Date().toISOString(),
+    ...snapshot,
+    categories: snapshot.categories.map((category) => ({
+      ...category,
+      items: category.items.map((item) => {
+        if (item.layer !== "observed") return item;
+        const status = observedStatusFromReport(category.id, report);
+        const summary = observedSummaryFromReport(category.id, report);
+        if (!status || !summary) return item;
+        const signalCount = report.signals.filter(
+          (signal) => signal.category === category.id,
+        ).length;
+        return {
+          ...item,
+          status,
+          signalCount,
+          summary,
+        };
+      }),
+    })),
+  };
+}
+
+export function buildValidationBoardSnapshot(
+  report?: DesktopValidationReport | null,
+): ValidationBoardSnapshot {
+  const snapshot = {
+    generatedAt: report?.generatedAt ?? new Date().toISOString(),
     categories: CATEGORY_DEFINITIONS.map((category) => ({
       ...category,
       items: [
@@ -136,6 +188,8 @@ export function buildValidationBoardSnapshot(): ValidationBoardSnapshot {
       ],
     })),
   };
+
+  return applyObservedReport(snapshot, report);
 }
 
 export function summarizeValidationBoard(

@@ -61,6 +61,7 @@ import type {
   DesktopTemplateMutationResult,
   DesktopTemplateUpsertInput,
   DesktopUpdateProfileInput,
+  DesktopValidationReport,
 } from "../types/desktop";
 
 export type DesktopServiceErrorCode =
@@ -406,6 +407,9 @@ export async function desktopOpenBackupPath(): Promise<string | null> {
 export function desktopCoreStart(): Promise<DesktopCoreStartStatus> {
   return Promise.resolve({});
 }
+
+export const collectValidationReport = (): Promise<DesktopValidationReport> =>
+  invokeDesktop("collect_validation_report");
 
 export const getAppStatus = (): Promise<DesktopStatusSnapshot> =>
   invokeDesktop("get_app_status");

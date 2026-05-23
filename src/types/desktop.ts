@@ -1,3 +1,24 @@
+export interface DesktopValidationSignal {
+  id: string;
+  category: string;
+  layer: "observed" | string;
+  status: "succeeded" | "warning" | "failed" | string;
+  label: string;
+  summary: string;
+  detail: string | null;
+  durationMs: number | null;
+}
+
+export interface DesktopValidationReport {
+  reportId: string;
+  generatedAt: string;
+  profileId: string | null;
+  collectorVersion: string;
+  categories: string[];
+  signals: DesktopValidationSignal[];
+  reportPath: string;
+  summary: string;
+}
 export type DesktopTaskStatus =
   | "pending"
   | "queued"

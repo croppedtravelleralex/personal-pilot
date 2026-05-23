@@ -1,3 +1,21 @@
+## Round 23 — Validation observed collectors v1 (2026-05-23)
+
+### Type: feature
+
+### Actions
+- 新增 `collect_validation_report` Tauri command。
+- 在 `src/services/desktop.ts` 增加 typed wrapper 与 TS report 类型。
+- Validation 页面新增 evidence collection 按钮和最近 report 展示。
+- 首批 observed collector 覆盖 DNS resolution 与 HTTPS transport probe，并写入本地 JSON report。
+
+### Results
+- `cargo check --manifest-path src-tauri/Cargo.toml` 通过。
+- `pnpm typecheck` 通过。
+- `pnpm build` 通过。
+- Win11 Tauri baseline enforcement 通过。
+- `pnpm desktop:release` 通过并生成 NSIS installer。
+
+### Verdict: success
 ## Round 22 — Validation Board MVP (2026-05-23)
 
 ### Type: feature

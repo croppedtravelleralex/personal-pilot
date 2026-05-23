@@ -2,11 +2,11 @@ use std::{
     collections::HashSet,
     env,
     fs::{self, OpenOptions},
-    net::{SocketAddr, TcpStream},
+    net::{SocketAddr, TcpStream, ToSocketAddrs},
     os::windows::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use persona_pilot::desktop::{
@@ -66,6 +66,186 @@ use crate::state::{DesktopState, ManagedRuntimeProcess};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 const LOCAL_RUNTIME_HEALTH_URL: &str = "http://127.0.0.1:3000/health";
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopValidationSignal {
+    pub id: String,
+    pub category: String,
+    pub layer: String,
+    pub status: String,
+    pub label: String,
+    pub summary: String,
+    pub detail: Option<String>,
+    pub duration_ms: Option<u128>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopValidationReport {
+    pub report_id: String,
+    pub generated_at: String,
+    pub profile_id: Option<String>,
+    pub collector_version: String,
+    pub categories: Vec<String>,
+    pub signals: Vec<DesktopValidationSignal>,
+    pub report_path: String,
+    pub summary: String,
+}
+
+fn validation_report_id() -> String {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    format!("validation-report-{millis}")
+}
+
+fn validation_signal(
+    id: &str,
+    category: &str,
+    status: &str,
+    label: &str,
+    summary: String,
+    detail: Option<String>,
+    duration_ms: Option<u128>,
+) -> DesktopValidationSignal {
+    DesktopValidationSignal {
+        id: id.to_string(),
+        category: category.to_string(),
+        layer: "observed".to_string(),
+        status: status.to_string(),
+        label: label.to_string(),
+        summary,
+        detail,
+        duration_ms,
+    }
+}
+
+fn collect_dns_signal() -> DesktopValidationSignal {
+    let started = Instant::now();
+    match ("example.com", 443).to_socket_addrs() {
+        Ok(addrs) => {
+            let addresses: Vec<String> = addrs.map(|addr| addr.ip().to_string()).collect();
+            let unique_count = addresses.iter().collect::<HashSet<_>>().len();
+            validation_signal(
+                "dns-example-com",
+                "dns",
+                if unique_count > 0 { "succeeded" } else { "failed" },
+                "example.com DNS resolution",
+                if unique_count > 0 {
+                    format!("Resolved example.com to {unique_count} unique address(es).")
+                } else {
+                    "Resolver returned no usable addresses for example.com.".to_string()
+                },
+                Some(addresses.join(", ")),
+                Some(started.elapsed().as_millis()),
+            )
+        }
+        Err(error) => validation_signal(
+            "dns-example-com",
+            "dns",
+            "failed",
+            "example.com DNS resolution",
+            format!("DNS resolution failed: {error}"),
+            None,
+            Some(started.elapsed().as_millis()),
+        ),
+    }
+}
+
+async fn collect_transport_signal() -> DesktopValidationSignal {
+    let started = Instant::now();
+    let client = match Client::builder().timeout(Duration::from_secs(8)).build() {
+        Ok(client) => client,
+        Err(error) => {
+            return validation_signal(
+                "transport-example-com",
+                "transport",
+                "failed",
+                "HTTPS HEAD probe",
+                format!("Transport client could not be created: {error}"),
+                None,
+                Some(started.elapsed().as_millis()),
+            );
+        }
+    };
+
+    match client.head("https://example.com/").send().await {
+        Ok(response) => {
+            let status = response.status();
+            validation_signal(
+                "transport-example-com",
+                "transport",
+                if status.is_success() || status.is_redirection() {
+                    "succeeded"
+                } else {
+                    "warning"
+                },
+                "HTTPS HEAD probe",
+                format!("HTTPS probe returned HTTP {status}."),
+                response.url().host_str().map(|host| format!("host={host}")),
+                Some(started.elapsed().as_millis()),
+            )
+        }
+        Err(error) => validation_signal(
+            "transport-example-com",
+            "transport",
+            "failed",
+            "HTTPS HEAD probe",
+            format!("HTTPS probe failed: {error}"),
+            None,
+            Some(started.elapsed().as_millis()),
+        ),
+    }
+}
+
+async fn build_validation_report(state: &DesktopState) -> Result<DesktopValidationReport, String> {
+    let snapshot = read_desktop_settings(Some(&state.database_url));
+    let report_id = validation_report_id();
+    let generated_at = now_ts_string();
+    let mut signals = vec![collect_dns_signal()];
+    signals.push(collect_transport_signal().await);
+
+    let succeeded = signals
+        .iter()
+        .filter(|signal| signal.status == "succeeded")
+        .count();
+    let failed = signals
+        .iter()
+        .filter(|signal| signal.status == "failed")
+        .count();
+    let signal_count = signals.len();
+    let report_dir = PathBuf::from(snapshot.reports_dir).join("validation");
+    fs::create_dir_all(&report_dir).map_err(|error| {
+        format!(
+            "Failed to prepare validation report directory {}: {error}",
+            report_dir.display()
+        )
+    })?;
+    let report_path = report_dir.join(format!("{report_id}.json"));
+
+    let report = DesktopValidationReport {
+        report_id,
+        generated_at,
+        profile_id: None,
+        collector_version: "validation-observed-v1".to_string(),
+        categories: vec!["dns".to_string(), "transport".to_string()],
+        signals,
+        report_path: report_path.to_string_lossy().to_string(),
+        summary: format!("{signal_count} observed signal(s), {succeeded} succeeded, {failed} failed."),
+    };
+
+    let payload = serde_json::to_string_pretty(&report)
+        .map_err(|error| format!("Failed to serialize validation report: {error}"))?;
+    fs::write(&report_path, payload).map_err(|error| {
+        format!(
+            "Failed to write validation report {}: {error}",
+            report_path.display()
+        )
+    })?;
+
+    Ok(report)
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1411,6 +1591,13 @@ mod tests {
         assert_eq!(snapshot.layout.gap_px, 20);
         assert!(snapshot.layout.sync_input);
     }
+}
+
+#[tauri::command]
+pub async fn collect_validation_report(
+    state: State<'_, DesktopState>,
+) -> Result<DesktopValidationReport, String> {
+    build_validation_report(&state).await
 }
 
 #[tauri::command]

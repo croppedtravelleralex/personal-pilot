@@ -22,6 +22,7 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      commands::collect_validation_report,
       commands::get_app_status,
       commands::list_task_page,
       commands::list_log_page,

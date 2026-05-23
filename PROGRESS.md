@@ -26,6 +26,12 @@ Progress must be reported with the dual-axis rule:
 - Win11 NSIS installer 已生成：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`。
 - 下一阶段主线切到 Overall `70%` 的 Validation Board MVP，不提高 capability score，直到有 observed evidence。
 
+## 2026-05-23 Validation observed collectors v1
+
+- 新增 `collect_validation_report` Tauri command，统一从 `src/services/desktop.ts` 暴露给前端。
+- Validation 页面可触发首批 observed 采集，并展示最近 report。
+- 首批 report 覆盖 DNS `example.com` 解析与 HTTPS transport HEAD probe，并写入本地 `reports/validation/*.json`。
+- 这只是 DNS/transport 最小闭环，不代表 WebRTC/canvas/audio/leak 或完整 detector 闭环。
 ## 2026-05-23 Validation Board MVP
 
 - 新增 `Validation` 桌面页面与导航入口。
