@@ -45,7 +45,8 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Connect first Validation Board observed collectors for DNS/transport and write repeatable local JSON reports
 - [x] Add Validation report history list and profile evidence export
 - [x] Add WebRTC/leak observed contract warning signals to validation reports
-- [ ] Upgrade WebRTC/leak to browser-scoped observed probes and add canvas/audio collectors
+- [x] Add desktop WebView scoped WebRTC/canvas/audio/storage observed probes without claiming profile browser coverage
+- [ ] Upgrade WebRTC/leak/canvas/audio probes to profile browser runtime / CDP scope
 - [ ] Deepen fingerprint runtime from `80` declared controls and `12` projected fields toward broader applied / observed coverage
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
 - [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy

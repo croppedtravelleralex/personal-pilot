@@ -1,26 +1,26 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 24,
+  "loop_iteration": 25,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Validation WebRTC/leak contract signals landed",
-  "current_objective": "把 WebRTC/leak warning contract 升级为 browser-scoped probes，并补 canvas/audio observed collectors",
-  "last_result_summary": "Validation reports 现覆盖 DNS/transport 真实 native probe 与 WebRTC/leak observed warning contract；history/export 已落地，下一步是 browser-scoped WebRTC/leak 和 canvas/audio",
-  "next_action_hint": "Implement browser-scoped WebRTC/leak probes, then canvas/audio collectors",
+  "current_focus": "Validation desktop WebView observed probes landed",
+  "current_objective": "把 WebRTC/leak/canvas/audio probes 从 desktop WebView scope 升级为 profile browser runtime / CDP scope",
+  "last_result_summary": "Validation reports 现覆盖 DNS/transport native probe、WebRTC/leak native warning contract、desktop WebView scoped WebRTC/canvas/audio/storage observed probes、history/export；仍不代表 profile browser runtime scoped probe 闭环",
+  "next_action_hint": "Reuse the profile runtime / CDP path for WebRTC/leak/canvas/audio evidence without adding heavy dependencies",
   "next_suggestions": [
     {
-      "title": "Upgrade WebRTC/leak to browser-scoped probes",
+      "title": "Upgrade WebRTC/leak/canvas/audio to profile browser runtime probes",
       "priority": 1,
-      "rationale": "当前只是 warning contract，下一步需要真实浏览器环境采样",
+      "rationale": "当前已采样 desktop WebView，下一步需要目标 profile browser / CDP scope 证据",
       "kind": "feature"
     },
     {
-      "title": "Add canvas/audio observed collectors",
+      "title": "Extract reusable browser evidence contract",
       "priority": 2,
-      "rationale": "指纹真实性需要 Canvas/Audio 的可重复观察证据",
+      "rationale": "让 desktop WebView 与 profile browser report 使用同一信号 schema，减少后续迁移成本",
       "kind": "feature"
     },
     {
@@ -72,6 +72,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Validation reports now include WebRTC/leak warning signals without overstating browser-scoped probe closure."
+    },
+    {
+      "title": "Validation desktop WebView observed probes",
+      "kind": "feature",
+      "status": "success",
+      "note": "Collect evidence now records desktop WebView scoped WebRTC/canvas/audio/storage signals while preserving target-profile-browser=false scope."
     }
   ],
   "blocked_reason": "",

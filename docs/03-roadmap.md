@@ -33,8 +33,9 @@
    - Validation Board 前端 MVP 已落地。
    - 形成 detector / leak / DNS / WebRTC / canvas / audio / worker / transport evidence。
    - 区分 declared / applied / observed。
-   - DNS/transport 首批 observed native collector 与本地 JSON report 已接入。
-   - 下一步扩展 WebRTC/canvas/audio/leak collector、report history 和 profile-level evidence export。
+   - DNS/transport 首批 observed native collector、本地 JSON report、report history、profile-level evidence export 已接入。
+   - desktop WebView scoped WebRTC/canvas/audio/storage probes 已接入，用于记录当前桌面壳浏览器 API 能力；不等同于 profile browser runtime probe。
+   - 下一步把 WebRTC/canvas/audio/leak collector 升级到 profile browser runtime / CDP scope。
 
 2. Fingerprint runtime depth
    - 从 `80` declared controls 和 `12` runtime projected fields 继续加深 applied / observed coverage。

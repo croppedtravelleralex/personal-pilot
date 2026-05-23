@@ -289,6 +289,41 @@ fn collect_leak_signal() -> DesktopValidationSignal {
     )
 }
 
+fn normalize_browser_validation_signal(
+    mut signal: DesktopValidationSignal,
+) -> DesktopValidationSignal {
+    let valid_category = matches!(
+        signal.category.as_str(),
+        "detector" | "leak" | "dns" | "webrtc" | "canvas" | "audio" | "worker" | "transport"
+    );
+    if !valid_category {
+        signal.category = "detector".to_string();
+        signal.status = "warning".to_string();
+        signal.summary = format!(
+            "Browser signal category was not recognized; original signal id={} was normalized.",
+            signal.id
+        );
+    }
+
+    if !matches!(
+        signal.status.as_str(),
+        "succeeded" | "warning" | "failed"
+    ) {
+        signal.status = "warning".to_string();
+    }
+
+    signal.layer = "observed".to_string();
+    signal.id = format!("browser-{}", signal.id.trim().replace(char::is_whitespace, "-"));
+    signal.label = format!("{}", signal.label.trim());
+    if signal.label.is_empty() {
+        signal.label = "Browser validation signal".to_string();
+    }
+    if signal.summary.trim().is_empty() {
+        signal.summary = "Browser validation signal did not include a summary.".to_string();
+    }
+    signal
+}
+
 async fn collect_transport_signal() -> DesktopValidationSignal {
     let started = Instant::now();
     let client = match Client::builder().timeout(Duration::from_secs(8)).build() {
@@ -335,7 +370,10 @@ async fn collect_transport_signal() -> DesktopValidationSignal {
     }
 }
 
-async fn build_validation_report(state: &DesktopState) -> Result<DesktopValidationReport, String> {
+async fn build_validation_report(
+    state: &DesktopState,
+    browser_signals: Vec<DesktopValidationSignal>,
+) -> Result<DesktopValidationReport, String> {
     let snapshot = read_desktop_settings(Some(&state.database_url));
     let report_id = validation_report_id();
     let generated_at = now_ts_string();
@@ -343,6 +381,11 @@ async fn build_validation_report(state: &DesktopState) -> Result<DesktopValidati
     signals.push(collect_transport_signal().await);
     signals.push(collect_webrtc_signal());
     signals.push(collect_leak_signal());
+    signals.extend(
+        browser_signals
+            .into_iter()
+            .map(normalize_browser_validation_signal),
+    );
 
     let succeeded = signals
         .iter()
@@ -372,6 +415,8 @@ async fn build_validation_report(state: &DesktopState) -> Result<DesktopValidati
             "transport".to_string(),
             "webrtc".to_string(),
             "leak".to_string(),
+            "canvas".to_string(),
+            "audio".to_string(),
         ],
         signals,
         report_path: report_path.to_string_lossy().to_string(),
@@ -1794,8 +1839,9 @@ pub fn export_validation_profile_evidence(
 #[tauri::command]
 pub async fn collect_validation_report(
     state: State<'_, DesktopState>,
+    browser_signals: Option<Vec<DesktopValidationSignal>>,
 ) -> Result<DesktopValidationReport, String> {
-    build_validation_report(&state).await
+    build_validation_report(&state, browser_signals.unwrap_or_default()).await
 }
 
 #[tauri::command]

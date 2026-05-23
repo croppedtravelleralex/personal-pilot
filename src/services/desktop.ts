@@ -62,6 +62,7 @@ import type {
   DesktopTemplateUpsertInput,
   DesktopUpdateProfileInput,
   DesktopValidationReport,
+  DesktopValidationBrowserSignal,
   DesktopValidationReportSummary,
   DesktopValidationProfileExport,
 } from "../types/desktop";
@@ -410,8 +411,10 @@ export function desktopCoreStart(): Promise<DesktopCoreStartStatus> {
   return Promise.resolve({});
 }
 
-export const collectValidationReport = (): Promise<DesktopValidationReport> =>
-  invokeDesktop("collect_validation_report");
+export const collectValidationReport = (
+  browserSignals: DesktopValidationBrowserSignal[] = [],
+): Promise<DesktopValidationReport> =>
+  invokeDesktop("collect_validation_report", { browserSignals });
 
 export const listValidationReports = (): Promise<DesktopValidationReportSummary[]> =>
   invokeDesktop("list_validation_reports");

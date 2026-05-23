@@ -31,6 +31,11 @@ Progress must be reported with the dual-axis rule:
 - Validation report now includes WebRTC and leak observed-category warning signals.
 - These signals are honest contract warnings: they record the missing browser-scoped probe boundary instead of pretending leak/WebRTC probing is complete.
 - Next implementation slice is browser-scoped WebRTC/leak probing plus canvas/audio collectors.
+## 2026-05-23 Validation desktop WebView probes
+
+- Validation evidence collection now runs desktop WebView scoped browser API probes before writing the Tauri JSON report.
+- Added observed signals for WebRTC ICE candidate capability, canvas render sample, AudioContext sample rate, and storage-scope availability.
+- Scope is explicitly recorded as `desktop-webview; target-profile-browser=false`, so this does not close profile browser runtime / CDP scoped probing or raise the Overall `30% / 70%` status.
 ## 2026-05-23 Validation report history/export
 
 - 新增 validation report history list native command 与 desktop wrapper。

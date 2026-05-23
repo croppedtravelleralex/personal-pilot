@@ -14,6 +14,7 @@ import {
   buildValidationBoardSnapshot,
   summarizeValidationBoard,
 } from "./model";
+import { collectBrowserValidationSignals } from "./browserProbe";
 
 export function useValidationBoardViewModel() {
   const [report, setReport] = useState<DesktopValidationReport | null>(null);
@@ -47,7 +48,8 @@ export function useValidationBoardViewModel() {
     setIsCollecting(true);
     setError(null);
     try {
-      const nextReport = await collectValidationReport();
+      const browserSignals = await collectBrowserValidationSignals();
+      const nextReport = await collectValidationReport(browserSignals);
       setReport(nextReport);
       setHistory(await listValidationReports());
     } catch (nextError) {

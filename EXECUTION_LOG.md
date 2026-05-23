@@ -1,3 +1,18 @@
+## Round 26 — Validation desktop WebView observed probes (2026-05-23)
+
+### Type: feature
+
+### Actions
+- 新增 desktop WebView scoped browser probe：WebRTC ICE candidate capability、canvas render sample、AudioContext sample rate、storage scope availability。
+- `Collect evidence` 先运行前端 browser API probe，再通过 `src/services/desktop.ts` 调用 Tauri command 持久化 JSON report。
+- Tauri report 合并 native DNS/transport、native contract warning、browser signals，并把 scope 标记为 `desktop-webview; target-profile-browser=false`。
+
+### Results
+- `pnpm typecheck` 通过。
+- `cargo check --manifest-path src-tauri/Cargo.toml` 通过。
+
+### Verdict: success
+
 ## Round 25 — Validation WebRTC/leak contract signals (2026-05-23)
 
 ### Type: feature

@@ -9,6 +9,8 @@ export interface DesktopValidationSignal {
   durationMs: number | null;
 }
 
+export type DesktopValidationBrowserSignal = DesktopValidationSignal;
+
 export interface DesktopValidationReport {
   reportId: string;
   generatedAt: string;
