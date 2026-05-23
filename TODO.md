@@ -42,7 +42,9 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 
 - [x] Build Validation Board MVP for detector, leak, DNS, WebRTC, canvas, audio, worker, and transport evidence
 - [x] Keep Validation Board reports split into declared / applied / observed
-- [x] Connect first Validation Board observed collectors for DNS/transport and write repeatable local JSON reports`r`n- [ ] Extend Validation Board observed collectors to WebRTC/canvas/audio/leak and add report history/profile export
+- [x] Connect first Validation Board observed collectors for DNS/transport and write repeatable local JSON reports
+- [x] Add Validation report history list and profile evidence export
+- [ ] Extend Validation Board observed collectors to WebRTC/canvas/audio/leak
 - [ ] Deepen fingerprint runtime from `80` declared controls and `12` projected fields toward broader applied / observed coverage
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
 - [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy

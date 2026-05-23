@@ -62,6 +62,8 @@ import type {
   DesktopTemplateUpsertInput,
   DesktopUpdateProfileInput,
   DesktopValidationReport,
+  DesktopValidationReportSummary,
+  DesktopValidationProfileExport,
 } from "../types/desktop";
 
 export type DesktopServiceErrorCode =
@@ -410,6 +412,14 @@ export function desktopCoreStart(): Promise<DesktopCoreStartStatus> {
 
 export const collectValidationReport = (): Promise<DesktopValidationReport> =>
   invokeDesktop("collect_validation_report");
+
+export const listValidationReports = (): Promise<DesktopValidationReportSummary[]> =>
+  invokeDesktop("list_validation_reports");
+
+export const exportValidationProfileEvidence = (
+  profileId?: string | null,
+): Promise<DesktopValidationProfileExport> =>
+  invokeDesktop("export_validation_profile_evidence", { profileId: profileId ?? null });
 
 export const getAppStatus = (): Promise<DesktopStatusSnapshot> =>
   invokeDesktop("get_app_status");

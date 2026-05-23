@@ -1,3 +1,20 @@
+## Round 24 — Validation report history and export (2026-05-23)
+
+### Type: feature
+
+### Actions
+- 新增 `list_validation_reports` Tauri command，列出本地 validation JSON reports。
+- 新增 `export_validation_profile_evidence` Tauri command，生成 profile-level evidence export JSON。
+- Validation 页面新增 history 加载和 export evidence 控制。
+- 清理 TODO/roadmap 中的字面量换行残留。
+
+### Results
+- `cargo check --manifest-path src-tauri/Cargo.toml` 通过。
+- `pnpm typecheck` 通过。
+- `pnpm build` 通过。
+- Win11 Tauri baseline enforcement 通过。
+
+### Verdict: success
 ## Round 23 — Validation observed collectors v1 (2026-05-23)
 
 ### Type: feature

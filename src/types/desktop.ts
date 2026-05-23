@@ -19,6 +19,27 @@ export interface DesktopValidationReport {
   reportPath: string;
   summary: string;
 }
+export interface DesktopValidationReportSummary {
+  reportId: string;
+  generatedAt: string;
+  profileId: string | null;
+  collectorVersion: string;
+  categories: string[];
+  signalCount: number;
+  failedCount: number;
+  warningCount: number;
+  reportPath: string;
+  summary: string;
+}
+
+export interface DesktopValidationProfileExport {
+  exportId: string;
+  profileId: string | null;
+  exportedAt: string;
+  reportCount: number;
+  exportPath: string;
+  summary: string;
+}
 export type DesktopTaskStatus =
   | "pending"
   | "queued"

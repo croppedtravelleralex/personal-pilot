@@ -1,38 +1,38 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 22,
+  "loop_iteration": 23,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Validation observed collectors v1 landed",
-  "current_objective": "扩展 Validation Board observed collectors 到 WebRTC/canvas/audio/leak，并补 report history 与 profile-level evidence export",
-  "last_result_summary": "Validation Board 已从前端 MVP 推进到首批 observed 证据闭环：DNS/transport native collector、typed desktop wrapper、本地 JSON report 和页面展示已落地；完整 detector/leak/WebRTC/canvas/audio 仍待扩展",
-  "next_action_hint": "扩展 Validation observed collectors: WebRTC + canvas/audio + report history/profile export",
+  "current_focus": "Validation report history/export landed",
+  "current_objective": "扩展 Validation Board observed collectors 到 WebRTC/canvas/audio/leak",
+  "last_result_summary": "Validation Board report history list 与 profile-level evidence export 已落地；DNS/transport observed report 可追溯和导出，WebRTC/canvas/audio/leak collector 仍待扩展",
+  "next_action_hint": "扩展 Validation observed collectors: WebRTC/leak first, then canvas/audio",
   "next_suggestions": [
     {
       "title": "Extend observed collectors to WebRTC and leak checks",
       "priority": 1,
-      "rationale": "DNS/transport 已有最小闭环，下一步要覆盖最容易暴露环境不一致的 WebRTC/leak",
-      "kind": "feature"
-    },
-    {
-      "title": "Add validation report history and profile export",
-      "priority": 2,
-      "rationale": "当前页面只展示本会话最近 report，需要可翻历史和按 profile 导出 evidence",
+      "rationale": "report history/export 底座已就绪，下一步覆盖最容易暴露环境不一致的 WebRTC/leak",
       "kind": "feature"
     },
     {
       "title": "Add canvas/audio observed collectors",
-      "priority": 3,
-      "rationale": "指纹真实性需要从声明/应用推进到可重复观察证据",
+      "priority": 2,
+      "rationale": "指纹真实性需要 Canvas/Audio 的可重复观察证据",
       "kind": "feature"
     },
     {
       "title": "Deepen fingerprint runtime with evidence split",
-      "priority": 4,
+      "priority": 3,
       "rationale": "继续保持 declared / applied / observed 分层，避免误报 runtime depth",
+      "kind": "feature"
+    },
+    {
+      "title": "Formalize SessionBundle profile portability",
+      "priority": 4,
+      "rationale": "restart continuity 已落地，下一步要变成可导入导出的完整 bundle",
       "kind": "feature"
     }
   ],
@@ -60,6 +60,12 @@
       "kind": "feature",
       "status": "success",
       "note": "DNS/transport observed collectors and local JSON report persistence landed through Tauri desktop service."
+    },
+    {
+      "title": "Validation report history/export",
+      "kind": "feature",
+      "status": "success",
+      "note": "Local validation report list and profile-level evidence export landed through Tauri desktop service."
     }
   ],
   "blocked_reason": "",

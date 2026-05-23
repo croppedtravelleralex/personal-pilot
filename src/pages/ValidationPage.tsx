@@ -24,11 +24,23 @@ function statusTone(status: ValidationEvidenceStatus) {
   return "failed";
 }
 
+function formatEpochSeconds(value: string) {
+  const millis = Number(value) * 1000;
+  if (!Number.isFinite(millis) || millis <= 0) return value;
+  return new Date(millis).toLocaleString();
+}
+
 export function ValidationPage() {
   const {
     collectObservedEvidence,
     error,
+    exportProfileEvidence,
+    history,
     isCollecting,
+    isExporting,
+    isLoadingHistory,
+    lastExport,
+    refreshHistory,
     report,
     snapshot,
     summary,
@@ -67,14 +79,24 @@ export function ValidationPage() {
         title="Validation Board"
         subtitle={`Generated ${new Date(snapshot.generatedAt).toLocaleString()}`}
         actions={
-          <button
-            className="button"
-            disabled={isCollecting}
-            type="button"
-            onClick={() => void collectObservedEvidence()}
-          >
-            {isCollecting ? "Collecting" : "Collect evidence"}
-          </button>
+          <div className="panel__actions">
+            <button
+              className="button button--secondary"
+              disabled={isLoadingHistory}
+              type="button"
+              onClick={() => void refreshHistory()}
+            >
+              {isLoadingHistory ? "Loading" : "Load history"}
+            </button>
+            <button
+              className="button"
+              disabled={isCollecting}
+              type="button"
+              onClick={() => void collectObservedEvidence()}
+            >
+              {isCollecting ? "Collecting" : "Collect evidence"}
+            </button>
+          </div>
         }
       >
         {error ? <p className="validation-error">{error}</p> : null}
@@ -155,6 +177,56 @@ export function ValidationPage() {
         ) : (
           <p className="record-card__content--muted">
             DNS and transport observed evidence will appear after collection.
+          </p>
+        )}
+      </Panel>
+
+      <Panel
+        title="Report History"
+        subtitle={`${history.length} local validation report${history.length === 1 ? "" : "s"}`}
+        actions={
+          <button
+            className="button button--secondary"
+            disabled={isExporting}
+            type="button"
+            onClick={() => void exportProfileEvidence(null)}
+          >
+            {isExporting ? "Exporting" : "Export evidence"}
+          </button>
+        }
+      >
+        {lastExport ? (
+          <p className="validation-report__summary">
+            {lastExport.summary} {lastExport.exportPath}
+          </p>
+        ) : null}
+        {history.length > 0 ? (
+          <div className="validation-history-list">
+            {history.slice(0, 8).map((item) => (
+              <article className="record-card record-card--compact" key={item.reportId}>
+                <div className="record-card__top">
+                  <div>
+                    <strong>{item.reportId}</strong>
+                    <p className="record-card__subline">
+                      {formatEpochSeconds(item.generatedAt)}
+                    </p>
+                  </div>
+                  <span className={item.failedCount > 0 ? "badge badge--failed" : "badge badge--succeeded"}>
+                    {item.failedCount > 0 ? "issues" : "clean"}
+                  </span>
+                </div>
+                <div className="record-card__footer">
+                  <span>{item.categories.join(", ")}</span>
+                  <span>{item.signalCount} signals</span>
+                </div>
+                <p className="record-card__content">{item.summary}</p>
+                <p className="record-card__subline">{item.reportPath}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="record-card__content--muted">
+            Load history or collect evidence to list local validation reports.
           </p>
         )}
       </Panel>

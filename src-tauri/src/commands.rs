@@ -66,7 +66,7 @@ use crate::state::{DesktopState, ManagedRuntimeProcess};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 const LOCAL_RUNTIME_HEALTH_URL: &str = "http://127.0.0.1:3000/health";
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopValidationSignal {
     pub id: String,
@@ -79,7 +79,7 @@ pub struct DesktopValidationSignal {
     pub duration_ms: Option<u128>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopValidationReport {
     pub report_id: String,
@@ -90,6 +90,116 @@ pub struct DesktopValidationReport {
     pub signals: Vec<DesktopValidationSignal>,
     pub report_path: String,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopValidationReportSummary {
+    pub report_id: String,
+    pub generated_at: String,
+    pub profile_id: Option<String>,
+    pub collector_version: String,
+    pub categories: Vec<String>,
+    pub signal_count: usize,
+    pub failed_count: usize,
+    pub warning_count: usize,
+    pub report_path: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopValidationProfileExport {
+    pub export_id: String,
+    pub profile_id: Option<String>,
+    pub exported_at: String,
+    pub report_count: usize,
+    pub export_path: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopValidationProfileExportPayload {
+    export_id: String,
+    profile_id: Option<String>,
+    exported_at: String,
+    reports: Vec<DesktopValidationReport>,
+}
+
+fn validation_report_dir(state: &DesktopState) -> Result<PathBuf, String> {
+    let snapshot = read_desktop_settings(Some(&state.database_url));
+    let report_dir = PathBuf::from(snapshot.reports_dir).join("validation");
+    fs::create_dir_all(&report_dir).map_err(|error| {
+        format!(
+            "Failed to prepare validation report directory {}: {error}",
+            report_dir.display()
+        )
+    })?;
+    Ok(report_dir)
+}
+
+fn validation_report_summary(report: &DesktopValidationReport) -> DesktopValidationReportSummary {
+    let failed_count = report
+        .signals
+        .iter()
+        .filter(|signal| signal.status == "failed")
+        .count();
+    let warning_count = report
+        .signals
+        .iter()
+        .filter(|signal| signal.status == "warning")
+        .count();
+    DesktopValidationReportSummary {
+        report_id: report.report_id.clone(),
+        generated_at: report.generated_at.clone(),
+        profile_id: report.profile_id.clone(),
+        collector_version: report.collector_version.clone(),
+        categories: report.categories.clone(),
+        signal_count: report.signals.len(),
+        failed_count,
+        warning_count,
+        report_path: report.report_path.clone(),
+        summary: report.summary.clone(),
+    }
+}
+
+fn read_validation_reports_from_dir(report_dir: &Path) -> Result<Vec<DesktopValidationReport>, String> {
+    let mut reports = Vec::new();
+    let entries = fs::read_dir(report_dir).map_err(|error| {
+        format!(
+            "Failed to read validation report directory {}: {error}",
+            report_dir.display()
+        )
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Failed to read validation report entry: {error}"))?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        if path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|name| name.starts_with("profile-evidence-export-"))
+        {
+            continue;
+        }
+        let raw = fs::read_to_string(&path).map_err(|error| {
+            format!("Failed to read validation report {}: {error}", path.display())
+        })?;
+        let mut report: DesktopValidationReport = serde_json::from_str(&raw).map_err(|error| {
+            format!("Failed to parse validation report {}: {error}", path.display())
+        })?;
+        if report.report_path.trim().is_empty() {
+            report.report_path = path.to_string_lossy().to_string();
+        }
+        reports.push(report);
+    }
+
+    reports.sort_by(|left, right| right.generated_at.cmp(&left.generated_at));
+    Ok(reports)
 }
 
 fn validation_report_id() -> String {
@@ -1591,6 +1701,61 @@ mod tests {
         assert_eq!(snapshot.layout.gap_px, 20);
         assert!(snapshot.layout.sync_input);
     }
+}
+
+#[tauri::command]
+pub fn list_validation_reports(
+    state: State<'_, DesktopState>,
+) -> Result<Vec<DesktopValidationReportSummary>, String> {
+    let report_dir = validation_report_dir(&state)?;
+    let reports = read_validation_reports_from_dir(&report_dir)?;
+    Ok(reports.iter().map(validation_report_summary).collect())
+}
+
+#[tauri::command]
+pub fn export_validation_profile_evidence(
+    state: State<'_, DesktopState>,
+    profile_id: Option<String>,
+) -> Result<DesktopValidationProfileExport, String> {
+    let report_dir = validation_report_dir(&state)?;
+    let reports = read_validation_reports_from_dir(&report_dir)?;
+    let export_id = format!("profile-evidence-export-{}", validation_report_id());
+    let exported_at = now_ts_string();
+    let safe_profile = profile_id
+        .as_deref()
+        .map(|value| {
+            value
+                .chars()
+                .map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' })
+                .collect::<String>()
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "all-profiles".to_string());
+    let export_path = report_dir.join(format!("profile-evidence-export-{safe_profile}-{exported_at}.json"));
+    let report_count = reports.len();
+    let payload = DesktopValidationProfileExportPayload {
+        export_id: export_id.clone(),
+        profile_id: profile_id.clone(),
+        exported_at: exported_at.clone(),
+        reports,
+    };
+    let raw = serde_json::to_string_pretty(&payload)
+        .map_err(|error| format!("Failed to serialize profile evidence export: {error}"))?;
+    fs::write(&export_path, raw).map_err(|error| {
+        format!(
+            "Failed to write profile evidence export {}: {error}",
+            export_path.display()
+        )
+    })?;
+
+    Ok(DesktopValidationProfileExport {
+        export_id,
+        profile_id,
+        exported_at,
+        report_count,
+        export_path: export_path.to_string_lossy().to_string(),
+        summary: format!("Exported {report_count} validation report(s) for evidence review."),
+    })
 }
 
 #[tauri::command]
