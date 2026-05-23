@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 36,
+  "loop_iteration": 37,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P20 batch 5 external-condition smoke gates",
-  "current_objective": "按批次执行第 5 批：把外部分发 manual smoke、干净 Win11、跨机器 SessionBundle portability 的 gateResults/failureReason 写入可重复 report",
-  "last_result_summary": "external_distribution_smoke v2 区分 local asset gate 和 external smoke gates；session_bundle_portability_smoke v2 输出 cross-machine gateResults/failureReason，未跑外部环境时保持 blocked。",
-  "next_action_hint": "Run P20 gates, commit/push, then continue batch 6 headed runtime/external browser/AdsPower gates",
+  "current_focus": "P21 batch 6 runtime adapter and AdsPower evidence gate",
+  "current_objective": "按批次执行第 6 批：建立 Fake/Lightpanda/headed adapter capability matrix、external browser lifecycle/CDP attach gate，并保持 AdsPower refresh evidence-gated deferred",
+  "last_result_summary": "Runtime adapter contract 已暴露 capability/evidence requirements/process lifecycle/CDP attach；runtime_adapter_evidence_gate 可生成 report，AdsPower refresh 仍 deferred_by_evidence_gate。",
+  "next_action_hint": "Run P21 gates, commit/push retry, then perform deep acceptance review and plan next batches",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -216,6 +216,12 @@
       "kind": "feature",
       "status": "success",
       "note": "External distribution and SessionBundle portability smokes now produce explicit external gate results and failure reasons without claiming manual or cross-machine acceptance."
+    },
+    {
+      "title": "P21 batch 6 runtime adapter evidence gate",
+      "kind": "feature",
+      "status": "success",
+      "note": "Runtime adapter evidence gate now reports Fake/Lightpanda/headed capabilities, lifecycle/CDP status, and keeps AdsPower refresh deferred until B1-B5 evidence is complete."
     }
   ],
   "blocked_reason": "",

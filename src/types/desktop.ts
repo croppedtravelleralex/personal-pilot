@@ -470,6 +470,10 @@ export interface DesktopRuntimeAdapterContractItem {
   profileRuntimeEvidence: string;
   fingerprintRuntimeDepth: string;
   externalKernelBoundary: string;
+  processLifecycleStatus: string;
+  cdpAttachStatus: string;
+  adapterCapabilities: string[];
+  evidenceRequirements: string[];
   blockers: string[];
 }
 

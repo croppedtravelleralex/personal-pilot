@@ -514,6 +514,10 @@ pub struct DesktopRuntimeAdapterContractItem {
     pub profile_runtime_evidence: String,
     pub fingerprint_runtime_depth: String,
     pub external_kernel_boundary: String,
+    pub process_lifecycle_status: String,
+    pub cdp_attach_status: String,
+    pub adapter_capabilities: Vec<String>,
+    pub evidence_requirements: Vec<String>,
     pub blockers: Vec<String>,
 }
 
@@ -2880,6 +2884,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "session-portability" => Some("session_portability"),
         "taxonomy-audit" => Some("taxonomy_audit"),
         "external-distribution" => Some("external_distribution"),
+        "runtime-adapter" => Some("runtime_adapter"),
         _ => None,
     }
 }
@@ -2955,6 +2960,7 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_default()
         ),
         "external_distribution" => format!("external distribution {status}"),
+        "runtime_adapter" => format!("runtime adapter {status}"),
         _ => format!("{kind} {status}"),
     };
 
@@ -2984,6 +2990,7 @@ pub fn list_desktop_evidence_reports(
         "session-portability",
         "taxonomy-audit",
         "external-distribution",
+        "runtime-adapter",
     ] {
         let Some(kind) = evidence_report_kind_from_dir(dir_name) else {
             continue;
@@ -3105,6 +3112,10 @@ pub fn read_desktop_release_smoke_contract(
             profile_runtime_evidence: "warning_stub_only".to_string(),
             fingerprint_runtime_depth: "none".to_string(),
             external_kernel_boundary: "in_process_stub".to_string(),
+            process_lifecycle_status: "in_process".to_string(),
+            cdp_attach_status: "not_applicable".to_string(),
+            adapter_capabilities: vec!["contract_tests".to_string()],
+            evidence_requirements: vec!["must not be counted as browser runtime evidence".to_string()],
             blockers: vec!["not real browser evidence".to_string()],
         },
         DesktopRuntimeAdapterContractItem {
@@ -3115,6 +3126,16 @@ pub fn read_desktop_release_smoke_contract(
             fingerprint_runtime_depth:
                 "26 projected fields; observed proof requires real Lightpanda/CDP smoke".to_string(),
             external_kernel_boundary: "external_process_not_repo_fork".to_string(),
+            process_lifecycle_status: "external_process_contract".to_string(),
+            cdp_attach_status: "validation_probe_contract".to_string(),
+            adapter_capabilities: vec![
+                "profile_runtime_probe".to_string(),
+                "cdp_validation_smoke".to_string(),
+            ],
+            evidence_requirements: vec![
+                "repeatable Lightpanda/CDP smoke report".to_string(),
+                "collector scope and failure reason metadata".to_string(),
+            ],
             blockers: vec![
                 "real Lightpanda/CDP operator smoke not recorded in this contract".to_string(),
             ],
@@ -3127,6 +3148,18 @@ pub fn read_desktop_release_smoke_contract(
             fingerprint_runtime_depth: "not_implemented".to_string(),
             external_kernel_boundary:
                 "must remain adapter boundary, not Chromium/Firefox fork host".to_string(),
+            process_lifecycle_status: "not_implemented".to_string(),
+            cdp_attach_status: "not_implemented".to_string(),
+            adapter_capabilities: vec![
+                "future_headed_process_lifecycle".to_string(),
+                "future_cdp_session_attach".to_string(),
+                "future_profile_runtime_compatibility_report".to_string(),
+            ],
+            evidence_requirements: vec![
+                "external browser process lifecycle smoke".to_string(),
+                "CDP attach/detect/fill smoke".to_string(),
+                "profile runtime compatibility report".to_string(),
+            ],
             blockers: vec![
                 "adapter implementation and evidence smoke are not implemented".to_string(),
             ],

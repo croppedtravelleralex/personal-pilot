@@ -112,21 +112,21 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### Runtime / Adapter / External Browser
 
-71. headed runtime realism smoke。`large-slice`
-72. headed external adapter contract implementation。`large-slice`
-73. headed runtime fingerprint evidence。`large-slice`
-74. headed runtime leak/coherence evidence。`large-slice`
-75. Fake/Lightpanda/headed adapter compare report。`ready`
-76. adapter capability matrix。`ready`
-77. adapter failure reason taxonomy。`ready`
-78. external browser process lifecycle contract。`large-slice`
-79. external browser CDP/session attach contract。`large-slice`
-80. external browser profile/runtime compatibility report。`ready`
+71. headed runtime realism smoke。`blocked-evidence-gated`
+72. headed external adapter contract implementation。`partial-contract-matrix`
+73. headed runtime fingerprint evidence。`blocked-evidence-gated`
+74. headed runtime leak/coherence evidence。`blocked-evidence-gated`
+75. Fake/Lightpanda/headed adapter compare report。`done-runtime-adapter-report`
+76. adapter capability matrix。`done-contract-visible`
+77. adapter failure reason taxonomy。`partial-runtime-adapter-report`
+78. external browser process lifecycle contract。`partial-contract-visible`
+79. external browser CDP/session attach contract。`partial-contract-visible`
+80. external browser profile/runtime compatibility report。`blocked-evidence-gated`
 81. keep Chromium/Firefox forks out of the main repo。`always-on`
 
 ### AdsPower / Benchmark
 
-82. B1-B5 新证据后重跑 AdsPower refresh。`blocked-evidence`
+82. B1-B5 新证据后重跑 AdsPower refresh。`blocked-evidence-gated-report`
 83. 刷新官方公开 AdsPower source set。`ready`
 84. 重算 capability score。`blocked-evidence`
 85. 生成 current/target/AdsPower comparison table。`blocked-evidence`

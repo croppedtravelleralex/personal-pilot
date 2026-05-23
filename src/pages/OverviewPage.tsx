@@ -339,7 +339,7 @@ export function OverviewPage() {
               <dt>Adapter boundary</dt>
               <dd>
                 {runtime.releaseSmoke
-                  ? runtime.releaseSmoke.adapterContracts.map((item) => `${item.adapterId}:${item.status}`).join("; ")
+                  ? runtime.releaseSmoke.adapterContracts.map((item) => `${item.adapterId}:${item.status}/${item.processLifecycleStatus}/${item.cdpAttachStatus}`).join("; ")
                   : "No adapter contract loaded"}
               </dd>
             </article>

@@ -61,7 +61,7 @@
    - P11 已新增 release measurement target vs measured pending 字段，并在 Overview 暴露 adapter boundary；P14 已新增 `scripts/release_performance_smoke.ps1` 用 release exe 生成 cold start/RSS/process count report。
    - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
-   - P12 已把 AdsPower benchmark refresh 固定为 boundary guard：等 B1-B5 有新证据后再重算评分。
+   - P12 已把 AdsPower benchmark refresh 固定为 boundary guard；P21 新增 runtime adapter evidence gate report：等 B1-B5 有新证据后再重算评分。
 
 ## Later：成熟度与评分刷新
 
