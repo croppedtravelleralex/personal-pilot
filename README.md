@@ -1,89 +1,92 @@
 # PersonaPilot
 
-PersonaPilot is a Windows 11 local desktop operator console for managing browser-profile work surfaces, proxy posture, automation runs, synchronization, logs, settings, and validation evidence from one Tauri app.
+PersonaPilot 是一个面向 Windows 11 的本地桌面 operator console，用一个 Tauri 应用管理 browser-profile 工作面、代理状态、自动化运行、同步器、日志、设置和 validation evidence。
 
-This repository targets **Tauri 2 + Vite + React + TypeScript**. Electron, Node backend services, embedded Python runtimes, and multi-window embedded-browser architectures are intentionally out of scope unless explicitly approved.
+本仓库固定使用 **Tauri 2 + Vite + React + TypeScript**。除非用户明确批准，否则不引入 Electron、Node 后端服务、内嵌 Python runtime 或多窗口 embedded-browser 架构。
 
-## Current Status
+## 当前状态
 
-- Mainline delivery: `100% / 0% / green`.
-- Overall end-state: `30% / 70% / yellow`.
-- Win11 release gate passed on 2026-05-23.
-- Latest release build produces `src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`.
-- Validation Board MVP is available in the desktop navigation and separates `declared / applied / observed` evidence.
+- 主线交付：`100% / 0% / green`。
+- 整体终态：`30% / 70% / yellow`。
+- Win11 release gate 已于 2026-05-23 通过。
+- 当前 release build 会生成 `src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`。
+- Validation Board 已进入桌面导航，并严格区分 `declared / applied / observed` evidence。
+- P13 已新增外部分发前检查入口：`docs/24-external-distribution-readiness.md`。
 
-For canonical maintenance entrypoints, read [`/docs/README.md`](docs/README.md) and [`/docs/root-entrypoint-map.md`](docs/root-entrypoint-map.md). For the canonical live truth, read [`/docs/02-current-state.md`](docs/02-current-state.md). Do not treat this root README as the maintenance source of record.
+维护真相源在 `docs/`。接手、汇报、规划时先读 `/docs/README.md`、`/docs/root-entrypoint-map.md` 和 `/docs/02-current-state.md`，不要把根 README 当成唯一事实来源。
 
-## What Is Included
+## 已包含能力
 
-- Dashboard, profiles, proxies, automation, synchronizer, logs, settings, and validation surfaces.
-- Native desktop boundary centralized through `src/services/desktop.ts`.
-- Provider-aware proxy rotation contract with rollback, cooldown, and retry semantics.
-- Native-first recorder/template flow with fallback reserved for recovery paths.
-- Synchronizer read/focus/set-main/layout support through native desktop contracts.
-- Validation Board MVP covering detector, leak, DNS, WebRTC, canvas, audio, worker, and transport evidence categories.
+- Dashboard、Profiles、Proxies、Automation、Synchronizer、Logs、Settings、Validation 页面。
+- Native desktop 能力统一经 `src/services/desktop.ts` 暴露。
+- Provider-aware proxy rotation contract，包含 rollback、cooldown、retry 语义。
+- Native-first recorder/template flow，fallback 只作为恢复路径。
+- Synchronizer read/focus/set-main/layout native desktop contract。
+- Validation Board 覆盖 detector、leak、DNS、WebRTC、canvas、audio、worker、transport evidence 类别。
+- Provider readiness、behavior audit、runtime posture 和 release measurement pending 可在 operator surface 查看。
 
-## Important Boundaries
+## 重要边界
 
-- Current runtime fingerprint depth is still incomplete: `80` declared controls and `26` runtime projected fields (`25` control-supported + derived `platform`).
-- Validation `observed` evidence now includes native DNS/transport reports, desktop WebView scoped WebRTC/canvas/audio/storage probes, profile runtime probe contracts, report history, and profile evidence export; repeatable real profile-browser proof still requires Lightpanda/CDP operator smoke outside FakeRunner.
-- CAPTCHA/SMS/Email handlers and routes are partially landed, but production manager wiring, provider acceptance, and operator UI closure are not complete.
-- `450+` fingerprint signals and `450+` behavior taxonomy remain target-track work, not shipped runtime depth.
+- 当前 fingerprint depth 仍未完整：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450+` target-only。
+- Validation observed evidence 包含 DNS/transport report、desktop WebView probes、profile runtime probe contract、report history、profile evidence export 和 P5 Lightpanda/CDP smoke；report 中的 WebRTC/audio warning、canvas failure 必须保留。
+- CAPTCHA/SMS/Email handler、route、readiness checklist 已部分落地，但 production manager wiring、真实 provider acceptance、CDP detect/fill 和 operator 闭环未完成。
+- `450+` fingerprint signals 与 `450+` behavior taxonomy 仍是目标轨道，不是已交付 runtime depth。
+- P12 AdsPower refresh 结论是 deferred；没有 B1-B5 新证据时不得重算 score 或宣称追平。
 
-## Quick Start
+## 快速开始
 
-Prerequisites:
+前置条件：
 
 - Windows 11
-- Node.js and pnpm
-- Rust toolchain compatible with Tauri 2
+- Node.js 和 pnpm
+- 兼容 Tauri 2 的 Rust toolchain
 
-Install dependencies:
+安装依赖：
 
 ```powershell
 pnpm install
 ```
 
-Run the web dev shell:
+启动 Web dev shell：
 
 ```powershell
 pnpm dev
 ```
 
-Build the frontend:
+构建前端：
 
 ```powershell
 pnpm build
 ```
 
-Build the Windows desktop release:
+构建 Windows 桌面 release：
 
 ```powershell
 pnpm desktop:release
 ```
 
-Run the project baseline enforcement:
+运行项目基线检查：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\Users\Lenovo\.codex\templates\win11-tauri-vite-react-ts\scripts\enforce-win11-tauri.ps1 -ProjectRoot D:\SelfMadeTool\personal-pilot
 ```
 
-## Quality Gate
+## 质量门禁
 
-Every meaningful code change should pass:
+每个 meaningful code change 至少应通过：
 
 - `pnpm typecheck`
 - `pnpm build`
 - Win11/Tauri baseline enforcement
-- `pnpm desktop:release` for release-impacting changes
+- release 相关改动还要跑 `pnpm desktop:release`
 
-The broader local verification script is:
+更完整的本地验证入口：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\windows_local_verify.ps1 -SkipContinuityTest
 ```
 
-## Project Layout
+## 项目结构
 
 ```text
 src/
@@ -105,30 +108,31 @@ scripts/
 docs/
 ```
 
-Native and system-capability calls must flow through:
+Native 和 system-capability 调用必须走固定链路：
 
 ```text
 pages/components -> features/hooks/store -> src/services/desktop.ts -> tauri
 ```
 
-UI code must not call Tauri directly.
+UI 代码不得直接调用 Tauri。
 
-## Maintenance Docs
+## 维护文档
 
-Canonical maintenance entrypoints:
+核心入口：
 
-- [`/docs/README.md`](docs/README.md)
-- [`/docs/02-current-state.md`](docs/02-current-state.md)
-- [`/docs/03-roadmap.md`](docs/03-roadmap.md)
-- [`/docs/04-improvement-backlog.md`](docs/04-improvement-backlog.md)
-- [`/docs/05-ai-maintenance-playbook.md`](docs/05-ai-maintenance-playbook.md)
-- [`/docs/root-entrypoint-map.md`](docs/root-entrypoint-map.md)
+- `docs/README.md`
+- `docs/02-current-state.md`
+- `docs/03-roadmap.md`
+- `docs/04-improvement-backlog.md`
+- `docs/05-ai-maintenance-playbook.md`
+- `docs/root-entrypoint-map.md`
+- `docs/24-external-distribution-readiness.md`
 
-When status changes, update the matching canonical docs instead of relying on this root README.
+状态变化时，先更新对应 canonical docs，再更新根入口摘要。
 
-## Next Work
+## 下一步
 
-1. Run real Lightpanda/CDP operator smoke for profile-browser validation evidence.
-2. Deepen fingerprint observed coverage beyond `26` projected fields while keeping declared, applied, and observed evidence separate.
-3. Turn `SessionBundle` contracts into a real restore write path and profile portability smoke.
-4. Wire CAPTCHA/SMS/Email production manager/config paths without claiming automation closure before provider acceptance.
+1. 按 `docs/24-external-distribution-readiness.md` 执行外部分发前人工 operator smoke。
+2. 继续加深 fingerprint observed coverage，保持 declared、applied、observed 分离。
+3. 验证 `SessionBundle` 跨机器 profile portability。
+4. 补齐 CAPTCHA/SMS/Email production manager wiring、provider acceptance 和 CDP detect/fill。

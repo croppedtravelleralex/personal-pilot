@@ -1,6 +1,6 @@
 # Root Entrypoint Map
 
-Updated: 2026-05-22
+Updated: 2026-05-23
 
 ## Purpose
 
@@ -31,6 +31,8 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
   - AdsPower boundary comparison on the overall end-state track
 - `/docs/18-external-browser-integration-plan.md`
   - external browser research and overall-track integration plan
+- `/docs/24-external-distribution-readiness.md`
+  - external distribution readiness, manual operator smoke, known limitations, and release-note boundaries
 - `/docs/agent-alexstudio-gateway-runbook.md`
   - gateway-specific runtime and acceptance guidance
 
@@ -53,6 +55,7 @@ Use one dual-axis rule everywhere:
 
 Use `/docs/13-adspower-deep-comparison.md` and `/docs/18-external-browser-integration-plan.md` only for the second route.
 Use `/docs/19-phase-plan-and-scorecard.md` when the user asks for detailed phase planning, scoring, or a full benchmark summary.
+Use `/docs/24-external-distribution-readiness.md` before external distribution or release-note drafting.
 
 ## Secondary Root Files
 

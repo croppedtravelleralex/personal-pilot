@@ -23,7 +23,7 @@
    - 2026-05-23 已通过 `scripts/windows_local_verify.ps1 -SkipContinuityTest`
    - 覆盖 typecheck、Vite build、Win11 baseline、Rust lib/full tests、Tauri release build
    - 生成 Win11 NSIS installer：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`
-   - 后续发布前可追加人工 operator smoke 和 continuity integration test
+   - P13 已新增 `docs/24-external-distribution-readiness.md`，后续发布前按该清单追加人工 operator smoke 和 continuity integration test
 
 ## Now：Overall remaining `70%`
 
@@ -65,3 +65,4 @@
 - 只有新 shipped evidence 出现时才提高 capability score。
 - AdsPower comparison 只用官方公开边界和本仓库可验证证据刷新；当前 P12 结论是 deferred，不上调 score。
 - `50+`、`450+`、AdsPower catch-up、external integration 继续归入 Overall track，不能写成当前 runtime depth。
+- 外部分发前执行 `docs/24-external-distribution-readiness.md` 的 known limitations 和 manual smoke checklist；未执行时只能说自动化 release gate 已通过，不能说外部发布已验收。

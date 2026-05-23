@@ -11,6 +11,7 @@
 5. `docs/03-roadmap.md`：Now / Next / Later 路线。
 6. `docs/04-improvement-backlog.md`：待办池和风险。
 7. `docs/05-ai-maintenance-playbook.md`：AI 接手、更新和验收规则。
+8. `docs/24-external-distribution-readiness.md`：外部分发前限制、人工 smoke 和发布说明边界。
 
 ## 当前报告口径
 
@@ -38,3 +39,4 @@
 - 接手规则变化更新 `05-ai-maintenance-playbook.md`。
 - 不把 Overall 目标数字伪装成 Mainline 已交付。
 - 不把 staged / fallback / mock 默认路径算作闭环交付。
+- 外部分发前必须读取 `docs/24-external-distribution-readiness.md`，并保留 provider、portability、release measurement、AdsPower 和 `450+` taxonomy 限制。

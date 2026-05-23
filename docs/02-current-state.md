@@ -25,6 +25,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - 2026-05-23 已通过 `scripts/windows_local_verify.ps1 -SkipContinuityTest`：type check、Vite production build、Win11 Tauri baseline、`cargo test --lib -- --test-threads=1`、Tauri release build、`cargo test --quiet`。
 - Tauri release installer 已生成：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`。
 - 后续 meaningful code change 仍需重新跑对应门禁；operator manual smoke 和 continuity integration test 可按发布需要追加。
+- P13 已新增外部分发前检查文档：`docs/24-external-distribution-readiness.md`，用于记录 known limitations、manual smoke checklist 和发布说明边界。
 
 ## Reporting Rule From Now On
 
@@ -70,10 +71,11 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；跨机器 profile portability 仍需真实环境验收。
 - headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前仅有 adapter/release measurement contract、Overview 可见性和 P12 AdsPower refresh guard，不是 headed runtime 实现，也不是 AdsPower 评分上调。
 - external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。
+- 外部分发前必须执行或明确跳过 `docs/24-external-distribution-readiness.md` 的人工 operator smoke，并保留 provider、profile portability、release measurement、AdsPower refresh 和 `450+` taxonomy 限制。
 
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. P13 external distribution readiness / manual smoke / release notes / known limitations
-2. 清理 docs/final-goal-progress-breakdown 和 docs/19-phase-plan-and-scorecard 的阶段口径，确保 P5-P13 事实同步
-3. 后续只有 B1-B5 出现新 evidence 后，才允许重新执行 AdsPower score refresh
+1. 按 `docs/24-external-distribution-readiness.md` 执行人工 operator smoke，决定是否对外分发
+2. 后续只有 B1-B5 出现新 evidence 后，才允许重新执行 AdsPower score refresh
+3. 继续 profile portability、provider closure、runtime measurement 和 `450+` taxonomy 深化

@@ -7,7 +7,7 @@
 | Proxy / IP | provider-side proxy rotation write | 已闭环 | 真实 provider action、rollback、cooldown、retry 均走 typed native chain |
 | Synchronizer | native broadcast write closure；set-main / work-area-aware layout 已落地 | 已闭环 | staged-only 不再是主 operator route，broadcast write 走 typed native chain |
 | Recorder / Templates | native-first de-fallback closure | 已闭环 | release-default path 不依赖 fallback |
-| Release | Win11 final packaging / operator acceptance polish | 自动化门禁已通过；人工 smoke 可选追加 | Type check、Vite build、Win11 baseline、Tauri release build、Windows local verify 同时通过并记录 |
+| Release | Win11 final packaging / operator acceptance polish | 自动化门禁已通过；P13 已新增外部分发 readiness 文档；人工 smoke 待执行 | Type check、Vite build、Win11 baseline、Tauri release build、Windows local verify 同时通过并记录；外部分发前按 `docs/24-external-distribution-readiness.md` 完成人工 smoke |
 
 ## Overall remaining `70%`
 

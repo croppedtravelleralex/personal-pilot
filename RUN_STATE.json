@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 28,
+  "loop_iteration": 29,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P12 AdsPower boundary refresh guard",
-  "current_objective": "AdsPower benchmark refresh 已作为 evidence-gated boundary guard 落地：没有 B1-B5 新证据时不得重算评分或宣称追平",
-  "last_result_summary": "Release smoke contract warning 和 docs 已同步 P12：AdsPower refresh deferred until B1-B5 evidence exists；当前 score 和 30/70 overall truth 不上调",
-  "next_action_hint": "Commit/push P12, then start P13 external distribution readiness and known-limits documentation",
+  "current_focus": "P13 external distribution readiness",
+  "current_objective": "外部分发前 known limitations、manual operator smoke checklist、release-note boundaries 已写入维护文档并接入入口链路",
+  "last_result_summary": "新增 docs/24-external-distribution-readiness.md，并同步 README、docs 入口、current-state、roadmap、backlog、AI playbook、TODO；分发前限制不被冒充为生产闭环",
+  "next_action_hint": "Run P13 gates, commit/push, then either execute manual operator smoke or continue provider/profile/runtime/taxonomy deepening",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -168,6 +168,12 @@
       "kind": "docs",
       "status": "success",
       "note": "AdsPower score refresh remains deferred because B1-B5 evidence is incomplete; docs and release smoke warnings now preserve the evidence gate instead of raising parity claims."
+    },
+    {
+      "title": "P13 external distribution readiness",
+      "kind": "docs",
+      "status": "success",
+      "note": "External distribution readiness now has a canonical Chinese doc covering known limitations, manual operator smoke, and release-note boundaries before any external handoff."
     }
   ],
   "blocked_reason": "",

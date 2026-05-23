@@ -38,7 +38,8 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 ## Mainline Release Evidence
 
 - [x] Run Win11 local release gate without reopening scope (`scripts/windows_local_verify.ps1 -SkipContinuityTest`)
-- [ ] Optional: run manual operator smoke before external distribution
+- [x] Add P13 external distribution readiness doc with known limitations, manual smoke checklist, and release-note boundaries
+- [ ] Execute manual operator smoke before external distribution
 
 ## Overall End-State 70%
 
