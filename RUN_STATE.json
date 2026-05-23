@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P5 real Lightpanda/CDP validation smoke gate",
-  "current_objective": "真实 Lightpanda/CDP validation smoke 已通过；下一步进入 P6 validation evidence schema 收敛，保持 scope/adapter/status/failure 字段一致",
-  "last_result_summary": "通过 WSL2 HermesUbuntu 安装官方 Lightpanda nightly，并用 validation_lightpanda_smoke --use-wsl-lightpanda 生成 status=passed 的双次复跑 evidence report；WebRTC/audio 为 capability warning，canvas 暴露 toDataURL missing，leak/storage succeeded",
-  "next_action_hint": "Start P6 reusable browser evidence schema and report history failure/path normalization, then run full checks before moving to P7",
+  "current_focus": "P6 validation evidence schema convergence",
+  "current_objective": "Validation evidence schema 已收敛到显式 collectorScope/runtimeAdapter/targetProfileBrowser/failureReason 字段；下一步进入 P7 fingerprint observed coverage",
+  "last_result_summary": "Desktop WebView、profile browser runtime、FakeRunner/native validation signals 现在都有兼容旧 detail 的显式 scope/adapter/failure metadata，旧报告读取时会自动补齐字段",
+  "next_action_hint": "Run final P6 gates, commit/push, then start P7 fingerprint observed collector coverage without conflating declared/projected fields",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -126,6 +126,12 @@
       "kind": "verify",
       "status": "success",
       "note": "WSL2 Lightpanda 1.0.0-nightly.6394+93d2e968 produced a repeatable status=passed profile-browser runtime evidence report through validation_lightpanda_smoke --use-wsl-lightpanda."
+    },
+    {
+      "title": "P6 validation evidence schema convergence",
+      "kind": "feature",
+      "status": "success",
+      "note": "Validation signals now expose collectorScope, runtimeAdapter, targetProfileBrowser, and failureReason while preserving backward compatibility with legacy detail strings."
     }
   ],
   "blocked_reason": "",

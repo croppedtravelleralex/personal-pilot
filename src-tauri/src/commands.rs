@@ -84,6 +84,14 @@ pub struct DesktopValidationSignal {
     pub label: String,
     pub summary: String,
     pub detail: Option<String>,
+    #[serde(default)]
+    pub collector_scope: String,
+    #[serde(default)]
+    pub runtime_adapter: String,
+    #[serde(default)]
+    pub target_profile_browser: bool,
+    #[serde(default)]
+    pub failure_reason: Option<String>,
     pub duration_ms: Option<u128>,
 }
 
@@ -200,6 +208,9 @@ fn read_validation_reports_from_dir(report_dir: &Path) -> Result<Vec<DesktopVali
         let mut report: DesktopValidationReport = serde_json::from_str(&raw).map_err(|error| {
             format!("Failed to parse validation report {}: {error}", path.display())
         })?;
+        for signal in &mut report.signals {
+            normalize_validation_signal_metadata(signal);
+        }
         if report.report_path.trim().is_empty() {
             report.report_path = path.to_string_lossy().to_string();
         }
@@ -227,6 +238,7 @@ fn validation_signal(
     detail: Option<String>,
     duration_ms: Option<u128>,
 ) -> DesktopValidationSignal {
+    let metadata = derive_validation_signal_metadata(detail.as_deref(), status, summary.as_str());
     DesktopValidationSignal {
         id: id.to_string(),
         category: category.to_string(),
@@ -235,7 +247,73 @@ fn validation_signal(
         label: label.to_string(),
         summary,
         detail,
+        collector_scope: metadata.collector_scope,
+        runtime_adapter: metadata.runtime_adapter,
+        target_profile_browser: metadata.target_profile_browser,
+        failure_reason: metadata.failure_reason,
         duration_ms,
+    }
+}
+
+struct ValidationSignalMetadata {
+    collector_scope: String,
+    runtime_adapter: String,
+    target_profile_browser: bool,
+    failure_reason: Option<String>,
+}
+
+fn derive_validation_signal_metadata(
+    detail: Option<&str>,
+    status: &str,
+    summary: &str,
+) -> ValidationSignalMetadata {
+    let detail = detail.unwrap_or("");
+    let collector_scope = detail
+        .split(';')
+        .map(str::trim)
+        .find_map(|part| part.strip_prefix("scope="))
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("native")
+        .to_string();
+    let runtime_adapter = if detail.contains("fake-runner") {
+        "fake".to_string()
+    } else if detail.contains("profile-browser-runtime") || detail.contains("cdp-runtime-evaluate") {
+        "lightpanda".to_string()
+    } else if detail.contains("desktop-webview") {
+        "desktop_webview".to_string()
+    } else {
+        "native".to_string()
+    };
+    let target_profile_browser = detail.contains("target-profile-browser=true")
+        || (collector_scope == "profile-browser-runtime" && !detail.contains("target-profile-browser=false"));
+    let failure_reason = if status == "failed" {
+        Some(summary.to_string())
+    } else {
+        None
+    };
+    ValidationSignalMetadata {
+        collector_scope,
+        runtime_adapter,
+        target_profile_browser,
+        failure_reason,
+    }
+}
+
+fn normalize_validation_signal_metadata(signal: &mut DesktopValidationSignal) {
+    let metadata = derive_validation_signal_metadata(
+        signal.detail.as_deref(),
+        signal.status.as_str(),
+        signal.summary.as_str(),
+    );
+    if signal.collector_scope.trim().is_empty() {
+        signal.collector_scope = metadata.collector_scope;
+    }
+    if signal.runtime_adapter.trim().is_empty() {
+        signal.runtime_adapter = metadata.runtime_adapter;
+    }
+    signal.target_profile_browser = signal.target_profile_browser || metadata.target_profile_browser;
+    if signal.failure_reason.is_none() {
+        signal.failure_reason = metadata.failure_reason;
     }
 }
 
@@ -329,6 +407,7 @@ fn normalize_browser_validation_signal(
     if signal.summary.trim().is_empty() {
         signal.summary = "Browser validation signal did not include a summary.".to_string();
     }
+    normalize_validation_signal_metadata(&mut signal);
     signal
 }
 
@@ -1835,6 +1914,52 @@ mod tests {
             .unwrap_err(),
             "layout uniformHeight must be greater than 0"
         );
+    }
+
+    #[test]
+    fn validation_signal_metadata_is_derived_from_legacy_detail() {
+        let mut profile_signal = DesktopValidationSignal {
+            id: "canvas-profile-browser-render".to_string(),
+            category: "canvas".to_string(),
+            layer: "observed".to_string(),
+            status: "failed".to_string(),
+            label: "Canvas profile browser render probe".to_string(),
+            summary: "Canvas profile probe failed: canvas.toDataURL is not a function".to_string(),
+            detail: Some("scope=profile-browser-runtime; collector=cdp-runtime-evaluate".to_string()),
+            collector_scope: String::new(),
+            runtime_adapter: String::new(),
+            target_profile_browser: false,
+            failure_reason: None,
+            duration_ms: Some(1),
+        };
+        normalize_validation_signal_metadata(&mut profile_signal);
+        assert_eq!(profile_signal.collector_scope, "profile-browser-runtime");
+        assert_eq!(profile_signal.runtime_adapter, "lightpanda");
+        assert!(profile_signal.target_profile_browser);
+        assert_eq!(
+            profile_signal.failure_reason.as_deref(),
+            Some("Canvas profile probe failed: canvas.toDataURL is not a function")
+        );
+
+        let mut webview_signal = DesktopValidationSignal {
+            id: "webrtc-desktop-webview-api".to_string(),
+            category: "webrtc".to_string(),
+            layer: "observed".to_string(),
+            status: "warning".to_string(),
+            label: "WebRTC desktop WebView API probe".to_string(),
+            summary: "Desktop WebView WebRTC API is present.".to_string(),
+            detail: Some("scope=desktop-webview; target-profile-browser=false".to_string()),
+            collector_scope: String::new(),
+            runtime_adapter: String::new(),
+            target_profile_browser: false,
+            failure_reason: None,
+            duration_ms: Some(0),
+        };
+        normalize_validation_signal_metadata(&mut webview_signal);
+        assert_eq!(webview_signal.collector_scope, "desktop-webview");
+        assert_eq!(webview_signal.runtime_adapter, "desktop_webview");
+        assert!(!webview_signal.target_profile_browser);
+        assert!(webview_signal.failure_reason.is_none());
     }
 
     #[test]

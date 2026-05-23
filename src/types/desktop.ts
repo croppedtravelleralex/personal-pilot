@@ -6,6 +6,10 @@ export interface DesktopValidationSignal {
   label: string;
   summary: string;
   detail: string | null;
+  collectorScope: string;
+  runtimeAdapter: string;
+  targetProfileBrowser: boolean;
+  failureReason: string | null;
   durationMs: number | null;
 }
 

@@ -23,6 +23,10 @@ function signal(
     label,
     summary,
     detail,
+    collectorScope: "desktop-webview",
+    runtimeAdapter: "desktop_webview",
+    targetProfileBrowser: false,
+    failureReason: status === "failed" ? summary : null,
     durationMs,
   };
 }

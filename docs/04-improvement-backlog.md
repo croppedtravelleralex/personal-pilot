@@ -13,7 +13,7 @@
 
 | 领域 | 待改进项 | 当前状态 | 退出条件 |
 | --- | --- | --- | --- |
-| Validation | detector / leak / DNS / WebRTC / canvas / audio / worker / transport board | 前端 MVP、DNS/transport observed report、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime `validation_probe` action、WebRTC/leak native warning contract、history list、profile-level export 和 `validation_lightpanda_smoke` 已接入；WSL2 Lightpanda nightly 真实 CDP smoke 已双次复跑 `status=passed` | P6 统一 evidence schema、报告路径、失败原因和 scope/adapter 字段；P7 继续扩大 observed coverage |
+| Validation | detector / leak / DNS / WebRTC / canvas / audio / worker / transport board | 前端 MVP、DNS/transport observed report、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime `validation_probe` action、WebRTC/leak native warning contract、history list、profile-level export、`validation_lightpanda_smoke` 和 P6 explicit evidence metadata 已接入；WSL2 Lightpanda nightly 真实 CDP smoke 已双次复跑 `status=passed` | P7 继续扩大 observed coverage，并继续保留 scope/adapter/target/failure metadata |
 | Fingerprint | 从 `12` runtime projected fields 扩展 runtime depth | 已扩到 `26` projected fields（`25` control-supported + derived `platform`）；observed coverage 仍待扩展 | declared / applied / observed 可解释且可验证 |
 | Session | 完整 `SessionBundle` 和 profile portability | profile-scoped export、import preflight、restore contract 已落地；默认脱敏并可显式包含本地敏感 payload；restore 仍为 non-destructive contract | 真实 import/export/restore 与 restart continuity 一起成立 |
 | Behavior | 从 `13` primitives 扩展 replayable `450+` taxonomy | 未落地 | 事件数量来自真实 taxonomy，不是目标口号 |
@@ -28,7 +28,7 @@
 - 把 mock / fallback / staged 默认路径算作 delivery closure。
 - 用历史 `77% / 23%` 或 `82% / 18%` 覆盖当前 live truth。
 - 在 Mainline closeout 阶段引入 Overall 级大范围重构。
-- P5 已通过后仍把 WebRTC/audio warning 或 canvas failure 写成全部成功。
+- P5/P6 已通过后仍把 WebRTC/audio warning 或 canvas failure 写成全部成功，或丢失 `failureReason`。
 
 ## 维护规则
 

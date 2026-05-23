@@ -51,6 +51,7 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Run real Lightpanda/CDP operator smoke to confirm WebRTC/leak/canvas/audio profile runtime reports are repeatable outside FakeRunner
   - [x] Add repeatable local smoke entry: `scripts/validation_lightpanda_smoke.ps1`
   - [x] Install/use official Lightpanda nightly through WSL2 and run `validation_lightpanda_smoke --use-wsl-lightpanda` with `status=passed`
+- [x] Converge validation evidence schema with explicit scope / adapter / target-profile / failure fields
 - [x] Deepen fingerprint runtime projection from `12` to `26` env-backed fields while preserving declared / applied / observed separation
 - [ ] Deepen fingerprint observed coverage beyond projected/applied fields
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets

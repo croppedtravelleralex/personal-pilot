@@ -37,11 +37,11 @@
    - desktop WebView scoped WebRTC/canvas/audio/storage probes 已接入，用于记录当前桌面壳浏览器 API 能力；不等同于 profile browser runtime probe。
    - profile browser runtime `validation_probe` action 已接入 runner；Lightpanda/CDP 可用时可生成 WebRTC/canvas/audio/leak runtime scoped signals，FakeRunner 只生成 warning stub。
    - P5 已新增 `validation_lightpanda_smoke` 可复跑入口，并通过 WSL2 Lightpanda nightly 真实 CDP 复跑，report `status=passed`。
-   - 下一步进入 P6，统一 desktop WebView、profile browser、FakeRunner warning 的 evidence schema 和失败原因保留。
+   - P6 已统一 desktop WebView、profile browser、FakeRunner/native validation signals 的 explicit evidence metadata：`collectorScope`、`runtimeAdapter`、`targetProfileBrowser`、`failureReason`；旧报告读取时从 legacy `detail` 补齐字段。
 
 2. Fingerprint runtime depth
    - 已从 `80` declared controls 和 `12` runtime projected fields 推进到 `26` runtime projected fields（`25` control-supported + derived `platform`）。
-   - P5 真实 Lightpanda/CDP smoke 已通过；下一步继续加深 observed coverage，不把 projected/applied fields 报成 observed signals。
+   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛；下一步继续加深 observed coverage，不把 projected/applied fields 报成 observed signals。
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration
