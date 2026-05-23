@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P0-P4 staged closeout truth-source cleanup",
-  "current_objective": "P0-P4 staged contracts 已按顺序落地；下一步进入真实 Lightpanda/CDP operator smoke、profile portability write-path 验收、provider/UI 生产闭环和 AdsPower evidence refresh 前置条件",
-  "last_result_summary": "P0 Validation evidence、P1 fingerprint runtime projection、P2 SessionBundle/provider readiness、P3 runtime adapter/release smoke contract、P4 truth-source cleanup 已闭环；仍不声明真实 headed runtime、真实 provider closure、450+ taxonomy 或 AdsPower refresh 完成",
-  "next_action_hint": "Run final full gate, commit/push P4 truth-source cleanup, then start real Lightpanda/CDP validation smoke as the next implementation stage",
+  "current_focus": "P5 real Lightpanda/CDP validation smoke gate",
+  "current_objective": "真实 Lightpanda/CDP validation smoke 已有可复跑入口；当前本机 blocked 于 lightpanda binary_not_found，不能进入依赖真实 runtime evidence 的 P6-P13",
+  "last_result_summary": "新增 validation_lightpanda_smoke Rust/PowerShell 入口并生成 blocked evidence report；本机 PATH 与常见目录未发现 lightpanda 可执行文件，profile-browser runtime evidence 尚未闭环",
+  "next_action_hint": "Install/provide LIGHTPANDA_BIN or place lightpanda on PATH, rerun scripts/validation_lightpanda_smoke.ps1 until status=passed, then continue P6",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -120,8 +120,14 @@
       "kind": "docs",
       "status": "success",
       "note": "Root README, RUN_STATE, final progress breakdown, and phase scorecard now report 26 projected fields, landed validation/session contracts, and remaining real-smoke gaps without overstating closure."
+    },
+    {
+      "title": "P5 Lightpanda/CDP validation smoke gate",
+      "kind": "verify",
+      "status": "blocked",
+      "note": "Added repeatable validation_lightpanda_smoke entry. Latest local run wrote blocked evidence because lightpanda binary was not found; P6-P13 remain gated on real profile-browser runtime evidence."
     }
   ],
-  "blocked_reason": "",
+  "blocked_reason": "P5 requires a real Lightpanda executable. Current smoke report status=blocked with error_kind=binary_not_found; set LIGHTPANDA_BIN or add lightpanda to PATH before continuing evidence-dependent stages.",
   "cooldown_seconds": 30
 }

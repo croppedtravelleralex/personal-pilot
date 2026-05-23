@@ -47,7 +47,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - SMS 后端 handler/route 与 provider 代码边界已部分落地：`internal/sms`、5sim、SMSPool、`/api/sms/*` 核心端点；生产 readiness contract 已接入桌面 API，但 manager wiring/CDP 填号填码/operator UI 闭环仍 blocked。
 - Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API；生产 readiness contract 已接入桌面 API，但自动化流程和 operator UI 闭环仍 blocked。
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
-- Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。
+- Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。P5 已新增 `scripts/validation_lightpanda_smoke.ps1` 可复跑入口，但本机最新 smoke blocked 于 `lightpanda` binary not found。
 - Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；真实 Lightpanda/CDP operator smoke 与冷启动/RSS/进程数测量仍需单独执行。
 
 ## 未完成边界
@@ -61,7 +61,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### Overall remaining `70%`
 
-- Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list 和 profile-level evidence export；后续需在真实 Lightpanda/CDP 环境下做 operator smoke，把 FakeRunner warning stub 替换为真实 profile runtime evidence。
+- Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list、profile-level evidence export 和 P5 smoke 脚本；后续需提供真实 Lightpanda 二进制并复跑 operator smoke，把 blocked evidence / FakeRunner warning stub 替换为真实 profile runtime evidence。
 - CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地，并已有 production readiness contract 可报告凭证、manager wiring、CDP 自动化、operator UI blocker；尚未完成真实 provider 验收和自动化闭环。
 - runtime materialization depth 已从 `12` 扩到 `26` projected fields；仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal observation / audit coverage 未落地。
@@ -73,6 +73,6 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. 在真实 Lightpanda/CDP 环境执行 Validation profile runtime smoke，确认 WebRTC/leak/canvas/audio report 可重复
-2. 扩展 fingerprint runtime depth，并保持 declared / applied / observed 三层分离
+1. 提供真实 `LIGHTPANDA_BIN` 或 PATH `lightpanda`，复跑 `scripts/validation_lightpanda_smoke.ps1`，直到 report `status=passed`
+2. 只有 P5 真实 runtime evidence 通过后，才继续扩展 fingerprint observed coverage，并保持 declared / applied / observed 三层分离
 3. CAPTCHA/SMS/Email production manager wiring/config 只作为后续集成切片，不宣称自动化闭环
