@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 26,
+  "loop_iteration": 27,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Validation profile runtime probe action landed",
-  "current_objective": "在真实 Lightpanda/CDP 环境执行 Validation operator smoke，然后推进 P1 fingerprint runtime depth",
-  "last_result_summary": "Validation reports 现覆盖 DNS/transport native probe、WebRTC/leak native warning contract、desktop WebView scoped probes、profile browser runtime validation_probe action、history/export；FakeRunner 会返回 warning stub，真实 profile runtime evidence 需要 Lightpanda/CDP smoke 验证",
-  "next_action_hint": "Run real Lightpanda/CDP validation smoke, then deepen fingerprint runtime evidence split",
+  "current_focus": "Fingerprint runtime projection depth expanded",
+  "current_objective": "继续推进 P1 observed fingerprint audit coverage，然后进入 P2 SessionBundle/profile portability",
+  "last_result_summary": "Fingerprint runtime projection 已从 12 扩到 26 env-backed fields，其中 25 个映射 first-family controls，derived platform 单独计入；450+ fingerprint signals 仍是 target-only",
+  "next_action_hint": "Add observed fingerprint audit coverage without conflating projected/applied fields with observed signals",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -26,7 +26,7 @@
     {
       "title": "Deepen fingerprint runtime with evidence split",
       "priority": 3,
-      "rationale": "继续保持 declared / applied / observed 分层，避免误报 runtime depth",
+      "rationale": "projection 已扩到 26，下一步补 observed audit coverage，避免误报 runtime depth",
       "kind": "feature"
     },
     {
@@ -84,6 +84,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Runner validation_probe action now returns profile browser runtime scoped WebRTC/canvas/audio/storage signals through Lightpanda/CDP, with FakeRunner warning stub."
+    },
+    {
+      "title": "Fingerprint runtime projection depth",
+      "kind": "feature",
+      "status": "success",
+      "note": "Lightpanda runtime projection expanded from 12 to 26 env-backed fields while preserving 25 control-supported + derived platform accounting."
     }
   ],
   "blocked_reason": "",

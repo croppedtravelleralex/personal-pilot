@@ -39,7 +39,8 @@
    - 下一步做真实 Lightpanda/CDP operator smoke，确认 profile browser runtime report 可重复。
 
 2. Fingerprint runtime depth
-   - 从 `80` declared controls 和 `12` runtime projected fields 继续加深 applied / observed coverage。
+   - 已从 `80` declared controls 和 `12` runtime projected fields 推进到 `26` runtime projected fields（`25` control-supported + derived `platform`）。
+   - 下一步继续加深 observed coverage，不把 projected/applied fields 报成 observed signals。
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration

@@ -7,7 +7,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - Mainline delivery：`100% / 0% / green` (3 P0 items closed)
 - Overall end-state：`30% / 70% / yellow`
 - 第一族控制 schema 已声明 `80` 个 core control fields。
-- 当前 runtime projection 仍是 `12` 个 env-backed fingerprint fields，包括 derived `platform`。
+- 当前 runtime projection 是 `26` 个 env-backed fingerprint fields，其中 `25` 个来自 first-family control fields，另含 derived `platform`。
 - 当前 behavior runtime 已交付 `13` 个 primitives。
 - cookie / localStorage / sessionStorage 跨 app restart 持久化与恢复已落地。
 
@@ -61,7 +61,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 - Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list 和 profile-level evidence export；后续需在真实 Lightpanda/CDP 环境下做 operator smoke，把 FakeRunner warning stub 替换为真实 profile runtime evidence。
 - CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地，尚未完成 production manager wiring、CDP 自动化检测、填入、真实 provider 验收和 operator UI 闭环。
-- runtime materialization depth 仍窄，当前只应报告 `12` projected fields。
+- runtime materialization depth 已从 `12` 扩到 `26` projected fields；仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal observation / audit coverage 未落地。
 - `450+` event taxonomy 未落地。
 - 完整 `SessionBundle`、profile portability、import/export contract 未落地。

@@ -14,7 +14,7 @@
 | 领域 | 待改进项 | 当前状态 | 退出条件 |
 | --- | --- | --- | --- |
 | Validation | detector / leak / DNS / WebRTC / canvas / audio / worker / transport board | 前端 MVP、DNS/transport observed report、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime `validation_probe` action、WebRTC/leak native warning contract、history list、profile-level export 已接入 | 真实 Lightpanda/CDP 环境下 WebRTC/leak/canvas/audio 可重复生成 profile runtime evidence report |
-| Fingerprint | 从 `12` runtime projected fields 扩展 runtime depth | 未落地 | declared / applied / observed 可解释且可验证 |
+| Fingerprint | 从 `12` runtime projected fields 扩展 runtime depth | 已扩到 `26` projected fields（`25` control-supported + derived `platform`）；observed coverage 仍待扩展 | declared / applied / observed 可解释且可验证 |
 | Session | 完整 `SessionBundle` 和 profile portability | 未落地 | import/export/restore 与 restart continuity 一起成立 |
 | Behavior | 从 `13` primitives 扩展 replayable `450+` taxonomy | 未落地 | 事件数量来自真实 taxonomy，不是目标口号 |
 | Runtime | headed realism、kernel strategy、adapter boundary | 未落地 | 有稳定 adapter contract 和验证证据 |

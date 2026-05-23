@@ -16,7 +16,7 @@
 
 - Mainline delivery：`100% / 0% / green`
 - Overall end-state：`30% / 70% / yellow`
-- Fingerprint：`80` declared controls / `12` runtime projected fields / `450+` target-only
+- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450+` target-only
 - Behavior：`13` shipped primitives / `450+` target-only
 - Session：cookie / localStorage / sessionStorage restart continuity 已落地；完整 `SessionBundle` 未落地
 

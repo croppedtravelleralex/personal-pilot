@@ -48,7 +48,8 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Add desktop WebView scoped WebRTC/canvas/audio/storage observed probes without claiming profile browser coverage
 - [x] Add profile browser runtime / CDP scoped `validation_probe` runner action and merge its signals into validation reports
 - [ ] Run real Lightpanda/CDP operator smoke to confirm WebRTC/leak/canvas/audio profile runtime reports are repeatable outside FakeRunner
-- [ ] Deepen fingerprint runtime from `80` declared controls and `12` projected fields toward broader applied / observed coverage
+- [x] Deepen fingerprint runtime projection from `12` to `26` env-backed fields while preserving declared / applied / observed separation
+- [ ] Deepen fingerprint observed coverage beyond projected/applied fields
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
 - [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy
 - [ ] Deepen headed realism, kernel strategy, and AdsPower-boundary catch-up without breaking the Win11 / Tauri baseline

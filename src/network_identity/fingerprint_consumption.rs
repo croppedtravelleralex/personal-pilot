@@ -13,22 +13,39 @@ pub const FINGERPRINT_CONSUMPTION_SOURCE_SHARED_SCHEMA: &str = "shared_schema_v1
 pub const DEVICE_MEMORY_ALIAS_FIELD: &str = "device_memory";
 pub const DEVICE_MEMORY_CANONICAL_FIELD: &str = "device_memory_gb";
 
-const LIGHTPANDA_SUPPORTED_FIELDS: [(&str, &str); 12] = [
+const LIGHTPANDA_SUPPORTED_FIELDS: [(&str, &str); 26] = [
     ("accept_language", "LIGHTPANDA_FP_ACCEPT_LANGUAGE"),
     ("timezone", "LIGHTPANDA_FP_TIMEZONE"),
     ("locale", "LIGHTPANDA_FP_LOCALE"),
     ("platform", "LIGHTPANDA_FP_PLATFORM"),
     ("user_agent", "LIGHTPANDA_FP_USER_AGENT"),
+    ("browser_family", "LIGHTPANDA_FP_BROWSER_FAMILY"),
+    ("browser_channel", "LIGHTPANDA_FP_BROWSER_CHANNEL"),
+    (
+        "browser_major_version",
+        "LIGHTPANDA_FP_BROWSER_MAJOR_VERSION",
+    ),
+    ("browser_minor_version", "LIGHTPANDA_FP_BROWSER_MINOR_VERSION"),
+    ("ua_platform", "LIGHTPANDA_FP_UA_PLATFORM"),
+    ("ua_mobile", "LIGHTPANDA_FP_UA_MOBILE"),
+    ("ua_architecture", "LIGHTPANDA_FP_UA_ARCHITECTURE"),
     ("viewport_width", "LIGHTPANDA_FP_VIEWPORT_WIDTH"),
     ("viewport_height", "LIGHTPANDA_FP_VIEWPORT_HEIGHT"),
     ("screen_width", "LIGHTPANDA_FP_SCREEN_WIDTH"),
     ("screen_height", "LIGHTPANDA_FP_SCREEN_HEIGHT"),
+    ("available_width", "LIGHTPANDA_FP_AVAILABLE_WIDTH"),
+    ("available_height", "LIGHTPANDA_FP_AVAILABLE_HEIGHT"),
     ("device_pixel_ratio", "LIGHTPANDA_FP_DEVICE_PIXEL_RATIO"),
+    ("page_zoom", "LIGHTPANDA_FP_PAGE_ZOOM"),
+    ("color_depth", "LIGHTPANDA_FP_COLOR_DEPTH"),
     ("hardware_concurrency", "LIGHTPANDA_FP_HARDWARE_CONCURRENCY"),
     (
         DEVICE_MEMORY_CANONICAL_FIELD,
         "LIGHTPANDA_FP_DEVICE_MEMORY_GB",
     ),
+    ("cpu_architecture", "LIGHTPANDA_FP_CPU_ARCHITECTURE"),
+    ("touch_support", "LIGHTPANDA_FP_TOUCH_SUPPORT"),
+    ("max_touch_points", "LIGHTPANDA_FP_MAX_TOUCH_POINTS"),
 ];
 
 fn is_metadata_field(field: &str) -> bool {
@@ -361,5 +378,58 @@ mod tests {
         let projection = build_lightpanda_runtime_projection("fp-supported-only", 1, &profile);
         assert_eq!(projection.consumption.consumption_status, "fully_consumed");
         assert_eq!(projection.consumption.ignored_count(), 0);
+    }
+
+    #[test]
+    fn expanded_l1_l2_runtime_projection_is_env_backed() {
+        let profile = serde_json::json!({
+            "control": {
+                "browser": {
+                    "browser_family": "chrome",
+                    "browser_channel": "stable",
+                    "browser_major_version": 124,
+                    "browser_minor_version": "0.6367.91",
+                    "user_agent": "Mozilla/5.0",
+                    "ua_platform": "Win32",
+                    "ua_mobile": false,
+                    "ua_architecture": "x86"
+                },
+                "display": {
+                    "screen_width": 1920,
+                    "screen_height": 1080,
+                    "available_width": 1920,
+                    "available_height": 1040,
+                    "viewport_width": 1536,
+                    "viewport_height": 864,
+                    "device_pixel_ratio": 1.25,
+                    "page_zoom": 1,
+                    "color_depth": 24
+                },
+                "hardware": {
+                    "cpu_architecture": "x86_64",
+                    "hardware_concurrency": 8,
+                    "device_memory_gb": 16,
+                    "touch_support": false,
+                    "max_touch_points": 0
+                },
+                "locale": {
+                    "locale": "zh-CN",
+                    "accept_language": "zh-CN,zh;q=0.9"
+                },
+                "os": {
+                    "timezone": "Asia/Shanghai"
+                }
+            }
+        });
+        let projection = build_lightpanda_runtime_projection("fp-expanded", 2, &profile);
+        assert_eq!(projection.consumption.applied_count(), 26);
+        assert!(projection
+            .envs
+            .iter()
+            .any(|(key, value)| key == "LIGHTPANDA_FP_BROWSER_MAJOR_VERSION" && value == "124"));
+        assert!(projection
+            .envs
+            .iter()
+            .any(|(key, value)| key == "LIGHTPANDA_FP_TOUCH_SUPPORT" && value == "false"));
     }
 }

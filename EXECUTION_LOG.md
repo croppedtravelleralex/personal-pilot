@@ -1,3 +1,18 @@
+## Round 28 — Fingerprint runtime projection depth (2026-05-23)
+
+### Type: feature
+
+### Actions
+- 扩展 Lightpanda runtime projection supported fields，从 `12` 增加到 `26` env-backed fields。
+- 同步 first-family runtime-supported control fields 为 `25` 个，保留 derived `platform` 不计入 `80` control count。
+- 增加 targeted unit test，验证扩展后的 L1/L2 fields 会进入 env-backed projection。
+
+### Results
+- `cargo test --lib network_identity::fingerprint_consumption -- --test-threads=1` 通过，6 tests passed。
+- `cargo check --manifest-path src-tauri/Cargo.toml` 通过。
+
+### Verdict: success
+
 ## Round 27 — Validation profile runtime probe action (2026-05-23)
 
 ### Type: feature

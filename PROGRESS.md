@@ -15,7 +15,7 @@ Progress must be reported with the dual-axis rule:
 
 - current shipped app / closeout / native mainline -> `100% / 0% / green`
 - complete app / AdsPower catch-up / `50+` control / `450+` fingerprint or event target -> `30% / 70% / yellow`
-- current reality anchors stay fixed at `80` declared controls, `12` runtime projection fields, `13` behavior primitives, and restart continuity landed
+- current reality anchors are `80` declared controls, `26` runtime projection fields (`25` control-supported + derived `platform`), `13` behavior primitives, and restart continuity landed
 - `450+` fingerprint signals, `450+` event taxonomy, and richer AdsPower-grade realism remain future overall-track work
 - detailed phase plan, scorecard, and benchmark summary live in `/docs/19-phase-plan-and-scorecard.md`
 
@@ -41,6 +41,11 @@ Progress must be reported with the dual-axis rule:
 - Added Lightpanda/Fake runner support for `validation_probe` and merged returned `validation_signals` into Tauri validation reports.
 - Lightpanda path executes WebRTC, canvas, AudioContext, and storage probes through CDP `Runtime.evaluate` in the profile browser runtime.
 - FakeRunner returns an explicit warning stub, preserving the evidence boundary until real Lightpanda/CDP smoke is run.
+## 2026-05-23 Fingerprint runtime projection depth
+
+- Expanded Lightpanda runtime projection from `12` to `26` env-backed fields.
+- `25` projected fields map to first-family control fields; derived `platform` remains a runtime field outside the `80` control count.
+- This is projected/applied depth only; `450+` fingerprint signal observation remains target-track work.
 ## 2026-05-23 Validation report history/export
 
 - 新增 validation report history list native command 与 desktop wrapper。

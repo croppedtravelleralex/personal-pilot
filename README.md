@@ -25,7 +25,7 @@ For canonical maintenance entrypoints, read [`/docs/README.md`](docs/README.md) 
 
 ## Important Boundaries
 
-- Current runtime fingerprint depth is still narrow: `80` declared controls and `12` runtime projected fields.
+- Current runtime fingerprint depth is still incomplete: `80` declared controls and `26` runtime projected fields (`25` control-supported + derived `platform`).
 - Validation `observed` evidence is not a full detector loop yet; native collectors and persistent reports are the next slice.
 - CAPTCHA/SMS/Email handlers and routes are partially landed, but production manager wiring, provider acceptance, and operator UI closure are not complete.
 - `450+` fingerprint signals and `450+` behavior taxonomy remain target-track work, not shipped runtime depth.

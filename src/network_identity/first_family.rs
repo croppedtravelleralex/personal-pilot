@@ -110,18 +110,32 @@ pub const BEHAVIOR_FIELDS: [&str; 10] = [
     "isolation_mode",
 ];
 
-const RUNTIME_SUPPORTED_CONTROL_FIELDS: [&str; 11] = [
+const RUNTIME_SUPPORTED_CONTROL_FIELDS: [&str; 25] = [
     "accept_language",
     "timezone",
     "locale",
+    "browser_family",
+    "browser_channel",
+    "browser_major_version",
+    "browser_minor_version",
     "user_agent",
+    "ua_platform",
+    "ua_mobile",
+    "ua_architecture",
     "viewport_width",
     "viewport_height",
     "screen_width",
     "screen_height",
+    "available_width",
+    "available_height",
     "device_pixel_ratio",
+    "page_zoom",
+    "color_depth",
     "hardware_concurrency",
     "device_memory_gb",
+    "cpu_architecture",
+    "touch_support",
+    "max_touch_points",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
