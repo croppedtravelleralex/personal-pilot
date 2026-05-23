@@ -16,9 +16,9 @@
 ## 当前报告口径
 
 - Mainline delivery：`100% / 0% / green`
-- Overall end-state：`30% / 70% / yellow`
-- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450+` target-only
-- Behavior：`13` shipped primitives / `450+` target-only
+- Overall end-state：`40% / 60% / yellow`
+- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450` taxonomy seed / full observed coverage pending
+- Behavior：`13` shipped primitives / `8` page archetypes / `450` taxonomy seed / full replay runtime pending
 - Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已落地，可恢复 target profile 和 proxy session bindings；外部机器 portability 仍需真实环境验收
 
 历史 `77% / 23%` 或 `82% / 18%` 只能作为历史上下文，不作为 live truth。

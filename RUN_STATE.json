@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 29,
+  "loop_iteration": 30,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P13 external distribution readiness",
-  "current_objective": "外部分发前 known limitations、manual operator smoke checklist、release-note boundaries 已写入维护文档并接入入口链路",
-  "last_result_summary": "新增 docs/24-external-distribution-readiness.md，并同步 README、docs 入口、current-state、roadmap、backlog、AI playbook、TODO；分发前限制不被冒充为生产闭环",
-  "next_action_hint": "Run P13 gates, commit/push, then either execute manual operator smoke or continue provider/profile/runtime/taxonomy deepening",
+  "current_focus": "P14 overall 40/60 evidence infrastructure",
+  "current_objective": "将 overall end-state 从 30/70/yellow 推进到 40/60/yellow：新增 release/provider/session/taxonomy 可重复 evidence 入口和 450 taxonomy seed，同时保留真实 provider/跨机器/完整 replay/observed coverage 未闭环边界",
+  "last_result_summary": "新增 release performance smoke、external distribution smoke、provider acceptance preflight、SessionBundle portability smoke、taxonomy audit、fingerprint/behavior taxonomy seed，并在 Automation audit 中暴露 behavior taxonomy seed 状态",
+  "next_action_hint": "Run P14 smoke/audit gates and full project gates, commit/push, then continue real provider acceptance or second-machine portability smoke when external prerequisites exist",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -174,6 +174,12 @@
       "kind": "docs",
       "status": "success",
       "note": "External distribution readiness now has a canonical Chinese doc covering known limitations, manual operator smoke, and release-note boundaries before any external handoff."
+    },
+    {
+      "title": "P14 overall 40/60 evidence infrastructure",
+      "kind": "feature",
+      "status": "success",
+      "note": "Release/provider/session/taxonomy evidence entrypoints and 450 taxonomy seeds move Overall to 40/60/yellow without claiming real provider closure, cross-machine portability, full observed fingerprint coverage, or full replay runtime."
     }
   ],
   "blocked_reason": "",

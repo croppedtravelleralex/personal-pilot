@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "behavior_event_taxonomy_v1",
+  "generatedAt": "2026-05-23",
+  "status": "taxonomy_seed_not_full_replay_runtime",
+  "shippedPrimitiveCount": 13,
+  "pageArchetypeCount": 8,
+  "targetEventCount": 450,
+  "rules": [
+    "Only primitives implemented in runtime count as shipped primitives.",
+    "Generated event families are taxonomy targets until replay, debug, manual gate, and recovery evidence exists.",
+    "Every promoted event must define replay semantics, audit payload, failure states, and recovery behavior."
+  ],
+  "dimensions": {
+    "pageArchetypes": ["article", "search_results", "listing", "product", "form", "auth", "dashboard", "generic"],
+    "phases": ["readiness", "settle", "scan", "focus", "input", "consume", "persist", "recover", "manual_gate", "audit"],
+    "outcomes": ["planned", "executed", "skipped", "failed", "aborted", "recovered"]
+  },
+  "families": [
+    { "id": "readiness_wait", "targetCount": 40, "currentEvidence": "wait_for_readiness primitive" },
+    { "id": "settle_idle", "targetCount": 38, "currentEvidence": "idle and wait_for_content_stable primitives" },
+    { "id": "scroll_scan", "targetCount": 48, "currentEvidence": "scroll_progressive and scroll_to_ratio primitives" },
+    { "id": "hover_focus", "targetCount": 42, "currentEvidence": "hover_candidate, focus_element, blur_element primitives" },
+    { "id": "typing_input", "targetCount": 44, "currentEvidence": "type_with_rhythm and clear_with_corrections primitives" },
+    { "id": "content_pause", "targetCount": 36, "currentEvidence": "pause_on_content primitive" },
+    { "id": "session_persist", "targetCount": 30, "currentEvidence": "persist_session_state primitive" },
+    { "id": "budget_recovery", "targetCount": 40, "currentEvidence": "soft_abort_if_budget_exceeded primitive" },
+    { "id": "manual_gate", "targetCount": 42, "currentEvidence": "operator commands exist; per-event semantics pending" },
+    { "id": "debug_audit", "targetCount": 48, "currentEvidence": "BehaviorTraceSummary audit contract" },
+    { "id": "provider_assist", "targetCount": 42, "currentEvidence": "CAPTCHA/SMS/Email readiness only; CDP fill pending" }
+  ]
+}

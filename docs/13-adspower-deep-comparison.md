@@ -4,7 +4,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ## 统一口径
 
 - 主线交付：`100% / 0% / green`
-- 整体终局：`30% / 70% / yellow`
+- 整体终局：`40% / 60% / yellow`
 - 本文属于 `整体终局` 轨道，不是当前主线 closeout 进度板
 
 详细阶段任务、评分板、以及 `当前 / 目标 / AdsPower` 的统一汇报入口，见 `docs/19-phase-plan-and-scorecard.md`。
@@ -40,7 +40,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ## 追评 AdsPower 应该并到哪条线
 
-AdsPower 追评属于 `整体终局 30% / 70% / yellow` 的范围，主要覆盖：
+AdsPower 追评属于 `整体终局 40% / 60% / yellow` 的范围，主要覆盖：
 
 1. 更深的指纹 / 内核 materialization
 2. 更强的真实性 observation / validation board
@@ -52,7 +52,7 @@ AdsPower 追评属于 `整体终局 30% / 70% / yellow` 的范围，主要覆盖
 ## 当前结论
 
 - 如果问“当前桌面 App 主线是否接近收口”，答案是：`100% / 0% / green`
-- 如果问“是否已经做到 AdsPower 级丰富、真实、完整”，答案是：还没有，这部分应按 `30% / 70% / yellow` 口径理解
+- 如果问“是否已经做到 AdsPower 级丰富、真实、完整”，答案是：还没有，这部分应按 `40% / 60% / yellow` 口径理解
 - 当前和 AdsPower 的差距，核心不在“有没有页面”，而在真实性、运行时深度、验证证据、代理生态和自动化广度
 
 ## P12 Refresh Guard

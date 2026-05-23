@@ -39,6 +39,7 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 
 - [x] Run Win11 local release gate without reopening scope (`scripts/windows_local_verify.ps1 -SkipContinuityTest`)
 - [x] Add P13 external distribution readiness doc with known limitations, manual smoke checklist, and release-note boundaries
+- [x] Add repeatable P14 smoke/audit entries for release performance, external distribution, provider acceptance preflight, SessionBundle portability, and taxonomy accounting
 - [ ] Execute manual operator smoke before external distribution
 
 ## Overall End-State 70%
@@ -72,6 +73,8 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Add runtime adapter / release smoke contract without hosting Chromium/Firefox forks
 - [x] Add release measurement pending fields and Overview adapter boundary visibility without using dev metrics as release evidence
 - [x] Add AdsPower boundary refresh guard: defer score refresh until B1-B5 evidence exists
+- [x] Add machine-readable `450` fingerprint signal taxonomy seed and taxonomy audit gate
+- [x] Add machine-readable `450` behavior event taxonomy seed and expose taxonomy seed status in Automation behavior audit
 - [ ] Deepen headed realism and kernel strategy without breaking the Win11 / Tauri baseline
 - [ ] Land the highest-ROI parts of the external browser integration plan into maintainable main-repo assets
 

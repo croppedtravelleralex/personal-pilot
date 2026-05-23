@@ -5,10 +5,11 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ## 当前 live truth
 
 - Mainline delivery：`100% / 0% / green` (3 P0 items closed)
-- Overall end-state：`30% / 70% / yellow`
+- Overall end-state：`40% / 60% / yellow`
 - 第一族控制 schema 已声明 `80` 个 core control fields。
 - 当前 runtime projection 是 `26` 个 env-backed fingerprint fields，其中 `25` 个来自 first-family control fields，另含 derived `platform`。
-- 当前 behavior runtime 已交付 `13` 个 primitives；P10 已新增 behavior audit contract，覆盖 `8` 个 page archetypes、workflow/debug/manual-gate/recovery audit 状态，并继续把 `450+` event taxonomy 标为 target-only。
+- 当前 behavior runtime 已交付 `13` 个 primitives；P10 已新增 behavior audit contract，覆盖 `8` 个 page archetypes、workflow/debug/manual-gate/recovery audit 状态；P14 已新增 machine-readable `450` event taxonomy seed，但仍不是完整 replay runtime。
+- P14 已新增 machine-readable `450` fingerprint signal taxonomy seed、release performance smoke、external distribution smoke、provider acceptance preflight、SessionBundle portability smoke 和 taxonomy audit 脚本；这些把整体终态证据入口从文档目标推进到可重复验收入口。
 - cookie / localStorage / sessionStorage 跨 app restart 持久化与恢复已落地。
 - profile-scoped `SessionBundle` export/import preflight/dry-run/confirmed local restore write path 已落地：可导出 profile refs、fingerprint/network/continuity/behavior references、session binding metadata、cookie/localStorage/sessionStorage 存在性与计数；默认脱敏，显式本地开关才包含敏感 payload；import preflight 可检查 schema、引用缺失和 profile 冲突；dry-run 不写 DB；confirmed restore 可 upsert target profile 和 `proxy_session_bindings`，敏感 payload 只在 bundle 包含时恢复。
 
@@ -30,7 +31,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ## Reporting Rule From Now On
 
 - current shipped app / closeout / native mainline：`100% / 0% / green`。
-- complete app / AdsPower catch-up / `50+` control / `450+` fingerprint or event target：`30% / 70% / yellow`。
+- complete app / AdsPower catch-up / `50+` control / `450+` fingerprint or event target：`40% / 60% / yellow`。
 - 汇报时必须分开 Mainline 和 Overall，不把目标深度写成已交付 runtime depth。
 
 ## 已确认落地
@@ -50,7 +51,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
 - Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。P5 已通过 WSL2 Lightpanda nightly 真实 CDP smoke：`validation_lightpanda_smoke --use-wsl-lightpanda` 双次复跑 `status=passed`。P6 已收敛 validation evidence schema：signals 显式携带 `collectorScope`、`runtimeAdapter`、`targetProfileBrowser`、`failureReason`，旧报告读取时从 legacy `detail` 自动补齐 metadata。P7 已新增 fingerprint observation audit：只从 WebRTC/canvas/audio/leak observed signals 统计真实观察覆盖，不把 `80` declared controls、`26` runtime projected fields 或 `450+` target-only signals 计入 observed proof。
 - Automation 已接入 P10 behavior audit contract：报告 `13` shipped primitives、`8` page archetypes、workflow graph/debug trace/manual gate/recovery semantics 覆盖状态，并明确 `450+` event taxonomy 仍是 target-only。
-- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平；真实 Lightpanda/CDP operator smoke 与冷启动/RSS/进程数测量仍需单独执行。
+- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P14 已新增 `scripts/release_performance_smoke.ps1` 并产出 release exe report，当前实测为 warning：`9301ms` cold start、`411MB` idle RSS、`14` processes，均超过默认预算；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平。
 
 ## 未完成边界
 
@@ -64,18 +65,18 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ### Overall remaining `70%`
 
 - Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list、profile-level evidence export、P5 smoke 脚本、P6 explicit evidence metadata 和 P7 fingerprint observation audit。WebRTC/audio capability warning、canvas `toDataURL` missing 等真实失败/警告原因必须保留在 report 中。
-- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地；P9 已有 production readiness checklist 和 Settings operator surface，可报告凭证、manager wiring、CDP 自动化、operator UI blocker、acceptance checklist；尚未完成真实 provider 验收和自动化闭环。
+- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地；P9 已有 production readiness checklist 和 Settings operator surface；P14 已新增 `scripts/provider_acceptance_preflight.ps1`，可生成凭证/acceptance blocker report；尚未完成真实 provider 验收、manager wiring 和自动化闭环。
 - runtime materialization depth 已从 `12` 扩到 `26` projected fields；P7 已有 observed audit summary，但仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
-- `450+` fingerprint signal taxonomy / full observation coverage 未落地；当前 P7 只是 WebRTC/canvas/audio/leak observed audit，不是 450+ 全量采集。
-- `450+` event taxonomy 未落地；P10 只新增 audit contract 和 Automation surface，不是全量 replay taxonomy 交付。
-- `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；跨机器 profile portability 仍需真实环境验收。
+- `450+` fingerprint signal taxonomy 已有 machine-readable seed：`docs/taxonomy/fingerprint-signal-taxonomy.json`，并可用 `scripts/taxonomy_audit.ps1` 校验计数；full observation coverage 未落地。
+- `450+` event taxonomy 已有 machine-readable seed：`docs/taxonomy/behavior-event-taxonomy.json`，Automation behavior audit 可显示 taxonomy seed 状态；完整 replay runtime 未交付。
+- `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；P14 已新增 `scripts/session_bundle_portability_smoke.ps1` 记录本机 contract 和跨机器 manual steps；跨机器 profile portability 仍需真实第二环境验收。
 - headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前仅有 adapter/release measurement contract、Overview 可见性和 P12 AdsPower refresh guard，不是 headed runtime 实现，也不是 AdsPower 评分上调。
 - external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。
-- 外部分发前必须执行或明确跳过 `docs/24-external-distribution-readiness.md` 的人工 operator smoke，并保留 provider、profile portability、release measurement、AdsPower refresh 和 `450+` taxonomy 限制。
+- 外部分发前必须执行或明确跳过 `docs/24-external-distribution-readiness.md` 的人工 operator smoke，并保留 provider、profile portability、release measurement warning、AdsPower refresh 和 `450+` taxonomy 限制。
 
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. 按 `docs/24-external-distribution-readiness.md` 执行人工 operator smoke，决定是否对外分发
-2. 后续只有 B1-B5 出现新 evidence 后，才允许重新执行 AdsPower score refresh
-3. 继续 profile portability、provider closure、runtime measurement 和 `450+` taxonomy 深化
+1. 运行 P14 smoke/audit 脚本，保存 evidence report：release performance、external distribution、provider preflight、session portability、taxonomy audit
+2. 在第二台/干净 Win11 环境执行真正跨机器 SessionBundle portability smoke
+3. 配置真实 provider credentials 后执行 provider acceptance，再推进 CDP detect/fill/operator closure

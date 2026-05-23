@@ -478,6 +478,9 @@ export interface DesktopBehaviorAuditContract {
   generatedAt: string;
   shippedPrimitiveCount: number;
   targetEventTaxonomyLabel: string;
+  targetEventTaxonomyStatus: string;
+  targetEventFamilyCount: number;
+  targetEventTaxonomyPath: string;
   pageArchetypeCount: number;
   supportedPrimitives: string[];
   pageArchetypes: string[];

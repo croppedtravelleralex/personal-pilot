@@ -279,7 +279,9 @@ export function AutomationPage() {
             <article className="automation-metric-strip__item">
               <span className="automation-metric-strip__label">Target taxonomy</span>
               <strong>{viewModel.behaviorAudit.targetEventTaxonomyLabel}</strong>
-              <small>{viewModel.behaviorAudit.warnings.join(" ")}</small>
+              <small>
+                {viewModel.behaviorAudit.targetEventTaxonomyStatus}; families: {viewModel.behaviorAudit.targetEventFamilyCount}; {viewModel.behaviorAudit.targetEventTaxonomyPath}
+              </small>
             </article>
           </div>
         ) : null}
@@ -289,7 +291,7 @@ export function AutomationPage() {
               <article className="contract-card" key={item.id}>
                 <div className="contract-card__top">
                   <strong>{item.label}</strong>
-                  <span className={`badge badge--${item.status === "target_only" ? "warning" : "info"}`}>
+                  <span className={`badge badge--${item.status === "target_only" || item.status === "taxonomy_seed" ? "warning" : "info"}`}>
                     {item.status}
                   </span>
                 </div>

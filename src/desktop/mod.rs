@@ -524,6 +524,9 @@ pub struct DesktopBehaviorAuditContract {
     pub generated_at: String,
     pub shipped_primitive_count: usize,
     pub target_event_taxonomy_label: String,
+    pub target_event_taxonomy_status: String,
+    pub target_event_family_count: usize,
+    pub target_event_taxonomy_path: String,
     pub page_archetype_count: usize,
     pub supported_primitives: Vec<String>,
     pub page_archetypes: Vec<String>,
@@ -2697,6 +2700,8 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
 pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
     let supported_primitives = SUPPORTED_PRIMITIVES.iter().map(|item| item.to_string()).collect();
     let page_archetypes = PAGE_ARCHETYPES.iter().map(|item| item.to_string()).collect();
+    let target_event_taxonomy_path = "docs/taxonomy/behavior-event-taxonomy.json".to_string();
+    let target_event_family_count = 11;
     let coverage = vec![
         DesktopBehaviorAuditCoverageItem {
             id: "workflow_graph".to_string(),
@@ -2725,8 +2730,10 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
         DesktopBehaviorAuditCoverageItem {
             id: "target_taxonomy".to_string(),
             label: "450+ event taxonomy".to_string(),
-            status: "target_only".to_string(),
-            evidence: "Target size remains a roadmap goal; only shipped primitives are counted as delivered".to_string(),
+            status: "taxonomy_seed".to_string(),
+            evidence: format!(
+                "Machine-readable taxonomy seed exists at {target_event_taxonomy_path}; only shipped primitives are counted as delivered"
+            ),
         },
     ];
     let warnings = vec![
@@ -2743,6 +2750,9 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
         generated_at: now_ts_string(),
         shipped_primitive_count: SUPPORTED_PRIMITIVES.len(),
         target_event_taxonomy_label: "450+".to_string(),
+        target_event_taxonomy_status: "taxonomy_seed_not_full_replay_runtime".to_string(),
+        target_event_family_count,
+        target_event_taxonomy_path,
         page_archetype_count: PAGE_ARCHETYPES.len(),
         supported_primitives,
         page_archetypes,
@@ -8666,10 +8676,19 @@ mod tests {
         assert_eq!(contract.shipped_primitive_count, 13);
         assert_eq!(contract.page_archetype_count, 8);
         assert_eq!(contract.target_event_taxonomy_label, "450+");
+        assert_eq!(
+            contract.target_event_taxonomy_status,
+            "taxonomy_seed_not_full_replay_runtime"
+        );
+        assert_eq!(contract.target_event_family_count, 11);
+        assert_eq!(
+            contract.target_event_taxonomy_path,
+            "docs/taxonomy/behavior-event-taxonomy.json"
+        );
         assert!(contract.supported_primitives.contains(&"wait_for_readiness".to_string()));
         assert!(contract.supported_primitives.contains(&"soft_abort_if_budget_exceeded".to_string()));
         assert!(contract.coverage.iter().any(|item| {
-            item.id == "target_taxonomy" && item.status == "target_only"
+            item.id == "target_taxonomy" && item.status == "taxonomy_seed"
         }));
         assert!(contract
             .warnings

@@ -13,9 +13,9 @@
 ## 默认事实
 
 - Mainline：`100% / 0% / green`
-- Overall：`30% / 70% / yellow`
-- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450+` target-only
-- Behavior：`13` shipped primitives / `8` page archetypes / P10 audit contract / `450+` target-only
+- Overall：`40% / 60% / yellow`
+- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450` taxonomy seed / full observed coverage pending
+- Behavior：`13` shipped primitives / `8` page archetypes / P10 audit contract / `450` taxonomy seed / full replay runtime pending
 - Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已落地，跨机器 profile portability 验收未落地
 
 ## 汇报规则

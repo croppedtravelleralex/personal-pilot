@@ -13,8 +13,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 保持进度真相和能力评分分离：
 
 - mainline delivery: `100% / 0% / green`
-- overall end-state: `30% / 70% / yellow`
-- internal capability score: `34 / 100`
+- overall end-state: `40% / 60% / yellow`
+- internal capability score: `40 / 100`
 - AdsPower public-boundary reference score: `83 / 100`
 
 The progress split answers “how much of our declared scope is closed”.
@@ -635,7 +635,7 @@ Suggested agent plan:
 Use progress for scope closure:
 
 - `95% / 7% / green`
-- `30% / 70% / yellow`
+- `40% / 60% / yellow`
 
 Use score only for capability maturity and benchmark distance.
 
@@ -661,18 +661,18 @@ Use score only for capability maturity and benchmark distance.
 
 ### Current Scorecard
 
-`Current capability score = 34 / 100`
+`Current capability score = 40 / 100`
 
-P12 guard result: score refresh is deferred until B1-B5 evidence exists. Do not raise this score from docs-only updates.
+P14 result: score moves from `34 / 100` to `40 / 100` because repeatable evidence entrypoints and machine-readable taxonomy seeds landed. AdsPower parity score is not raised; B1-B5 still need real provider, portability, runtime, and observed/replay evidence before AdsPower refresh.
 
 | Dimension | Weight | Current evidence | Current score | Weighted score | Final target | AdsPower public boundary |
 | --- | ---: | --- | ---: | ---: | --- | --- |
-| Fingerprint quantity | 15 | `80` declared controls / `26` runtime-projected fields | `4/10` | `6.0` | `450+` total signals with control / derived / observation split | `50+` customizable parameters and `20+` options, public score `8/10` |
+| Fingerprint quantity | 15 | `80` declared controls / `26` runtime-projected fields / `450` taxonomy seed | `5/10` | `7.5` | `450+` total signals with control / derived / observation split | `50+` customizable parameters and `20+` options, public score `8/10` |
 | Fingerprint realism | 20 | first-family consistency start exists, but runtime depth and validation are shallow | `2/10` | `4.0` | headed realism + validation board + observation evidence | public score `8/10` |
-| Event taxonomy | 15 | `13` shipped primitives | `2/10` | `3.0` | `450+` replayable event taxonomy | public count undisclosed, public breadth score `8/10` |
+| Event taxonomy | 15 | `13` shipped primitives / `450` taxonomy seed / replay runtime pending | `4/10` | `6.0` | `450+` replayable event taxonomy | public count undisclosed, public breadth score `8/10` |
 | Proxy / IP | 15 | sticky-aware contract + session bindings and provider-aware rotation are landed; broader provider ecosystem evidence remains incomplete | `5/10` | `7.5` | provider-grade rotation + lease / cooldown / rollback + coherence evidence | public score `7/10` |
-| Session continuity | 10 | restart continuity and `SessionBundle` export/import preflight/restore contract are landed; real portability smoke is open | `6/10` | `6.0` | full `SessionBundle` + portability + import/export | public score `8/10` |
-| Product surface | 10 | real desktop entry + multi-workbench surface are landed | `5/10` | `5.0` | richer operator tooling, groups, portability, team-grade workflows | public score `9/10` |
+| Session continuity | 10 | restart continuity, `SessionBundle` export/import preflight/restore contract, and local portability smoke contract are landed; real cross-machine smoke is open | `7/10` | `7.0` | full `SessionBundle` + portability + import/export | public score `8/10` |
+| Product surface | 10 | real desktop entry, multi-workbench surface, external distribution preflight, and readiness docs are landed | `6/10` | `6.0` | richer operator tooling, groups, portability, team-grade workflows | public score `9/10` |
 | AdsPower parity | 15 | current product has a base surface and some real contracts, but deep parity is far away | `2/10` | `3.0` | reach or surpass AdsPower on the benchmark board | AdsPower baseline `10/10` |
 
 `AdsPower public-boundary reference score = 83 / 100`
@@ -689,9 +689,9 @@ Always report fingerprint and event quantities as multi-part numbers:
 
 Default wording:
 
-- fingerprint quantity: `80 declared / 26 runtime-projected / 450+ target-only`
-- event quantity: `13 shipped / 450+ target-only`
-- continuity: `restart continuity landed / SessionBundle contract landed / portability not yet landed`
+- fingerprint quantity: `80 declared / 26 runtime-projected / 450 taxonomy seed / full observed coverage pending`
+- event quantity: `13 shipped / 450 taxonomy seed / full replay runtime pending`
+- continuity: `restart continuity landed / SessionBundle contract landed / local portability contract landed / cross-machine smoke not yet landed`
 
 ## AdsPower Benchmark Summary
 

@@ -4,7 +4,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ## 结论
 
-PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控外部分发前检查；但不应直接宣称完整生产闭环。当前主线交付口径仍是 `100% / 0% / green`，整体终态口径仍是 `30% / 70% / yellow`。
+PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控外部分发前检查；但不应直接宣称完整生产闭环。当前主线交付口径仍是 `100% / 0% / green`，整体终态口径仍是 `40% / 60% / yellow`。
 
 ## 可分发资产
 
@@ -18,10 +18,10 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 
 1. Provider closure：CAPTCHA / SMS / Email 已有 readiness surface 和 blockers，但真实 provider smoke、manager wiring、CDP detect/fill 和 operator 闭环未完成。
 2. Profile portability：`SessionBundle` export/import/preflight/dry-run/confirmed local restore 已落地，但跨机器 portability smoke 未完成。
-3. Runtime measurement：release contract 有 cold start/RSS/process targets，但真实 release artifact 实测仍是 `pending_operator_measurement`。
+3. Runtime measurement：P14 已有 release artifact 实测入口和 report；当前 `personal-pilot-tauri.exe` smoke 为 warning，`9301ms` cold start、`411MB` idle RSS、`14` processes 均超过默认预算，外部分发前应先做性能 mitigation 或明确记录例外。
 4. Validation evidence：P5 Lightpanda/CDP smoke 可重复生成 profile runtime evidence report，但 WebRTC/audio warning、canvas failure 等 failure reason 必须保留。
-5. Fingerprint depth：当前是 `80` declared controls / `26` runtime-projected fields / `450+` target-only，不是全量 observed fingerprint coverage。
-6. Behavior depth：当前是 `13` shipped primitives / `8` page archetypes / `450+` target-only，不是完整 replay taxonomy。
+5. Fingerprint depth：当前是 `80` declared controls / `26` runtime-projected fields / `450` taxonomy seed，不是全量 observed fingerprint coverage。
+6. Behavior depth：当前是 `13` shipped primitives / `8` page archetypes / `450` taxonomy seed，不是完整 replay taxonomy。
 7. AdsPower boundary：P12 结论是 refresh deferred；没有 B1-B5 新证据前不得重算 score 或宣称追平。
 
 ## 手工 operator smoke 清单
@@ -44,7 +44,7 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 - 已有 validation evidence、profile/session bundle、provider readiness、automation audit 和 runtime posture 的本地可视化能力。
 - 当前还不是完整 AdsPower 级 antidetect/browser-kernel platform。
 - 当前不托管 Chromium / Firefox fork，外部浏览器能力只能通过 adapter contract 逐步接入。
-- Provider、profile portability、release performance measurement 和 `450+` taxonomy 都属于下一阶段验收项。
+- Provider、profile portability、release performance mitigation 和 `450` taxonomy seed 到 observed/replay runtime 的转化都属于下一阶段验收项。
 
 ## P13 退出条件
 
