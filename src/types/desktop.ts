@@ -340,6 +340,24 @@ export interface DesktopImportExportSkeleton {
   updatedAt: string;
 }
 
+export interface DesktopSessionBundleExportRequest {
+  profileId: string;
+  includeSensitivePayloads?: boolean;
+}
+
+export interface DesktopSessionBundleExport {
+  bundleId: string;
+  profileId: string;
+  exportedAt: string;
+  schemaVersion: string;
+  collectorVersion: string;
+  sessionBindingCount: number;
+  includeSensitivePayloads: boolean;
+  exportPath: string;
+  warnings: string[];
+  summary: string;
+}
+
 export type DesktopJsonValue =
   | string
   | number

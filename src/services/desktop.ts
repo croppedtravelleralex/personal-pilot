@@ -11,6 +11,8 @@ import type {
   DesktopDirectoryTarget,
   DesktopImportExportSkeleton,
   DesktopJsonValue,
+  DesktopSessionBundleExport,
+  DesktopSessionBundleExportRequest,
   DesktopLaunchTemplateRunRequest,
   DesktopLaunchTemplateRunResult,
   DesktopLocalApiMutationResult,
@@ -473,6 +475,10 @@ export const readLocalAssetWorkspace = (): Promise<DesktopLocalAssetWorkspaceSna
 
 export const readImportExportSkeleton = (): Promise<DesktopImportExportSkeleton> =>
   invokeDesktop("read_import_export_skeleton");
+
+export const exportSessionBundle = (
+  request: DesktopSessionBundleExportRequest,
+): Promise<DesktopSessionBundleExport> => invokeDesktop("export_session_bundle", { request });
 
 export const openLocalAssetEntry = (entryId: DesktopLocalAssetEntryId): Promise<void> =>
   invokeDesktop("open_local_asset_entry", { entryId });

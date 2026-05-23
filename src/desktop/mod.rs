@@ -318,6 +318,73 @@ pub struct DesktopImportExportSkeleton {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleExportRequest {
+    pub profile_id: String,
+    pub include_sensitive_payloads: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleArtifactSummary {
+    pub present: bool,
+    pub item_count: i64,
+    pub included: bool,
+    pub value: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleSessionBinding {
+    pub session_key: String,
+    pub proxy_id: String,
+    pub provider: Option<String>,
+    pub region: Option<String>,
+    pub site_key: Option<String>,
+    pub requested_region: Option<String>,
+    pub requested_provider: Option<String>,
+    pub cookies: DesktopSessionBundleArtifactSummary,
+    pub local_storage: DesktopSessionBundleArtifactSummary,
+    pub session_storage: DesktopSessionBundleArtifactSummary,
+    pub cookie_updated_at: Option<String>,
+    pub storage_updated_at: Option<String>,
+    pub last_success_at: Option<String>,
+    pub last_failure_at: Option<String>,
+    pub last_used_at: String,
+    pub expires_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundlePayload {
+    pub schema_version: String,
+    pub collector_version: String,
+    pub bundle_id: String,
+    pub exported_at: String,
+    pub profile: DesktopProfileDetail,
+    pub portability_contract: Value,
+    pub session_bindings: Vec<DesktopSessionBundleSessionBinding>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleExport {
+    pub bundle_id: String,
+    pub profile_id: String,
+    pub exported_at: String,
+    pub schema_version: String,
+    pub collector_version: String,
+    pub session_binding_count: usize,
+    pub include_sensitive_payloads: bool,
+    pub export_path: String,
+    pub warnings: Vec<String>,
+    pub summary: String,
+}
+
 fn now_ts_string() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1684,6 +1751,7 @@ pub fn read_desktop_import_export_skeleton(
         ],
         supported_export_kinds: vec![
             "profile_archive".to_string(),
+            "session_bundle".to_string(),
             "browser_environment".to_string(),
             "bookmark_catalog".to_string(),
             "runtime_policy".to_string(),
@@ -1756,9 +1824,164 @@ pub fn read_desktop_import_export_skeleton(
             "Only local file bundles and queue directories are modeled here. No cloud sync or team workspace is involved.".to_string(),
             "The import/export layer is intentionally manifest-first so future compiler or recorder outputs can plug into the same queue.".to_string(),
             "Opening an asset entry will prepare parent directories on demand, but it will not fabricate remote or cloud contracts.".to_string(),
+            "Session bundle export is profile-scoped and manifest-first; restore/import remains a future explicit confirmation flow.".to_string(),
         ],
         updated_at: now_ts_string(),
     }
+}
+
+fn parsed_json_artifact_summary(
+    raw: Option<String>,
+    include_sensitive_payloads: bool,
+) -> DesktopSessionBundleArtifactSummary {
+    let parsed = raw.and_then(|value| serde_json::from_str::<Value>(&value).ok());
+    let item_count = match parsed.as_ref() {
+        Some(Value::Array(values)) => values.len() as i64,
+        Some(Value::Object(values)) => values.len() as i64,
+        Some(Value::Null) | None => 0,
+        Some(_) => 1,
+    };
+
+    DesktopSessionBundleArtifactSummary {
+        present: parsed.is_some(),
+        item_count,
+        included: include_sensitive_payloads && parsed.is_some(),
+        value: include_sensitive_payloads.then_some(parsed).flatten(),
+    }
+}
+
+async fn load_session_bundle_bindings(
+    db: &DbPool,
+    fingerprint_profile_id: &str,
+    include_sensitive_payloads: bool,
+) -> Result<Vec<DesktopSessionBundleSessionBinding>> {
+    let rows = sqlx::query(
+        r#"SELECT
+               session_key, proxy_id, provider, region, site_key, requested_region,
+               requested_provider, cookies_json, cookie_updated_at, local_storage_json,
+               session_storage_json, storage_updated_at, last_success_at, last_failure_at,
+               last_used_at, expires_at, created_at, updated_at
+           FROM proxy_session_bindings
+           WHERE fingerprint_profile_id = ?
+           ORDER BY CAST(last_used_at AS INTEGER) DESC, session_key DESC"#,
+    )
+    .bind(fingerprint_profile_id)
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| DesktopSessionBundleSessionBinding {
+            session_key: row.get("session_key"),
+            proxy_id: row.get("proxy_id"),
+            provider: row.get("provider"),
+            region: row.get("region"),
+            site_key: row.get("site_key"),
+            requested_region: row.get("requested_region"),
+            requested_provider: row.get("requested_provider"),
+            cookies: parsed_json_artifact_summary(
+                row.get("cookies_json"),
+                include_sensitive_payloads,
+            ),
+            local_storage: parsed_json_artifact_summary(
+                row.get("local_storage_json"),
+                include_sensitive_payloads,
+            ),
+            session_storage: parsed_json_artifact_summary(
+                row.get("session_storage_json"),
+                include_sensitive_payloads,
+            ),
+            cookie_updated_at: row.get("cookie_updated_at"),
+            storage_updated_at: row.get("storage_updated_at"),
+            last_success_at: row.get("last_success_at"),
+            last_failure_at: row.get("last_failure_at"),
+            last_used_at: row.get("last_used_at"),
+            expires_at: row.get("expires_at"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+        .collect())
+}
+
+pub async fn export_desktop_session_bundle(
+    db: &DbPool,
+    database_url: &str,
+    request: DesktopSessionBundleExportRequest,
+) -> Result<DesktopSessionBundleExport> {
+    let profile_id = normalized_optional_text(Some(request.profile_id))
+        .ok_or_else(|| anyhow::anyhow!("profile_id is required"))?;
+    let include_sensitive_payloads = request.include_sensitive_payloads.unwrap_or(false);
+    let exported_at = now_ts_string();
+    let bundle_id = format!("session-bundle-{profile_id}-{exported_at}");
+    let profile = load_desktop_profile_detail(db, &profile_id).await?;
+    let bindings = load_session_bundle_bindings(
+        db,
+        &profile.profile.fingerprint_profile_id,
+        include_sensitive_payloads,
+    )
+    .await?;
+
+    let mut warnings = Vec::new();
+    if !include_sensitive_payloads {
+        warnings.push(
+            "sensitive session payloads redacted; re-export with includeSensitivePayloads=true for local restore evidence"
+                .to_string(),
+        );
+    }
+    if bindings.is_empty() {
+        warnings.push(
+            "no proxy_session_bindings found for this profile fingerprint; restart continuity evidence is absent"
+                .to_string(),
+        );
+    }
+    if profile.profile.behavior_profile_id.is_none() {
+        warnings.push("profile has no behavior profile reference".to_string());
+    }
+
+    let payload = DesktopSessionBundlePayload {
+        schema_version: "session-bundle-v1".to_string(),
+        collector_version: "desktop-session-bundle-export-v1".to_string(),
+        bundle_id: bundle_id.clone(),
+        exported_at: exported_at.clone(),
+        profile,
+        portability_contract: serde_json::json!({
+            "scope": "profile_session_bundle",
+            "restoreStatus": "not_implemented",
+            "importMode": "manifest_preflight_only",
+            "declaredAppliedObservedBoundary": "profile links and persisted session artifacts are exported; browser runtime restore remains separately verified",
+            "requiredForRestore": [
+                "fingerprintProfileId",
+                "networkPolicyId",
+                "continuityPolicyId",
+                "proxySessionBindings"
+            ]
+        }),
+        session_bindings: bindings,
+        warnings: warnings.clone(),
+    };
+
+    let export_queue_dir = asset_workspace_root_from_database_url(database_url).join("exports");
+    fs::create_dir_all(&export_queue_dir)?;
+    let export_path = export_queue_dir.join(format!("{bundle_id}.json"));
+    fs::write(&export_path, serde_json::to_string_pretty(&payload)?)?;
+    let session_binding_count = payload.session_bindings.len();
+    let summary = format!(
+        "Exported session bundle for profile {profile_id}: {session_binding_count} binding(s), sensitive payloads {}.",
+        if include_sensitive_payloads { "included" } else { "redacted" }
+    );
+
+    Ok(DesktopSessionBundleExport {
+        bundle_id,
+        profile_id,
+        exported_at,
+        schema_version: payload.schema_version,
+        collector_version: payload.collector_version,
+        session_binding_count,
+        include_sensitive_payloads,
+        export_path: export_path.to_string_lossy().to_string(),
+        warnings,
+        summary,
+    })
 }
 
 pub fn resolve_desktop_local_asset_entry_path(
@@ -7269,6 +7492,112 @@ mod tests {
         assert_eq!(proxy_row.get::<i64, _>("success_count"), 0);
         assert_eq!(proxy_row.get::<i64, _>("failure_count"), 1);
         assert_eq!(proxy_row.get::<Option<String>, _>("cooldown_until"), None);
+    }
+
+    #[tokio::test]
+    async fn export_session_bundle_writes_manifest_and_respects_sensitive_payload_flag() {
+        let db_url = format!(
+            "sqlite:///tmp/persona_pilot_session_bundle_{}.db",
+            Uuid::new_v4()
+        );
+        let db = init_db(&db_url).await.expect("init db");
+        seed_launch_test_fixtures(&db).await;
+        sqlx::query(
+            r#"INSERT INTO proxies (
+                   id, scheme, host, port, provider, region, country, status, score,
+                   success_count, failure_count, created_at, updated_at
+               ) VALUES (
+                   'proxy-session-bundle-test', 'http', '127.0.0.1', 8081, 'provider-a', 'us-east',
+                   'US', 'active', 0.9, 0, 0, '2000000000', '2000000000'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed proxy");
+        sqlx::query(
+            r#"INSERT INTO proxy_session_bindings (
+                   session_key, proxy_id, provider, region, fingerprint_profile_id, site_key,
+                   requested_region, requested_provider, cookies_json, cookie_updated_at,
+                   local_storage_json, session_storage_json, storage_updated_at,
+                   last_success_at, last_failure_at, last_used_at, expires_at, created_at, updated_at
+               ) VALUES (
+                   'session-bundle-test', 'proxy-session-bundle-test', 'provider-a', 'us-east',
+                   'fp-launch-test', 'example.com', 'us-east', 'provider-a',
+                   '[{"name":"sid","value":"secret"}]', '2000000001',
+                   '{"theme":"dark"}', '{"step":"1"}', '2000000002',
+                   '2000000003', NULL, '2000000004', NULL, '2000000000', '2000000004'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed session binding");
+
+        let redacted = export_desktop_session_bundle(
+            &db,
+            &db_url,
+            DesktopSessionBundleExportRequest {
+                profile_id: "persona-launch-test".to_string(),
+                include_sensitive_payloads: Some(false),
+            },
+        )
+        .await
+        .expect("export redacted bundle");
+        assert_eq!(redacted.profile_id, "persona-launch-test");
+        assert_eq!(redacted.schema_version, "session-bundle-v1");
+        assert_eq!(redacted.session_binding_count, 1);
+        assert!(!redacted.include_sensitive_payloads);
+        assert!(redacted
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("sensitive session payloads redacted")));
+        let redacted_raw = fs::read_to_string(&redacted.export_path).expect("read redacted export");
+        let redacted_json: Value =
+            serde_json::from_str(&redacted_raw).expect("parse redacted export");
+        assert_eq!(
+            redacted_json["sessionBindings"][0]["cookies"]["present"],
+            true
+        );
+        assert_eq!(
+            redacted_json["sessionBindings"][0]["cookies"]["itemCount"],
+            1
+        );
+        assert_eq!(
+            redacted_json["sessionBindings"][0]["cookies"]["included"],
+            false
+        );
+        assert!(
+            redacted_json["sessionBindings"][0]["cookies"]
+                .get("value")
+                .is_none()
+                || redacted_json["sessionBindings"][0]["cookies"]["value"].is_null()
+        );
+
+        let included = export_desktop_session_bundle(
+            &db,
+            &db_url,
+            DesktopSessionBundleExportRequest {
+                profile_id: "persona-launch-test".to_string(),
+                include_sensitive_payloads: Some(true),
+            },
+        )
+        .await
+        .expect("export included bundle");
+        assert!(included.include_sensitive_payloads);
+        let included_raw = fs::read_to_string(&included.export_path).expect("read included export");
+        let included_json: Value =
+            serde_json::from_str(&included_raw).expect("parse included export");
+        assert_eq!(
+            included_json["sessionBindings"][0]["cookies"]["included"],
+            true
+        );
+        assert_eq!(
+            included_json["sessionBindings"][0]["cookies"]["value"][0]["name"],
+            "sid"
+        );
+        assert_eq!(
+            included_json["portabilityContract"]["restoreStatus"],
+            "not_implemented"
+        );
     }
 
     #[test]

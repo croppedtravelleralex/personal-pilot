@@ -51,6 +51,9 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Deepen fingerprint runtime projection from `12` to `26` env-backed fields while preserving declared / applied / observed separation
 - [ ] Deepen fingerprint observed coverage beyond projected/applied fields
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
+  - [x] Add profile-scoped export contract with redacted-by-default session evidence
+  - [ ] Add import preflight and restore contract
+  - [ ] Verify profile portability end to end with restart continuity
 - [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy
 - [ ] Deepen headed realism, kernel strategy, and AdsPower-boundary catch-up without breaking the Win11 / Tauri baseline
 - [ ] Land the highest-ROI parts of the external browser integration plan into maintainable main-repo assets

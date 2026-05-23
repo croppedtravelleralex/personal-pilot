@@ -13,7 +13,7 @@ use persona_pilot::desktop::{
     apply_desktop_browser_environment_policy, apply_desktop_local_api_settings,
     apply_desktop_runtime_settings, change_desktop_proxy_ip, check_desktop_profile_proxies,
     compile_desktop_template_run, confirm_desktop_manual_gate, create_desktop_profile,
-    delete_desktop_template, launch_desktop_template_run, load_desktop_logs,
+    delete_desktop_template, export_desktop_session_bundle, launch_desktop_template_run, load_desktop_logs,
     load_desktop_profile_detail, load_desktop_profile_page, load_desktop_proxy_health,
     load_desktop_proxy_page, load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
     load_desktop_template_metadata_page, open_desktop_profiles,
@@ -36,7 +36,7 @@ use persona_pilot::desktop::{
     DesktopProxyChangeIpResult, DesktopProxyHealth, DesktopProxyPage, DesktopProxyPageQuery,
     DesktopProxyUsageItem, DesktopReadRunDetailQuery, DesktopRecorderSnapshot,
     DesktopRecorderSnapshotQuery, DesktopRunDetail, DesktopRuntimeSettingsDraft,
-    DesktopSettingsMutationResult, DesktopSettingsSnapshot, DesktopStartBehaviorRecordingRequest,
+    DesktopSessionBundleExport, DesktopSessionBundleExportRequest, DesktopSettingsMutationResult, DesktopSettingsSnapshot, DesktopStartBehaviorRecordingRequest,
     DesktopStatusSnapshot, DesktopStopBehaviorRecordingRequest, DesktopSyncLayoutState,
     DesktopSyncLayoutUpdate, DesktopSyncWindowBounds, DesktopSyncWindowState,
     DesktopSynchronizerActionResult, DesktopSynchronizerSnapshot, DesktopTaskPage,
@@ -2034,6 +2034,16 @@ pub fn read_import_export_skeleton(
     Ok(read_desktop_import_export_skeleton(Some(
         &state.database_url,
     )))
+}
+
+#[tauri::command]
+pub async fn export_session_bundle(
+    state: State<'_, DesktopState>,
+    request: DesktopSessionBundleExportRequest,
+) -> Result<DesktopSessionBundleExport, String> {
+    export_desktop_session_bundle(&state.db, &state.database_url, request)
+        .await
+        .map_err(normalize_error)
 }
 
 #[tauri::command]
