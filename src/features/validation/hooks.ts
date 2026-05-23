@@ -12,6 +12,7 @@ import type {
 } from "../../types/desktop";
 import {
   buildValidationBoardSnapshot,
+  buildFingerprintObservationAudit,
   summarizeValidationBoard,
 } from "./model";
 import { collectBrowserValidationSignals } from "./browserProbe";
@@ -27,6 +28,7 @@ export function useValidationBoardViewModel() {
 
   const snapshot = useMemo(() => buildValidationBoardSnapshot(report), [report]);
   const summary = useMemo(() => summarizeValidationBoard(snapshot), [snapshot]);
+  const fingerprintAudit = useMemo(() => buildFingerprintObservationAudit(report), [report]);
 
   async function refreshHistory() {
     setIsLoadingHistory(true);
@@ -83,6 +85,7 @@ export function useValidationBoardViewModel() {
     collectObservedEvidence,
     error,
     exportProfileEvidence,
+    fingerprintAudit,
     history,
     isCollecting,
     isExporting,

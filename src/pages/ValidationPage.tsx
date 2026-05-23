@@ -35,6 +35,7 @@ export function ValidationPage() {
     collectObservedEvidence,
     error,
     exportProfileEvidence,
+    fingerprintAudit,
     history,
     isCollecting,
     isExporting,
@@ -179,6 +180,65 @@ export function ValidationPage() {
             DNS, transport, desktop WebView, and profile browser runtime evidence will appear after collection.
           </p>
         )}
+      </Panel>
+
+      <Panel
+        title="Fingerprint Observation Audit"
+        subtitle="Declared, projected, and observed counts are separated"
+      >
+        <div className="details-grid">
+          <div>
+            <span>Declared controls</span>
+            <strong>{fingerprintAudit.declaredControlCount}</strong>
+          </div>
+          <div>
+            <span>Runtime projected</span>
+            <strong>{fingerprintAudit.runtimeProjectedFieldCount}</strong>
+          </div>
+          <div>
+            <span>Target signals</span>
+            <strong>{fingerprintAudit.targetSignalCountLabel}</strong>
+          </div>
+          <div>
+            <span>Observed proof</span>
+            <strong>{fingerprintAudit.observedSignalCount}</strong>
+          </div>
+        </div>
+        <p className="validation-report__summary">{fingerprintAudit.summary}</p>
+        <div className="validation-audit-grid">
+          <article className="validation-layer">
+            <div className="validation-layer__top">
+              <span>Profile Browser</span>
+              <span className={`badge badge--${statusTone(fingerprintAudit.status)}`}>
+                {STATUS_LABELS[fingerprintAudit.status]}
+              </span>
+            </div>
+            <strong>{fingerprintAudit.profileBrowserObservedCount}</strong>
+            <p>
+              Profile runtime signals. Success {fingerprintAudit.readyObservedCount}, warning {fingerprintAudit.warningObservedCount}, failed {fingerprintAudit.failedObservedCount}.
+            </p>
+          </article>
+          <article className="validation-layer">
+            <div className="validation-layer__top">
+              <span>Covered</span>
+              <span className="badge badge--info">
+                {fingerprintAudit.observedCategoryCount}/4
+              </span>
+            </div>
+            <strong>{fingerprintAudit.coveredCategories.join(", ") || "none"}</strong>
+            <p>Fingerprint-related categories with real observed signals in the loaded report.</p>
+          </article>
+          <article className="validation-layer">
+            <div className="validation-layer__top">
+              <span>Gaps</span>
+              <span className="badge badge--warning">
+                {fingerprintAudit.missingCategories.length}
+              </span>
+            </div>
+            <strong>{fingerprintAudit.missingCategories.join(", ") || "none"}</strong>
+            <p>Missing categories remain gaps, not declared or projected evidence.</p>
+          </article>
+        </div>
       </Panel>
 
       <Panel

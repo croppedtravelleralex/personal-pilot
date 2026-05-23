@@ -34,6 +34,22 @@ export interface ValidationBoardSummary {
   readyCount: number;
 }
 
+export interface FingerprintObservationAudit {
+  declaredControlCount: number;
+  runtimeProjectedFieldCount: number;
+  targetSignalCountLabel: string;
+  observedSignalCount: number;
+  observedCategoryCount: number;
+  profileBrowserObservedCount: number;
+  readyObservedCount: number;
+  warningObservedCount: number;
+  failedObservedCount: number;
+  status: ValidationEvidenceStatus;
+  coveredCategories: string[];
+  missingCategories: string[];
+  summary: string;
+}
+
 const CATEGORY_DEFINITIONS: Array<Omit<ValidationCategory, "items">> = [
   {
     id: "detector",
@@ -80,6 +96,10 @@ const CATEGORY_DEFINITIONS: Array<Omit<ValidationCategory, "items">> = [
 const READY_APPLIED = new Set(["dns", "transport"]);
 const PARTIAL_APPLIED = new Set(["detector", "leak", "canvas", "worker"]);
 const PARTIAL_OBSERVED = new Set(["dns", "transport"]);
+const FINGERPRINT_OBSERVED_CATEGORIES = ["webrtc", "canvas", "audio", "leak"];
+const DECLARED_FINGERPRINT_CONTROL_COUNT = 80;
+const RUNTIME_PROJECTED_FINGERPRINT_FIELD_COUNT = 26;
+const TARGET_FINGERPRINT_SIGNAL_COUNT_LABEL = "450+";
 
 function buildEvidenceItem(
   category: Omit<ValidationCategory, "items">,
@@ -207,5 +227,57 @@ export function summarizeValidationBoard(
     ).length,
     missingCount: items.filter((item) => item.status === "missing").length,
     readyCount: items.filter((item) => item.status === "ready").length,
+  };
+}
+
+export function buildFingerprintObservationAudit(
+  report?: DesktopValidationReport | null,
+): FingerprintObservationAudit {
+  const observedSignals = report?.signals.filter(
+    (signal) =>
+      signal.layer === "observed" && FINGERPRINT_OBSERVED_CATEGORIES.includes(signal.category),
+  ) ?? [];
+  const coveredCategories = FINGERPRINT_OBSERVED_CATEGORIES.filter((category) =>
+    observedSignals.some((signal) => signal.category === category),
+  );
+  const missingCategories = FINGERPRINT_OBSERVED_CATEGORIES.filter(
+    (category) => !coveredCategories.includes(category),
+  );
+  const readyObservedCount = observedSignals.filter(
+    (signal) => signal.status === "succeeded",
+  ).length;
+  const warningObservedCount = observedSignals.filter(
+    (signal) => signal.status === "warning",
+  ).length;
+  const failedObservedCount = observedSignals.filter(
+    (signal) => signal.status === "failed",
+  ).length;
+  const profileBrowserObservedCount = observedSignals.filter(
+    (signal) => signal.targetProfileBrowser,
+  ).length;
+  const status: ValidationEvidenceStatus =
+    observedSignals.length === 0
+      ? "missing"
+      : failedObservedCount > 0 || warningObservedCount > 0 || missingCategories.length > 0
+        ? "partial"
+        : "ready";
+
+  return {
+    declaredControlCount: DECLARED_FINGERPRINT_CONTROL_COUNT,
+    runtimeProjectedFieldCount: RUNTIME_PROJECTED_FINGERPRINT_FIELD_COUNT,
+    targetSignalCountLabel: TARGET_FINGERPRINT_SIGNAL_COUNT_LABEL,
+    observedSignalCount: observedSignals.length,
+    observedCategoryCount: coveredCategories.length,
+    profileBrowserObservedCount,
+    readyObservedCount,
+    warningObservedCount,
+    failedObservedCount,
+    status,
+    coveredCategories,
+    missingCategories,
+    summary:
+      observedSignals.length === 0
+        ? "No fingerprint observed proof is present in the loaded report; declared and projected fields remain separate from observed evidence."
+        : `${observedSignals.length} observed fingerprint-related signals across ${coveredCategories.length} categories; declared controls and runtime projections are not counted as observed proof.`,
   };
 }

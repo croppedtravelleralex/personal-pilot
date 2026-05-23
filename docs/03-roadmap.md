@@ -41,7 +41,7 @@
 
 2. Fingerprint runtime depth
    - 已从 `80` declared controls 和 `12` runtime projected fields 推进到 `26` runtime projected fields（`25` control-supported + derived `platform`）。
-   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛；下一步继续加深 observed coverage，不把 projected/applied fields 报成 observed signals。
+   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；下一步继续加深真实采集，不把 projected/applied fields 报成 observed signals。
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration

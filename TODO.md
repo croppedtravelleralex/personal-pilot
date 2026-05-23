@@ -53,7 +53,9 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
   - [x] Install/use official Lightpanda nightly through WSL2 and run `validation_lightpanda_smoke --use-wsl-lightpanda` with `status=passed`
 - [x] Converge validation evidence schema with explicit scope / adapter / target-profile / failure fields
 - [x] Deepen fingerprint runtime projection from `12` to `26` env-backed fields while preserving declared / applied / observed separation
-- [ ] Deepen fingerprint observed coverage beyond projected/applied fields
+- [x] Deepen fingerprint observed coverage beyond projected/applied fields
+  - [x] Add Validation Board fingerprint observation audit from real WebRTC/canvas/audio/leak observed signals
+  - [x] Keep `80` declared controls, `26` runtime projected fields, and `450+` target-only signals out of observed proof counts
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
   - [x] Add profile-scoped export contract with redacted-by-default session evidence
   - [x] Add import preflight and restore contract

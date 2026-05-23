@@ -625,6 +625,12 @@ textarea {
   gap: 12px;
 }
 
+.validation-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .details-grid__value {
   margin-bottom: 14px !important;
 }
@@ -1964,6 +1970,7 @@ textarea {
   .synchronizer-toolbar__metrics,
   .synchronizer-toolbar__body,
   .validation-board,
+  .validation-audit-grid,
   .window-matrix,
   .window-card__stats,
   .settings-form,
@@ -2057,6 +2064,7 @@ textarea {
   .synchronizer-toolbar__metrics,
   .synchronizer-toolbar__body,
   .validation-board,
+  .validation-audit-grid,
   .validation-layers,
   .window-matrix,
   .window-card__stats,
