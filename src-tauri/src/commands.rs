@@ -18,7 +18,7 @@ use persona_pilot::desktop::{
     load_desktop_profile_detail, load_desktop_profile_page, load_desktop_proxy_health,
     load_desktop_proxy_page, load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
     load_desktop_template_metadata_page, open_desktop_profiles,
-    read_desktop_behavior_audit_contract, read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
+    list_desktop_evidence_reports, read_desktop_behavior_audit_contract, read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
     read_desktop_provider_production_readiness, read_desktop_release_smoke_contract,
     read_desktop_local_api_snapshot, read_desktop_local_asset_workspace, read_desktop_run_detail,
     read_desktop_settings, reject_desktop_manual_gate, resolve_desktop_local_asset_entry_path,
@@ -29,7 +29,7 @@ use persona_pilot::desktop::{
     update_desktop_profile, update_desktop_template, DesktopAppendBehaviorRecordingStepRequest,
     DesktopBehaviorAuditContract, DesktopBrowserEnvironmentPolicyDraft, DesktopBrowserEnvironmentPolicyMutationResult,
     DesktopBrowserEnvironmentPolicySnapshot, DesktopCompileTemplateRunRequest,
-    DesktopCompileTemplateRunResult, DesktopCreateProfileInput, DesktopImportExportSkeleton,
+    DesktopCompileTemplateRunResult, DesktopCreateProfileInput, DesktopEvidenceReportHistory, DesktopImportExportSkeleton,
     DesktopLaunchTemplateRunRequest, DesktopLaunchTemplateRunResult, DesktopLocalApiMutationResult,
     DesktopLocalApiSettingsDraft, DesktopLocalApiSnapshot, DesktopLocalAssetWorkspaceSnapshot,
     DesktopLogPage, DesktopLogQuery, DesktopManualGateActionRequest,
@@ -2212,6 +2212,13 @@ pub fn read_release_smoke_contract(
     state: State<'_, DesktopState>,
 ) -> Result<DesktopReleaseSmokeContract, String> {
     Ok(read_desktop_release_smoke_contract(Some(&state.database_url)))
+}
+
+#[tauri::command]
+pub fn list_evidence_reports(
+    state: State<'_, DesktopState>,
+) -> Result<DesktopEvidenceReportHistory, String> {
+    list_desktop_evidence_reports(Some(&state.database_url)).map_err(normalize_error)
 }
 
 #[tauri::command]

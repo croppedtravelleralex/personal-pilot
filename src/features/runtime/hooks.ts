@@ -40,6 +40,7 @@ export function useRuntimeViewModel() {
       state.refreshIntervalMs,
     ),
     releaseSmoke: state.releaseSmoke,
+    evidenceReports: state.evidenceReports,
     actions: runtimeActions,
   };
 }

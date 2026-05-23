@@ -1,10 +1,11 @@
 import { createStore } from "../../store/createStore";
 import * as desktop from "../../services/desktop";
-import type { DesktopReleaseSmokeContract, DesktopRuntimeStatus } from "../../types/desktop";
+import type { DesktopEvidenceReportHistory, DesktopReleaseSmokeContract, DesktopRuntimeStatus } from "../../types/desktop";
 
 interface RuntimeState {
   snapshot: DesktopRuntimeStatus | null;
   releaseSmoke: DesktopReleaseSmokeContract | null;
+  evidenceReports: DesktopEvidenceReportHistory | null;
   isLoading: boolean;
   activeAction: "start" | "stop" | null;
   error: string | null;
@@ -17,6 +18,7 @@ interface RuntimeState {
 const runtimeStore = createStore<RuntimeState>({
   snapshot: null,
   releaseSmoke: null,
+  evidenceReports: null,
   isLoading: false,
   activeAction: null,
   error: null,
@@ -83,9 +85,10 @@ export const runtimeActions = {
     }));
 
     try {
-      const [snapshot, releaseSmoke] = await Promise.all([
+      const [snapshot, releaseSmoke, evidenceReports] = await Promise.all([
         desktop.readLocalRuntimeStatus(),
         desktop.readReleaseSmokeContract(),
+        desktop.listEvidenceReports(),
       ]);
       if (runtimeStore.getState().requestId !== requestId) {
         return;
@@ -93,6 +96,7 @@ export const runtimeActions = {
       runtimeStore.setState((current) => ({
         ...current,
         releaseSmoke,
+        evidenceReports,
       }));
       updateSnapshot(snapshot);
     } catch (error) {

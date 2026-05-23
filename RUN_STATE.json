@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 31,
+  "loop_iteration": 32,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P15 prioritized remaining-work gates",
-  "current_objective": "先完成 5 项优先级：修旧口径、release performance mitigation、cross-machine portability gate、provider acceptance gate、首批 taxonomy evidence-backed family，并把剩余工作登记为可执行 register",
-  "last_result_summary": "新增 release performance mitigation plan、SessionBundle cross-machine runbook、provider production acceptance runbook、remaining work register；provider/session scripts 增强为真实门槛；taxonomy 前 5 个 family 已补 evidenceStatus/path",
-  "next_action_hint": "Run P15 validation gates, commit/push, then choose next ready package from docs/25-overall-remaining-work-register.md",
+  "current_focus": "P16 batch 1 evidence history surface",
+  "current_objective": "按批次执行第 1 批本机质量闭环：统一 release/provider/session/taxonomy/distribution evidence report history，并在 Overview 暴露最近报告",
+  "last_result_summary": "新增 list_evidence_reports 桌面 API、typed desktop wrapper、runtime store 集成和 Overview evidence report history；remaining work register 更新 release/provider/portability history 状态",
+  "next_action_hint": "Run P16 gates, commit/push, then continue batch 2 fingerprint observed coverage collectors",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -186,6 +186,12 @@
       "kind": "planning",
       "status": "success",
       "note": "First five priority items now have corrected live-truth docs, mitigation/runbook gates, stricter provider/session scripts, evidence-backed taxonomy family seeds, and a remaining-work register."
+    },
+    {
+      "title": "P16 batch 1 evidence history surface",
+      "kind": "feature",
+      "status": "success",
+      "note": "Overview can now load local smoke/audit evidence report history for release, provider, portability, taxonomy, and distribution reports through the desktop service boundary."
     }
   ],
   "blocked_reason": "",

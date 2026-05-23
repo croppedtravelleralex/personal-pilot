@@ -478,6 +478,27 @@ pub struct DesktopProviderProductionReadiness {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DesktopEvidenceReportSummary {
+    pub report_id: String,
+    pub kind: String,
+    pub status: String,
+    pub generated_at: String,
+    pub report_path: String,
+    pub failure_reason: Option<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopEvidenceReportHistory {
+    pub generated_at: String,
+    pub report_count: usize,
+    pub reports: Vec<DesktopEvidenceReportSummary>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopRuntimeAdapterContractItem {
     pub adapter_id: String,
     pub status: String,
@@ -2695,6 +2716,146 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
         items,
         summary,
     }
+}
+
+fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
+    match dir_name {
+        "release-smoke" => Some("release_performance"),
+        "provider-acceptance" => Some("provider_acceptance"),
+        "session-portability" => Some("session_portability"),
+        "taxonomy-audit" => Some("taxonomy_audit"),
+        "external-distribution" => Some("external_distribution"),
+        _ => None,
+    }
+}
+
+fn evidence_report_summary_from_json(
+    kind: &str,
+    path: &Path,
+    value: &Value,
+) -> DesktopEvidenceReportSummary {
+    let report_id = path
+        .file_stem()
+        .and_then(|item| item.to_str())
+        .unwrap_or("evidence-report")
+        .to_string();
+    let generated_at = value
+        .get("generatedAt")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path_timestamp_or_now(path));
+    let status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_string();
+    let failure_reason = value
+        .get("failureReason")
+        .and_then(Value::as_str)
+        .filter(|item| !item.is_empty())
+        .map(ToOwned::to_owned);
+    let summary = match kind {
+        "release_performance" => format!(
+            "release performance {status}: cold_start={}ms rss={}MB processes={}",
+            value
+                .get("measuredColdStartMs")
+                .and_then(Value::as_i64)
+                .map(|item| item.to_string())
+                .unwrap_or_else(|| "pending".to_string()),
+            value
+                .get("measuredIdleRssMb")
+                .and_then(Value::as_i64)
+                .map(|item| item.to_string())
+                .unwrap_or_else(|| "pending".to_string()),
+            value
+                .get("measuredProcessCount")
+                .and_then(Value::as_i64)
+                .map(|item| item.to_string())
+                .unwrap_or_else(|| "pending".to_string())
+        ),
+        "provider_acceptance" => format!(
+            "provider acceptance {status}: accepted={} readyCredentials={}",
+            value
+                .get("acceptedCount")
+                .and_then(Value::as_i64)
+                .unwrap_or_default(),
+            value
+                .get("readyCredentialCount")
+                .and_then(Value::as_i64)
+                .unwrap_or_default()
+        ),
+        "session_portability" => format!(
+            "session portability {status}: crossMachineComplete={}",
+            value
+                .get("crossMachineComplete")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        ),
+        "taxonomy_audit" => format!(
+            "taxonomy audit {status}: reports={}",
+            value
+                .get("items")
+                .and_then(Value::as_array)
+                .map(|items| items.len())
+                .unwrap_or_default()
+        ),
+        "external_distribution" => format!("external distribution {status}"),
+        _ => format!("{kind} {status}"),
+    };
+
+    DesktopEvidenceReportSummary {
+        report_id,
+        kind: kind.to_string(),
+        status,
+        generated_at,
+        report_path: path.to_string_lossy().to_string(),
+        failure_reason,
+        summary,
+    }
+}
+
+pub fn list_desktop_evidence_reports(
+    database_url: Option<&str>,
+) -> Result<DesktopEvidenceReportHistory> {
+    let database_url = database_url
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(default_database_url);
+    let reports_root = data_root_from_database_url(&database_url).join("reports");
+    let mut reports = Vec::new();
+
+    for dir_name in [
+        "release-smoke",
+        "provider-acceptance",
+        "session-portability",
+        "taxonomy-audit",
+        "external-distribution",
+    ] {
+        let Some(kind) = evidence_report_kind_from_dir(dir_name) else {
+            continue;
+        };
+        let dir = reports_root.join(dir_name);
+        if !dir.exists() {
+            continue;
+        }
+        for entry in fs::read_dir(&dir)? {
+            let path = entry?.path();
+            if path.extension().and_then(|item| item.to_str()) != Some("json") {
+                continue;
+            }
+            let raw = fs::read_to_string(&path)?;
+            let value = serde_json::from_str::<Value>(&raw).unwrap_or(Value::Null);
+            reports.push(evidence_report_summary_from_json(kind, &path, &value));
+        }
+    }
+
+    reports.sort_by(|left, right| right.generated_at.cmp(&left.generated_at));
+    let report_count = reports.len();
+    Ok(DesktopEvidenceReportHistory {
+        generated_at: now_ts_string(),
+        report_count,
+        reports,
+        summary: format!("Evidence report history: {report_count} local reports"),
+    })
 }
 
 pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
@@ -8694,6 +8855,42 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("13 shipped primitives are not the 450+ target taxonomy")));
+    }
+
+    #[test]
+    fn evidence_report_history_reads_local_smoke_reports() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_evidence_history_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("release-smoke");
+        fs::create_dir_all(&reports_dir).expect("create reports dir");
+        let report_path = reports_dir.join("release-performance-smoke-test.json");
+        fs::write(
+            &report_path,
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v1",
+                "generatedAt": "2026-05-23T00:00:00Z",
+                "status": "warning",
+                "failureReason": "idle_rss_target_exceeded",
+                "measuredColdStartMs": 9301,
+                "measuredIdleRssMb": 411,
+                "measuredProcessCount": 14
+            })
+            .to_string(),
+        )
+        .expect("write report");
+
+        let db_url = format!("sqlite://{}", temp_root.join("persona.db").to_string_lossy());
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        assert_eq!(history.report_count, 1);
+        let report = &history.reports[0];
+        assert_eq!(report.kind, "release_performance");
+        assert_eq!(report.status, "warning");
+        assert_eq!(report.failure_reason.as_deref(), Some("idle_rss_target_exceeded"));
+        assert!(report.summary.contains("411MB"));
+
+        let _ = fs::remove_dir_all(temp_root);
     }
 
     #[test]

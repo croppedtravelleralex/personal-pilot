@@ -19,6 +19,7 @@ import type {
   DesktopSessionBundleRestoreRequest,
   DesktopSessionBundleRestoreResult,
   DesktopProviderProductionReadiness,
+  DesktopEvidenceReportHistory,
   DesktopReleaseSmokeContract,
   DesktopLaunchTemplateRunRequest,
   DesktopLaunchTemplateRunResult,
@@ -503,6 +504,9 @@ export const readProviderProductionReadiness =
 
 export const readReleaseSmokeContract = (): Promise<DesktopReleaseSmokeContract> =>
   invokeDesktop("read_release_smoke_contract");
+
+export const listEvidenceReports = (): Promise<DesktopEvidenceReportHistory> =>
+  invokeDesktop("list_evidence_reports");
 
 export const readBehaviorAuditContract = (): Promise<DesktopBehaviorAuditContract> =>
   invokeDesktop("read_behavior_audit_contract");

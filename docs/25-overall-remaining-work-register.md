@@ -15,7 +15,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 | ID | 任务 | 状态 | 下一步 |
 | --- | --- | --- | --- |
 | P15-1 | 修正文档残留 `70%` / 旧 `450+ target-only` live 口径 | done | 持续用 consistency scan 防回归 |
-| P15-2 | release performance warning mitigation | ready | 按 `docs/release-performance-mitigation-plan.md` 优化启动/RSS/进程数 |
+| P15-2 | release performance warning mitigation | ready | 已有 mitigation plan；P16 已接入 evidence report history，下一步优化启动/RSS/进程数 |
 | P15-3 | 跨机器 SessionBundle portability smoke 门槛 | blocked-external | 按 `docs/sessionbundle-cross-machine-portability-runbook.md` 在第二环境执行 |
 | P15-4 | provider production acceptance 门槛 | blocked-external | 按 `docs/provider-production-acceptance-runbook.md` 配凭证并跑真实 smoke |
 | P15-5 | 首批 taxonomy family evidence-backed | done | 继续把更多 family 接入 collector/runtime path |
@@ -31,8 +31,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 5. 优化 cold start：`9301ms -> <= 2000ms`。`large-slice`
 6. 优化 idle RSS：`411MB -> <= 220MB`。`large-slice`
 7. 优化 process count：`14 -> <= 4` 或记录例外。`large-slice`
-8. 生成 release performance history。`ready`
-9. 将 release performance report 接入 Overview / Settings。`ready`
+8. 生成 release performance history。`done`
+9. 将 release performance report 接入 Overview / Settings。`done-overview`
 
 ### Session / Portability
 
@@ -42,8 +42,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 13. target machine confirmed restore evidence。`blocked-external`
 14. restart continuity after restore evidence。`blocked-external`
 15. profile portability UI 完善。`ready`
-16. portability failure reason viewer。`ready`
-17. portability report history。`ready`
+16. portability failure reason viewer。`partial-overview-history`
+17. portability report history。`done-overview`
 
 ### Provider Closure
 
@@ -63,8 +63,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 31. Email CDP detect/fill。`large-slice`
 32. Email real registration-flow smoke。`blocked-external`
 33. Provider failure reason taxonomy。`ready`
-34. Provider evidence viewer。`ready`
-35. Provider acceptance report history。`ready`
+34. Provider evidence viewer。`partial-overview-history`
+35. Provider acceptance report history。`done-overview`
 
 ### Fingerprint / Validation
 
@@ -108,7 +108,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 67. per-event manual gate semantics。`large-slice`
 68. deterministic replay evidence。`large-slice`
 69. behavior event coverage dashboard。`ready`
-70. behavior event audit report history。`ready`
+70. behavior event audit report history。`partial-taxonomy-history`
 
 ### Runtime / Adapter / External Browser
 

@@ -45,6 +45,7 @@ pub fn run() {
       commands::read_provider_production_readiness,
       commands::read_behavior_audit_contract,
       commands::read_release_smoke_contract,
+      commands::list_evidence_reports,
       commands::open_local_asset_entry,
       commands::open_local_directory,
       commands::read_local_runtime_status,
