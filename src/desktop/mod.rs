@@ -8719,6 +8719,10 @@ mod tests {
             .iter()
             .any(|warning| warning.contains("AdsPower boundary must not be refreshed")));
         assert!(contract
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("B1-B5 evidence exists")));
+        assert!(contract
             .measurement_notes
             .iter()
             .any(|note| note.contains("release artifacts, not dev-mode metrics")));

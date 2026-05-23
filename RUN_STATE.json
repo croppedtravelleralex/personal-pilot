@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 27,
+  "loop_iteration": 28,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P11 runtime adapter and release measurement contract",
-  "current_objective": "Release smoke contract 已扩展 measured/pending 字段并在 Overview 暴露 adapter boundary；真实 cold start/RSS/process 测量仍需 operator smoke",
-  "last_result_summary": "Runtime posture 现在展示 release performance target vs measured pending、adapter statuses 和 no Chromium/Firefox fork boundary；测试锁定不能用 dev metrics 冒充 release measurement",
-  "next_action_hint": "Run P11 full gates, commit/push, then start P12 AdsPower boundary refresh only if B1-B5 evidence exists",
+  "current_focus": "P12 AdsPower boundary refresh guard",
+  "current_objective": "AdsPower benchmark refresh 已作为 evidence-gated boundary guard 落地：没有 B1-B5 新证据时不得重算评分或宣称追平",
+  "last_result_summary": "Release smoke contract warning 和 docs 已同步 P12：AdsPower refresh deferred until B1-B5 evidence exists；当前 score 和 30/70 overall truth 不上调",
+  "next_action_hint": "Commit/push P12, then start P13 external distribution readiness and known-limits documentation",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -162,6 +162,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Release smoke contract now separates performance targets from pending measurements and exposes adapter boundary in Overview without claiming headed runtime implementation or browser fork hosting."
+    },
+    {
+      "title": "P12 AdsPower boundary refresh guard",
+      "kind": "docs",
+      "status": "success",
+      "note": "AdsPower score refresh remains deferred because B1-B5 evidence is incomplete; docs and release smoke warnings now preserve the evidence gate instead of raising parity claims."
     }
   ],
   "blocked_reason": "",

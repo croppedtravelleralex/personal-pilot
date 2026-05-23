@@ -585,6 +585,8 @@ Suggested agent plan:
 
 ### B6 AdsPower Boundary Refresh
 
+Current P12 status: `deferred by evidence gate`. B1-B5 do not yet have enough new shipped evidence to rescore AdsPower parity, so this refresh stage preserves the current scorecard and records the guard instead of raising the benchmark result.
+
 Task packages:
 
 1. `benchmark evidence refresh`
@@ -660,6 +662,8 @@ Use score only for capability maturity and benchmark distance.
 ### Current Scorecard
 
 `Current capability score = 34 / 100`
+
+P12 guard result: score refresh is deferred until B1-B5 evidence exists. Do not raise this score from docs-only updates.
 
 | Dimension | Weight | Current evidence | Current score | Weighted score | Final target | AdsPower public boundary |
 | --- | ---: | --- | ---: | ---: | --- | --- |
@@ -740,3 +744,4 @@ When this report is refreshed:
 2. only raise scores when new shipped evidence exists
 3. if a competitor public count is not disclosed, mark it as `undisclosed` instead of inventing a number
 4. refresh the AdsPower public boundary using official public sources only
+5. if B1-B5 evidence is incomplete, record `deferred` and keep the current score unchanged

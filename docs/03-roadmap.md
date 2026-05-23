@@ -58,10 +58,10 @@
    - P11 已新增 release measurement target vs measured pending 字段，并在 Overview 暴露 adapter boundary；真实 cold start/RSS/process count smoke 仍需 operator 执行。
    - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
-   - AdsPower benchmark refresh 等 B1-B5 有证据后再做。
+   - P12 已把 AdsPower benchmark refresh 固定为 boundary guard：等 B1-B5 有新证据后再重算评分。
 
 ## Later：成熟度与评分刷新
 
 - 只有新 shipped evidence 出现时才提高 capability score。
-- AdsPower comparison 只用官方公开边界和本仓库可验证证据刷新。
+- AdsPower comparison 只用官方公开边界和本仓库可验证证据刷新；当前 P12 结论是 deferred，不上调 score。
 - `50+`、`450+`、AdsPower catch-up、external integration 继续归入 Overall track，不能写成当前 runtime depth。

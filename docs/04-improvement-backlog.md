@@ -19,7 +19,7 @@
 | Behavior | 从 `13` primitives 扩展 replayable `450+` taxonomy | P10 behavior audit contract 已落地：`13` primitives、`8` page archetypes、workflow/debug/manual-gate/recovery coverage 可见；`450+` 仍是 target-only | 事件数量来自真实 taxonomy，不是目标口号 |
 | Provider closure | CAPTCHA/SMS/Email production manager wiring/config | production readiness contract、acceptance checklist 和 Settings operator surface 已落地，可报告 credentials、manager wiring、CDP automation、operator UI blockers 和 next action | 真实 provider 验收、CDP detect/fill、operator UI 和失败处理闭环 |
 | Runtime | headed realism、kernel strategy、adapter boundary | adapter/release smoke contract 和 P11 measurement pending visibility 已落地；headed runtime 未实现；真实 cold start/RSS/process 测量未跑 | 有稳定 adapter contract 和真实 runtime 验证证据 |
-| Benchmark | AdsPower boundary refresh | 暂缓 | B1-B5 有新证据后再刷新评分 |
+| Benchmark | AdsPower boundary refresh | P12 已落地 guard；评分刷新暂缓 | B1-B5 有新证据后再刷新评分；没有证据时只保留 deferred 结论 |
 
 ## 固定风险
 

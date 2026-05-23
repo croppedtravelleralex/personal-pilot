@@ -70,7 +70,8 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
   - [x] Preserve `450+` event taxonomy as target-only until real taxonomy is shipped
 - [x] Add runtime adapter / release smoke contract without hosting Chromium/Firefox forks
 - [x] Add release measurement pending fields and Overview adapter boundary visibility without using dev metrics as release evidence
-- [ ] Deepen headed realism, kernel strategy, and AdsPower-boundary catch-up without breaking the Win11 / Tauri baseline
+- [x] Add AdsPower boundary refresh guard: defer score refresh until B1-B5 evidence exists
+- [ ] Deepen headed realism and kernel strategy without breaking the Win11 / Tauri baseline
 - [ ] Land the highest-ROI parts of the external browser integration plan into maintainable main-repo assets
 
 ## Notes
