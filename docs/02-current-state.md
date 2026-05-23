@@ -43,9 +43,9 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - Synchronizer live desktop snapshot、native focus、native set-main、work-area-aware native physical layout 已落地。
 - full Rust / integration gate 已恢复 green。
 - route-level code splitting 已清掉旧 Vite chunk warning。
-- CAPTCHA 后端 handler/route 与 solver 代码边界已部分落地：`internal/captcha`、2Captcha、Capsolver、`/api/captcha/*` 核心端点；生产 readiness contract 已接入桌面 API，但 manager wiring/CDP 填入/operator UI 闭环仍 blocked。
-- SMS 后端 handler/route 与 provider 代码边界已部分落地：`internal/sms`、5sim、SMSPool、`/api/sms/*` 核心端点；生产 readiness contract 已接入桌面 API，但 manager wiring/CDP 填号填码/operator UI 闭环仍 blocked。
-- Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API；生产 readiness contract 已接入桌面 API，但自动化流程和 operator UI 闭环仍 blocked。
+- CAPTCHA 后端 handler/route 与 solver 代码边界已部分落地：`internal/captcha`、2Captcha、Capsolver、`/api/captcha/*` 核心端点；P9 已将 production readiness contract 扩展为 acceptance checklist 并接入 Settings operator surface，但 manager wiring/CDP 填入/真实 provider smoke 仍 blocked。
+- SMS 后端 handler/route 与 provider 代码边界已部分落地：`internal/sms`、5sim、SMSPool、`/api/sms/*` 核心端点；P9 已展示 credentials、manager wiring、CDP automation、operator UI、blockers 和 next action，但真实 provider 验收仍 blocked。
+- Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API；P9 已纳入 provider readiness operator surface，但自动化流程、CDP 填码和真实注册流 smoke 仍 blocked。
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
 - Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。P5 已通过 WSL2 Lightpanda nightly 真实 CDP smoke：`validation_lightpanda_smoke --use-wsl-lightpanda` 双次复跑 `status=passed`。P6 已收敛 validation evidence schema：signals 显式携带 `collectorScope`、`runtimeAdapter`、`targetProfileBrowser`、`failureReason`，旧报告读取时从 legacy `detail` 自动补齐 metadata。P7 已新增 fingerprint observation audit：只从 WebRTC/canvas/audio/leak observed signals 统计真实观察覆盖，不把 `80` declared controls、`26` runtime projected fields 或 `450+` target-only signals 计入 observed proof。
 - Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；真实 Lightpanda/CDP operator smoke 与冷启动/RSS/进程数测量仍需单独执行。
@@ -62,7 +62,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ### Overall remaining `70%`
 
 - Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list、profile-level evidence export、P5 smoke 脚本、P6 explicit evidence metadata 和 P7 fingerprint observation audit。WebRTC/audio capability warning、canvas `toDataURL` missing 等真实失败/警告原因必须保留在 report 中。
-- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地，并已有 production readiness contract 可报告凭证、manager wiring、CDP 自动化、operator UI blocker；尚未完成真实 provider 验收和自动化闭环。
+- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地；P9 已有 production readiness checklist 和 Settings operator surface，可报告凭证、manager wiring、CDP 自动化、operator UI blocker、acceptance checklist；尚未完成真实 provider 验收和自动化闭环。
 - runtime materialization depth 已从 `12` 扩到 `26` projected fields；P7 已有 observed audit summary，但仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal taxonomy / full observation coverage 未落地；当前 P7 只是 WebRTC/canvas/audio/leak observed audit，不是 450+ 全量采集。
 - `450+` event taxonomy 未落地。
@@ -73,6 +73,6 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. P9 推进 CAPTCHA/SMS/Email production manager wiring/config，但不宣称真实 provider 闭环，除非凭证和验收可用
-2. P10 扩展 behavior taxonomy/workflow audit，并继续避免把 `450+` 目标写成已交付
-3. P11 推进 runtime adapter/headed realism/performance measurement，不托管 Chromium/Firefox fork
+1. P10 扩展 behavior taxonomy/workflow audit，并继续避免把 `450+` 目标写成已交付
+2. P11 推进 runtime adapter/headed realism/performance measurement，不托管 Chromium/Firefox fork
+3. P12 AdsPower boundary refresh 只在 B1-B5 有新证据后执行

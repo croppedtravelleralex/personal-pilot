@@ -17,7 +17,7 @@
 | Fingerprint | 从 `12` runtime projected fields 扩展 runtime depth | 已扩到 `26` projected fields（`25` control-supported + derived `platform`）；P7 已新增 WebRTC/canvas/audio/leak observed audit，但 `450+` taxonomy 和全量采集仍待扩展 | declared / applied / observed 可解释且可验证；目标信号不得计入 observed proof |
 | Session | 完整 `SessionBundle` 和 profile portability | profile-scoped export、import preflight、dry-run、confirmed local restore write path 已落地；默认脱敏并可显式包含本地敏感 payload；confirmed restore 可 upsert target profile 和 `proxy_session_bindings` | 跨机器 profile portability、restart continuity 和 restored payload 真实环境验收一起成立 |
 | Behavior | 从 `13` primitives 扩展 replayable `450+` taxonomy | 未落地 | 事件数量来自真实 taxonomy，不是目标口号 |
-| Provider closure | CAPTCHA/SMS/Email production manager wiring/config | production readiness contract 已落地，可报告 credentials、manager wiring、CDP automation、operator UI blockers | 真实 provider 验收、CDP detect/fill、operator UI 和失败处理闭环 |
+| Provider closure | CAPTCHA/SMS/Email production manager wiring/config | production readiness contract、acceptance checklist 和 Settings operator surface 已落地，可报告 credentials、manager wiring、CDP automation、operator UI blockers 和 next action | 真实 provider 验收、CDP detect/fill、operator UI 和失败处理闭环 |
 | Runtime | headed realism、kernel strategy、adapter boundary | adapter/release smoke contract 已落地；headed runtime 未实现 | 有稳定 adapter contract 和真实 runtime 验证证据 |
 | Benchmark | AdsPower boundary refresh | 暂缓 | B1-B5 有新证据后再刷新评分 |
 

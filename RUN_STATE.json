@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P8 SessionBundle confirmed restore path",
-  "current_objective": "SessionBundle restore 已从 non-destructive contract 推进到 preflight + dry-run + confirmed local restore write path，可 upsert target profile 和 session bindings",
-  "last_result_summary": "SessionBundle restore 现在 dryRun=true 不写库，dryRun=false 且 preflight 通过时写入目标 profile 并恢复 proxy_session_bindings；敏感 cookie/localStorage/sessionStorage 仅在 bundle 包含 payload 时恢复",
-  "next_action_hint": "Run P8 full gates, commit/push, then start P9 provider production manager wiring/config readiness closure",
+  "current_focus": "P9 provider production readiness operator closure",
+  "current_objective": "CAPTCHA/SMS/Email provider readiness 已暴露 acceptance checklist 和 Settings operator surface，但真实 provider smoke 仍需凭证和外部服务验收",
+  "last_result_summary": "Provider readiness contract 现在包含 acceptanceStatus 和 acceptanceChecklist；Settings 页面展示 credentials、manager wiring、CDP automation、operator UI、provider count、blockers 和 next action",
+  "next_action_hint": "Run P9 full gates, commit/push, then start P10 behavior taxonomy/workflow audit expansion",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -144,6 +144,12 @@
       "kind": "feature",
       "status": "success",
       "note": "SessionBundle restore now supports preflight, dry-run, and confirmed local DB restore for target profiles and proxy_session_bindings, with a regression test covering write behavior."
+    },
+    {
+      "title": "P9 provider production readiness operator closure",
+      "kind": "feature",
+      "status": "success",
+      "note": "CAPTCHA/SMS/Email readiness now exposes acceptance checklists and Settings operator visibility while preserving real provider smoke as blocked without credentials and wiring evidence."
     }
   ],
   "blocked_reason": "",

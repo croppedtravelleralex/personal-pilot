@@ -8,6 +8,7 @@ import {
   readImportExportSkeleton,
   readLocalApiSnapshot,
   readLocalAssetWorkspace,
+  readProviderProductionReadiness,
   readSettings,
   restoreBrowserEnvironmentPolicyDefaults,
   restoreLocalApiDefaults as restoreLocalApiDefaultsCommand,
@@ -23,6 +24,7 @@ import type {
   DesktopLocalApiSnapshot,
   DesktopLocalAssetEntryId,
   DesktopLocalAssetWorkspaceSnapshot,
+  DesktopProviderProductionReadiness,
   DesktopRuntimeSettingsDraft as DesktopRuntimeSettingsInput,
   DesktopSettingsSnapshot,
 } from "../../types/desktop";
@@ -74,6 +76,7 @@ interface SettingsState {
   browserEnvironmentSnapshot: DesktopBrowserEnvironmentPolicySnapshot | null;
   assetWorkspace: DesktopLocalAssetWorkspaceSnapshot | null;
   importExportSkeleton: DesktopImportExportSkeleton | null;
+  providerProductionReadiness: DesktopProviderProductionReadiness | null;
   draft: RuntimeSettingsDraft;
   loadedDraft: RuntimeSettingsDraft | null;
   localApiDraft: LocalApiSettingsDraft;
@@ -230,6 +233,7 @@ export const settingsStore = createStore<SettingsState>({
   browserEnvironmentSnapshot: null,
   assetWorkspace: null,
   importExportSkeleton: null,
+  providerProductionReadiness: null,
   draft: DEFAULT_RUNTIME_SETTINGS_DRAFT,
   loadedDraft: null,
   localApiDraft: DEFAULT_LOCAL_API_SETTINGS_DRAFT,
@@ -263,12 +267,14 @@ export const settingsActions = {
         browserEnvironmentSnapshot,
         assetWorkspace,
         importExportSkeleton,
+        providerProductionReadiness,
       ] = await Promise.all([
         readSettings(),
         readLocalApiSnapshot(),
         readBrowserEnvironmentPolicy(),
         readLocalAssetWorkspace(),
         readImportExportSkeleton(),
+        readProviderProductionReadiness(),
       ]);
 
       if (settingsStore.getState().refreshRequestId !== requestId) {
@@ -311,6 +317,7 @@ export const settingsActions = {
           browserEnvironmentSnapshot,
           assetWorkspace,
           importExportSkeleton,
+          providerProductionReadiness,
           draft: shouldReplaceDraft(
             current.draft,
             current.loadedDraft,

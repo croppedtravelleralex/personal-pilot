@@ -458,6 +458,8 @@ pub struct DesktopProviderReadinessItem {
     pub credential_status: String,
     pub cdp_automation_status: String,
     pub operator_ui_status: String,
+    pub acceptance_status: String,
+    pub acceptance_checklist: Vec<String>,
     pub blockers: Vec<String>,
     pub next_action: String,
 }
@@ -2521,6 +2523,7 @@ fn provider_readiness_item(
     manager_wiring_status: &str,
     cdp_automation_status: &str,
     operator_ui_status: &str,
+    acceptance_checklist: &[&str],
 ) -> DesktopProviderReadinessItem {
     let credential_present = env_any_present(credential_env_keys);
     let credential_status = if credential_present {
@@ -2549,6 +2552,12 @@ fn provider_readiness_item(
     if operator_ui_status != "wired" {
         blockers.push("operator UI closure is not wired".to_string());
     }
+    let acceptance_status = if blockers.is_empty() {
+        "ready_for_real_provider_smoke"
+    } else {
+        "blocked_before_real_provider_smoke"
+    }
+    .to_string();
 
     let status = if blockers.is_empty() {
         "ready"
@@ -2574,6 +2583,8 @@ fn provider_readiness_item(
         credential_status: credential_status.to_string(),
         cdp_automation_status: cdp_automation_status.to_string(),
         operator_ui_status: operator_ui_status.to_string(),
+        acceptance_status,
+        acceptance_checklist: acceptance_checklist.iter().map(|item| item.to_string()).collect(),
         blockers,
         next_action,
     }
@@ -2593,6 +2604,13 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
             "contract_only",
             "not_wired",
             "not_wired",
+            &[
+                "configure at least one solver credential",
+                "wire production solver manager into runtime task flow",
+                "detect captcha challenge through CDP/page probe",
+                "fill provider token/result through browser automation",
+                "run a real provider acceptance smoke and preserve failure evidence",
+            ],
         ),
         provider_readiness_item(
             "sms",
@@ -2601,6 +2619,13 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
             "contract_only",
             "not_wired",
             "not_wired",
+            &[
+                "configure at least one SMS provider credential",
+                "wire SMS manager and provider selection config into runtime flow",
+                "buy/request number through real provider or sandbox",
+                "detect phone/code fields and fill through CDP automation",
+                "handle cancel/finish/failure states with operator-visible evidence",
+            ],
         ),
         provider_readiness_item(
             "email",
@@ -2609,6 +2634,13 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
             "service_api_available",
             "not_wired",
             "not_wired",
+            &[
+                "configure mail.tm or worker endpoint credentials when required",
+                "persist email session identity across the registration flow",
+                "wait for code through EmailService/inbox API",
+                "fill email code through CDP automation",
+                "run a real registration-flow smoke and preserve provider/session evidence",
+            ],
         ),
     ];
     let ready_count = items.iter().filter(|item| item.status == "ready").count();

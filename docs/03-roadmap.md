@@ -51,7 +51,7 @@
 4. Behavior and automation depth
    - 从 `13` shipped primitives 扩展到 replayable `450+` event taxonomy。
    - 补齐 workflow graph、debug、audit、manual gate 和 recovery 语义。
-   - CAPTCHA/SMS/Email 已有 production readiness contract；下一步是真实 manager wiring、CDP detect/fill、operator UI 和 provider acceptance。
+   - CAPTCHA/SMS/Email 已有 production readiness contract、acceptance checklist 和 Settings operator surface；下一步是真实 manager wiring、CDP detect/fill 和 provider acceptance。
 
 5. Runtime adapter and external integration
    - Runtime adapter / release smoke contract 已接入，覆盖 Fake、Lightpanda、headed_external 边界和 release artifact 检查。

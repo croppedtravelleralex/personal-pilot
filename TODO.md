@@ -31,6 +31,7 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Add backend handler/route and provider code boundary for SMS verification (5sim/SMSPool); production manager wiring/config remains open
 - [x] Land EmailService/API boundary for temporary inbox creation, lookup, release, and wait-code; session persistence is currently best-effort
 - [x] Add provider production readiness contract for CAPTCHA/SMS/Email blockers
+- [x] Add provider production readiness acceptance checklist and Settings operator surface for CAPTCHA/SMS/Email blockers
 - [x] Split backup implementation away from the old `app_backup_ops.go` monolith
 - [x] Move browser launch args and process monitor into `backend/internal/browser/`
 

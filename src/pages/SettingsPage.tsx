@@ -119,6 +119,12 @@ function getAssetBadgeTone(entry: DesktopLocalAssetEntry): "success" | "warning"
   return entry.status === "ready" ? "success" : "warning";
 }
 
+function getProviderBadgeTone(status: string): "success" | "warning" | "failed" {
+  if (status === "ready") return "success";
+  if (status === "configured_but_blocked") return "warning";
+  return "failed";
+}
+
 function renderBooleanSelect(
   value: string,
   onChange: (nextValue: string) => void,
@@ -153,6 +159,7 @@ export function SettingsPage() {
   const browserEnvironmentSnapshot = state.browserEnvironmentSnapshot;
   const assetWorkspace = state.assetWorkspace;
   const importExportSkeleton = state.importExportSkeleton;
+  const providerProductionReadiness = state.providerProductionReadiness;
   const runtimeSnapshot = runtime.state.snapshot;
   const readyAssetCount =
     assetWorkspace?.entries.filter((entry) => entry.status === "ready").length ?? 0;
@@ -816,6 +823,75 @@ export function SettingsPage() {
       </div>
 
       <div className="page-grid page-grid--two">
+        <Panel
+          title="Provider Production Readiness"
+          subtitle="CAPTCHA, SMS, and Email stay blocked until manager wiring, CDP automation, operator UI, and real provider smoke all pass"
+        >
+          {providerProductionReadiness ? (
+            <div className="contract-list">
+              <article className="contract-card">
+                <div className="contract-card__top">
+                  <strong>{providerProductionReadiness.summary}</strong>
+                  <span className={`badge badge--${getProviderBadgeTone(providerProductionReadiness.status)}`}>
+                    {formatStatusLabel(providerProductionReadiness.status)}
+                  </span>
+                </div>
+                <p>Generated {formatRelativeTimestamp(providerProductionReadiness.generatedAt)}</p>
+              </article>
+              {providerProductionReadiness.items.map((item) => (
+                <article className="record-card record-card--compact" key={item.domain}>
+                  <div className="record-card__top">
+                    <div>
+                      <strong>{formatStatusLabel(item.domain)}</strong>
+                      <p className="record-card__subline">{item.nextAction}</p>
+                    </div>
+                    <span className={`badge badge--${getProviderBadgeTone(item.status)}`}>
+                      {formatStatusLabel(item.status)}
+                    </span>
+                  </div>
+                  <div className="details-grid details-grid--two">
+                    <div className="details-grid__item">
+                      <dt>Credentials</dt>
+                      <dd>{formatStatusLabel(item.credentialStatus)}</dd>
+                    </div>
+                    <div className="details-grid__item">
+                      <dt>Manager</dt>
+                      <dd>{formatStatusLabel(item.managerWiringStatus)}</dd>
+                    </div>
+                    <div className="details-grid__item">
+                      <dt>CDP automation</dt>
+                      <dd>{formatStatusLabel(item.cdpAutomationStatus)}</dd>
+                    </div>
+                    <div className="details-grid__item">
+                      <dt>Operator UI</dt>
+                      <dd>{formatStatusLabel(item.operatorUiStatus)}</dd>
+                    </div>
+                    <div className="details-grid__item">
+                      <dt>Acceptance</dt>
+                      <dd>{formatStatusLabel(item.acceptanceStatus)}</dd>
+                    </div>
+                    <div className="details-grid__item">
+                      <dt>Providers</dt>
+                      <dd>{item.configuredProviderCount}/{item.providerCount}</dd>
+                    </div>
+                  </div>
+                  <p className="record-card__content">
+                    {item.acceptanceChecklist.join(" -> ")}
+                  </p>
+                  {item.blockers.length > 0 ? (
+                    <p className="record-card__subline">Blocked: {item.blockers.join("; ")}</p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Provider readiness unavailable"
+              detail="Refresh to inspect CAPTCHA, SMS, and Email production wiring blockers."
+            />
+          )}
+        </Panel>
+
         <Panel
           title="Import / Export Skeleton"
           subtitle="Manifest-first local import and export queue design, ready for future compiler and recorder integrations"

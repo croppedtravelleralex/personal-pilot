@@ -423,6 +423,8 @@ export interface DesktopProviderReadinessItem {
   credentialStatus: string;
   cdpAutomationStatus: string;
   operatorUiStatus: string;
+  acceptanceStatus: string;
+  acceptanceChecklist: string[];
   blockers: string[];
   nextAction: string;
 }
