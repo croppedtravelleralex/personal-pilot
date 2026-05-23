@@ -1,20 +1,20 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 23,
+  "loop_iteration": 24,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Validation report history/export landed",
-  "current_objective": "扩展 Validation Board observed collectors 到 WebRTC/canvas/audio/leak",
-  "last_result_summary": "Validation Board report history list 与 profile-level evidence export 已落地；DNS/transport observed report 可追溯和导出，WebRTC/canvas/audio/leak collector 仍待扩展",
-  "next_action_hint": "扩展 Validation observed collectors: WebRTC/leak first, then canvas/audio",
+  "current_focus": "Validation WebRTC/leak contract signals landed",
+  "current_objective": "把 WebRTC/leak warning contract 升级为 browser-scoped probes，并补 canvas/audio observed collectors",
+  "last_result_summary": "Validation reports 现覆盖 DNS/transport 真实 native probe 与 WebRTC/leak observed warning contract；history/export 已落地，下一步是 browser-scoped WebRTC/leak 和 canvas/audio",
+  "next_action_hint": "Implement browser-scoped WebRTC/leak probes, then canvas/audio collectors",
   "next_suggestions": [
     {
-      "title": "Extend observed collectors to WebRTC and leak checks",
+      "title": "Upgrade WebRTC/leak to browser-scoped probes",
       "priority": 1,
-      "rationale": "report history/export 底座已就绪，下一步覆盖最容易暴露环境不一致的 WebRTC/leak",
+      "rationale": "当前只是 warning contract，下一步需要真实浏览器环境采样",
       "kind": "feature"
     },
     {
@@ -66,6 +66,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Local validation report list and profile-level evidence export landed through Tauri desktop service."
+    },
+    {
+      "title": "Validation WebRTC/leak contract signals",
+      "kind": "feature",
+      "status": "success",
+      "note": "Validation reports now include WebRTC/leak warning signals without overstating browser-scoped probe closure."
     }
   ],
   "blocked_reason": "",

@@ -26,6 +26,11 @@ Progress must be reported with the dual-axis rule:
 - Win11 NSIS installer 已生成：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`。
 - 下一阶段主线切到 Overall `70%` 的 Validation Board MVP，不提高 capability score，直到有 observed evidence。
 
+## 2026-05-23 Validation WebRTC/leak contract signals
+
+- Validation report now includes WebRTC and leak observed-category warning signals.
+- These signals are honest contract warnings: they record the missing browser-scoped probe boundary instead of pretending leak/WebRTC probing is complete.
+- Next implementation slice is browser-scoped WebRTC/leak probing plus canvas/audio collectors.
 ## 2026-05-23 Validation report history/export
 
 - 新增 validation report history list native command 与 desktop wrapper。

@@ -1,3 +1,16 @@
+## Round 25 — Validation WebRTC/leak contract signals (2026-05-23)
+
+### Type: feature
+
+### Actions
+- 扩展 validation report categories 到 WebRTC 和 leak。
+- 新增 WebRTC/leak observed warning signals，明确记录 browser-scoped probe 尚未闭环。
+
+### Results
+- `cargo check --manifest-path src-tauri/Cargo.toml` 通过。
+- `pnpm typecheck` 通过。
+
+### Verdict: success
 ## Round 24 — Validation report history and export (2026-05-23)
 
 ### Type: feature

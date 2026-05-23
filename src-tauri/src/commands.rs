@@ -263,6 +263,32 @@ fn collect_dns_signal() -> DesktopValidationSignal {
     }
 }
 
+fn collect_webrtc_signal() -> DesktopValidationSignal {
+    let started = Instant::now();
+    validation_signal(
+        "webrtc-native-contract",
+        "webrtc",
+        "warning",
+        "WebRTC native collector contract",
+        "Native WebRTC leak probing requires a browser runtime probe; this report records the missing observed collector boundary.".to_string(),
+        Some("next: run browser-scoped local/public IP and media device exposure probe".to_string()),
+        Some(started.elapsed().as_millis()),
+    )
+}
+
+fn collect_leak_signal() -> DesktopValidationSignal {
+    let started = Instant::now();
+    validation_signal(
+        "leak-report-persistence",
+        "leak",
+        "warning",
+        "Cross-profile leak collector contract",
+        "Report persistence is available, but storage/cookie cross-profile leak probing still needs a browser-scoped collector.".to_string(),
+        Some("next: compare profile storage scopes, cookies, localStorage, sessionStorage, and identity material.".to_string()),
+        Some(started.elapsed().as_millis()),
+    )
+}
+
 async fn collect_transport_signal() -> DesktopValidationSignal {
     let started = Instant::now();
     let client = match Client::builder().timeout(Duration::from_secs(8)).build() {
@@ -315,6 +341,8 @@ async fn build_validation_report(state: &DesktopState) -> Result<DesktopValidati
     let generated_at = now_ts_string();
     let mut signals = vec![collect_dns_signal()];
     signals.push(collect_transport_signal().await);
+    signals.push(collect_webrtc_signal());
+    signals.push(collect_leak_signal());
 
     let succeeded = signals
         .iter()
@@ -339,7 +367,12 @@ async fn build_validation_report(state: &DesktopState) -> Result<DesktopValidati
         generated_at,
         profile_id: None,
         collector_version: "validation-observed-v1".to_string(),
-        categories: vec!["dns".to_string(), "transport".to_string()],
+        categories: vec![
+            "dns".to_string(),
+            "transport".to_string(),
+            "webrtc".to_string(),
+            "leak".to_string(),
+        ],
         signals,
         report_path: report_path.to_string_lossy().to_string(),
         summary: format!("{signal_count} observed signal(s), {succeeded} succeeded, {failed} failed."),
