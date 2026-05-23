@@ -11,17 +11,185 @@
     "Every promoted signal must name collector scope, runtime adapter, target-profile-browser flag, and failure reason when applicable."
   ],
   "families": [
-    { "id": "browser_api_surface", "targetCount": 44, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts", "currentEvidence": "desktop WebView and profile runtime probes for WebRTC/canvas/audio/storage subset" },
-    { "id": "network_transport", "targetCount": 42, "evidenceStatus": "partial_observed", "collectorPath": "src/desktop/mod.rs collect_validation_report", "currentEvidence": "DNS and HTTPS transport observed collector v1" },
-    { "id": "webrtc_ip_leak", "targetCount": 36, "evidenceStatus": "partial_observed", "collectorPath": "validation_probe Lightpanda/CDP", "currentEvidence": "profile runtime WebRTC warning/signal with failure preservation" },
-    { "id": "canvas_rendering", "targetCount": 38, "evidenceStatus": "partial_observed_with_failure", "collectorPath": "validation_probe Lightpanda/CDP and desktop WebView canvas probe", "currentEvidence": "canvas sample exists but Lightpanda toDataURL failure must remain visible" },
-    { "id": "audio_stack", "targetCount": 34, "evidenceStatus": "partial_observed_with_warning", "collectorPath": "validation_probe Lightpanda/CDP and desktop WebView audio probe", "currentEvidence": "AudioContext availability/sample-rate warning evidence only" },
-    { "id": "webgl_gpu", "targetCount": 42, "currentEvidence": "declared/profile consistency only; observed collector not complete" },
-    { "id": "fonts_text_metrics", "targetCount": 34, "currentEvidence": "declared/profile layer only" },
-    { "id": "media_devices", "targetCount": 30, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts permissions-devices probe", "currentEvidence": "desktop WebView mediaDevices capability and count probe" },
-    { "id": "storage_partitioning", "targetCount": 28, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts leak/storage probe", "currentEvidence": "desktop WebView storage scope probe only" },
-    { "id": "timezone_locale", "targetCount": 34, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts timezone-locale probe", "currentEvidence": "desktop WebView timezone and navigator languages probe plus runtime projection and consistency rules" },
-    { "id": "hardware_os", "targetCount": 46, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts hardware-os probe", "currentEvidence": "desktop WebView navigator hardware/OS probe plus runtime projection for selected first-family fields" },
-    { "id": "coherence_detector", "targetCount": 42, "currentEvidence": "validation board category and consistency assessment; full detector matrix pending" }
+    {
+      "id": "browser_api_surface",
+      "targetCount": 44,
+      "evidenceStatus": "partial_observed",
+      "collectorPath": "src/features/validation/browserProbe.ts",
+      "currentEvidence": "desktop WebView and profile runtime probes for WebRTC/canvas/audio/storage subset",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "network_transport",
+      "targetCount": 42,
+      "evidenceStatus": "partial_observed",
+      "collectorPath": "src/desktop/mod.rs collect_validation_report",
+      "currentEvidence": "DNS and HTTPS transport observed collector v1",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "webrtc_ip_leak",
+      "targetCount": 36,
+      "evidenceStatus": "partial_observed",
+      "collectorPath": "validation_probe Lightpanda/CDP",
+      "currentEvidence": "profile runtime WebRTC warning/signal with failure preservation",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "canvas_rendering",
+      "targetCount": 38,
+      "evidenceStatus": "partial_observed_with_failure",
+      "collectorPath": "validation_probe Lightpanda/CDP and desktop WebView canvas probe",
+      "currentEvidence": "canvas sample exists but Lightpanda toDataURL failure must remain visible",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "audio_stack",
+      "targetCount": 34,
+      "evidenceStatus": "partial_observed_with_warning",
+      "collectorPath": "validation_probe Lightpanda/CDP and desktop WebView audio probe",
+      "currentEvidence": "AudioContext availability/sample-rate warning evidence only",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "webgl_gpu",
+      "targetCount": 42,
+      "currentEvidence": "desktop WebView WebGL vendor/renderer/version probe; profile browser proof pending",
+      "evidenceStatus": "partial_desktop_webview_observed",
+      "collectorPath": "src/features/validation/browserProbe.ts webgl probe",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "fonts_text_metrics",
+      "targetCount": 34,
+      "currentEvidence": "desktop WebView canvas text metrics across common fonts; profile browser proof pending",
+      "evidenceStatus": "partial_desktop_webview_observed",
+      "collectorPath": "src/features/validation/browserProbe.ts font text metrics probe",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "media_devices",
+      "targetCount": 30,
+      "evidenceStatus": "partial_observed",
+      "collectorPath": "src/features/validation/browserProbe.ts permissions-devices probe",
+      "currentEvidence": "desktop WebView mediaDevices capability and count probe",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "storage_partitioning",
+      "targetCount": 28,
+      "evidenceStatus": "partial_observed",
+      "collectorPath": "src/features/validation/browserProbe.ts leak/storage probe",
+      "currentEvidence": "desktop WebView storage scope probe only",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "timezone_locale",
+      "targetCount": 34,
+      "evidenceStatus": "partial_observed",
+      "collectorPath": "src/features/validation/browserProbe.ts timezone-locale probe",
+      "currentEvidence": "desktop WebView timezone and navigator languages probe plus runtime projection and consistency rules",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "hardware_os",
+      "targetCount": 46,
+      "evidenceStatus": "partial_observed",
+      "collectorPath": "src/features/validation/browserProbe.ts hardware-os probe",
+      "currentEvidence": "desktop WebView navigator hardware/OS probe plus runtime projection for selected first-family fields",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    },
+    {
+      "id": "coherence_detector",
+      "targetCount": 42,
+      "currentEvidence": "validation board category and consistency assessment; full detector matrix pending",
+      "evidenceStatus": "taxonomy_defined_detector_pending",
+      "collectorPath": "validation board detector/coherence matrix pending",
+      "declaredAppliedObservedLayer": "declared/applied/observed split required",
+      "adapterSupport": [
+        "desktop_webview",
+        "lightpanda_profile_browser_pending"
+      ],
+      "failureMode": "collector unavailable, adapter mismatch, or profile-browser evidence missing",
+      "repeatabilityRule": "repeat collector at least twice and preserve generatedAt, collectorScope, runtimeAdapter, targetProfileBrowser, failureReason",
+      "evidenceSchema": "DesktopValidationBrowserSignal or validation report signal metadata"
+    }
   ]
 }

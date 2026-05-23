@@ -2889,6 +2889,29 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
     }
 }
 
+fn latest_report_value(database_url: &str, dir_name: &str) -> Option<Value> {
+    let reports_dir = data_root_from_database_url(database_url)
+        .join("reports")
+        .join(dir_name);
+    let entries = fs::read_dir(reports_dir).ok()?;
+    let mut reports = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|item| item.to_str()) != Some("json") {
+            continue;
+        }
+        let raw = fs::read_to_string(&path).ok()?;
+        let value = serde_json::from_str::<Value>(&raw).ok()?;
+        let generated_at = value
+            .get("generatedAt")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| path_timestamp_or_now(&path));
+        reports.push((generated_at, value));
+    }
+    reports.sort_by(|left, right| right.0.cmp(&left.0));
+    reports.into_iter().next().map(|(_, value)| value)
+}
 fn evidence_report_summary_from_json(
     kind: &str,
     path: &Path,
@@ -3098,12 +3121,39 @@ pub fn read_desktop_release_smoke_contract(
         .join("nsis")
         .join("PersonaPilot_0.1.0_x64-setup.exe");
     let release_artifact_present = release_artifact_path.exists();
-    let measurement_status = "pending_operator_measurement".to_string();
-    let measurement_notes = vec![
-        "release artifact exists check is automated; cold start, idle RSS, and process count still require a measured operator smoke".to_string(),
+    let database_url = database_url
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(default_database_url);
+    let latest_release_report = latest_report_value(&database_url, "release-smoke");
+    let measured_cold_start_ms = latest_release_report
+        .as_ref()
+        .and_then(|report| report.get("measuredColdStartMs"))
+        .and_then(Value::as_i64);
+    let measured_idle_rss_mb = latest_release_report
+        .as_ref()
+        .and_then(|report| report.get("measuredIdleRssMb"))
+        .and_then(Value::as_i64);
+    let measured_process_count = latest_release_report
+        .as_ref()
+        .and_then(|report| report.get("measuredProcessCount"))
+        .and_then(Value::as_i64);
+    let latest_release_status = latest_release_report
+        .as_ref()
+        .and_then(|report| report.get("status"))
+        .and_then(Value::as_str);
+    let measurement_status = latest_release_status
+        .map(|status| format!("measured_{status}"))
+        .unwrap_or_else(|| "pending_operator_measurement".to_string());
+    let mut measurement_notes = vec![
+        "release artifact exists check is automated; cold start, idle RSS, and process count must come from release smoke reports".to_string(),
         "performance assessment must use release artifacts, not dev-mode metrics".to_string(),
         "headed_external must remain an adapter contract and must not turn this repository into a Chromium/Firefox fork host".to_string(),
     ];
+    if let Some(report) = latest_release_report.as_ref() {
+        if let Some(reason) = value_text(report, "failureReason") {
+            measurement_notes.push(format!("latest release smoke failureReason: {reason}"));
+        }
+    }
     let adapter_contracts = vec![
         DesktopRuntimeAdapterContractItem {
             adapter_id: "fake".to_string(),
@@ -3184,7 +3234,7 @@ pub fn read_desktop_release_smoke_contract(
     }
     .to_string();
     let summary = format!(
-        "Release smoke contract {status}; adapters tracked: {}; release artifact present={release_artifact_present}.",
+        "Release smoke contract {status}; adapters tracked: {}; release artifact present={release_artifact_present}; measurement={measurement_status}.",
         adapter_contracts.len()
     );
 
@@ -3195,11 +3245,11 @@ pub fn read_desktop_release_smoke_contract(
         release_artifact_present,
         win11_baseline_status: "enforced_by_template_script".to_string(),
         cold_start_target_ms: 2000,
-        measured_cold_start_ms: None,
+        measured_cold_start_ms,
         idle_rss_target_mb: 220,
-        measured_idle_rss_mb: None,
+        measured_idle_rss_mb,
         process_count_target: 4,
-        measured_process_count: None,
+        measured_process_count,
         measurement_status,
         measurement_notes,
         adapter_contracts,
@@ -9083,14 +9133,39 @@ mod tests {
 
     #[test]
     fn release_smoke_contract_tracks_adapter_boundary_without_kernel_fork_claims() {
-        let contract = read_desktop_release_smoke_contract(None);
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_release_contract_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("release-smoke");
+        fs::create_dir_all(&reports_dir).expect("create release reports dir");
+        fs::write(
+            reports_dir.join("release-performance-smoke-test.json"),
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v1",
+                "generatedAt": "2026-05-23T00:00:00Z",
+                "status": "warning",
+                "failureReason": "cold_start_target_exceeded,idle_rss_target_exceeded,process_count_target_exceeded",
+                "measuredColdStartMs": 9301,
+                "measuredIdleRssMb": 411,
+                "measuredProcessCount": 14
+            })
+            .to_string(),
+        )
+        .expect("write release report");
+        let db_url = format!("sqlite://{}", temp_root.join("persona.db").to_string_lossy());
+        let contract = read_desktop_release_smoke_contract(Some(&db_url));
         assert_eq!(contract.cold_start_target_ms, 2000);
-        assert_eq!(contract.measured_cold_start_ms, None);
+        assert_eq!(contract.measured_cold_start_ms, Some(9301));
         assert_eq!(contract.idle_rss_target_mb, 220);
-        assert_eq!(contract.measured_idle_rss_mb, None);
+        assert_eq!(contract.measured_idle_rss_mb, Some(411));
         assert_eq!(contract.process_count_target, 4);
-        assert_eq!(contract.measured_process_count, None);
-        assert_eq!(contract.measurement_status, "pending_operator_measurement");
+        assert_eq!(contract.measured_process_count, Some(14));
+        assert_eq!(contract.measurement_status, "measured_warning");
+        assert!(contract
+            .measurement_notes
+            .iter()
+            .any(|note| note.contains("cold_start_target_exceeded")));
         assert_eq!(contract.adapter_contracts.len(), 3);
         let fake = contract
             .adapter_contracts
@@ -9122,6 +9197,8 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("AdsPower boundary must not be refreshed")));
+
+        let _ = fs::remove_dir_all(temp_root);
         assert!(contract
             .warnings
             .iter()

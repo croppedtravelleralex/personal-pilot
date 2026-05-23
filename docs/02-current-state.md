@@ -13,7 +13,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - cookie / localStorage / sessionStorage 跨 app restart 持久化与恢复已落地。
 - profile-scoped `SessionBundle` export/import preflight/dry-run/confirmed local restore write path 已落地：可导出 profile refs、fingerprint/network/continuity/behavior references、session binding metadata、cookie/localStorage/sessionStorage 存在性与计数；默认脱敏，显式本地开关才包含敏感 payload；import preflight 可检查 schema、引用缺失和 profile 冲突；dry-run 不写 DB；confirmed restore 可 upsert target profile 和 `proxy_session_bindings`，敏感 payload 只在 bundle 包含时恢复。
 
-历史 `77% / 23%` 或 `82% / 18%` 不再作为当前进度口径。
+历史 `77% / 23%` 或 `82% / 18%` (historical-only) 不再作为当前进度口径。
 
 ## Runtime Alive
 
@@ -53,11 +53,12 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - P17 扩展 desktop WebView observed probes：timezone/locale、hardware/os、screen/display、navigator hints、permissions/media devices 已有 desktop WebView scoped signals；它们仍不是 profile browser proof。
 - Automation 已接入 P10 behavior audit contract：报告 `13` shipped primitives、`8` page archetypes、workflow graph/debug trace/manual gate/recovery semantics 覆盖状态，并明确 `450+` event taxonomy 仍是 target-only。
 - P18 已把 behavior taxonomy 前 5 个 family 补成 replay-semantics backed：readiness_wait、settle_idle、scroll_scan、hover_focus、typing_input 均有 replaySemantics、auditPayload、failureStates、recoveryBehavior；完整 `450` replay runtime 仍未交付。
-- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P14 已新增 `scripts/release_performance_smoke.ps1` 并产出 release exe report，当前实测为 warning：`9301ms` cold start、`411MB` idle RSS、`14` processes，均超过默认预算；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平。
+- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P14 已新增 `scripts/release_performance_smoke.ps1` 并产出 release exe report，当前 release smoke contract 会读取最新 report；最近实测为 warning：`9301ms` cold start、`411MB` idle RSS、`14` processes，均超过默认预算；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平。
 - P16 已新增 unified evidence report history：release performance、provider acceptance、SessionBundle portability、taxonomy audit、external distribution smoke 的本地 JSON report 可通过桌面 API 读取，并在 Overview 显示最近报告。
 - P19 已深化 provider production closure contract：Settings 现在区分 credentials、manager wiring、CDP detect、CDP fill、operator UI、real provider smoke、failure reason 和 latest report path；scripts/provider_acceptance_preflight.ps1 输出 v2 blockers/failureReason。真实 provider acceptance 仍必须有凭证和真实 smoke 证据。
 - P20 已升级外部条件 smoke gates：`external_distribution_smoke.ps1` v2 区分 local asset gate 与 manual/clean-Win11/page/provider/session external gates；`session_bundle_portability_smoke.ps1` v2 输出 cross-machine gateResults/failureReason。未跑第二环境或人工 smoke 时必须保留 blocked 状态。
 - P21 已新增 runtime adapter evidence gate：release contract 现在暴露 adapter capability/evidence requirements/process lifecycle/CDP attach 状态；scripts/runtime_adapter_evidence_gate.ps1 可生成 runtime-adapter report，并把 AdsPower refresh 保持为 deferred_by_evidence_gate，直到 B1-B5 证据齐全。
+- P22-P27 已执行新一轮 6 批本机推进：release smoke contract 读取最新实测 report；Settings Import/Export 显示最新 SessionBundle portability report；Validation desktop WebView 新增 WebGL 与 font/text metrics observed probes；fingerprint taxonomy 全 family 补 collector/layer/adapter/failure/repeatability/schema 元数据；behavior taxonomy 全 family 补 replay/audit/failure/recovery 定义；新增 `scripts/live_truth_guard.ps1` 防止 live-truth 口径回退。
 
 ## 未完成边界
 

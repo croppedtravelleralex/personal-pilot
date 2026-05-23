@@ -59,6 +59,6 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - `主线交付: 100% / 0%`
 - `整体终态: 40% / 60%`
 
-历史的 `77% / 23%` 审计重置仅作为上下文保留。
+历史的 `77% / 23%` (historical-only) 审计重置仅作为上下文保留。
 
 详细阶段板、评分卡和 AdsPower 基准摘要请参阅 `docs/19-phase-plan-and-scorecard.md`。

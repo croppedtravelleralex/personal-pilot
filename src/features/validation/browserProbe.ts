@@ -136,6 +136,96 @@ function collectCanvasSignal(): DesktopValidationBrowserSignal {
   }
 }
 
+function collectWebGlSignal(): DesktopValidationBrowserSignal {
+  const started = performance.now();
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl") ?? canvas.getContext("experimental-webgl");
+    if (!gl) {
+      return signal(
+        "webgl-desktop-webview-renderer",
+        "fingerprint",
+        "warning",
+        "WebGL desktop WebView renderer probe",
+        "Desktop WebView could not create a WebGL context.",
+        "scope=desktop-webview; target-profile-browser=false",
+        elapsed(started),
+      );
+    }
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    const vendor = debugInfo
+      ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)
+      : gl.getParameter(gl.VENDOR);
+    const renderer = debugInfo
+      ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+      : gl.getParameter(gl.RENDERER);
+    const version = gl.getParameter(gl.VERSION);
+    return signal(
+      "webgl-desktop-webview-renderer",
+      "fingerprint",
+      vendor || renderer ? "succeeded" : "warning",
+      "WebGL desktop WebView renderer probe",
+      `Desktop WebView WebGL reports vendor=${vendor || "unknown"} renderer=${renderer || "unknown"}.`,
+      `scope=desktop-webview; target-profile-browser=false; vendor=${vendor || "unknown"}; renderer=${renderer || "unknown"}; version=${version || "unknown"}`,
+      elapsed(started),
+    );
+  } catch (error) {
+    return signal(
+      "webgl-desktop-webview-renderer",
+      "fingerprint",
+      "failed",
+      "WebGL desktop WebView renderer probe",
+      `WebGL probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      "scope=desktop-webview; target-profile-browser=false",
+      elapsed(started),
+    );
+  }
+}
+
+function collectFontTextMetricsSignal(): DesktopValidationBrowserSignal {
+  const started = performance.now();
+  try {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return signal(
+        "font-text-metrics-desktop-webview",
+        "fingerprint",
+        "failed",
+        "Font text metrics desktop WebView probe",
+        "Desktop WebView could not create a 2D canvas context for text metrics.",
+        "scope=desktop-webview; target-profile-browser=false",
+        elapsed(started),
+      );
+    }
+    const sample = "PersonaPilot mWg 012345";
+    const fonts = ["16px Arial", "16px Times New Roman", "16px Consolas", "16px Segoe UI"];
+    const metrics = fonts.map((font) => {
+      context.font = font;
+      const measured = context.measureText(sample);
+      return `${font}:${Math.round(measured.width * 100) / 100}`;
+    });
+    return signal(
+      "font-text-metrics-desktop-webview",
+      "fingerprint",
+      metrics.length > 0 ? "succeeded" : "warning",
+      "Font text metrics desktop WebView probe",
+      "Desktop WebView canvas text metrics were sampled across common fonts.",
+      `scope=desktop-webview; target-profile-browser=false; metrics=${metrics.join(" | ")}`,
+      elapsed(started),
+    );
+  } catch (error) {
+    return signal(
+      "font-text-metrics-desktop-webview",
+      "fingerprint",
+      "failed",
+      "Font text metrics desktop WebView probe",
+      `Font metrics probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      "scope=desktop-webview; target-profile-browser=false",
+      elapsed(started),
+    );
+  }
+}
 async function collectAudioSignal(): Promise<DesktopValidationBrowserSignal> {
   const started = performance.now();
   const AudioContextCtor = window.AudioContext ?? window.webkitAudioContext;
@@ -372,6 +462,8 @@ export async function collectBrowserValidationSignals(): Promise<DesktopValidati
     collectTimezoneLocaleSignal(),
     collectHardwareOsSignal(),
     collectScreenDisplaySignal(),
+    collectWebGlSignal(),
+    collectFontTextMetricsSignal(),
     collectNavigatorHintsSignal(),
     permissionsDevices,
   ];

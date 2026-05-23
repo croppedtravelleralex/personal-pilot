@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 37,
+  "loop_iteration": 43,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P21 batch 6 runtime adapter and AdsPower evidence gate",
-  "current_objective": "按批次执行第 6 批：建立 Fake/Lightpanda/headed adapter capability matrix、external browser lifecycle/CDP attach gate，并保持 AdsPower refresh evidence-gated deferred",
-  "last_result_summary": "Runtime adapter contract 已暴露 capability/evidence requirements/process lifecycle/CDP attach；runtime_adapter_evidence_gate 可生成 report，AdsPower refresh 仍 deferred_by_evidence_gate。",
-  "next_action_hint": "Run P21 gates, commit/push retry, then perform deep acceptance review and plan next batches",
+  "current_focus": "P22-P27 six-batch overall hardening",
+  "current_objective": "按 6 批继续推进剩余 Overall 工作：release report ingestion、portability report UI、fingerprint WebGL/font probes、taxonomy metadata、behavior semantics、live-truth guard",
+  "last_result_summary": "新 6 批已实现：release contract 读取最新实测、Settings 显示 portability report、Validation 新增 WebGL/font observed probes、fingerprint/behavior taxonomy 元数据深化、live_truth_guard 防口径回退。",
+  "next_action_hint": "Run full gates, commit, push, then plan next external-evidence or performance-mitigation batch",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -222,6 +222,42 @@
       "kind": "feature",
       "status": "success",
       "note": "Runtime adapter evidence gate now reports Fake/Lightpanda/headed capabilities, lifecycle/CDP status, and keeps AdsPower refresh deferred until B1-B5 evidence is complete."
+    },
+    {
+      "title": "P22 release measurement ingestion",
+      "note": "Release smoke contract now reads latest release-smoke report values instead of always showing pending.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P23 portability report viewer",
+      "note": "Settings Import/Export surface now shows latest SessionBundle portability report summary, failure reason, and path.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P24 fingerprint WebGL/font probes",
+      "note": "Desktop WebView validation signals now include WebGL renderer and font/text metrics observed probes without claiming profile-browser proof.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P25 fingerprint taxonomy metadata",
+      "note": "Fingerprint taxonomy families now include collector/layer/adapter/failure/repeatability/evidence schema metadata and audit counters.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P26 behavior taxonomy semantics",
+      "note": "All behavior taxonomy families now define replay semantics, audit payload, failure states, and recovery behavior while full replay runtime remains pending.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P27 live-truth guard",
+      "note": "live_truth_guard script prevents historical ratios and taxonomy target claims from becoming live truth.",
+      "status": "success",
+      "kind": "verify"
     }
   ],
   "blocked_reason": "",

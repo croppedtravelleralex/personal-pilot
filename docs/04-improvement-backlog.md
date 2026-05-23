@@ -27,7 +27,7 @@
 - 把 `80` declared controls 误报成 `80` runtime-applied fields。
 - 把 `450+` fingerprint / event target 误报成当前已交付。
 - 把 mock / fallback / staged 默认路径算作 delivery closure。
-- 用历史 `77% / 23%` 或 `82% / 18%` 覆盖当前 live truth。
+- 把历史比例 `77% / 23%` 或 `82% / 18%` (historical-only) 覆盖成当前 live truth。
 - 在 Mainline closeout 阶段引入 Overall 级大范围重构。
 - P5/P6 已通过后仍把 WebRTC/audio warning 或 canvas failure 写成全部成功，或丢失 `failureReason`。
 

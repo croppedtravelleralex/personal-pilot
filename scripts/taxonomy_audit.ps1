@@ -38,6 +38,12 @@ function Measure-Taxonomy($taxonomy, [string]$kind) {
     auditPayloadFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.auditPayload }).Count
     failureStatesFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.failureStates }).Count
     recoveryBehaviorFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.recoveryBehavior }).Count
+    collectorPathFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.collectorPath }).Count
+    layerFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.declaredAppliedObservedLayer }).Count
+    adapterSupportFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.adapterSupport }).Count
+    failureModeFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.failureMode }).Count
+    repeatabilityRuleFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.repeatabilityRule }).Count
+    evidenceSchemaFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.evidenceSchema }).Count
   }
 }
 

@@ -5,6 +5,7 @@ import {
   openLocalAssetEntry,
   openLocalDirectory,
   readBrowserEnvironmentPolicy,
+  listEvidenceReports,
   readImportExportSkeleton,
   readLocalApiSnapshot,
   readLocalAssetWorkspace,
@@ -19,6 +20,7 @@ import type {
   DesktopBrowserEnvironmentPolicyDraft as DesktopBrowserEnvironmentPolicyInput,
   DesktopBrowserEnvironmentPolicySnapshot,
   DesktopDirectoryTarget,
+  DesktopEvidenceReportSummary,
   DesktopImportExportSkeleton,
   DesktopLocalApiSettingsDraft as DesktopLocalApiSettingsInput,
   DesktopLocalApiSnapshot,
@@ -77,6 +79,7 @@ interface SettingsState {
   assetWorkspace: DesktopLocalAssetWorkspaceSnapshot | null;
   importExportSkeleton: DesktopImportExportSkeleton | null;
   providerProductionReadiness: DesktopProviderProductionReadiness | null;
+  latestPortabilityReport: DesktopEvidenceReportSummary | null;
   draft: RuntimeSettingsDraft;
   loadedDraft: RuntimeSettingsDraft | null;
   localApiDraft: LocalApiSettingsDraft;
@@ -234,6 +237,7 @@ export const settingsStore = createStore<SettingsState>({
   assetWorkspace: null,
   importExportSkeleton: null,
   providerProductionReadiness: null,
+  latestPortabilityReport: null,
   draft: DEFAULT_RUNTIME_SETTINGS_DRAFT,
   loadedDraft: null,
   localApiDraft: DEFAULT_LOCAL_API_SETTINGS_DRAFT,
@@ -268,6 +272,7 @@ export const settingsActions = {
         assetWorkspace,
         importExportSkeleton,
         providerProductionReadiness,
+        evidenceReports,
       ] = await Promise.all([
         readSettings(),
         readLocalApiSnapshot(),
@@ -275,6 +280,7 @@ export const settingsActions = {
         readLocalAssetWorkspace(),
         readImportExportSkeleton(),
         readProviderProductionReadiness(),
+        listEvidenceReports(),
       ]);
 
       if (settingsStore.getState().refreshRequestId !== requestId) {
@@ -318,6 +324,7 @@ export const settingsActions = {
           assetWorkspace,
           importExportSkeleton,
           providerProductionReadiness,
+          latestPortabilityReport: evidenceReports.reports.find((report) => report.kind === "session_portability") ?? null,
           draft: shouldReplaceDraft(
             current.draft,
             current.loadedDraft,

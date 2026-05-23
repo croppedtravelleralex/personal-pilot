@@ -160,6 +160,7 @@ export function SettingsPage() {
   const assetWorkspace = state.assetWorkspace;
   const importExportSkeleton = state.importExportSkeleton;
   const providerProductionReadiness = state.providerProductionReadiness;
+  const latestPortabilityReport = state.latestPortabilityReport;
   const runtimeSnapshot = runtime.state.snapshot;
   const readyAssetCount =
     assetWorkspace?.entries.filter((entry) => entry.status === "ready").length ?? 0;
@@ -1001,6 +1002,21 @@ export function SettingsPage() {
                       .map((field) => `${field.key}${field.required ? " (required)" : ""}`)
                       .join(", ")}
                   </p>
+                </article>
+                <article className="contract-card">
+                  <div className="contract-card__top">
+                    <strong>SessionBundle portability</strong>
+                    <span className={`badge badge--${latestPortabilityReport ? getProviderBadgeTone(latestPortabilityReport.status) : "warning"}`}>
+                      {latestPortabilityReport ? formatStatusLabel(latestPortabilityReport.status) : "No report"}
+                    </span>
+                  </div>
+                  <p>{latestPortabilityReport?.summary ?? "Run the portability smoke to capture local or cross-machine gate evidence."}</p>
+                  {latestPortabilityReport?.failureReason ? (
+                    <p className="record-card__subline">Failure reason: {latestPortabilityReport.failureReason}</p>
+                  ) : null}
+                  {latestPortabilityReport?.reportPath ? (
+                    <p className="record-card__content record-card__content--muted">{latestPortabilityReport.reportPath}</p>
+                  ) : null}
                 </article>
                 <article className="contract-card">
                   <div className="contract-card__top">

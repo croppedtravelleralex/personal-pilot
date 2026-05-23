@@ -28,9 +28,9 @@ Updated: 2026-05-23 (Asia/Shanghai)
 2. 在干净 Win11 机器验证安装、启动、卸载。`blocked-external-gated`
 3. 验证全页面可打开。`blocked-external-gated`
 4. 保持 release notes 与真实能力一致。`ready`
-5. 优化 cold start：`9301ms -> <= 2000ms`。`large-slice`
-6. 优化 idle RSS：`411MB -> <= 220MB`。`large-slice`
-7. 优化 process count：`14 -> <= 4` 或记录例外。`large-slice`
+5. 优化 cold start：`9301ms -> <= 2000ms`。`measured-report-ingested`
+6. 优化 idle RSS：`411MB -> <= 220MB`。`measured-report-ingested`
+7. 优化 process count：`14 -> <= 4` 或记录例外。`measured-report-ingested`
 8. 生成 release performance history。`done`
 9. 将 release performance report 接入 Overview / Settings。`done-overview`
 
@@ -41,8 +41,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 12. target machine dry-run evidence。`blocked-external-gated`
 13. target machine confirmed restore evidence。`blocked-external-gated`
 14. restart continuity after restore evidence。`blocked-external-gated`
-15. profile portability UI 完善。`ready`
-16. portability failure reason viewer。`partial-report-v2`
+15. profile portability UI 完善。`partial-settings-report-visible`
+16. portability failure reason viewer。`partial-settings-report-visible`
 17. portability report history。`done-overview`
 
 ### Provider Closure
@@ -68,8 +68,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### Fingerprint / Validation
 
-36. WebGL observed collector。`large-slice`
-37. font/text metrics observed collector。`large-slice`
+36. WebGL observed collector。`partial-desktop-webview`
+37. font/text metrics observed collector。`partial-desktop-webview`
 38. media devices observed collector。`partial-desktop-webview`
 39. timezone/locale observed collector。`partial-desktop-webview`
 40. hardware/os observed collector。`partial-desktop-webview`
@@ -86,22 +86,22 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### 450 Fingerprint Taxonomy
 
-51. 为全部 fingerprint family 定义 collector path。`large-slice`
-52. 为全部 signal 定义 declared/applied/observed layer。`large-slice`
-53. 为全部 signal 定义 adapter support。`large-slice`
-54. 为全部 signal 定义 failure mode。`large-slice`
-55. 为全部 signal 定义 repeatability rule。`large-slice`
-56. 为全部 signal 定义 evidence schema。`large-slice`
+51. 为全部 fingerprint family 定义 collector path。`done-taxonomy-metadata`
+52. 为全部 signal 定义 declared/applied/observed layer。`done-family-metadata`
+53. 为全部 signal 定义 adapter support。`done-family-metadata`
+54. 为全部 signal 定义 failure mode。`done-family-metadata`
+55. 为全部 signal 定义 repeatability rule。`done-family-metadata`
+56. 为全部 signal 定义 evidence schema。`done-family-metadata`
 57. signal coverage dashboard。`ready`
 58. signal audit report。`ready`
 59. signal version / collector version 管理。`ready`
 
 ### 450 Behavior Taxonomy
 
-60. 为全部 behavior family 定义 replay semantics。`partial-first-5-families`
-61. 为全部 behavior family 定义 audit payload。`partial-first-5-families`
-62. 为全部 behavior family 定义 failure states。`partial-first-5-families`
-63. 为全部 behavior family 定义 recovery behavior。`partial-first-5-families`
+60. 为全部 behavior family 定义 replay semantics。`done-taxonomy-semantics`
+61. 为全部 behavior family 定义 audit payload。`done-taxonomy-semantics`
+62. 为全部 behavior family 定义 failure states。`done-taxonomy-semantics`
+63. 为全部 behavior family 定义 recovery behavior。`done-taxonomy-semantics`
 64. 扩展 `13` shipped primitives。`large-slice`
 65. workflow graph runtime。`large-slice`
 66. replay debugger。`large-slice`
@@ -136,8 +136,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 87. 每次变更后同步 root/docs/RUN_STATE/TODO。`always-on`
 88. 每次变更跑 stage entry consistency。`always-on`
-89. 防止历史 `30/70`、`77/23`、`82/18` 复活为 live truth。`always-on`
-90. 防止 taxonomy seed 冒充 observed/replay runtime。`always-on`
+89. 防止历史 `30/70`、`77/23`、`82/18` 复活为 live truth。`done-live-truth-guard`
+90. 防止 taxonomy seed 冒充 observed/replay runtime。`done-live-truth-guard`
 
 ## 说明
 
