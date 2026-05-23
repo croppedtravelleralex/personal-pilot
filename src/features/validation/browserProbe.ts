@@ -221,13 +221,173 @@ function collectLeakSignal(): DesktopValidationBrowserSignal {
   );
 }
 
+function collectTimezoneLocaleSignal(): DesktopValidationBrowserSignal {
+  const started = performance.now();
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "unknown";
+    const languages = navigator.languages?.join(",") || navigator.language || "unknown";
+    return signal(
+      "timezone-locale-desktop-webview",
+      "fingerprint",
+      timezone !== "unknown" || languages !== "unknown" ? "succeeded" : "warning",
+      "Timezone and locale desktop WebView probe",
+      `Desktop WebView reports timezone=${timezone} and languages=${languages}.`,
+      `scope=desktop-webview; target-profile-browser=false; timezone=${timezone}; languages=${languages}`,
+      elapsed(started),
+    );
+  } catch (error) {
+    return signal(
+      "timezone-locale-desktop-webview",
+      "fingerprint",
+      "failed",
+      "Timezone and locale desktop WebView probe",
+      `Timezone/locale probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      "scope=desktop-webview; target-profile-browser=false",
+      elapsed(started),
+    );
+  }
+}
+
+function collectHardwareOsSignal(): DesktopValidationBrowserSignal {
+  const started = performance.now();
+  const detail = [
+    `scope=desktop-webview`,
+    `target-profile-browser=false`,
+    `platform=${navigator.platform || "unknown"}`,
+    `userAgent=${navigator.userAgent || "unknown"}`,
+    `hardwareConcurrency=${navigator.hardwareConcurrency ?? "unknown"}`,
+    `deviceMemory=${navigator.deviceMemory ?? "unknown"}`,
+    `maxTouchPoints=${navigator.maxTouchPoints ?? "unknown"}`,
+  ].join("; ");
+  return signal(
+    "hardware-os-desktop-webview",
+    "fingerprint",
+    navigator.userAgent || navigator.platform ? "succeeded" : "warning",
+    "Hardware and OS desktop WebView probe",
+    "Desktop WebView navigator hardware and OS fields were sampled.",
+    detail,
+    elapsed(started),
+  );
+}
+
+function collectScreenDisplaySignal(): DesktopValidationBrowserSignal {
+  const started = performance.now();
+  const detail = [
+    `scope=desktop-webview`,
+    `target-profile-browser=false`,
+    `screen=${window.screen.width}x${window.screen.height}`,
+    `avail=${window.screen.availWidth}x${window.screen.availHeight}`,
+    `colorDepth=${window.screen.colorDepth}`,
+    `pixelRatio=${window.devicePixelRatio}`,
+    `viewport=${window.innerWidth}x${window.innerHeight}`,
+  ].join("; ");
+  return signal(
+    "screen-display-desktop-webview",
+    "fingerprint",
+    window.screen.width > 0 && window.screen.height > 0 ? "succeeded" : "warning",
+    "Screen and display desktop WebView probe",
+    "Desktop WebView screen, viewport, color depth, and pixel ratio were sampled.",
+    detail,
+    elapsed(started),
+  );
+}
+
+function collectNavigatorHintsSignal(): DesktopValidationBrowserSignal {
+  const started = performance.now();
+  const userAgentData = navigator.userAgentData;
+  const brands = userAgentData?.brands?.map((item) => `${item.brand}/${item.version}`).join(",") ?? "unavailable";
+  const detail = [
+    `scope=desktop-webview`,
+    `target-profile-browser=false`,
+    `vendor=${navigator.vendor || "unknown"}`,
+    `webdriver=${navigator.webdriver}`,
+    `pdfViewerEnabled=${navigator.pdfViewerEnabled ?? "unknown"}`,
+    `brands=${brands}`,
+    `mobile=${userAgentData?.mobile ?? "unknown"}`,
+    `platform=${userAgentData?.platform ?? "unknown"}`,
+  ].join("; ");
+  return signal(
+    "navigator-hints-desktop-webview",
+    "fingerprint",
+    navigator.userAgent || userAgentData ? "succeeded" : "warning",
+    "Navigator hints desktop WebView probe",
+    "Desktop WebView navigator hint fields were sampled.",
+    detail,
+    elapsed(started),
+  );
+}
+
+async function collectPermissionDeviceSignal(): Promise<DesktopValidationBrowserSignal> {
+  const started = performance.now();
+  const permissionStates: string[] = [];
+  const permissionsApi = navigator.permissions;
+  if (permissionsApi?.query) {
+    for (const name of ["geolocation", "notifications", "camera", "microphone"] as PermissionName[]) {
+      try {
+        const result = await permissionsApi.query({ name });
+        permissionStates.push(`${name}:${result.state}`);
+      } catch (error) {
+        permissionStates.push(`${name}:unavailable`);
+      }
+    }
+  }
+  const mediaDevicesAvailable = Boolean(navigator.mediaDevices?.enumerateDevices);
+  let mediaDeviceCount: number | "not_queried" = "not_queried";
+  if (mediaDevicesAvailable) {
+    try {
+      mediaDeviceCount = (await navigator.mediaDevices.enumerateDevices()).length;
+    } catch {
+      mediaDeviceCount = "not_queried";
+    }
+  }
+  const detail = [
+    `scope=desktop-webview`,
+    `target-profile-browser=false`,
+    `permissions=${permissionStates.join(",") || "unavailable"}`,
+    `mediaDevicesAvailable=${mediaDevicesAvailable}`,
+    `mediaDeviceCount=${mediaDeviceCount}`,
+  ].join("; ");
+  return signal(
+    "permissions-devices-desktop-webview",
+    "fingerprint",
+    permissionStates.length > 0 || mediaDevicesAvailable ? "succeeded" : "warning",
+    "Permissions and devices desktop WebView probe",
+    "Desktop WebView permissions and media-device capability fields were sampled.",
+    detail,
+    elapsed(started),
+  );
+}
+
 export async function collectBrowserValidationSignals(): Promise<DesktopValidationBrowserSignal[]> {
-  const [webrtc, audio] = await Promise.all([collectWebRtcSignal(), collectAudioSignal()]);
-  return [webrtc, collectCanvasSignal(), audio, collectLeakSignal()];
+  const [webrtc, audio, permissionsDevices] = await Promise.all([
+    collectWebRtcSignal(),
+    collectAudioSignal(),
+    collectPermissionDeviceSignal(),
+  ]);
+  return [
+    webrtc,
+    collectCanvasSignal(),
+    audio,
+    collectLeakSignal(),
+    collectTimezoneLocaleSignal(),
+    collectHardwareOsSignal(),
+    collectScreenDisplaySignal(),
+    collectNavigatorHintsSignal(),
+    permissionsDevices,
+  ];
 }
 
 declare global {
   interface Window {
     webkitAudioContext?: typeof AudioContext;
+  }
+
+  interface Navigator {
+    deviceMemory?: number;
+    userAgentData?: {
+      brands?: Array<{ brand: string; version: string }>;
+      mobile?: boolean;
+      platform?: string;
+    };
   }
 }

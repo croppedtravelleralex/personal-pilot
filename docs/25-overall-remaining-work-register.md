@@ -70,13 +70,13 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 36. WebGL observed collector。`large-slice`
 37. font/text metrics observed collector。`large-slice`
-38. media devices observed collector。`large-slice`
-39. timezone/locale observed collector。`ready`
-40. hardware/os observed collector。`ready`
-41. storage partitioning observed collector。`ready`
-42. screen/display observed collector。`ready`
-43. navigator/client hints observed collector。`ready`
-44. permission/device capability observed collector。`ready`
+38. media devices observed collector。`partial-desktop-webview`
+39. timezone/locale observed collector。`partial-desktop-webview`
+40. hardware/os observed collector。`partial-desktop-webview`
+41. storage partitioning observed collector。`partial-desktop-webview`
+42. screen/display observed collector。`partial-desktop-webview`
+43. navigator/client hints observed collector。`partial-desktop-webview`
+44. permission/device capability observed collector。`partial-desktop-webview`
 45. detector/coherence observed matrix。`large-slice`
 46. observed coverage dashboard。`ready`
 47. observed coverage report history。`ready`

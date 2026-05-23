@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 32,
+  "loop_iteration": 33,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P16 batch 1 evidence history surface",
-  "current_objective": "按批次执行第 1 批本机质量闭环：统一 release/provider/session/taxonomy/distribution evidence report history，并在 Overview 暴露最近报告",
-  "last_result_summary": "新增 list_evidence_reports 桌面 API、typed desktop wrapper、runtime store 集成和 Overview evidence report history；remaining work register 更新 release/provider/portability history 状态",
-  "next_action_hint": "Run P16 gates, commit/push, then continue batch 2 fingerprint observed coverage collectors",
+  "current_focus": "P17 batch 2 fingerprint observed coverage",
+  "current_objective": "按批次执行第 2 批：扩展本机可闭环的 desktop WebView observed fingerprint collectors，同时保留 targetProfileBrowser=false 边界",
+  "last_result_summary": "Validation browser probes 新增 timezone/locale、hardware/os、screen/display、navigator hints、permissions/media devices；taxonomy/register/current-state 已同步为 partial desktop-webview observed coverage",
+  "next_action_hint": "Run P17 gates, commit/push, then continue batch 3 behavior replay deepening",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -192,6 +192,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Overview can now load local smoke/audit evidence report history for release, provider, portability, taxonomy, and distribution reports through the desktop service boundary."
+    },
+    {
+      "title": "P17 batch 2 fingerprint observed coverage",
+      "kind": "feature",
+      "status": "success",
+      "note": "Desktop WebView validation probes now collect timezone/locale, hardware/OS, screen/display, navigator hints, and permissions/media-device capability signals without claiming profile-browser proof."
     }
   ],
   "blocked_reason": "",

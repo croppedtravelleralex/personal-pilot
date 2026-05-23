@@ -18,10 +18,10 @@
     { "id": "audio_stack", "targetCount": 34, "evidenceStatus": "partial_observed_with_warning", "collectorPath": "validation_probe Lightpanda/CDP and desktop WebView audio probe", "currentEvidence": "AudioContext availability/sample-rate warning evidence only" },
     { "id": "webgl_gpu", "targetCount": 42, "currentEvidence": "declared/profile consistency only; observed collector not complete" },
     { "id": "fonts_text_metrics", "targetCount": 34, "currentEvidence": "declared/profile layer only" },
-    { "id": "media_devices", "targetCount": 30, "currentEvidence": "target-only; collector needed" },
-    { "id": "storage_partitioning", "targetCount": 28, "currentEvidence": "desktop WebView storage scope probe only" },
-    { "id": "timezone_locale", "targetCount": 34, "currentEvidence": "runtime projection and consistency rules" },
-    { "id": "hardware_os", "targetCount": 46, "currentEvidence": "runtime projection for selected first-family fields" },
+    { "id": "media_devices", "targetCount": 30, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts permissions-devices probe", "currentEvidence": "desktop WebView mediaDevices capability and count probe" },
+    { "id": "storage_partitioning", "targetCount": 28, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts leak/storage probe", "currentEvidence": "desktop WebView storage scope probe only" },
+    { "id": "timezone_locale", "targetCount": 34, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts timezone-locale probe", "currentEvidence": "desktop WebView timezone and navigator languages probe plus runtime projection and consistency rules" },
+    { "id": "hardware_os", "targetCount": 46, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts hardware-os probe", "currentEvidence": "desktop WebView navigator hardware/OS probe plus runtime projection for selected first-family fields" },
     { "id": "coherence_detector", "targetCount": 42, "currentEvidence": "validation board category and consistency assessment; full detector matrix pending" }
   ]
 }
