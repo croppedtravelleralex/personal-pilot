@@ -98,10 +98,10 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### 450 Behavior Taxonomy
 
-60. 为全部 behavior family 定义 replay semantics。`large-slice`
-61. 为全部 behavior family 定义 audit payload。`large-slice`
-62. 为全部 behavior family 定义 failure states。`large-slice`
-63. 为全部 behavior family 定义 recovery behavior。`large-slice`
+60. 为全部 behavior family 定义 replay semantics。`partial-first-5-families`
+61. 为全部 behavior family 定义 audit payload。`partial-first-5-families`
+62. 为全部 behavior family 定义 failure states。`partial-first-5-families`
+63. 为全部 behavior family 定义 recovery behavior。`partial-first-5-families`
 64. 扩展 `13` shipped primitives。`large-slice`
 65. workflow graph runtime。`large-slice`
 66. replay debugger。`large-slice`

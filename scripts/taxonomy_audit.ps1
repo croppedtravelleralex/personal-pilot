@@ -34,6 +34,10 @@ function Measure-Taxonomy($taxonomy, [string]$kind) {
     familyTargetTotal = $targetTotal
     targetTotalMatches = ($targetTotal -eq $declaredTarget -and $declaredTarget -eq 450)
     evidenceBackedFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.evidenceStatus }).Count
+    replaySemanticsFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.replaySemantics }).Count
+    auditPayloadFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.auditPayload }).Count
+    failureStatesFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.failureStates }).Count
+    recoveryBehaviorFamilyCount = @($taxonomy.families | Where-Object { $null -ne $_.recoveryBehavior }).Count
   }
 }
 

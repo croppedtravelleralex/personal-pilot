@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 33,
+  "loop_iteration": 34,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P17 batch 2 fingerprint observed coverage",
-  "current_objective": "按批次执行第 2 批：扩展本机可闭环的 desktop WebView observed fingerprint collectors，同时保留 targetProfileBrowser=false 边界",
-  "last_result_summary": "Validation browser probes 新增 timezone/locale、hardware/os、screen/display、navigator hints、permissions/media devices；taxonomy/register/current-state 已同步为 partial desktop-webview observed coverage",
-  "next_action_hint": "Run P17 gates, commit/push, then continue batch 3 behavior replay deepening",
+  "current_focus": "P18 batch 3 behavior replay semantics",
+  "current_objective": "按批次执行第 3 批：把 behavior taxonomy 前 5 个 family 从 seed 推进到 replay semantics / audit payload / failure / recovery 定义",
+  "last_result_summary": "behavior taxonomy 前 5 个 primitive-backed family 已补 replaySemantics、auditPayload、failureStates、recoveryBehavior；taxonomy audit 会统计这些覆盖数",
+  "next_action_hint": "Run P18 gates, commit/push, then continue batch 4 provider production closure wiring/contracts",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -198,6 +198,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Desktop WebView validation probes now collect timezone/locale, hardware/OS, screen/display, navigator hints, and permissions/media-device capability signals without claiming profile-browser proof."
+    },
+    {
+      "title": "P18 batch 3 behavior replay semantics",
+      "kind": "feature",
+      "status": "success",
+      "note": "The first five behavior taxonomy families now define replay semantics, audit payloads, failure states, and recovery behavior, while full 450 replay runtime remains pending."
     }
   ],
   "blocked_reason": "",
