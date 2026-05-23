@@ -17,6 +17,7 @@ fn simulated_action(task: &RunnerTask) -> &'static str {
         "get_title" => "get_title",
         "get_final_url" => "get_final_url",
         "extract_text" => "extract_text",
+        "validation_probe" => "validation_probe",
         _ => "open_page",
     }
 }
@@ -149,12 +150,28 @@ fn result_payload(
         "get_html" | "extract_text" => json!(action),
         _ => Value::Null,
     };
+    let validation_signals = if action == "validation_probe" {
+        json!([
+            {
+                "id": "profile-browser-runtime-fake-stub",
+                "category": "detector",
+                "layer": "observed",
+                "status": "warning",
+                "label": "Profile browser runtime fake runner stub",
+                "summary": "FakeRunner cannot execute profile browser runtime probes; set PERSONA_PILOT_RUNNER=lightpanda for real CDP scoped evidence.",
+                "detail": "scope=fake-runner; target-profile-browser=false",
+                "durationMs": 0
+            }
+        ])
+    } else {
+        json!([])
+    };
     let content_ready = match action {
         "get_html" | "extract_text" => json!(true),
         _ => Value::Null,
     };
 
-    json!({
+    let mut payload = json!({
         "runner": "fake",
         "runner_mode": FAKE_RUNNER_MODE,
         "is_fake": true,
@@ -200,7 +217,13 @@ fn result_payload(
         "stdout_preview": Value::Null,
         "stderr_preview": Value::Null,
         "message": message,
-    })
+    });
+
+    if let Value::Object(ref mut obj) = payload {
+        obj.insert("validation_signals".to_string(), validation_signals);
+    }
+
+    payload
 }
 
 fn build_result(

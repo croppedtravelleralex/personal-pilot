@@ -46,7 +46,8 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Add Validation report history list and profile evidence export
 - [x] Add WebRTC/leak observed contract warning signals to validation reports
 - [x] Add desktop WebView scoped WebRTC/canvas/audio/storage observed probes without claiming profile browser coverage
-- [ ] Upgrade WebRTC/leak/canvas/audio probes to profile browser runtime / CDP scope
+- [x] Add profile browser runtime / CDP scoped `validation_probe` runner action and merge its signals into validation reports
+- [ ] Run real Lightpanda/CDP operator smoke to confirm WebRTC/leak/canvas/audio profile runtime reports are repeatable outside FakeRunner
 - [ ] Deepen fingerprint runtime from `80` declared controls and `12` projected fields toward broader applied / observed coverage
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
 - [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy

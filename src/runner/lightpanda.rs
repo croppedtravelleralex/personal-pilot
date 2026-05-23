@@ -67,6 +67,7 @@ struct BrowserActionResult {
     cookies: Vec<Value>,
     local_storage: Option<Value>,
     session_storage: Option<Value>,
+    validation_signals: Vec<Value>,
     behavior_runtime_explain: Option<BehaviorRuntimeExplain>,
     behavior_trace_summary: Option<BehaviorTraceSummary>,
     behavior_trace_lines: Vec<String>,
@@ -191,6 +192,7 @@ impl BrowserActionResult {
             cookies: Vec::new(),
             local_storage: None,
             session_storage: None,
+            validation_signals: Vec::new(),
             behavior_runtime_explain: None,
             behavior_trace_summary: None,
             behavior_trace_lines: Vec::new(),
@@ -211,6 +213,7 @@ impl BrowserActionResult {
             cookies: Vec::new(),
             local_storage: None,
             session_storage: None,
+            validation_signals: Vec::new(),
             behavior_runtime_explain: None,
             behavior_trace_summary: None,
             behavior_trace_lines: Vec::new(),
@@ -231,6 +234,7 @@ impl BrowserActionResult {
             cookies: Vec::new(),
             local_storage: None,
             session_storage: None,
+            validation_signals: Vec::new(),
             behavior_runtime_explain: None,
             behavior_trace_summary: None,
             behavior_trace_lines: Vec::new(),
@@ -631,6 +635,26 @@ impl CdpClient {
         )
     }
 
+    async fn read_validation_signals(
+        &mut self,
+        session_id: &str,
+    ) -> Result<Vec<Value>, RunnerFailure> {
+        let value = self
+            .evaluate_json(session_id, validation_probe_expression())
+            .await?;
+        value
+            .as_array()
+            .cloned()
+            .ok_or_else(|| {
+                RunnerFailure::new(
+                    "cdp_protocol_error",
+                    "failed to decode validation probe signals",
+                    Some("action"),
+                    None,
+                )
+            })
+    }
+
     async fn send_command(
         &mut self,
         method: &str,
@@ -838,6 +862,9 @@ fn result_payload(
     let cookies = browser_result.map(|result| result.cookies.clone());
     let local_storage = browser_result.and_then(|result| result.local_storage.clone());
     let session_storage = browser_result.and_then(|result| result.session_storage.clone());
+    let validation_signals = browser_result
+        .map(|result| result.validation_signals.clone())
+        .unwrap_or_default();
 
     let (html_preview, html_length, html_truncated) = match action {
         "get_html" => content_preview_metadata(html_raw, HTML_PREVIEW_LIMIT),
@@ -1005,6 +1032,7 @@ fn result_payload(
         obj.insert("cookies".to_string(), json!(cookies));
         obj.insert("local_storage".to_string(), json!(local_storage));
         obj.insert("session_storage".to_string(), json!(session_storage));
+        obj.insert("validation_signals".to_string(), json!(validation_signals));
     }
 
     payload
@@ -1178,7 +1206,13 @@ fn extract_action(task: &RunnerTask) -> String {
     }
 
     match task.kind.as_str() {
-        "open_page" | "fetch" | "get_html" | "get_title" | "get_final_url" | "extract_text" => {
+        "open_page"
+        | "fetch"
+        | "get_html"
+        | "get_title"
+        | "get_final_url"
+        | "extract_text"
+        | "validation_probe" => {
             task.kind.clone()
         }
         _ => "open_page".to_string(),
@@ -1192,6 +1226,7 @@ fn normalize_action(action: &str) -> Option<&'static str> {
         "get_title" => Some("get_title"),
         "get_final_url" => Some("get_final_url"),
         "extract_text" => Some("extract_text"),
+        "validation_probe" => Some("validation_probe"),
         _ => None,
     }
 }
@@ -1204,6 +1239,7 @@ fn supported_actions() -> &'static [&'static str] {
         "get_title",
         "get_final_url",
         "extract_text",
+        "validation_probe",
     ]
 }
 
@@ -1468,6 +1504,90 @@ fn text_expression() -> &'static str {
     href: typeof window !== "undefined" && window.location ? (window.location.href || "") : "",
     text: doc && doc.body ? doc.body.innerText : ""
   };
+})()"#
+}
+
+fn validation_probe_expression() -> &'static str {
+    r#"(async function(){
+  function elapsed(start){ return Math.max(0, Math.round(performance.now() - start)); }
+  function signal(id, category, status, label, summary, detail, durationMs){
+    return { id, category, layer: 'observed', status, label, summary, detail, durationMs };
+  }
+  async function webrtc(){
+    const started = performance.now();
+    if (!window.RTCPeerConnection) {
+      return signal('webrtc-profile-browser-api', 'webrtc', 'warning', 'WebRTC profile browser runtime probe', 'Profile browser runtime does not expose RTCPeerConnection.', 'scope=profile-browser-runtime; collector=cdp-runtime-evaluate', elapsed(started));
+    }
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    const candidates = [];
+    try {
+      pc.createDataChannel('validation-probe');
+      pc.onicecandidate = (event) => { if (event.candidate && event.candidate.candidate) candidates.push(event.candidate.candidate); };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return signal(
+        'webrtc-profile-browser-api',
+        'webrtc',
+        candidates.length > 0 ? 'succeeded' : 'warning',
+        'WebRTC profile browser runtime probe',
+        candidates.length > 0 ? `Profile browser runtime gathered ${candidates.length} ICE candidate(s).` : 'Profile browser runtime WebRTC API is present, but no ICE candidates were gathered.',
+        `scope=profile-browser-runtime; collector=cdp-runtime-evaluate; candidates=${candidates.join(' | ')}`,
+        elapsed(started)
+      );
+    } catch (error) {
+      return signal('webrtc-profile-browser-api', 'webrtc', 'failed', 'WebRTC profile browser runtime probe', `WebRTC profile probe failed: ${error && error.message ? error.message : String(error)}`, 'scope=profile-browser-runtime; collector=cdp-runtime-evaluate', elapsed(started));
+    } finally {
+      pc.close();
+    }
+  }
+  function canvas(){
+    const started = performance.now();
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 240;
+      canvas.height = 80;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return signal('canvas-profile-browser-render', 'canvas', 'failed', 'Canvas profile browser render probe', 'Profile browser runtime could not create a 2D canvas context.', 'scope=profile-browser-runtime; collector=cdp-runtime-evaluate', elapsed(started));
+      ctx.fillStyle = '#153a5b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#f4c542';
+      ctx.font = '18px Arial';
+      ctx.fillText('PersonaPilot validation', 12, 36);
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeRect(8, 8, 224, 64);
+      const dataUrl = canvas.toDataURL('image/png');
+      return signal('canvas-profile-browser-render', 'canvas', dataUrl.length > 100 ? 'succeeded' : 'warning', 'Canvas profile browser render probe', `Profile browser canvas rendered a ${dataUrl.length} byte data URL sample.`, `scope=profile-browser-runtime; collector=cdp-runtime-evaluate; size=${canvas.width}x${canvas.height}`, elapsed(started));
+    } catch (error) {
+      return signal('canvas-profile-browser-render', 'canvas', 'failed', 'Canvas profile browser render probe', `Canvas profile probe failed: ${error && error.message ? error.message : String(error)}`, 'scope=profile-browser-runtime; collector=cdp-runtime-evaluate', elapsed(started));
+    }
+  }
+  async function audio(){
+    const started = performance.now();
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      return signal('audio-profile-browser-context', 'audio', 'warning', 'AudioContext profile browser probe', 'Profile browser runtime does not expose AudioContext.', 'scope=profile-browser-runtime; collector=cdp-runtime-evaluate', elapsed(started));
+    }
+    let context = null;
+    try {
+      context = new AudioContextCtor();
+      return signal('audio-profile-browser-context', 'audio', context.sampleRate > 0 ? 'succeeded' : 'warning', 'AudioContext profile browser probe', `Profile browser AudioContext opened with sampleRate=${context.sampleRate}.`, `scope=profile-browser-runtime; collector=cdp-runtime-evaluate; sampleRate=${context.sampleRate}; state=${context.state}`, elapsed(started));
+    } catch (error) {
+      return signal('audio-profile-browser-context', 'audio', 'failed', 'AudioContext profile browser probe', `AudioContext profile probe failed: ${error && error.message ? error.message : String(error)}`, 'scope=profile-browser-runtime; collector=cdp-runtime-evaluate', elapsed(started));
+    } finally {
+      if (context && context.close) await context.close().catch(() => undefined);
+    }
+  }
+  function leak(){
+    const started = performance.now();
+    let localStorageAvailable = false;
+    let sessionStorageAvailable = false;
+    try { localStorage.setItem('persona-pilot-validation-local', '1'); localStorageAvailable = localStorage.getItem('persona-pilot-validation-local') === '1'; localStorage.removeItem('persona-pilot-validation-local'); } catch (_) {}
+    try { sessionStorage.setItem('persona-pilot-validation-session', '1'); sessionStorageAvailable = sessionStorage.getItem('persona-pilot-validation-session') === '1'; sessionStorage.removeItem('persona-pilot-validation-session'); } catch (_) {}
+    return signal('leak-profile-browser-storage-scope', 'leak', localStorageAvailable || sessionStorageAvailable ? 'succeeded' : 'warning', 'Profile browser storage scope probe', 'Profile browser storage APIs were sampled for leak-check capability evidence.', `scope=profile-browser-runtime; collector=cdp-runtime-evaluate; cookieEnabled=${navigator.cookieEnabled}; localStorage=${localStorageAvailable}; sessionStorage=${sessionStorageAvailable}`, elapsed(started));
+  }
+  const asyncResults = await Promise.all([webrtc(), audio()]);
+  return [asyncResults[0], canvas(), asyncResults[1], leak()];
 })()"#
 }
 
@@ -3773,7 +3893,7 @@ async fn perform_browser_action(
                             Err(error) => return Err(error),
                         };
                         let mut result = match action {
-                            "open_page" | "get_title" | "get_final_url" => {
+                            "open_page" | "get_title" | "get_final_url" | "validation_probe" => {
                                 Ok(BrowserActionResult::from_readiness(refreshed))
                             }
                             "get_html" => client
@@ -3788,6 +3908,12 @@ async fn perform_browser_action(
                         };
                         if let Ok(ref mut action_result) = result {
                             apply_form_action_runtime(action_result, runtime);
+                            if action == "validation_probe" {
+                                action_result.validation_signals = client
+                                    .read_validation_signals(&session_id)
+                                    .await
+                                    .unwrap_or_default();
+                            }
                             action_result.cookies = client
                                 .get_cookies(&session_id, url)
                                 .await
@@ -3805,7 +3931,7 @@ async fn perform_browser_action(
                     };
 
                     let mut result = match action {
-                        "open_page" | "get_title" | "get_final_url" => {
+                        "open_page" | "get_title" | "get_final_url" | "validation_probe" => {
                             Ok(BrowserActionResult::from_readiness(latest_snapshot))
                         }
                         "get_html" => client
@@ -3820,6 +3946,12 @@ async fn perform_browser_action(
                     };
                     if let Ok(ref mut action_result) = result {
                         apply_non_active_form_action_result(action_result, task);
+                        if action == "validation_probe" {
+                            action_result.validation_signals = client
+                                .read_validation_signals(&session_id)
+                                .await
+                                .unwrap_or_default();
+                        }
                         action_result.cookies = client
                             .get_cookies(&session_id, url)
                             .await
@@ -3837,7 +3969,7 @@ async fn perform_browser_action(
                 let behavior_runtime =
                     execute_active_behavior_plan(&mut client, &session_id, task, action).await?;
                 let mut result = match action {
-                    "open_page" | "get_title" | "get_final_url" => {
+                    "open_page" | "get_title" | "get_final_url" | "validation_probe" => {
                         Ok(BrowserActionResult::from_readiness(snapshot))
                     }
                     "get_html" => client
@@ -3855,6 +3987,12 @@ async fn perform_browser_action(
                         action_result.behavior_runtime_explain = Some(runtime.runtime_explain);
                         action_result.behavior_trace_summary = Some(runtime.trace_summary);
                         action_result.behavior_trace_lines = runtime.trace_lines;
+                    }
+                    if action == "validation_probe" {
+                        action_result.validation_signals = client
+                            .read_validation_signals(&session_id)
+                            .await
+                            .unwrap_or_default();
                     }
                     action_result.cookies = client
                         .get_cookies(&session_id, url)
@@ -4237,7 +4375,7 @@ impl TaskRunner for LightpandaRunner {
                     &task,
                     requested_action.as_str(),
                     requested_action.as_str(),
-                    "lightpanda runner currently supports only action=open_page, action=get_html, action=get_title, action=get_final_url, action=extract_text (fetch is accepted as an alias for open_page)",
+                    "lightpanda runner currently supports only action=open_page, action=get_html, action=get_title, action=get_final_url, action=extract_text, action=validation_probe (fetch is accepted as an alias for open_page)",
                     extract_url(&task.payload).as_deref(),
                 )
             }

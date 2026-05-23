@@ -176,7 +176,7 @@ export function ValidationPage() {
           </div>
         ) : (
           <p className="record-card__content--muted">
-            DNS and transport observed evidence will appear after collection.
+            DNS, transport, desktop WebView, and profile browser runtime evidence will appear after collection.
           </p>
         )}
       </Panel>

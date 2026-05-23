@@ -46,7 +46,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - SMS 后端 handler/route 与 provider 代码边界已部分落地：`internal/sms`、5sim、SMSPool、`/api/sms/*` 核心端点；生产 manager wiring/config 尚未接入。
 - Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API。
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
-- Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入，仍不代表完整 profile browser-scoped leak/WebRTC/canvas/audio 闭环。
+- Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。
 
 ## 未完成边界
 
@@ -59,7 +59,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### Overall remaining `70%`
 
-- Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、本地 JSON report、history list 和 profile-level evidence export；后续需把 WebRTC/leak/canvas/audio 从 desktop WebView scoped probe 升级为 profile browser-scoped collector。
+- Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list 和 profile-level evidence export；后续需在真实 Lightpanda/CDP 环境下做 operator smoke，把 FakeRunner warning stub 替换为真实 profile runtime evidence。
 - CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地，尚未完成 production manager wiring、CDP 自动化检测、填入、真实 provider 验收和 operator UI 闭环。
 - runtime materialization depth 仍窄，当前只应报告 `12` projected fields。
 - `450+` fingerprint signal observation / audit coverage 未落地。
@@ -71,6 +71,6 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. 将 WebRTC/leak/canvas/audio observed probe 从 desktop WebView scope 升级为 profile browser runtime / CDP scope
+1. 在真实 Lightpanda/CDP 环境执行 Validation profile runtime smoke，确认 WebRTC/leak/canvas/audio report 可重复
 2. 扩展 fingerprint runtime depth，并保持 declared / applied / observed 三层分离
-3. CAPTCHA/SMS/Email production manager wiring/config 只作为下一条集成切片，不宣称自动化闭环
+3. CAPTCHA/SMS/Email production manager wiring/config 只作为后续集成切片，不宣称自动化闭环

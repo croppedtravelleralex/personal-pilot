@@ -36,6 +36,11 @@ Progress must be reported with the dual-axis rule:
 - Validation evidence collection now runs desktop WebView scoped browser API probes before writing the Tauri JSON report.
 - Added observed signals for WebRTC ICE candidate capability, canvas render sample, AudioContext sample rate, and storage-scope availability.
 - Scope is explicitly recorded as `desktop-webview; target-profile-browser=false`, so this does not close profile browser runtime / CDP scoped probing or raise the Overall `30% / 70%` status.
+## 2026-05-23 Validation profile runtime probe action
+
+- Added Lightpanda/Fake runner support for `validation_probe` and merged returned `validation_signals` into Tauri validation reports.
+- Lightpanda path executes WebRTC, canvas, AudioContext, and storage probes through CDP `Runtime.evaluate` in the profile browser runtime.
+- FakeRunner returns an explicit warning stub, preserving the evidence boundary until real Lightpanda/CDP smoke is run.
 ## 2026-05-23 Validation report history/export
 
 - 新增 validation report history list native command 与 desktop wrapper。

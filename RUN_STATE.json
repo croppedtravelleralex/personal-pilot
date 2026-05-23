@@ -1,21 +1,21 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 25,
+  "loop_iteration": 26,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Validation desktop WebView observed probes landed",
-  "current_objective": "把 WebRTC/leak/canvas/audio probes 从 desktop WebView scope 升级为 profile browser runtime / CDP scope",
-  "last_result_summary": "Validation reports 现覆盖 DNS/transport native probe、WebRTC/leak native warning contract、desktop WebView scoped WebRTC/canvas/audio/storage observed probes、history/export；仍不代表 profile browser runtime scoped probe 闭环",
-  "next_action_hint": "Reuse the profile runtime / CDP path for WebRTC/leak/canvas/audio evidence without adding heavy dependencies",
+  "current_focus": "Validation profile runtime probe action landed",
+  "current_objective": "在真实 Lightpanda/CDP 环境执行 Validation operator smoke，然后推进 P1 fingerprint runtime depth",
+  "last_result_summary": "Validation reports 现覆盖 DNS/transport native probe、WebRTC/leak native warning contract、desktop WebView scoped probes、profile browser runtime validation_probe action、history/export；FakeRunner 会返回 warning stub，真实 profile runtime evidence 需要 Lightpanda/CDP smoke 验证",
+  "next_action_hint": "Run real Lightpanda/CDP validation smoke, then deepen fingerprint runtime evidence split",
   "next_suggestions": [
     {
-      "title": "Upgrade WebRTC/leak/canvas/audio to profile browser runtime probes",
+      "title": "Run Lightpanda/CDP validation smoke",
       "priority": 1,
-      "rationale": "当前已采样 desktop WebView，下一步需要目标 profile browser / CDP scope 证据",
-      "kind": "feature"
+      "rationale": "validation_probe action 已接入，需要真实 runner 环境确认可重复 report",
+      "kind": "verify"
     },
     {
       "title": "Extract reusable browser evidence contract",
@@ -78,6 +78,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Collect evidence now records desktop WebView scoped WebRTC/canvas/audio/storage signals while preserving target-profile-browser=false scope."
+    },
+    {
+      "title": "Validation profile runtime probe action",
+      "kind": "feature",
+      "status": "success",
+      "note": "Runner validation_probe action now returns profile browser runtime scoped WebRTC/canvas/audio/storage signals through Lightpanda/CDP, with FakeRunner warning stub."
     }
   ],
   "blocked_reason": "",

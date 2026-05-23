@@ -35,7 +35,8 @@
    - 区分 declared / applied / observed。
    - DNS/transport 首批 observed native collector、本地 JSON report、report history、profile-level evidence export 已接入。
    - desktop WebView scoped WebRTC/canvas/audio/storage probes 已接入，用于记录当前桌面壳浏览器 API 能力；不等同于 profile browser runtime probe。
-   - 下一步把 WebRTC/canvas/audio/leak collector 升级到 profile browser runtime / CDP scope。
+   - profile browser runtime `validation_probe` action 已接入 runner；Lightpanda/CDP 可用时可生成 WebRTC/canvas/audio/leak runtime scoped signals，FakeRunner 只生成 warning stub。
+   - 下一步做真实 Lightpanda/CDP operator smoke，确认 profile browser runtime report 可重复。
 
 2. Fingerprint runtime depth
    - 从 `80` declared controls 和 `12` runtime projected fields 继续加深 applied / observed coverage。

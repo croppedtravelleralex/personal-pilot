@@ -1,3 +1,19 @@
+## Round 27 — Validation profile runtime probe action (2026-05-23)
+
+### Type: feature
+
+### Actions
+- 新增 runner action `validation_probe`。
+- Lightpanda runner 通过 CDP `Runtime.evaluate` 在 profile browser runtime 中采集 WebRTC、canvas、AudioContext、storage scope signals。
+- FakeRunner 返回明确 warning stub，不把 fake path 计入真实 profile browser evidence。
+- Tauri `collect_validation_report` 合并 runner 返回的 `validation_signals`，写入本地 JSON report。
+
+### Results
+- `pnpm typecheck` 通过。
+- `cargo check --manifest-path src-tauri/Cargo.toml` 通过。
+
+### Verdict: success
+
 ## Round 26 — Validation desktop WebView observed probes (2026-05-23)
 
 ### Type: feature

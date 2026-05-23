@@ -44,8 +44,10 @@ use persona_pilot::desktop::{
     DesktopTemplateMetadataPage, DesktopTemplateMetadataPageQuery, DesktopTemplateMutationResult,
     DesktopTemplateUpsertInput, DesktopUpdateProfileInput,
 };
+use persona_pilot::runner::{RunnerOutcomeStatus, RunnerTask};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use tauri::State;
 
 #[cfg(target_os = "windows")]
@@ -324,6 +326,79 @@ fn normalize_browser_validation_signal(
     signal
 }
 
+fn validation_signal_from_value(value: Value) -> Option<DesktopValidationSignal> {
+    serde_json::from_value::<DesktopValidationSignal>(value).ok()
+}
+
+async fn collect_profile_browser_runtime_signals(
+    state: &DesktopState,
+) -> Vec<DesktopValidationSignal> {
+    let started = Instant::now();
+    let task = RunnerTask {
+        task_id: format!("validation-profile-runtime-{}", validation_report_id()),
+        attempt: 1,
+        kind: "validation_probe".to_string(),
+        payload: json!({
+            "action": "validation_probe",
+            "url": "https://example.com/",
+            "collector": "validation-profile-browser-runtime-v1"
+        }),
+        timeout_seconds: Some(15),
+        execution_intent: None,
+        fingerprint_profile: None,
+        behavior_profile: None,
+        behavior_plan: None,
+        form_action_plan: None,
+        proxy: None,
+        session_cookies: None,
+        session_local_storage: None,
+        session_session_storage: None,
+    };
+
+    let result = state.runner.execute(task).await;
+    let mut signals: Vec<DesktopValidationSignal> = result
+        .result_json
+        .as_ref()
+        .and_then(|value| value.get("validation_signals"))
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .cloned()
+                .filter_map(validation_signal_from_value)
+                .map(normalize_browser_validation_signal)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if signals.is_empty() || !matches!(result.status, RunnerOutcomeStatus::Succeeded) {
+        let status = if matches!(result.status, RunnerOutcomeStatus::Succeeded) {
+            "warning"
+        } else {
+            "failed"
+        };
+        let detail = result
+            .error_message
+            .or_else(|| result.result_json.map(|value| value.to_string()))
+            .unwrap_or_else(|| "runner returned no validation signal detail".to_string());
+        signals.push(validation_signal(
+            "profile-browser-runtime-runner",
+            "detector",
+            status,
+            "Profile browser runtime collector",
+            "Profile browser runtime validation probe did not return complete evidence signals."
+                .to_string(),
+            Some(format!(
+                "scope=profile-browser-runtime; runner={}; detail={detail}",
+                state.runner.name()
+            )),
+            Some(started.elapsed().as_millis()),
+        ));
+    }
+
+    signals
+}
+
 async fn collect_transport_signal() -> DesktopValidationSignal {
     let started = Instant::now();
     let client = match Client::builder().timeout(Duration::from_secs(8)).build() {
@@ -381,6 +456,7 @@ async fn build_validation_report(
     signals.push(collect_transport_signal().await);
     signals.push(collect_webrtc_signal());
     signals.push(collect_leak_signal());
+    signals.extend(collect_profile_browser_runtime_signals(state).await);
     signals.extend(
         browser_signals
             .into_iter()
