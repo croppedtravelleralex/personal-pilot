@@ -431,6 +431,30 @@ export interface DesktopProviderProductionReadiness {
   summary: string;
 }
 
+export interface DesktopRuntimeAdapterContractItem {
+  adapterId: string;
+  status: string;
+  runnerKind: string;
+  profileRuntimeEvidence: string;
+  fingerprintRuntimeDepth: string;
+  externalKernelBoundary: string;
+  blockers: string[];
+}
+
+export interface DesktopReleaseSmokeContract {
+  generatedAt: string;
+  status: string;
+  releaseArtifactPath: string;
+  releaseArtifactPresent: boolean;
+  win11BaselineStatus: string;
+  coldStartTargetMs: number;
+  idleRssTargetMb: number;
+  processCountTarget: number;
+  adapterContracts: DesktopRuntimeAdapterContractItem[];
+  warnings: string[];
+  summary: string;
+}
+
 export type DesktopJsonValue =
   | string
   | number

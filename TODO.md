@@ -56,6 +56,7 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
   - [x] Add import preflight and restore contract
   - [ ] Verify profile portability end to end with restart continuity
 - [ ] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy
+- [x] Add runtime adapter / release smoke contract without hosting Chromium/Firefox forks
 - [ ] Deepen headed realism, kernel strategy, and AdsPower-boundary catch-up without breaking the Win11 / Tauri baseline
 - [ ] Land the highest-ROI parts of the external browser integration plan into maintainable main-repo assets
 

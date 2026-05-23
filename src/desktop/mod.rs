@@ -472,6 +472,34 @@ pub struct DesktopProviderProductionReadiness {
     pub summary: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopRuntimeAdapterContractItem {
+    pub adapter_id: String,
+    pub status: String,
+    pub runner_kind: String,
+    pub profile_runtime_evidence: String,
+    pub fingerprint_runtime_depth: String,
+    pub external_kernel_boundary: String,
+    pub blockers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopReleaseSmokeContract {
+    pub generated_at: String,
+    pub status: String,
+    pub release_artifact_path: String,
+    pub release_artifact_present: bool,
+    pub win11_baseline_status: String,
+    pub cold_start_target_ms: i64,
+    pub idle_rss_target_mb: i64,
+    pub process_count_target: i64,
+    pub adapter_contracts: Vec<DesktopRuntimeAdapterContractItem>,
+    pub warnings: Vec<String>,
+    pub summary: String,
+}
+
 fn now_ts_string() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2425,6 +2453,92 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
         ready_count,
         blocked_count,
         items,
+        summary,
+    }
+}
+
+pub fn read_desktop_release_smoke_contract(
+    database_url: Option<&str>,
+) -> DesktopReleaseSmokeContract {
+    let generated_at = now_ts_string();
+    let settings = read_desktop_settings(database_url);
+    let release_artifact_path = PathBuf::from(&settings.project_root)
+        .join("src-tauri")
+        .join("target")
+        .join("release")
+        .join("bundle")
+        .join("nsis")
+        .join("PersonaPilot_0.1.0_x64-setup.exe");
+    let release_artifact_present = release_artifact_path.exists();
+    let adapter_contracts = vec![
+        DesktopRuntimeAdapterContractItem {
+            adapter_id: "fake".to_string(),
+            status: "available_for_contract_tests".to_string(),
+            runner_kind: "fake".to_string(),
+            profile_runtime_evidence: "warning_stub_only".to_string(),
+            fingerprint_runtime_depth: "none".to_string(),
+            external_kernel_boundary: "in_process_stub".to_string(),
+            blockers: vec!["not real browser evidence".to_string()],
+        },
+        DesktopRuntimeAdapterContractItem {
+            adapter_id: "lightpanda".to_string(),
+            status: "available_when_binary_and_cdp_are_configured".to_string(),
+            runner_kind: "lightpanda".to_string(),
+            profile_runtime_evidence: "validation_probe_contract".to_string(),
+            fingerprint_runtime_depth:
+                "26 projected fields; observed proof requires real Lightpanda/CDP smoke".to_string(),
+            external_kernel_boundary: "external_process_not_repo_fork".to_string(),
+            blockers: vec![
+                "real Lightpanda/CDP operator smoke not recorded in this contract".to_string(),
+            ],
+        },
+        DesktopRuntimeAdapterContractItem {
+            adapter_id: "headed_external".to_string(),
+            status: "planned_contract_only".to_string(),
+            runner_kind: "future".to_string(),
+            profile_runtime_evidence: "not_implemented".to_string(),
+            fingerprint_runtime_depth: "not_implemented".to_string(),
+            external_kernel_boundary:
+                "must remain adapter boundary, not Chromium/Firefox fork host".to_string(),
+            blockers: vec![
+                "adapter implementation and evidence smoke are not implemented".to_string(),
+            ],
+        },
+    ];
+    let mut warnings = Vec::new();
+    if !release_artifact_present {
+        warnings
+            .push("release installer artifact is missing; run pnpm desktop:release".to_string());
+    }
+    warnings.push(
+        "performance targets are contractual baselines; cold start/RSS/process counts still require measured operator smoke"
+            .to_string(),
+    );
+    warnings
+        .push("AdsPower boundary must not be refreshed until B1-B5 evidence exists".to_string());
+
+    let status = if release_artifact_present {
+        "release_artifact_present_contract_ready"
+    } else {
+        "blocked_missing_release_artifact"
+    }
+    .to_string();
+    let summary = format!(
+        "Release smoke contract {status}; adapters tracked: {}; release artifact present={release_artifact_present}.",
+        adapter_contracts.len()
+    );
+
+    DesktopReleaseSmokeContract {
+        generated_at,
+        status,
+        release_artifact_path: release_artifact_path.to_string_lossy().to_string(),
+        release_artifact_present,
+        win11_baseline_status: "enforced_by_template_script".to_string(),
+        cold_start_target_ms: 2000,
+        idle_rss_target_mb: 220,
+        process_count_target: 4,
+        adapter_contracts,
+        warnings,
         summary,
     }
 }
@@ -8193,6 +8307,45 @@ mod tests {
             .any(|blocker| blocker.contains("production manager wiring")));
         assert_eq!(with_captcha_credential.ready_count, 0);
         env::remove_var("CAPSOLVER_API_KEY");
+    }
+
+    #[test]
+    fn release_smoke_contract_tracks_adapter_boundary_without_kernel_fork_claims() {
+        let contract = read_desktop_release_smoke_contract(None);
+        assert_eq!(contract.cold_start_target_ms, 2000);
+        assert_eq!(contract.idle_rss_target_mb, 220);
+        assert_eq!(contract.process_count_target, 4);
+        assert_eq!(contract.adapter_contracts.len(), 3);
+        let fake = contract
+            .adapter_contracts
+            .iter()
+            .find(|item| item.adapter_id == "fake")
+            .expect("fake adapter contract");
+        assert_eq!(fake.profile_runtime_evidence, "warning_stub_only");
+        let lightpanda = contract
+            .adapter_contracts
+            .iter()
+            .find(|item| item.adapter_id == "lightpanda")
+            .expect("lightpanda adapter contract");
+        assert_eq!(
+            lightpanda.external_kernel_boundary,
+            "external_process_not_repo_fork"
+        );
+        assert!(lightpanda
+            .fingerprint_runtime_depth
+            .contains("26 projected fields"));
+        let headed = contract
+            .adapter_contracts
+            .iter()
+            .find(|item| item.adapter_id == "headed_external")
+            .expect("headed adapter contract");
+        assert!(headed
+            .external_kernel_boundary
+            .contains("not Chromium/Firefox fork host"));
+        assert!(contract
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("AdsPower boundary must not be refreshed")));
     }
 
     #[test]

@@ -18,6 +18,7 @@ import type {
   DesktopSessionBundleRestoreRequest,
   DesktopSessionBundleRestoreResult,
   DesktopProviderProductionReadiness,
+  DesktopReleaseSmokeContract,
   DesktopLaunchTemplateRunRequest,
   DesktopLaunchTemplateRunResult,
   DesktopLocalApiMutationResult,
@@ -498,6 +499,9 @@ export const restoreSessionBundle = (
 export const readProviderProductionReadiness =
   (): Promise<DesktopProviderProductionReadiness> =>
     invokeDesktop("read_provider_production_readiness");
+
+export const readReleaseSmokeContract = (): Promise<DesktopReleaseSmokeContract> =>
+  invokeDesktop("read_release_smoke_contract");
 
 export const openLocalAssetEntry = (entryId: DesktopLocalAssetEntryId): Promise<void> =>
   invokeDesktop("open_local_asset_entry", { entryId });

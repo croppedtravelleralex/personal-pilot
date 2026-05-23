@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Provider production readiness contract",
-  "current_objective": "继续推进 P2 behavior/provider closure；真实 CAPTCHA/SMS/Email manager wiring、CDP automation、operator UI 仍未闭环",
-  "last_result_summary": "Provider production readiness contract 已落地，可报告 CAPTCHA/SMS/Email 的 credentials、manager wiring、CDP automation、operator UI blockers；不会把 provider credentials 误报为生产闭环",
-  "next_action_hint": "After provider readiness gates pass, move to P3 runtime adapter/benchmark/release smoke contract",
+  "current_focus": "Runtime adapter and release smoke contract",
+  "current_objective": "继续推进 P3 runtime/benchmark/release；真实 Lightpanda/CDP smoke、headed runtime、性能测量仍未闭环",
+  "last_result_summary": "Runtime adapter / release smoke contract 已落地，记录 Fake、Lightpanda、headed_external 边界、release artifact、Win11 baseline 和性能预算目标；不托管 Chromium/Firefox fork，不刷新 AdsPower 评分",
+  "next_action_hint": "Move to P4 docs truth-source cleanup and final full gate after P3 checks pass",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -108,6 +108,12 @@
       "kind": "feature",
       "status": "success",
       "note": "CAPTCHA/SMS/Email readiness now reports credential, manager wiring, CDP automation, operator UI blockers without claiming production closure."
+    },
+    {
+      "title": "Runtime adapter and release smoke contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "Release smoke API now reports adapter boundaries, installer presence, Win11 baseline status, and performance target contracts without claiming real headed runtime closure."
     }
   ],
   "blocked_reason": "",

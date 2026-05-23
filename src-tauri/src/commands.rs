@@ -19,7 +19,7 @@ use persona_pilot::desktop::{
     load_desktop_proxy_page, load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
     load_desktop_template_metadata_page, open_desktop_profiles,
     read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
-    read_desktop_provider_production_readiness,
+    read_desktop_provider_production_readiness, read_desktop_release_smoke_contract,
     read_desktop_local_api_snapshot, read_desktop_local_asset_workspace, read_desktop_run_detail,
     read_desktop_settings, reject_desktop_manual_gate, resolve_desktop_local_asset_entry_path,
     preflight_desktop_session_bundle_import, restore_desktop_browser_environment_policy_defaults,
@@ -38,7 +38,7 @@ use persona_pilot::desktop::{
     DesktopProviderProductionReadiness, DesktopProxyBatchCheckRequest, DesktopProxyBatchCheckResponse, DesktopProxyChangeIpRequest,
     DesktopProxyChangeIpResult, DesktopProxyHealth, DesktopProxyPage, DesktopProxyPageQuery,
     DesktopProxyUsageItem, DesktopReadRunDetailQuery, DesktopRecorderSnapshot,
-    DesktopRecorderSnapshotQuery, DesktopRunDetail, DesktopRuntimeSettingsDraft,
+    DesktopRecorderSnapshotQuery, DesktopReleaseSmokeContract, DesktopRunDetail, DesktopRuntimeSettingsDraft,
     DesktopSessionBundleExport, DesktopSessionBundleExportRequest,
     DesktopSessionBundleImportPreflight, DesktopSessionBundleImportPreflightRequest,
     DesktopSessionBundleRestoreRequest, DesktopSessionBundleRestoreResult,
@@ -2075,6 +2075,13 @@ pub async fn restore_session_bundle(
 #[tauri::command]
 pub fn read_provider_production_readiness() -> Result<DesktopProviderProductionReadiness, String> {
     Ok(read_desktop_provider_production_readiness())
+}
+
+#[tauri::command]
+pub fn read_release_smoke_contract(
+    state: State<'_, DesktopState>,
+) -> Result<DesktopReleaseSmokeContract, String> {
+    Ok(read_desktop_release_smoke_contract(Some(&state.database_url)))
 }
 
 #[tauri::command]

@@ -48,6 +48,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - Email 已从内部模块推进到 `EmailService` + inbox / wait-code REST API；生产 readiness contract 已接入桌面 API，但自动化流程和 operator UI 闭环仍 blocked。
 - 备份单体已拆成 core/import/merge/utils；browser launch args 与 process monitor 已迁入 `internal/browser`。
 - Validation Board 已落地到桌面导航：8 类 evidence（detector / leak / DNS / WebRTC / canvas / audio / worker / transport）按 declared / applied / observed 分层展示；DNS/transport observed 首批 native collector、desktop WebView scoped WebRTC/canvas/audio/storage probes、profile browser runtime validation probe action、WebRTC/leak native contract warning、JSON report、report history 和 profile-level evidence export 已接入。真实 profile browser-scoped evidence 依赖 `PERSONA_PILOT_RUNNER=lightpanda` 与 Lightpanda/CDP 可用；FakeRunner 只记录 warning stub。
+- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；真实 Lightpanda/CDP operator smoke 与冷启动/RSS/进程数测量仍需单独执行。
 
 ## 未完成边界
 
@@ -66,8 +67,8 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - `450+` fingerprint signal observation / audit coverage 未落地。
 - `450+` event taxonomy 未落地。
 - `SessionBundle` profile-level export、import preflight、restore contract 已落地；真实 restore write path、profile portability 验收仍未落地。
-- headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道。
-- external browser integration 已有计划，但不是已交付 runtime depth。
+- headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前仅有 adapter/release smoke contract，不是 headed runtime 实现。
+- external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。
 
 ## 当前下一步
 

@@ -53,7 +53,8 @@
    - CAPTCHA/SMS/Email 已有 production readiness contract；下一步是真实 manager wiring、CDP detect/fill、operator UI 和 provider acceptance。
 
 5. Runtime adapter and external integration
-   - 只吸收高 ROI 外部浏览器思路。
+   - Runtime adapter / release smoke contract 已接入，覆盖 Fake、Lightpanda、headed_external 边界和 release artifact 检查。
+   - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
    - AdsPower benchmark refresh 等 B1-B5 有证据后再做。
 
