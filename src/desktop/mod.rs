@@ -441,6 +441,7 @@ pub struct DesktopSessionBundleRestoreResult {
     pub status: String,
     pub dry_run: bool,
     pub write_performed: bool,
+    pub restored_session_binding_count: usize,
     pub preflight: DesktopSessionBundleImportPreflight,
     pub summary: String,
 }
@@ -1939,7 +1940,7 @@ pub fn read_desktop_import_export_skeleton(
             "Only local file bundles and queue directories are modeled here. No cloud sync or team workspace is involved.".to_string(),
             "The import/export layer is intentionally manifest-first so future compiler or recorder outputs can plug into the same queue.".to_string(),
             "Opening an asset entry will prepare parent directories on demand, but it will not fabricate remote or cloud contracts.".to_string(),
-            "Session bundle export is profile-scoped and manifest-first; restore/import remains a future explicit confirmation flow.".to_string(),
+            "Session bundle export is profile-scoped and manifest-first; restore/import uses preflight before any confirmed local write.".to_string(),
         ],
         updated_at: now_ts_string(),
     }
@@ -2061,8 +2062,8 @@ pub async fn export_desktop_session_bundle(
         profile,
         portability_contract: serde_json::json!({
             "scope": "profile_session_bundle",
-            "restoreStatus": "not_implemented",
-            "importMode": "manifest_preflight_only",
+            "restoreStatus": "confirmed_restore_available",
+            "importMode": "preflight_then_confirmed_restore",
             "declaredAppliedObservedBoundary": "profile links and persisted session artifacts are exported; browser runtime restore remains separately verified",
             "requiredForRestore": [
                 "fingerprintProfileId",
@@ -2244,14 +2245,14 @@ pub async fn preflight_desktop_session_bundle_import(
         DesktopSessionBundleRestoreStep {
             id: "restore_session_bindings".to_string(),
             label: "Restore session bindings".to_string(),
-            status: "contract_only".to_string(),
-            detail: "DB restore write is intentionally blocked until confirmed restore semantics are implemented".to_string(),
+            status: if errors.is_empty() { "ready" } else { "blocked" }.to_string(),
+            detail: "Confirmed restore can upsert the target profile and session bindings after preflight passes".to_string(),
         },
     ];
 
-    let restore_supported = false;
+    let restore_supported = errors.is_empty();
     let status = if errors.is_empty() {
-        "ready_for_restore_contract"
+        "ready_for_confirmed_restore"
     } else {
         "blocked"
     }
@@ -2278,7 +2279,7 @@ pub async fn preflight_desktop_session_bundle_import(
         schema_version: payload.schema_version,
         collector_version: payload.collector_version,
         status,
-        import_mode: "manifest_preflight_only".to_string(),
+        import_mode: "preflight_then_confirmed_restore".to_string(),
         restore_supported,
         session_binding_count: payload.session_bindings.len(),
         missing_reference_count,
@@ -2290,44 +2291,219 @@ pub async fn preflight_desktop_session_bundle_import(
     })
 }
 
+fn session_bundle_artifact_json(summary: &DesktopSessionBundleArtifactSummary) -> Option<String> {
+    if !summary.included {
+        return None;
+    }
+    summary.value.as_ref().map(Value::to_string)
+}
+
+async fn upsert_session_bundle_profile(
+    db: &DbPool,
+    payload: &DesktopSessionBundlePayload,
+    target_profile_id: &str,
+    allow_profile_overwrite: bool,
+    now: &str,
+) -> Result<()> {
+    let profile = &payload.profile.profile;
+    if profile_exists(db, target_profile_id).await? {
+        if !allow_profile_overwrite {
+            return Err(anyhow::anyhow!(
+                "target profile already exists and allowProfileOverwrite=false: {target_profile_id}"
+            ));
+        }
+        sqlx::query(
+            r#"UPDATE persona_profiles
+               SET store_id = ?, platform_id = ?, device_family = ?, country_anchor = ?,
+                   region_anchor = ?, locale = ?, timezone = ?, fingerprint_profile_id = ?,
+                   behavior_profile_id = ?, network_policy_id = ?, continuity_policy_id = ?,
+                   credential_ref = ?, status = ?, updated_at = ?
+               WHERE id = ?"#,
+        )
+        .bind(&profile.store_id)
+        .bind(&profile.platform_id)
+        .bind(&profile.device_family)
+        .bind(&profile.country_anchor)
+        .bind(&profile.region_anchor)
+        .bind(&profile.locale)
+        .bind(&profile.timezone)
+        .bind(&profile.fingerprint_profile_id)
+        .bind(&profile.behavior_profile_id)
+        .bind(&profile.network_policy_id)
+        .bind(&profile.continuity_policy_id)
+        .bind(&profile.credential_ref)
+        .bind(&profile.status)
+        .bind(now)
+        .bind(target_profile_id)
+        .execute(db)
+        .await?;
+        return Ok(());
+    }
+
+    sqlx::query(
+        r#"INSERT INTO persona_profiles (
+               id, store_id, platform_id, device_family, country_anchor, region_anchor, locale,
+               timezone, fingerprint_profile_id, behavior_profile_id, network_policy_id,
+               continuity_policy_id, credential_ref, status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(target_profile_id)
+    .bind(&profile.store_id)
+    .bind(&profile.platform_id)
+    .bind(&profile.device_family)
+    .bind(&profile.country_anchor)
+    .bind(&profile.region_anchor)
+    .bind(&profile.locale)
+    .bind(&profile.timezone)
+    .bind(&profile.fingerprint_profile_id)
+    .bind(&profile.behavior_profile_id)
+    .bind(&profile.network_policy_id)
+    .bind(&profile.continuity_policy_id)
+    .bind(&profile.credential_ref)
+    .bind(&profile.status)
+    .bind(now)
+    .bind(now)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+async fn upsert_session_bundle_bindings(
+    db: &DbPool,
+    payload: &DesktopSessionBundlePayload,
+    now: &str,
+) -> Result<usize> {
+    let fingerprint_profile_id = &payload.profile.profile.fingerprint_profile_id;
+    for binding in &payload.session_bindings {
+        sqlx::query(
+            r#"INSERT INTO proxy_session_bindings (
+                   session_key, proxy_id, provider, region, fingerprint_profile_id, site_key,
+                   requested_region, requested_provider, cookies_json, cookie_updated_at,
+                   local_storage_json, session_storage_json, storage_updated_at,
+                   last_success_at, last_failure_at, last_used_at, expires_at, created_at, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(session_key) DO UPDATE SET
+                   proxy_id = excluded.proxy_id,
+                   provider = excluded.provider,
+                   region = excluded.region,
+                   fingerprint_profile_id = excluded.fingerprint_profile_id,
+                   site_key = excluded.site_key,
+                   requested_region = excluded.requested_region,
+                   requested_provider = excluded.requested_provider,
+                   cookies_json = excluded.cookies_json,
+                   cookie_updated_at = excluded.cookie_updated_at,
+                   local_storage_json = excluded.local_storage_json,
+                   session_storage_json = excluded.session_storage_json,
+                   storage_updated_at = excluded.storage_updated_at,
+                   last_success_at = excluded.last_success_at,
+                   last_failure_at = excluded.last_failure_at,
+                   last_used_at = excluded.last_used_at,
+                   expires_at = excluded.expires_at,
+                   updated_at = excluded.updated_at"#,
+        )
+        .bind(&binding.session_key)
+        .bind(&binding.proxy_id)
+        .bind(&binding.provider)
+        .bind(&binding.region)
+        .bind(fingerprint_profile_id)
+        .bind(&binding.site_key)
+        .bind(&binding.requested_region)
+        .bind(&binding.requested_provider)
+        .bind(session_bundle_artifact_json(&binding.cookies))
+        .bind(&binding.cookie_updated_at)
+        .bind(session_bundle_artifact_json(&binding.local_storage))
+        .bind(session_bundle_artifact_json(&binding.session_storage))
+        .bind(&binding.storage_updated_at)
+        .bind(&binding.last_success_at)
+        .bind(&binding.last_failure_at)
+        .bind(&binding.last_used_at)
+        .bind(&binding.expires_at)
+        .bind(&binding.created_at)
+        .bind(now)
+        .execute(db)
+        .await?;
+    }
+    Ok(payload.session_bindings.len())
+}
+
 pub async fn restore_desktop_session_bundle(
     db: &DbPool,
     request: DesktopSessionBundleRestoreRequest,
 ) -> Result<DesktopSessionBundleRestoreResult> {
     let dry_run = request.dry_run.unwrap_or(true);
+    let bundle_path = request.bundle_path.clone();
+    let target_profile_id = request.target_profile_id.clone();
+    let allow_profile_overwrite = request.allow_profile_overwrite.unwrap_or(false);
     let preflight = preflight_desktop_session_bundle_import(
         db,
         DesktopSessionBundleImportPreflightRequest {
-            bundle_path: request.bundle_path,
-            target_profile_id: request.target_profile_id,
-            allow_profile_overwrite: request.allow_profile_overwrite,
+            bundle_path: bundle_path.clone(),
+            target_profile_id,
+            allow_profile_overwrite: Some(allow_profile_overwrite),
         },
     )
     .await?;
 
-    let status = if preflight.errors.is_empty() {
-        "blocked_contract_only"
-    } else {
-        "blocked_preflight_failed"
-    }
-    .to_string();
-    let summary = if preflight.errors.is_empty() {
-        "Restore contract is available, but DB write restore is intentionally not implemented yet."
-            .to_string()
-    } else {
-        format!(
+    if !preflight.errors.is_empty() {
+        let summary = format!(
             "Restore blocked by preflight: {}",
             preflight.errors.join("; ")
-        )
-    };
+        );
+        return Ok(DesktopSessionBundleRestoreResult {
+            bundle_id: preflight.bundle_id.clone(),
+            profile_id: preflight.profile_id.clone(),
+            target_profile_id: preflight.target_profile_id.clone(),
+            status: "blocked_preflight_failed".to_string(),
+            dry_run,
+            write_performed: false,
+            restored_session_binding_count: 0,
+            preflight,
+            summary,
+        });
+    }
+
+    if dry_run {
+        let summary = format!(
+            "Dry-run restore passed for target profile {} with {} binding(s); no DB writes performed.",
+            preflight.target_profile_id, preflight.session_binding_count
+        );
+        return Ok(DesktopSessionBundleRestoreResult {
+            bundle_id: preflight.bundle_id.clone(),
+            profile_id: preflight.profile_id.clone(),
+            target_profile_id: preflight.target_profile_id.clone(),
+            status: "dry_run_ready".to_string(),
+            dry_run,
+            write_performed: false,
+            restored_session_binding_count: 0,
+            preflight,
+            summary,
+        });
+    }
+
+    let (_, payload) = read_session_bundle_payload(&bundle_path)?;
+    let now = now_ts_string();
+    upsert_session_bundle_profile(
+        db,
+        &payload,
+        &preflight.target_profile_id,
+        allow_profile_overwrite,
+        &now,
+    )
+    .await?;
+    let restored_session_binding_count = upsert_session_bundle_bindings(db, &payload, &now).await?;
+    let summary = format!(
+        "Restored session bundle for target profile {} with {} binding(s).",
+        preflight.target_profile_id, restored_session_binding_count
+    );
 
     Ok(DesktopSessionBundleRestoreResult {
         bundle_id: preflight.bundle_id.clone(),
         profile_id: preflight.profile_id.clone(),
         target_profile_id: preflight.target_profile_id.clone(),
-        status,
+        status: "restored".to_string(),
         dry_run,
-        write_performed: false,
+        write_performed: true,
+        restored_session_binding_count,
         preflight,
         summary,
     })
@@ -8155,12 +8331,12 @@ mod tests {
         );
         assert_eq!(
             included_json["portabilityContract"]["restoreStatus"],
-            "not_implemented"
+            "confirmed_restore_available"
         );
     }
 
     #[tokio::test]
-    async fn session_bundle_import_preflight_and_restore_are_non_destructive_contracts() {
+    async fn session_bundle_import_preflight_and_restore_write_confirmed_copy() {
         let db_url = format!(
             "sqlite:///tmp/persona_pilot_session_bundle_restore_{}.db",
             Uuid::new_v4()
@@ -8199,7 +8375,7 @@ mod tests {
             &db_url,
             DesktopSessionBundleExportRequest {
                 profile_id: "persona-launch-test".to_string(),
-                include_sensitive_payloads: Some(false),
+                include_sensitive_payloads: Some(true),
             },
         )
         .await
@@ -8233,14 +8409,37 @@ mod tests {
         )
         .await
         .expect("preflight import contract");
-        assert_eq!(contract.status, "ready_for_restore_contract");
+        assert_eq!(contract.status, "ready_for_confirmed_restore");
         assert_eq!(contract.session_binding_count, 1);
         assert_eq!(contract.missing_reference_count, 0);
         assert_eq!(contract.conflict_count, 0);
+        assert!(contract.restore_supported);
         assert!(contract
             .restore_plan
             .iter()
-            .any(|step| step.id == "restore_session_bindings" && step.status == "contract_only"));
+            .any(|step| step.id == "restore_session_bindings" && step.status == "ready"));
+
+        let dry_run = restore_desktop_session_bundle(
+            &db,
+            DesktopSessionBundleRestoreRequest {
+                bundle_path: export.export_path.clone(),
+                target_profile_id: Some("persona-restored-copy".to_string()),
+                allow_profile_overwrite: Some(false),
+                dry_run: Some(true),
+            },
+        )
+        .await
+        .expect("dry-run restore");
+        assert_eq!(dry_run.status, "dry_run_ready");
+        assert!(!dry_run.write_performed);
+        assert_eq!(dry_run.restored_session_binding_count, 0);
+        let dry_run_profile_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM persona_profiles WHERE id = ?")
+                .bind("persona-restored-copy")
+                .fetch_one(&db)
+                .await
+                .expect("count dry-run restored profile");
+        assert_eq!(dry_run_profile_count, 0);
 
         let restore = restore_desktop_session_bundle(
             &db,
@@ -8252,17 +8451,39 @@ mod tests {
             },
         )
         .await
-        .expect("restore contract");
-        assert_eq!(restore.status, "blocked_contract_only");
-        assert!(!restore.write_performed);
+        .expect("confirmed restore");
+        assert_eq!(restore.status, "restored");
+        assert!(restore.write_performed);
         assert!(!restore.dry_run);
+        assert_eq!(restore.restored_session_binding_count, 1);
         let restored_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM persona_profiles WHERE id = ?")
                 .bind("persona-restored-copy")
                 .fetch_one(&db)
                 .await
                 .expect("count restored profile");
-        assert_eq!(restored_count, 0);
+        assert_eq!(restored_count, 1);
+        let restored_binding = sqlx::query(
+            r#"SELECT cookies_json, local_storage_json, session_storage_json
+               FROM proxy_session_bindings
+               WHERE session_key = ?"#,
+        )
+        .bind("session-restore-test")
+        .fetch_one(&db)
+        .await
+        .expect("load restored binding");
+        assert_eq!(
+            restored_binding.get::<Option<String>, _>("cookies_json"),
+            Some(r#"[{"name":"sid","value":"secret"}]"#.to_string())
+        );
+        assert_eq!(
+            restored_binding.get::<Option<String>, _>("local_storage_json"),
+            Some(r#"{"theme":"dark"}"#.to_string())
+        );
+        assert_eq!(
+            restored_binding.get::<Option<String>, _>("session_storage_json"),
+            Some(r#"{"step":"1"}"#.to_string())
+        );
     }
 
     #[test]

@@ -10,7 +10,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - 当前 runtime projection 是 `26` 个 env-backed fingerprint fields，其中 `25` 个来自 first-family control fields，另含 derived `platform`。
 - 当前 behavior runtime 已交付 `13` 个 primitives。
 - cookie / localStorage / sessionStorage 跨 app restart 持久化与恢复已落地。
-- profile-scoped `SessionBundle` export/import preflight/restore contract 已落地：可导出 profile refs、fingerprint/network/continuity/behavior references、session binding metadata、cookie/localStorage/sessionStorage 存在性与计数；默认脱敏，显式本地开关才包含敏感 payload；import preflight 可检查 schema、引用缺失和 profile 冲突；restore 当前为 non-destructive contract，不写 DB。
+- profile-scoped `SessionBundle` export/import preflight/dry-run/confirmed local restore write path 已落地：可导出 profile refs、fingerprint/network/continuity/behavior references、session binding metadata、cookie/localStorage/sessionStorage 存在性与计数；默认脱敏，显式本地开关才包含敏感 payload；import preflight 可检查 schema、引用缺失和 profile 冲突；dry-run 不写 DB；confirmed restore 可 upsert target profile 和 `proxy_session_bindings`，敏感 payload 只在 bundle 包含时恢复。
 
 历史 `77% / 23%` 或 `82% / 18%` 不再作为当前进度口径。
 
@@ -66,13 +66,13 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - runtime materialization depth 已从 `12` 扩到 `26` projected fields；P7 已有 observed audit summary，但仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal taxonomy / full observation coverage 未落地；当前 P7 只是 WebRTC/canvas/audio/leak observed audit，不是 450+ 全量采集。
 - `450+` event taxonomy 未落地。
-- `SessionBundle` profile-level export、import preflight、restore contract 已落地；真实 restore write path、profile portability 验收仍未落地。
+- `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；跨机器 profile portability 仍需真实环境验收。
 - headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前仅有 adapter/release smoke contract，不是 headed runtime 实现。
 - external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。
 
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. P8 补齐 SessionBundle 真实 restore write path / portability 验收
-2. P9 推进 CAPTCHA/SMS/Email production manager wiring/config，但不宣称真实 provider 闭环，除非凭证和验收可用
-3. P10 扩展 behavior taxonomy/workflow audit，并继续避免把 `450+` 目标写成已交付
+1. P9 推进 CAPTCHA/SMS/Email production manager wiring/config，但不宣称真实 provider 闭环，除非凭证和验收可用
+2. P10 扩展 behavior taxonomy/workflow audit，并继续避免把 `450+` 目标写成已交付
+3. P11 推进 runtime adapter/headed realism/performance measurement，不托管 Chromium/Firefox fork

@@ -408,6 +408,7 @@ export interface DesktopSessionBundleRestoreResult {
   status: string;
   dryRun: boolean;
   writePerformed: boolean;
+  restoredSessionBindingCount: number;
   preflight: DesktopSessionBundleImportPreflight;
   summary: string;
 }
