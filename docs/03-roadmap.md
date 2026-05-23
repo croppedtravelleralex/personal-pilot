@@ -44,8 +44,8 @@
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration
-   - 已将 restart continuity 推进到 profile-scoped `SessionBundle` export contract。
-   - 下一步补齐 import preflight、restore、profile portability、lease / cooldown / health / rollback。
+   - 已将 restart continuity 推进到 profile-scoped `SessionBundle` export、import preflight、restore contract。
+   - 下一步补齐真实 restore write path、profile portability 验收、lease / cooldown / health / rollback。
 
 4. Behavior and automation depth
    - 从 `13` shipped primitives 扩展到 replayable `450+` event taxonomy。

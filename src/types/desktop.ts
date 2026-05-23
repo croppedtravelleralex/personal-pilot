@@ -358,6 +358,56 @@ export interface DesktopSessionBundleExport {
   summary: string;
 }
 
+export interface DesktopSessionBundleImportPreflightRequest {
+  bundlePath: string;
+  targetProfileId?: string | null;
+  allowProfileOverwrite?: boolean;
+}
+
+export interface DesktopSessionBundleRestoreStep {
+  id: string;
+  label: string;
+  status: string;
+  detail: string;
+}
+
+export interface DesktopSessionBundleImportPreflight {
+  bundleId: string;
+  profileId: string;
+  targetProfileId: string;
+  bundlePath: string;
+  schemaVersion: string;
+  collectorVersion: string;
+  status: string;
+  importMode: string;
+  restoreSupported: boolean;
+  sessionBindingCount: number;
+  missingReferenceCount: number;
+  conflictCount: number;
+  warnings: string[];
+  errors: string[];
+  restorePlan: DesktopSessionBundleRestoreStep[];
+  summary: string;
+}
+
+export interface DesktopSessionBundleRestoreRequest {
+  bundlePath: string;
+  targetProfileId?: string | null;
+  allowProfileOverwrite?: boolean;
+  dryRun?: boolean;
+}
+
+export interface DesktopSessionBundleRestoreResult {
+  bundleId: string;
+  profileId: string;
+  targetProfileId: string;
+  status: string;
+  dryRun: boolean;
+  writePerformed: boolean;
+  preflight: DesktopSessionBundleImportPreflight;
+  summary: string;
+}
+
 export type DesktopJsonValue =
   | string
   | number

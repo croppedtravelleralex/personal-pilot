@@ -385,6 +385,66 @@ pub struct DesktopSessionBundleExport {
     pub summary: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleImportPreflightRequest {
+    pub bundle_path: String,
+    pub target_profile_id: Option<String>,
+    pub allow_profile_overwrite: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleRestoreStep {
+    pub id: String,
+    pub label: String,
+    pub status: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleImportPreflight {
+    pub bundle_id: String,
+    pub profile_id: String,
+    pub target_profile_id: String,
+    pub bundle_path: String,
+    pub schema_version: String,
+    pub collector_version: String,
+    pub status: String,
+    pub import_mode: String,
+    pub restore_supported: bool,
+    pub session_binding_count: usize,
+    pub missing_reference_count: usize,
+    pub conflict_count: usize,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+    pub restore_plan: Vec<DesktopSessionBundleRestoreStep>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleRestoreRequest {
+    pub bundle_path: String,
+    pub target_profile_id: Option<String>,
+    pub allow_profile_overwrite: Option<bool>,
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopSessionBundleRestoreResult {
+    pub bundle_id: String,
+    pub profile_id: String,
+    pub target_profile_id: String,
+    pub status: String,
+    pub dry_run: bool,
+    pub write_performed: bool,
+    pub preflight: DesktopSessionBundleImportPreflight,
+    pub summary: String,
+}
+
 fn now_ts_string() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1980,6 +2040,240 @@ pub async fn export_desktop_session_bundle(
         include_sensitive_payloads,
         export_path: export_path.to_string_lossy().to_string(),
         warnings,
+        summary,
+    })
+}
+
+fn read_session_bundle_payload(
+    bundle_path: &str,
+) -> Result<(PathBuf, DesktopSessionBundlePayload)> {
+    let path = PathBuf::from(bundle_path.trim());
+    if path.as_os_str().is_empty() {
+        return Err(anyhow::anyhow!("bundle_path is required"));
+    }
+    let raw = fs::read_to_string(&path).map_err(|error| {
+        anyhow::anyhow!("failed to read session bundle {}: {error}", path.display())
+    })?;
+    let payload = serde_json::from_str::<DesktopSessionBundlePayload>(&raw).map_err(|error| {
+        anyhow::anyhow!("failed to parse session bundle {}: {error}", path.display())
+    })?;
+    Ok((path, payload))
+}
+
+async fn reference_exists(db: &DbPool, table: &str, id: Option<&str>) -> Result<bool> {
+    let Some(id) = id else {
+        return Ok(true);
+    };
+    let count: i64 = match table {
+        "fingerprint_profiles" => {
+            sqlx::query_scalar("SELECT COUNT(*) FROM fingerprint_profiles WHERE id = ?")
+                .bind(id)
+                .fetch_one(db)
+                .await?
+        }
+        "behavior_profiles" => {
+            sqlx::query_scalar("SELECT COUNT(*) FROM behavior_profiles WHERE id = ?")
+                .bind(id)
+                .fetch_one(db)
+                .await?
+        }
+        "network_policies" => {
+            sqlx::query_scalar("SELECT COUNT(*) FROM network_policies WHERE id = ?")
+                .bind(id)
+                .fetch_one(db)
+                .await?
+        }
+        "continuity_policies" => {
+            sqlx::query_scalar("SELECT COUNT(*) FROM continuity_policies WHERE id = ?")
+                .bind(id)
+                .fetch_one(db)
+                .await?
+        }
+        _ => return Err(anyhow::anyhow!("unsupported reference table: {table}")),
+    };
+    Ok(count > 0)
+}
+
+async fn profile_exists(db: &DbPool, profile_id: &str) -> Result<bool> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM persona_profiles WHERE id = ?")
+        .bind(profile_id)
+        .fetch_one(db)
+        .await?;
+    Ok(count > 0)
+}
+
+pub async fn preflight_desktop_session_bundle_import(
+    db: &DbPool,
+    request: DesktopSessionBundleImportPreflightRequest,
+) -> Result<DesktopSessionBundleImportPreflight> {
+    let (path, payload) = read_session_bundle_payload(&request.bundle_path)?;
+    let source_profile_id = payload.profile.profile.id.clone();
+    let target_profile_id = normalized_optional_text(request.target_profile_id)
+        .unwrap_or_else(|| source_profile_id.clone());
+    let allow_profile_overwrite = request.allow_profile_overwrite.unwrap_or(false);
+    let mut warnings = payload.warnings.clone();
+    let mut errors = Vec::new();
+    let mut conflict_count = 0_usize;
+    let mut missing_reference_count = 0_usize;
+
+    if payload.schema_version != "session-bundle-v1" {
+        errors.push(format!(
+            "unsupported session bundle schema version: {}",
+            payload.schema_version
+        ));
+    }
+
+    if profile_exists(db, &target_profile_id).await? && !allow_profile_overwrite {
+        conflict_count += 1;
+        errors.push(format!(
+            "target profile already exists and allowProfileOverwrite=false: {target_profile_id}"
+        ));
+    }
+
+    let refs = [
+        (
+            "fingerprint profile",
+            "fingerprint_profiles",
+            Some(payload.profile.profile.fingerprint_profile_id.as_str()),
+        ),
+        (
+            "behavior profile",
+            "behavior_profiles",
+            payload.profile.profile.behavior_profile_id.as_deref(),
+        ),
+        (
+            "network policy",
+            "network_policies",
+            Some(payload.profile.profile.network_policy_id.as_str()),
+        ),
+        (
+            "continuity policy",
+            "continuity_policies",
+            Some(payload.profile.profile.continuity_policy_id.as_str()),
+        ),
+    ];
+
+    for (label, table, id) in refs {
+        if !reference_exists(db, table, id).await? {
+            missing_reference_count += 1;
+            errors.push(format!(
+                "missing {label} reference required by bundle: {}",
+                id.unwrap_or("<none>")
+            ));
+        }
+    }
+
+    if payload.session_bindings.is_empty() {
+        warnings.push("bundle has no session bindings to restore".to_string());
+    }
+
+    let mut restore_plan = vec![
+        DesktopSessionBundleRestoreStep {
+            id: "read_bundle".to_string(),
+            label: "Read session bundle".to_string(),
+            status: "ready".to_string(),
+            detail: format!("Parsed {}", path.display()),
+        },
+        DesktopSessionBundleRestoreStep {
+            id: "validate_references".to_string(),
+            label: "Validate profile references".to_string(),
+            status: if missing_reference_count == 0 { "ready" } else { "blocked" }.to_string(),
+            detail: format!("missingReferenceCount={missing_reference_count}"),
+        },
+        DesktopSessionBundleRestoreStep {
+            id: "check_profile_conflict".to_string(),
+            label: "Check profile conflict".to_string(),
+            status: if conflict_count == 0 { "ready" } else { "blocked" }.to_string(),
+            detail: format!("targetProfileId={target_profile_id}; conflictCount={conflict_count}"),
+        },
+        DesktopSessionBundleRestoreStep {
+            id: "restore_session_bindings".to_string(),
+            label: "Restore session bindings".to_string(),
+            status: "contract_only".to_string(),
+            detail: "DB restore write is intentionally blocked until confirmed restore semantics are implemented".to_string(),
+        },
+    ];
+
+    let restore_supported = false;
+    let status = if errors.is_empty() {
+        "ready_for_restore_contract"
+    } else {
+        "blocked"
+    }
+    .to_string();
+    if !errors.is_empty() {
+        restore_plan.push(DesktopSessionBundleRestoreStep {
+            id: "resolve_blocks".to_string(),
+            label: "Resolve preflight blocks".to_string(),
+            status: "blocked".to_string(),
+            detail: errors.join("; "),
+        });
+    }
+
+    let summary = format!(
+        "Session bundle preflight {status}: {} binding(s), {missing_reference_count} missing reference(s), {conflict_count} conflict(s).",
+        payload.session_bindings.len()
+    );
+
+    Ok(DesktopSessionBundleImportPreflight {
+        bundle_id: payload.bundle_id,
+        profile_id: source_profile_id,
+        target_profile_id,
+        bundle_path: path.to_string_lossy().to_string(),
+        schema_version: payload.schema_version,
+        collector_version: payload.collector_version,
+        status,
+        import_mode: "manifest_preflight_only".to_string(),
+        restore_supported,
+        session_binding_count: payload.session_bindings.len(),
+        missing_reference_count,
+        conflict_count,
+        warnings,
+        errors,
+        restore_plan,
+        summary,
+    })
+}
+
+pub async fn restore_desktop_session_bundle(
+    db: &DbPool,
+    request: DesktopSessionBundleRestoreRequest,
+) -> Result<DesktopSessionBundleRestoreResult> {
+    let dry_run = request.dry_run.unwrap_or(true);
+    let preflight = preflight_desktop_session_bundle_import(
+        db,
+        DesktopSessionBundleImportPreflightRequest {
+            bundle_path: request.bundle_path,
+            target_profile_id: request.target_profile_id,
+            allow_profile_overwrite: request.allow_profile_overwrite,
+        },
+    )
+    .await?;
+
+    let status = if preflight.errors.is_empty() {
+        "blocked_contract_only"
+    } else {
+        "blocked_preflight_failed"
+    }
+    .to_string();
+    let summary = if preflight.errors.is_empty() {
+        "Restore contract is available, but DB write restore is intentionally not implemented yet."
+            .to_string()
+    } else {
+        format!(
+            "Restore blocked by preflight: {}",
+            preflight.errors.join("; ")
+        )
+    };
+
+    Ok(DesktopSessionBundleRestoreResult {
+        bundle_id: preflight.bundle_id.clone(),
+        profile_id: preflight.profile_id.clone(),
+        target_profile_id: preflight.target_profile_id.clone(),
+        status,
+        dry_run,
+        write_performed: false,
+        preflight,
         summary,
     })
 }
@@ -7598,6 +7892,112 @@ mod tests {
             included_json["portabilityContract"]["restoreStatus"],
             "not_implemented"
         );
+    }
+
+    #[tokio::test]
+    async fn session_bundle_import_preflight_and_restore_are_non_destructive_contracts() {
+        let db_url = format!(
+            "sqlite:///tmp/persona_pilot_session_bundle_restore_{}.db",
+            Uuid::new_v4()
+        );
+        let db = init_db(&db_url).await.expect("init db");
+        seed_launch_test_fixtures(&db).await;
+        sqlx::query(
+            r#"INSERT INTO proxies (
+                   id, scheme, host, port, provider, region, country, status, score,
+                   success_count, failure_count, created_at, updated_at
+               ) VALUES (
+                   'proxy-session-restore-test', 'http', '127.0.0.1', 8082, 'provider-a', 'us-east',
+                   'US', 'active', 0.9, 0, 0, '2000000000', '2000000000'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed proxy");
+        sqlx::query(
+            r#"INSERT INTO proxy_session_bindings (
+                   session_key, proxy_id, provider, region, fingerprint_profile_id, site_key,
+                   cookies_json, local_storage_json, session_storage_json,
+                   last_used_at, created_at, updated_at
+               ) VALUES (
+                   'session-restore-test', 'proxy-session-restore-test', 'provider-a', 'us-east',
+                   'fp-launch-test', 'example.com', '[{"name":"sid","value":"secret"}]',
+                   '{"theme":"dark"}', '{"step":"1"}', '2000000004', '2000000000', '2000000004'
+               )"#,
+        )
+        .execute(&db)
+        .await
+        .expect("seed session binding");
+
+        let export = export_desktop_session_bundle(
+            &db,
+            &db_url,
+            DesktopSessionBundleExportRequest {
+                profile_id: "persona-launch-test".to_string(),
+                include_sensitive_payloads: Some(false),
+            },
+        )
+        .await
+        .expect("export bundle");
+
+        let blocked = preflight_desktop_session_bundle_import(
+            &db,
+            DesktopSessionBundleImportPreflightRequest {
+                bundle_path: export.export_path.clone(),
+                target_profile_id: None,
+                allow_profile_overwrite: Some(false),
+            },
+        )
+        .await
+        .expect("preflight blocked import");
+        assert_eq!(blocked.status, "blocked");
+        assert_eq!(blocked.conflict_count, 1);
+        assert!(!blocked.restore_supported);
+        assert!(blocked
+            .errors
+            .iter()
+            .any(|error| error.contains("target profile already exists")));
+
+        let contract = preflight_desktop_session_bundle_import(
+            &db,
+            DesktopSessionBundleImportPreflightRequest {
+                bundle_path: export.export_path.clone(),
+                target_profile_id: Some("persona-restored-copy".to_string()),
+                allow_profile_overwrite: Some(false),
+            },
+        )
+        .await
+        .expect("preflight import contract");
+        assert_eq!(contract.status, "ready_for_restore_contract");
+        assert_eq!(contract.session_binding_count, 1);
+        assert_eq!(contract.missing_reference_count, 0);
+        assert_eq!(contract.conflict_count, 0);
+        assert!(contract
+            .restore_plan
+            .iter()
+            .any(|step| step.id == "restore_session_bindings" && step.status == "contract_only"));
+
+        let restore = restore_desktop_session_bundle(
+            &db,
+            DesktopSessionBundleRestoreRequest {
+                bundle_path: export.export_path,
+                target_profile_id: Some("persona-restored-copy".to_string()),
+                allow_profile_overwrite: Some(false),
+                dry_run: Some(false),
+            },
+        )
+        .await
+        .expect("restore contract");
+        assert_eq!(restore.status, "blocked_contract_only");
+        assert!(!restore.write_performed);
+        assert!(!restore.dry_run);
+        let restored_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM persona_profiles WHERE id = ?")
+                .bind("persona-restored-copy")
+                .fetch_one(&db)
+                .await
+                .expect("count restored profile");
+        assert_eq!(restored_count, 0);
     }
 
     #[test]

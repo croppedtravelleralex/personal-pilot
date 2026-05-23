@@ -13,6 +13,10 @@ import type {
   DesktopJsonValue,
   DesktopSessionBundleExport,
   DesktopSessionBundleExportRequest,
+  DesktopSessionBundleImportPreflight,
+  DesktopSessionBundleImportPreflightRequest,
+  DesktopSessionBundleRestoreRequest,
+  DesktopSessionBundleRestoreResult,
   DesktopLaunchTemplateRunRequest,
   DesktopLaunchTemplateRunResult,
   DesktopLocalApiMutationResult,
@@ -479,6 +483,16 @@ export const readImportExportSkeleton = (): Promise<DesktopImportExportSkeleton>
 export const exportSessionBundle = (
   request: DesktopSessionBundleExportRequest,
 ): Promise<DesktopSessionBundleExport> => invokeDesktop("export_session_bundle", { request });
+
+export const preflightSessionBundleImport = (
+  request: DesktopSessionBundleImportPreflightRequest,
+): Promise<DesktopSessionBundleImportPreflight> =>
+  invokeDesktop("preflight_session_bundle_import", { request });
+
+export const restoreSessionBundle = (
+  request: DesktopSessionBundleRestoreRequest,
+): Promise<DesktopSessionBundleRestoreResult> =>
+  invokeDesktop("restore_session_bundle", { request });
 
 export const openLocalAssetEntry = (entryId: DesktopLocalAssetEntryId): Promise<void> =>
   invokeDesktop("open_local_asset_entry", { entryId });

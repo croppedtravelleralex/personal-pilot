@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "SessionBundle profile export contract",
-  "current_objective": "继续推进 P2 SessionBundle/profile portability，先补 import preflight/restore contract，再进入 behavior/provider closure",
-  "last_result_summary": "Profile-scoped SessionBundle export contract 已落地：导出 profile refs、session binding metadata、cookie/localStorage/sessionStorage 证据计数；默认脱敏，显式本地开关才包含敏感 payload；restore/import 仍未落地",
-  "next_action_hint": "Add SessionBundle import preflight and restore contract without claiming full profile portability until verified",
+  "current_focus": "SessionBundle import preflight and restore contract",
+  "current_objective": "继续推进 P2 profile portability 和 behavior/provider closure；真实 restore write path 尚未落地",
+  "last_result_summary": "Profile-scoped SessionBundle export、import preflight、restore contract 已落地；preflight 检查 schema/ref/conflict，restore 当前 non-destructive 且不写 DB；真实 portability 仍需后续验收",
+  "next_action_hint": "Move to P2 behavior/provider closure slice after checking SessionBundle gates",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -32,7 +32,7 @@
     {
       "title": "Formalize SessionBundle profile portability",
       "priority": 4,
-      "rationale": "export contract 已落地，下一步补 import preflight/restore 才能形成完整 portability",
+      "rationale": "export/import preflight/restore contract 已落地，下一步需要真实 restore write path 和 portability smoke",
       "kind": "feature"
     }
   ],
@@ -96,6 +96,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Profile-scoped SessionBundle JSON export writes to local export queue, defaults to redacted evidence counts, and can explicitly include local sensitive payloads."
+    },
+    {
+      "title": "SessionBundle import preflight and restore contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "Import preflight checks schema/reference/conflict state and restore returns a non-destructive contract with writePerformed=false."
     }
   ],
   "blocked_reason": "",

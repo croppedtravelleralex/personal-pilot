@@ -13,15 +13,17 @@ use persona_pilot::desktop::{
     apply_desktop_browser_environment_policy, apply_desktop_local_api_settings,
     apply_desktop_runtime_settings, change_desktop_proxy_ip, check_desktop_profile_proxies,
     compile_desktop_template_run, confirm_desktop_manual_gate, create_desktop_profile,
-    delete_desktop_template, export_desktop_session_bundle, launch_desktop_template_run, load_desktop_logs,
+    delete_desktop_template, export_desktop_session_bundle, launch_desktop_template_run,
+    load_desktop_logs,
     load_desktop_profile_detail, load_desktop_profile_page, load_desktop_proxy_health,
     load_desktop_proxy_page, load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
     load_desktop_template_metadata_page, open_desktop_profiles,
     read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
     read_desktop_local_api_snapshot, read_desktop_local_asset_workspace, read_desktop_run_detail,
     read_desktop_settings, reject_desktop_manual_gate, resolve_desktop_local_asset_entry_path,
-    restore_desktop_browser_environment_policy_defaults, restore_desktop_local_api_defaults,
-    restore_desktop_runtime_settings_defaults, retry_desktop_task, run_desktop_proxy_batch_check,
+    preflight_desktop_session_bundle_import, restore_desktop_browser_environment_policy_defaults,
+    restore_desktop_local_api_defaults, restore_desktop_runtime_settings_defaults,
+    restore_desktop_session_bundle, retry_desktop_task, run_desktop_proxy_batch_check,
     save_desktop_template, start_desktop_profiles, stop_desktop_profiles, sync_desktop_profiles,
     update_desktop_profile, update_desktop_template, DesktopAppendBehaviorRecordingStepRequest,
     DesktopBrowserEnvironmentPolicyDraft, DesktopBrowserEnvironmentPolicyMutationResult,
@@ -36,7 +38,10 @@ use persona_pilot::desktop::{
     DesktopProxyChangeIpResult, DesktopProxyHealth, DesktopProxyPage, DesktopProxyPageQuery,
     DesktopProxyUsageItem, DesktopReadRunDetailQuery, DesktopRecorderSnapshot,
     DesktopRecorderSnapshotQuery, DesktopRunDetail, DesktopRuntimeSettingsDraft,
-    DesktopSessionBundleExport, DesktopSessionBundleExportRequest, DesktopSettingsMutationResult, DesktopSettingsSnapshot, DesktopStartBehaviorRecordingRequest,
+    DesktopSessionBundleExport, DesktopSessionBundleExportRequest,
+    DesktopSessionBundleImportPreflight, DesktopSessionBundleImportPreflightRequest,
+    DesktopSessionBundleRestoreRequest, DesktopSessionBundleRestoreResult,
+    DesktopSettingsMutationResult, DesktopSettingsSnapshot, DesktopStartBehaviorRecordingRequest,
     DesktopStatusSnapshot, DesktopStopBehaviorRecordingRequest, DesktopSyncLayoutState,
     DesktopSyncLayoutUpdate, DesktopSyncWindowBounds, DesktopSyncWindowState,
     DesktopSynchronizerActionResult, DesktopSynchronizerSnapshot, DesktopTaskPage,
@@ -2042,6 +2047,26 @@ pub async fn export_session_bundle(
     request: DesktopSessionBundleExportRequest,
 ) -> Result<DesktopSessionBundleExport, String> {
     export_desktop_session_bundle(&state.db, &state.database_url, request)
+        .await
+        .map_err(normalize_error)
+}
+
+#[tauri::command]
+pub async fn preflight_session_bundle_import(
+    state: State<'_, DesktopState>,
+    request: DesktopSessionBundleImportPreflightRequest,
+) -> Result<DesktopSessionBundleImportPreflight, String> {
+    preflight_desktop_session_bundle_import(&state.db, request)
+        .await
+        .map_err(normalize_error)
+}
+
+#[tauri::command]
+pub async fn restore_session_bundle(
+    state: State<'_, DesktopState>,
+    request: DesktopSessionBundleRestoreRequest,
+) -> Result<DesktopSessionBundleRestoreResult, String> {
+    restore_desktop_session_bundle(&state.db, request)
         .await
         .map_err(normalize_error)
 }

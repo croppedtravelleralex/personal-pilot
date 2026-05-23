@@ -15,7 +15,7 @@
 - Overall：`30% / 70% / yellow`
 - Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450+` target-only
 - Behavior：`13` shipped primitives / `450+` target-only
-- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export contract 已落地，import/restore 未落地
+- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、restore contract 已落地，真实 restore/profile portability 验收未落地
 
 ## 汇报规则
 
