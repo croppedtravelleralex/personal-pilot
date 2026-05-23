@@ -452,16 +452,24 @@ pub struct DesktopSessionBundleRestoreResult {
 pub struct DesktopProviderReadinessItem {
     pub domain: String,
     pub status: String,
+    pub provider_name: Option<String>,
     pub provider_count: usize,
     pub configured_provider_count: usize,
     pub manager_wiring_status: String,
     pub config_status: String,
     pub credential_status: String,
+    pub present_credential_names: Vec<String>,
+    pub cdp_detect_status: String,
+    pub cdp_fill_status: String,
     pub cdp_automation_status: String,
     pub operator_ui_status: String,
+    pub real_provider_smoke_status: String,
     pub acceptance_status: String,
+    pub closure_gates: Vec<String>,
     pub acceptance_checklist: Vec<String>,
     pub blockers: Vec<String>,
+    pub failure_reason: String,
+    pub latest_report_path: Option<String>,
     pub next_action: String,
 }
 
@@ -2564,9 +2572,62 @@ pub async fn restore_desktop_session_bundle(
     })
 }
 
-fn env_any_present(keys: &[&str]) -> bool {
+fn env_present_names(keys: &[&str]) -> Vec<String> {
     keys.iter()
-        .any(|key| env::var(key).is_ok_and(|value| !value.trim().is_empty()))
+        .filter(|key| env::var(key).is_ok_and(|value| !value.trim().is_empty()))
+        .map(|key| (*key).to_string())
+        .collect()
+}
+
+fn value_string_array(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn latest_provider_acceptance_report_item(domain: &str) -> Option<(Value, String)> {
+    let reports_dir = data_root_from_database_url(&default_database_url())
+        .join("reports")
+        .join("provider-acceptance");
+    let entries = fs::read_dir(reports_dir).ok()?;
+    let mut reports = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|item| item.to_str()) != Some("json") {
+            continue;
+        }
+        let raw = fs::read_to_string(&path).ok()?;
+        let value = serde_json::from_str::<Value>(&raw).ok()?;
+        let generated_at = value
+            .get("generatedAt")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| path_timestamp_or_now(&path));
+        reports.push((generated_at, path, value));
+    }
+    reports.sort_by(|left, right| right.0.cmp(&left.0));
+
+    for (_, path, report) in reports {
+        let Some(items) = report.get("items").and_then(Value::as_array) else {
+            continue;
+        };
+        for item in items {
+            if item.get("domain").and_then(Value::as_str) == Some(domain) {
+                return Some((item.clone(), path.to_string_lossy().to_string()));
+            }
+        }
+    }
+    None
 }
 
 fn provider_readiness_item(
@@ -2574,21 +2635,57 @@ fn provider_readiness_item(
     provider_names: &[&str],
     credential_env_keys: &[&str],
     manager_wiring_status: &str,
-    cdp_automation_status: &str,
+    cdp_detect_status: &str,
+    cdp_fill_status: &str,
     operator_ui_status: &str,
+    real_provider_smoke_status: &str,
+    closure_gates: &[&str],
     acceptance_checklist: &[&str],
 ) -> DesktopProviderReadinessItem {
-    let credential_present = env_any_present(credential_env_keys);
+    let present_credential_names = env_present_names(credential_env_keys);
+    let credential_present = !present_credential_names.is_empty();
+    let latest_report = latest_provider_acceptance_report_item(domain);
+    let latest_report_item = latest_report.as_ref().map(|(item, _)| item);
+    let latest_report_path = latest_report.as_ref().map(|(_, path)| path.clone());
+    let provider_name = latest_report_item.and_then(|item| value_text(item, "providerName"));
+    let manager_wiring_status = latest_report_item
+        .and_then(|item| value_text(item, "managerWiringStatus"))
+        .unwrap_or_else(|| manager_wiring_status.to_string());
+    let cdp_detect_status = latest_report_item
+        .and_then(|item| value_text(item, "cdpDetectStatus"))
+        .unwrap_or_else(|| cdp_detect_status.to_string());
+    let cdp_fill_status = latest_report_item
+        .and_then(|item| value_text(item, "cdpFillStatus"))
+        .unwrap_or_else(|| cdp_fill_status.to_string());
+    let operator_ui_status = latest_report_item
+        .and_then(|item| value_text(item, "operatorUiStatus"))
+        .unwrap_or_else(|| operator_ui_status.to_string());
+    let real_provider_smoke_status = latest_report_item
+        .and_then(|item| value_text(item, "realProviderSmokeStatus"))
+        .unwrap_or_else(|| real_provider_smoke_status.to_string());
+    let report_credential_names = latest_report_item
+        .map(|item| value_string_array(item, "presentCredentialNames"))
+        .unwrap_or_default();
     let credential_status = if credential_present {
-        "configured"
+        "configured".to_string()
     } else {
-        "missing_credentials"
+        "missing_credentials".to_string()
     };
     let config_status = if credential_present {
         "provider_credentials_present"
     } else {
         "provider_credentials_missing"
-    };
+    }
+    .to_string();
+    let cdp_automation_status = if cdp_detect_status == "passed" && cdp_fill_status == "passed" {
+        "wired"
+    } else if cdp_detect_status == "passed" || cdp_fill_status == "passed" {
+        "partial"
+    } else {
+        "not_wired"
+    }
+    .to_string();
+
     let mut blockers = Vec::new();
     if !credential_present {
         blockers.push(format!(
@@ -2599,19 +2696,27 @@ fn provider_readiness_item(
     if manager_wiring_status != "wired" {
         blockers.push("production manager wiring is not connected to runtime flow".to_string());
     }
-    if cdp_automation_status != "wired" {
-        blockers.push("CDP detect/fill automation is not wired".to_string());
+    if cdp_detect_status != "passed" {
+        blockers.push("CDP challenge/field detection has not passed".to_string());
+    }
+    if cdp_fill_status != "passed" {
+        blockers.push("CDP fill automation has not passed".to_string());
     }
     if operator_ui_status != "wired" {
         blockers.push("operator UI closure is not wired".to_string());
     }
+    if real_provider_smoke_status != "passed" {
+        blockers.push("real provider smoke has not passed".to_string());
+    }
+
     let acceptance_status = if blockers.is_empty() {
-        "ready_for_real_provider_smoke"
+        "accepted"
+    } else if credential_present {
+        "credential_ready_but_runtime_closure_required"
     } else {
-        "blocked_before_real_provider_smoke"
+        "blocked_missing_credentials"
     }
     .to_string();
-
     let status = if blockers.is_empty() {
         "ready"
     } else if credential_present {
@@ -2620,25 +2725,42 @@ fn provider_readiness_item(
         "blocked"
     }
     .to_string();
+    let failure_reason = latest_report_item
+        .and_then(|item| value_text(item, "failureReason"))
+        .filter(|reason| !reason.is_empty())
+        .unwrap_or_else(|| blockers.join("; "));
     let next_action = if blockers.is_empty() {
-        "run real provider acceptance smoke".to_string()
+        "preserve accepted report and run production flow regression".to_string()
     } else {
         blockers[0].clone()
+    };
+    let present_credential_names = if present_credential_names.is_empty() {
+        report_credential_names
+    } else {
+        present_credential_names
     };
 
     DesktopProviderReadinessItem {
         domain: domain.to_string(),
         status,
+        provider_name,
         provider_count: provider_names.len(),
         configured_provider_count: usize::from(credential_present),
-        manager_wiring_status: manager_wiring_status.to_string(),
-        config_status: config_status.to_string(),
-        credential_status: credential_status.to_string(),
-        cdp_automation_status: cdp_automation_status.to_string(),
-        operator_ui_status: operator_ui_status.to_string(),
+        manager_wiring_status,
+        config_status,
+        credential_status,
+        present_credential_names,
+        cdp_detect_status,
+        cdp_fill_status,
+        cdp_automation_status,
+        operator_ui_status,
+        real_provider_smoke_status,
         acceptance_status,
+        closure_gates: closure_gates.iter().map(|item| item.to_string()).collect(),
         acceptance_checklist: acceptance_checklist.iter().map(|item| item.to_string()).collect(),
         blockers,
+        failure_reason,
+        latest_report_path,
         next_action,
     }
 }
@@ -2655,8 +2777,18 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
                 "ANTICAPTCHA_API_KEY",
             ],
             "contract_only",
+            "not_run",
+            "not_run",
             "not_wired",
-            "not_wired",
+            "not_run",
+            &[
+                "credentials",
+                "manager_wiring",
+                "cdp_detect",
+                "cdp_fill",
+                "operator_ui",
+                "real_provider_smoke",
+            ],
             &[
                 "configure at least one solver credential",
                 "wire production solver manager into runtime task flow",
@@ -2670,8 +2802,20 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
             &["5sim", "smspool"],
             &["FIVESIM_API_KEY", "SMSPOOL_API_KEY", "HEROSMS_API_KEY"],
             "contract_only",
+            "not_run",
+            "not_run",
             "not_wired",
-            "not_wired",
+            "not_run",
+            &[
+                "credentials",
+                "manager_wiring",
+                "number_purchase",
+                "cdp_detect",
+                "cdp_fill",
+                "state_flow",
+                "operator_ui",
+                "real_provider_smoke",
+            ],
             &[
                 "configure at least one SMS provider credential",
                 "wire SMS manager and provider selection config into runtime flow",
@@ -2685,8 +2829,19 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
             &["mailtm", "cloudflare_worker"],
             &["MAILTM_API_TOKEN", "EMAIL_WORKER_URL", "EMAIL_WORKER_TOKEN"],
             "service_api_available",
+            "not_run",
+            "not_run",
             "not_wired",
-            "not_wired",
+            "not_run",
+            &[
+                "credentials",
+                "session_persistence",
+                "wait_code",
+                "cdp_detect",
+                "cdp_fill",
+                "operator_ui",
+                "registration_flow_smoke",
+            ],
             &[
                 "configure mail.tm or worker endpoint credentials when required",
                 "persist email session identity across the registration flow",

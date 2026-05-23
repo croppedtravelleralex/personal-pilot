@@ -433,16 +433,24 @@ export interface DesktopSessionBundleRestoreResult {
 export interface DesktopProviderReadinessItem {
   domain: string;
   status: string;
+  providerName?: string | null;
   providerCount: number;
   configuredProviderCount: number;
   managerWiringStatus: string;
   configStatus: string;
   credentialStatus: string;
+  presentCredentialNames: string[];
+  cdpDetectStatus: string;
+  cdpFillStatus: string;
   cdpAutomationStatus: string;
   operatorUiStatus: string;
+  realProviderSmokeStatus: string;
   acceptanceStatus: string;
+  closureGates: string[];
   acceptanceChecklist: string[];
   blockers: string[];
+  failureReason: string;
+  latestReportPath?: string | null;
   nextAction: string;
 }
 

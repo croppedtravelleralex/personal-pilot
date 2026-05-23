@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 34,
+  "loop_iteration": 35,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P18 batch 3 behavior replay semantics",
-  "current_objective": "按批次执行第 3 批：把 behavior taxonomy 前 5 个 family 从 seed 推进到 replay semantics / audit payload / failure / recovery 定义",
-  "last_result_summary": "behavior taxonomy 前 5 个 primitive-backed family 已补 replaySemantics、auditPayload、failureStates、recoveryBehavior；taxonomy audit 会统计这些覆盖数",
-  "next_action_hint": "Run P18 gates, commit/push, then continue batch 4 provider production closure wiring/contracts",
+  "current_focus": "P19 batch 4 provider production closure contract/UI",
+  "current_objective": "按批次执行第 4 批：把 CAPTCHA/SMS/Email provider closure gates、failure reason、latest report path 接入 preflight contract 和 Settings operator surface",
+  "last_result_summary": "Provider readiness 现在区分 credentials、manager wiring、CDP detect、CDP fill、operator UI、real smoke，并可读取最近 provider acceptance report 的 failureReason/reportPath；真实 provider acceptance 仍 blocked-external。",
+  "next_action_hint": "Run P19 gates, commit locally, retry push, then continue batch 5 external-condition smoke gates",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -204,6 +204,12 @@
       "kind": "feature",
       "status": "success",
       "note": "The first five behavior taxonomy families now define replay semantics, audit payloads, failure states, and recovery behavior, while full 450 replay runtime remains pending."
+    },
+    {
+      "title": "P19 batch 4 provider closure gates",
+      "kind": "feature",
+      "status": "success",
+      "note": "Provider production readiness now exposes closure gates, separate CDP detect/fill statuses, real smoke status, failure reason, and latest acceptance report path without claiming real provider acceptance."
     }
   ],
   "blocked_reason": "",

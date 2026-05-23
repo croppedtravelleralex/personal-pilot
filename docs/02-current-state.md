@@ -55,6 +55,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - P18 已把 behavior taxonomy 前 5 个 family 补成 replay-semantics backed：readiness_wait、settle_idle、scroll_scan、hover_focus、typing_input 均有 replaySemantics、auditPayload、failureStates、recoveryBehavior；完整 `450` replay runtime 仍未交付。
 - Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P14 已新增 `scripts/release_performance_smoke.ps1` 并产出 release exe report，当前实测为 warning：`9301ms` cold start、`411MB` idle RSS、`14` processes，均超过默认预算；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平。
 - P16 已新增 unified evidence report history：release performance、provider acceptance、SessionBundle portability、taxonomy audit、external distribution smoke 的本地 JSON report 可通过桌面 API 读取，并在 Overview 显示最近报告。
+- P19 已深化 provider production closure contract：Settings 现在区分 credentials、manager wiring、CDP detect、CDP fill、operator UI、real provider smoke、failure reason 和 latest report path；scripts/provider_acceptance_preflight.ps1 输出 v2 blockers/failureReason。真实 provider acceptance 仍必须有凭证和真实 smoke 证据。
 
 ## 未完成边界
 
@@ -68,7 +69,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ### Overall remaining `60%`
 
 - Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list、profile-level evidence export、P5 smoke 脚本、P6 explicit evidence metadata 和 P7 fingerprint observation audit。WebRTC/audio capability warning、canvas `toDataURL` missing 等真实失败/警告原因必须保留在 report 中。
-- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地；P9 已有 production readiness checklist 和 Settings operator surface；P14 已新增 `scripts/provider_acceptance_preflight.ps1`，可生成凭证/acceptance blocker report；尚未完成真实 provider 验收、manager wiring 和自动化闭环。
+- CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地；P9 已有 production readiness checklist 和 Settings operator surface；P14 已新增 `scripts/provider_acceptance_preflight.ps1`，P19 已升级为 v2 blockers/failureReason report 并接入 Settings latest report path；尚未完成真实 provider 验收、manager wiring 和自动化闭环。
 - runtime materialization depth 已从 `12` 扩到 `26` projected fields；P7 已有 observed audit summary，但仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal taxonomy 已有 machine-readable seed：`docs/taxonomy/fingerprint-signal-taxonomy.json`，并可用 `scripts/taxonomy_audit.ps1` 校验计数；full observation coverage 未落地。
 - `450+` event taxonomy 已有 machine-readable seed：`docs/taxonomy/behavior-event-taxonomy.json`，Automation behavior audit 可显示 taxonomy seed 状态；完整 replay runtime 未交付。

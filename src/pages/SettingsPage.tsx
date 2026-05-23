@@ -859,12 +859,20 @@ export function SettingsPage() {
                       <dd>{formatStatusLabel(item.managerWiringStatus)}</dd>
                     </div>
                     <div className="details-grid__item">
-                      <dt>CDP automation</dt>
-                      <dd>{formatStatusLabel(item.cdpAutomationStatus)}</dd>
+                      <dt>CDP detect</dt>
+                      <dd>{formatStatusLabel(item.cdpDetectStatus)}</dd>
+                    </div>
+                    <div className="details-grid__item">
+                      <dt>CDP fill</dt>
+                      <dd>{formatStatusLabel(item.cdpFillStatus)}</dd>
                     </div>
                     <div className="details-grid__item">
                       <dt>Operator UI</dt>
                       <dd>{formatStatusLabel(item.operatorUiStatus)}</dd>
+                    </div>
+                    <div className="details-grid__item">
+                      <dt>Real smoke</dt>
+                      <dd>{formatStatusLabel(item.realProviderSmokeStatus)}</dd>
                     </div>
                     <div className="details-grid__item">
                       <dt>Acceptance</dt>
@@ -874,10 +882,18 @@ export function SettingsPage() {
                       <dt>Providers</dt>
                       <dd>{item.configuredProviderCount}/{item.providerCount}</dd>
                     </div>
+                    <div className="details-grid__item">
+                      <dt>Report</dt>
+                      <dd>{item.latestReportPath ? "available" : "missing"}</dd>
+                    </div>
                   </div>
                   <p className="record-card__content">
-                    {item.acceptanceChecklist.join(" -> ")}
+                    {item.closureGates.join(" -> ")}
                   </p>
+                  <p className="record-card__subline">Failure reason: {item.failureReason || "none"}</p>
+                  {item.latestReportPath ? (
+                    <p className="record-card__content record-card__content--muted">{item.latestReportPath}</p>
+                  ) : null}
                   {item.blockers.length > 0 ? (
                     <p className="record-card__subline">Blocked: {item.blockers.join("; ")}</p>
                   ) : null}

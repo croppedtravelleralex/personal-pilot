@@ -17,7 +17,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 | P15-1 | 修正文档残留 `70%` / 旧 `450+ target-only` live 口径 | done | 持续用 consistency scan 防回归 |
 | P15-2 | release performance warning mitigation | ready | 已有 mitigation plan；P16 已接入 evidence report history，下一步优化启动/RSS/进程数 |
 | P15-3 | 跨机器 SessionBundle portability smoke 门槛 | blocked-external | 按 `docs/sessionbundle-cross-machine-portability-runbook.md` 在第二环境执行 |
-| P15-4 | provider production acceptance 门槛 | blocked-external | 按 `docs/provider-production-acceptance-runbook.md` 配凭证并跑真实 smoke |
+| P15-4 | provider production acceptance 门槛 | partial-contract-ui | P19 已补 closure gates/failure reason/latest report；真实 acceptance 仍需凭证和 smoke |
 | P15-5 | 首批 taxonomy family evidence-backed | done | 继续把更多 family 接入 collector/runtime path |
 
 ## 剩余工作全集
@@ -48,22 +48,22 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ### Provider Closure
 
 18. CAPTCHA credentials 配置。`blocked-external`
-19. CAPTCHA manager wiring。`large-slice`
-20. CAPTCHA CDP detect。`large-slice`
-21. CAPTCHA CDP fill。`large-slice`
+19. CAPTCHA manager wiring。`partial-contract-visible`
+20. CAPTCHA CDP detect。`partial-contract-visible`
+21. CAPTCHA CDP fill。`partial-contract-visible`
 22. CAPTCHA real provider smoke。`blocked-external`
-23. CAPTCHA operator UI closure。`large-slice`
+23. CAPTCHA operator UI closure。`partial-settings-visible`
 24. SMS credentials 配置。`blocked-external`
-25. SMS manager wiring。`large-slice`
+25. SMS manager wiring。`partial-contract-visible`
 26. SMS number purchase/status/cancel/finish flow。`large-slice`
-27. SMS CDP detect/fill。`large-slice`
+27. SMS CDP detect/fill。`partial-contract-visible`
 28. SMS real provider smoke。`blocked-external`
-29. SMS operator UI closure。`large-slice`
+29. SMS operator UI closure。`partial-settings-visible`
 30. Email session persistence hardening。`ready`
-31. Email CDP detect/fill。`large-slice`
+31. Email CDP detect/fill。`partial-contract-visible`
 32. Email real registration-flow smoke。`blocked-external`
-33. Provider failure reason taxonomy。`ready`
-34. Provider evidence viewer。`partial-overview-history`
+33. Provider failure reason taxonomy。`partial-preflight-v2`
+34. Provider evidence viewer。`partial-settings-latest-report`
 35. Provider acceptance report history。`done-overview`
 
 ### Fingerprint / Validation

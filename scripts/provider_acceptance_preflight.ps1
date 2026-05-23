@@ -52,12 +52,14 @@ if ($selectedDomains.Count -eq 0) {
 $items = foreach ($domain in $selectedDomains) {
   $present = Test-AnyEnv $domain.env
   $credentialStatus = if ($present.Count -gt 0) { "credential_present" } else { "credential_missing" }
-  $realClosure = $credentialStatus -eq "credential_present" `
-    -and $ManagerWiringStatus -eq "wired" `
-    -and $CdpDetectStatus -eq "passed" `
-    -and $CdpFillStatus -eq "passed" `
-    -and $OperatorUiStatus -eq "wired" `
-    -and $RealProviderSmokeStatus -eq "passed"
+  $blockers = @()
+  if ($present.Count -eq 0) { $blockers += "missing provider credential env: $($domain.env -join '|')" }
+  if ($ManagerWiringStatus -ne "wired") { $blockers += "production manager wiring is not connected to runtime flow" }
+  if ($CdpDetectStatus -ne "passed") { $blockers += "CDP challenge/field detection has not passed" }
+  if ($CdpFillStatus -ne "passed") { $blockers += "CDP fill automation has not passed" }
+  if ($OperatorUiStatus -ne "wired") { $blockers += "operator UI closure is not wired" }
+  if ($RealProviderSmokeStatus -ne "passed") { $blockers += "real provider smoke has not passed" }
+  $realClosure = $blockers.Count -eq 0
   [ordered]@{
     domain = $domain.domain
     providerName = $ProviderName
@@ -69,10 +71,12 @@ $items = foreach ($domain in $selectedDomains) {
     operatorUiStatus = $OperatorUiStatus
     realProviderSmokeStatus = $RealProviderSmokeStatus
     requiredClosure = $domain.requiredClosure
+    blockers = $blockers
+    failureReason = if ($blockers.Count -eq 0) { "" } else { $blockers -join "; " }
     acceptanceStatus = if ($realClosure) {
       "accepted"
     } elseif ($present.Count -gt 0) {
-      "ready_for_real_provider_smoke_after_manager_wiring"
+      "credential_ready_but_runtime_closure_required"
     } else {
       "blocked_missing_credentials"
     }
@@ -90,7 +94,7 @@ $status = if ($acceptedCount -eq $items.Count) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "provider_acceptance_preflight_v1"
+  schemaVersion = "provider_acceptance_preflight_v2"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
