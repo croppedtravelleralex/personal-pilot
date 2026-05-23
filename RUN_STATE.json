@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "Runtime adapter and release smoke contract",
-  "current_objective": "继续推进 P3 runtime/benchmark/release；真实 Lightpanda/CDP smoke、headed runtime、性能测量仍未闭环",
-  "last_result_summary": "Runtime adapter / release smoke contract 已落地，记录 Fake、Lightpanda、headed_external 边界、release artifact、Win11 baseline 和性能预算目标；不托管 Chromium/Firefox fork，不刷新 AdsPower 评分",
-  "next_action_hint": "Move to P4 docs truth-source cleanup and final full gate after P3 checks pass",
+  "current_focus": "P0-P4 staged closeout truth-source cleanup",
+  "current_objective": "P0-P4 staged contracts 已按顺序落地；下一步进入真实 Lightpanda/CDP operator smoke、profile portability write-path 验收、provider/UI 生产闭环和 AdsPower evidence refresh 前置条件",
+  "last_result_summary": "P0 Validation evidence、P1 fingerprint runtime projection、P2 SessionBundle/provider readiness、P3 runtime adapter/release smoke contract、P4 truth-source cleanup 已闭环；仍不声明真实 headed runtime、真实 provider closure、450+ taxonomy 或 AdsPower refresh 完成",
+  "next_action_hint": "Run final full gate, commit/push P4 truth-source cleanup, then start real Lightpanda/CDP validation smoke as the next implementation stage",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -114,6 +114,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Release smoke API now reports adapter boundaries, installer presence, Win11 baseline status, and performance target contracts without claiming real headed runtime closure."
+    },
+    {
+      "title": "P4 truth-source cleanup",
+      "kind": "docs",
+      "status": "success",
+      "note": "Root README, RUN_STATE, final progress breakdown, and phase scorecard now report 26 projected fields, landed validation/session contracts, and remaining real-smoke gaps without overstating closure."
     }
   ],
   "blocked_reason": "",

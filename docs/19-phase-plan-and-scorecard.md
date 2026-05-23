@@ -1,5 +1,5 @@
 # 19 Phase Plan And Scorecard
-Updated: 2026-05-21 (Asia/Shanghai)
+Updated: 2026-05-23 (Asia/Shanghai)
 
 ## 规范角色
 
@@ -25,9 +25,11 @@ The capability score answers “how mature the product is relative to the final 
 当前详细报告必须锚定这些已验证事实：
 
 - 第一族控制分类已声明 `80` 个核心控制字段
-- 当前 `Lightpanda` 运行时仅投影 `12` 个环境变量驱动的指纹字段（含 derived `platform`）
+- 当前 `Lightpanda` 运行时投影 `26` 个字段（`25` 个 control-supported + derived `platform`），但完整 observed proof 尚未落地
 - 当前行为运行时仅交付 `13` 个真实原语
 - cookie/localStorage/sessionStorage 连续性已在应用重启间持久化和恢复
+- profile-scoped `SessionBundle` export、import preflight、non-destructive restore contract 已落地；真实 restore write path 和 profile portability smoke 尚未落地
+- Validation Board 已接入 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history 和 profile evidence export；真实 Lightpanda/CDP operator smoke 尚未完成
 - 当前真实运行器集仍为 `Fake + Lightpanda`；有头 Chromium/Firefox 深度运行时未落地
 
 这意味着：
@@ -48,7 +50,7 @@ The capability score answers “how mature the product is relative to the final 
 
 - 第一族 `80` 个核心控制字段已声明并分组为 `8` 个部分
 - 规范指纹运行时可解释性和部分消费报告已落地
-- 当前 `Lightpanda` 运行时可以消费 `12` 个环境变量驱动的指纹字段
+- 当前 `Lightpanda` 运行时投影 `26` 个字段（`25` 个 control-supported + derived `platform`）
 - 项目已区分已声明控制 vs 运行时投影字段
 
 ### 行为和自动化
@@ -85,15 +87,15 @@ The capability score answers “how mature the product is relative to the final 
 - provider 侧代理轮换写入 — **已完成**：`changeProxyIp` 从本地桩升级为真实 HTTP POST/PUT/PATCH 引擎，含重试/冷却/回滚/7 种错误分类
 - synchronizer 原生广播写入路径 — **已完成**：物理 `SetWindowPos` 窗口排布，确定性排序，CWAC 感知布局
 - recorder/templates native-first 降级闭环 — **已完成**：desktop session 守卫防止草稿覆盖，空状态模板选择修复，源消息精确化
-- 主线 release gate：仅剩 Win11 打包验收
+- 主线 release gate：Win11 本地验收和 release build 已通过；发布给外部前可再做人工 operator smoke
 
 ### 整体终态剩余 `70%`
 
-- validation board 未落地
-- 运行时实现深度仍窄，仅 `12` 个投影字段
+- Validation Board 已有 MVP、native report、history、profile export 和 runtime probe contract；真实 Lightpanda/CDP operator smoke 未落地
+- 运行时实现深度仍窄，仅 `26` 个投影字段，且不能等同于 observed proof
 - `450+` 指纹信号观察/审计覆盖未落地
 - `450+` 事件分类未落地
-- 完整 session bundle/可移植性/导入导出合约未落地
+- `SessionBundle` export、import preflight、restore contract 已落地；真实 restore write path 和 profile portability smoke 未落地
 - 有头运行时真实感和更深的内核策略未落地
 - AdsPower 级真实感追赶未落地
 - 外部集成资产已规划但尚未运行时落地
@@ -105,11 +107,11 @@ The capability score answers “how mature the product is relative to the final 
 1. 保持当前 Win11 desktop shell 稳定
 2. 保持类型化服务边界和单实例纪律
 3. 维护至少 `80` 个真实控制字段作为第一族基线
-4. 从 `12` 个运行时投影字段扩展到实质性的应用/观察运行时覆盖
+4. 从 `26` 个运行时投影字段扩展到实质性的应用/观察运行时覆盖
 5. 增长到 `450+` 总指纹信号（控制/派生/观察层）
 6. 从 `13` 个已交付原语增长到 `450+` 事件分类
-7. 将重启连续性转变为完整 `SessionBundle` 合约
-8. 构建含 detector/leak/transport/coherence 证据的 validation board
+7. 将 `SessionBundle` 合约转变为真实可迁移、可导入、可恢复的 profile portability 闭环
+8. 将 Validation Board 已有 evidence contract 推进到真实 Lightpanda/CDP 可重复 operator smoke
 9. 吸收高 ROI 外部浏览器优势，不将浏览器 fork 拉入主仓库
 10. 在真实感、代理一致性、自动化深度和运营工具方面达到或超越 AdsPower
 
@@ -181,14 +183,14 @@ Goal:
 
 Detailed tasks:
 
-1. land `validation board`
-2. define `ValidationProfile`
-3. define `ObservationReport`
-4. add detector / leak / transport / coherence evidence collection
+1. keep the landed `validation board` evidence split stable
+2. keep `ValidationProfile` and report history/export contracts stable
+3. run real Lightpanda/CDP operator smoke outside FakeRunner
+4. add deeper detector / leak / transport / coherence evidence collection
 
 Acceptance:
 
-- detector and leak checks are repeatable
+- detector and leak checks are repeatable in real profile-browser runtime
 - observation reports differentiate declared / applied / observed signals
 - future benchmark refreshes can cite evidence rather than only design intent
 
@@ -208,12 +210,12 @@ Detailed tasks:
 1. stabilize `Profile Spec`
 2. deepen `Consistency Graph`
 3. deepen `Runtime Policy`
-4. expand current `12` projected fields into richer applied / observed coverage
+4. expand current `26` projected fields into richer applied / observed coverage
 5. keep control / derived / observation layers clearly separated
 
 Acceptance:
 
-- runtime coverage is no longer summarized only by `12` env fields
+- runtime coverage is no longer summarized only by `26` projected fields
 - first family emits coherence score + risk reasons + observation deltas
 - declared control breadth and runtime depth are no longer conflated
 
@@ -231,8 +233,8 @@ Goal:
 
 Detailed tasks:
 
-1. define `SessionBundle`
-2. add profile groups / import / export contract
+1. deepen the landed `SessionBundle` export/import preflight/restore contract
+2. add real restore write path and profile portability smoke
 3. add sticky residency + geo / locale / timezone linkage
 4. add proxy lease / cooldown / health / rollback semantics
 
@@ -362,7 +364,7 @@ Planning baseline:
 | --- | --- | ---: | --- |
 | `Wave 1` | `A1 + A2` | `3-4` | provider-side proxy write path and synchronizer native write path are both materially closed |
 | `Wave 2` | `A3 + A4` | `2-4` | recorder/templates are native-first and the full mainline release gate is green |
-| `Wave 3` | `B1 + B2` | `4-6` | validation board exists and fingerprint maturity is measurable beyond `12` runtime fields |
+| `Wave 3` | `B1 + B2` | `4-6` | validation board exists and fingerprint maturity is measurable beyond `26` runtime-projected fields |
 | `Wave 4` | `B3 + B4` | `4-6` | session portability and event grammar both move out of concept stage |
 | `Wave 5` | `B5 + B6` | `3-6` | runtime adapter boundary is stable and AdsPower refresh is evidence-based |
 
@@ -661,11 +663,11 @@ Use score only for capability maturity and benchmark distance.
 
 | Dimension | Weight | Current evidence | Current score | Weighted score | Final target | AdsPower public boundary |
 | --- | ---: | --- | ---: | ---: | --- | --- |
-| Fingerprint quantity | 15 | `80` declared controls / `12` runtime-projected fields | `4/10` | `6.0` | `450+` total signals with control / derived / observation split | `50+` customizable parameters and `20+` options, public score `8/10` |
+| Fingerprint quantity | 15 | `80` declared controls / `26` runtime-projected fields | `4/10` | `6.0` | `450+` total signals with control / derived / observation split | `50+` customizable parameters and `20+` options, public score `8/10` |
 | Fingerprint realism | 20 | first-family consistency start exists, but runtime depth and validation are shallow | `2/10` | `4.0` | headed realism + validation board + observation evidence | public score `8/10` |
 | Event taxonomy | 15 | `13` shipped primitives | `2/10` | `3.0` | `450+` replayable event taxonomy | public count undisclosed, public breadth score `8/10` |
-| Proxy / IP | 15 | sticky-aware contract + session bindings are landed, provider-side write not fully closed | `5/10` | `7.5` | provider-grade rotation + lease / cooldown / rollback + coherence evidence | public score `7/10` |
-| Session continuity | 10 | restart continuity for cookies / localStorage / sessionStorage is landed | `6/10` | `6.0` | full `SessionBundle` + portability + import/export | public score `8/10` |
+| Proxy / IP | 15 | sticky-aware contract + session bindings and provider-aware rotation are landed; broader provider ecosystem evidence remains incomplete | `5/10` | `7.5` | provider-grade rotation + lease / cooldown / rollback + coherence evidence | public score `7/10` |
+| Session continuity | 10 | restart continuity and `SessionBundle` export/import preflight/restore contract are landed; real portability smoke is open | `6/10` | `6.0` | full `SessionBundle` + portability + import/export | public score `8/10` |
 | Product surface | 10 | real desktop entry + multi-workbench surface are landed | `5/10` | `5.0` | richer operator tooling, groups, portability, team-grade workflows | public score `9/10` |
 | AdsPower parity | 15 | current product has a base surface and some real contracts, but deep parity is far away | `2/10` | `3.0` | reach or surpass AdsPower on the benchmark board | AdsPower baseline `10/10` |
 
@@ -679,13 +681,13 @@ Always report fingerprint and event quantities as multi-part numbers:
 
 - fingerprint: `declared / runtime / target`
 - event taxonomy: `shipped / target`
-- session continuity: `restart continuity landed / session bundle not yet landed`
+- session continuity: `restart continuity landed / SessionBundle contract landed / portability smoke not yet landed`
 
 Default wording:
 
-- fingerprint quantity: `80 declared / 12 runtime / 450+ target-only`
+- fingerprint quantity: `80 declared / 26 runtime-projected / 450+ target-only`
 - event quantity: `13 shipped / 450+ target-only`
-- continuity: `restart continuity landed / portability not yet landed`
+- continuity: `restart continuity landed / SessionBundle contract landed / portability not yet landed`
 
 ## AdsPower Benchmark Summary
 

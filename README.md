@@ -26,7 +26,7 @@ For canonical maintenance entrypoints, read [`/docs/README.md`](docs/README.md) 
 ## Important Boundaries
 
 - Current runtime fingerprint depth is still incomplete: `80` declared controls and `26` runtime projected fields (`25` control-supported + derived `platform`).
-- Validation `observed` evidence is not a full detector loop yet; native collectors and persistent reports are the next slice.
+- Validation `observed` evidence now includes native DNS/transport reports, desktop WebView scoped WebRTC/canvas/audio/storage probes, profile runtime probe contracts, report history, and profile evidence export; repeatable real profile-browser proof still requires Lightpanda/CDP operator smoke outside FakeRunner.
 - CAPTCHA/SMS/Email handlers and routes are partially landed, but production manager wiring, provider acceptance, and operator UI closure are not complete.
 - `450+` fingerprint signals and `450+` behavior taxonomy remain target-track work, not shipped runtime depth.
 
@@ -128,7 +128,7 @@ When status changes, update the matching canonical docs instead of relying on th
 
 ## Next Work
 
-1. Connect Validation Board `observed` layer to native collectors.
-2. Persist repeatable validation reports and add profile-level evidence export.
-3. Deepen fingerprint runtime coverage while keeping declared, applied, and observed evidence separate.
+1. Run real Lightpanda/CDP operator smoke for profile-browser validation evidence.
+2. Deepen fingerprint observed coverage beyond `26` projected fields while keeping declared, applied, and observed evidence separate.
+3. Turn `SessionBundle` contracts into a real restore write path and profile portability smoke.
 4. Wire CAPTCHA/SMS/Email production manager/config paths without claiming automation closure before provider acceptance.
