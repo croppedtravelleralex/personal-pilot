@@ -7,9 +7,9 @@
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
   "current_focus": "P5 real Lightpanda/CDP validation smoke gate",
-  "current_objective": "真实 Lightpanda/CDP validation smoke 已有可复跑入口；当前本机 blocked 于 lightpanda binary_not_found，不能进入依赖真实 runtime evidence 的 P6-P13",
-  "last_result_summary": "新增 validation_lightpanda_smoke Rust/PowerShell 入口并生成 blocked evidence report；本机 PATH 与常见目录未发现 lightpanda 可执行文件，profile-browser runtime evidence 尚未闭环",
-  "next_action_hint": "Install/provide LIGHTPANDA_BIN or place lightpanda on PATH, rerun scripts/validation_lightpanda_smoke.ps1 until status=passed, then continue P6",
+  "current_objective": "真实 Lightpanda/CDP validation smoke 已通过；下一步进入 P6 validation evidence schema 收敛，保持 scope/adapter/status/failure 字段一致",
+  "last_result_summary": "通过 WSL2 HermesUbuntu 安装官方 Lightpanda nightly，并用 validation_lightpanda_smoke --use-wsl-lightpanda 生成 status=passed 的双次复跑 evidence report；WebRTC/audio 为 capability warning，canvas 暴露 toDataURL missing，leak/storage succeeded",
+  "next_action_hint": "Start P6 reusable browser evidence schema and report history failure/path normalization, then run full checks before moving to P7",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -124,10 +124,10 @@
     {
       "title": "P5 Lightpanda/CDP validation smoke gate",
       "kind": "verify",
-      "status": "blocked",
-      "note": "Added repeatable validation_lightpanda_smoke entry. Latest local run wrote blocked evidence because lightpanda binary was not found; P6-P13 remain gated on real profile-browser runtime evidence."
+      "status": "success",
+      "note": "WSL2 Lightpanda 1.0.0-nightly.6394+93d2e968 produced a repeatable status=passed profile-browser runtime evidence report through validation_lightpanda_smoke --use-wsl-lightpanda."
     }
   ],
-  "blocked_reason": "P5 requires a real Lightpanda executable. Current smoke report status=blocked with error_kind=binary_not_found; set LIGHTPANDA_BIN or add lightpanda to PATH before continuing evidence-dependent stages.",
+  "blocked_reason": "",
   "cooldown_seconds": 30
 }

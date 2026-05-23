@@ -48,9 +48,9 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Add WebRTC/leak observed contract warning signals to validation reports
 - [x] Add desktop WebView scoped WebRTC/canvas/audio/storage observed probes without claiming profile browser coverage
 - [x] Add profile browser runtime / CDP scoped `validation_probe` runner action and merge its signals into validation reports
-- [ ] Run real Lightpanda/CDP operator smoke to confirm WebRTC/leak/canvas/audio profile runtime reports are repeatable outside FakeRunner
+- [x] Run real Lightpanda/CDP operator smoke to confirm WebRTC/leak/canvas/audio profile runtime reports are repeatable outside FakeRunner
   - [x] Add repeatable local smoke entry: `scripts/validation_lightpanda_smoke.ps1`
-  - [ ] Provide a real `LIGHTPANDA_BIN` or PATH `lightpanda` executable; latest local run is blocked by `binary_not_found`
+  - [x] Install/use official Lightpanda nightly through WSL2 and run `validation_lightpanda_smoke --use-wsl-lightpanda` with `status=passed`
 - [x] Deepen fingerprint runtime projection from `12` to `26` env-backed fields while preserving declared / applied / observed separation
 - [ ] Deepen fingerprint observed coverage beyond projected/applied fields
 - [ ] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
