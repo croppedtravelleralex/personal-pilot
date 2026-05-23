@@ -56,6 +56,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P14 已新增 `scripts/release_performance_smoke.ps1` 并产出 release exe report，当前实测为 warning：`9301ms` cold start、`411MB` idle RSS、`14` processes，均超过默认预算；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平。
 - P16 已新增 unified evidence report history：release performance、provider acceptance、SessionBundle portability、taxonomy audit、external distribution smoke 的本地 JSON report 可通过桌面 API 读取，并在 Overview 显示最近报告。
 - P19 已深化 provider production closure contract：Settings 现在区分 credentials、manager wiring、CDP detect、CDP fill、operator UI、real provider smoke、failure reason 和 latest report path；scripts/provider_acceptance_preflight.ps1 输出 v2 blockers/failureReason。真实 provider acceptance 仍必须有凭证和真实 smoke 证据。
+- P20 已升级外部条件 smoke gates：`external_distribution_smoke.ps1` v2 区分 local asset gate 与 manual/clean-Win11/page/provider/session external gates；`session_bundle_portability_smoke.ps1` v2 输出 cross-machine gateResults/failureReason。未跑第二环境或人工 smoke 时必须保留 blocked 状态。
 
 ## 未完成边界
 
@@ -73,7 +74,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - runtime materialization depth 已从 `12` 扩到 `26` projected fields；P7 已有 observed audit summary，但仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal taxonomy 已有 machine-readable seed：`docs/taxonomy/fingerprint-signal-taxonomy.json`，并可用 `scripts/taxonomy_audit.ps1` 校验计数；full observation coverage 未落地。
 - `450+` event taxonomy 已有 machine-readable seed：`docs/taxonomy/behavior-event-taxonomy.json`，Automation behavior audit 可显示 taxonomy seed 状态；完整 replay runtime 未交付。
-- `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；P14 已新增 `scripts/session_bundle_portability_smoke.ps1` 记录本机 contract 和跨机器 manual steps；跨机器 profile portability 仍需真实第二环境验收。
+- `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；P14 已新增 `scripts/session_bundle_portability_smoke.ps1` 记录本机 contract 和跨机器 manual steps，P20 已升级为 v2 gateResults/failureReason；跨机器 profile portability 仍需真实第二环境验收。
 - headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前仅有 adapter/release measurement contract、Overview 可见性和 P12 AdsPower refresh guard，不是 headed runtime 实现，也不是 AdsPower 评分上调。
 - external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。
 - 外部分发前必须执行或明确跳过 `docs/24-external-distribution-readiness.md` 的人工 operator smoke，并保留 provider、profile portability、release measurement warning、AdsPower refresh 和 `450+` taxonomy 限制。

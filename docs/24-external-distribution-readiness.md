@@ -46,6 +46,11 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 - 当前不托管 Chromium / Firefox fork，外部浏览器能力只能通过 adapter contract 逐步接入。
 - Provider、profile portability、release performance mitigation 和 `450` taxonomy seed 到 observed/replay runtime 的转化都属于下一阶段验收项。
 
+## P20 外部条件 smoke gate
+
+`external_distribution_smoke.ps1` v2 会区分本机资产检查和外部条件检查：安装包、文档限制和 release report 属于 local asset gate；manual operator smoke、干净 Win11 安装/启动/卸载、页面导航、provider readiness 和 SessionBundle smoke 属于 external gate。外部 gate 未通过时状态必须保留为 `blocked_external_smoke_required`，不能写成外部分发完成。
+
+`session_bundle_portability_smoke.ps1` v2 会输出 cross-machine gateResults 和 failureReason。未提供第二台干净 Win11 证据时只能算 `local_contract_passed` 或 `blocked_requires_second_machine_evidence`，不能写成 profile portability closure。
 ## P13 退出条件
 
 - 分发前限制、手工 smoke、发布说明边界已经写入维护文档。

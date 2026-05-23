@@ -1,5 +1,10 @@
 param(
   [switch]$RunReleasePerformanceSmoke,
+  [string]$ManualOperatorSmokeStatus = "not_run",
+  [string]$CleanWin11InstallStatus = "not_run",
+  [string]$PageNavigationSmokeStatus = "not_run",
+  [string]$ProviderReadinessSmokeStatus = "not_run",
+  [string]$SessionBundleSmokeStatus = "not_run",
   [string]$OutputDir = "data/reports/external-distribution"
 )
 
@@ -27,14 +32,21 @@ $checks = @(
 
 $readinessDoc = Get-Content (Join-Path $projectRoot "docs\24-external-distribution-readiness.md") -Raw
 $requiredPhrases = @(
-  "Provider closure",
-  "Profile portability",
-  "Runtime measurement",
-  "AdsPower boundary",
-  "450+"
+  [ordered]@{ id = "provider_closure"; alternatives = @("Provider closure") },
+  [ordered]@{ id = "profile_portability"; alternatives = @("Profile portability") },
+  [ordered]@{ id = "runtime_measurement"; alternatives = @("Runtime measurement") },
+  [ordered]@{ id = "adspower_boundary"; alternatives = @("AdsPower boundary") },
+  [ordered]@{ id = "taxonomy_boundary"; alternatives = @("450+", "450 taxonomy", "450` taxonomy", "450` event", "450` fingerprint") }
 )
 $phraseChecks = $requiredPhrases | ForEach-Object {
-  [ordered]@{ phrase = $_; present = $readinessDoc.Contains($_) }
+  $present = $false
+  foreach ($phrase in $_.alternatives) {
+    if ($readinessDoc.Contains($phrase)) { $present = $true; break }
+  }
+  if (-not $present -and $_.id -eq "taxonomy_boundary") {
+    $present = $readinessDoc.Contains("450") -and $readinessDoc.Contains("taxonomy seed")
+  }
+  [ordered]@{ id = $_.id; alternatives = $_.alternatives; present = $present }
 }
 
 $releasePerformanceExitCode = $null
@@ -45,19 +57,40 @@ if ($RunReleasePerformanceSmoke) {
 
 $missing = @($checks | Where-Object { -not $_.present })
 $missingPhrases = @($phraseChecks | Where-Object { -not $_.present })
-$status = if ($missing.Count -eq 0 -and $missingPhrases.Count -eq 0 -and ($null -eq $releasePerformanceExitCode -or $releasePerformanceExitCode -eq 0)) {
+$externalGates = @(
+  [ordered]@{ id = "manual_operator_smoke"; status = $ManualOperatorSmokeStatus; requiredForExternalDistribution = $true },
+  [ordered]@{ id = "clean_win11_install_start_uninstall"; status = $CleanWin11InstallStatus; requiredForExternalDistribution = $true },
+  [ordered]@{ id = "page_navigation_smoke"; status = $PageNavigationSmokeStatus; requiredForExternalDistribution = $true },
+  [ordered]@{ id = "provider_readiness_smoke"; status = $ProviderReadinessSmokeStatus; requiredForExternalDistribution = $true },
+  [ordered]@{ id = "session_bundle_smoke"; status = $SessionBundleSmokeStatus; requiredForExternalDistribution = $true }
+)
+$blockedExternalGates = @($externalGates | Where-Object { $_.status -ne "passed" })
+$assetStatus = if ($missing.Count -eq 0 -and $missingPhrases.Count -eq 0 -and ($null -eq $releasePerformanceExitCode -or $releasePerformanceExitCode -eq 0)) { "passed" } else { "failed" }
+$status = if ($assetStatus -eq "passed" -and $blockedExternalGates.Count -eq 0) {
   "passed"
+} elseif ($assetStatus -eq "passed") {
+  "blocked_external_smoke_required"
 } else {
   "failed"
 }
+$failureReason = if ($status -eq "passed") {
+  ""
+} elseif ($assetStatus -ne "passed") {
+  "distribution assets or limitation wording failed local checks"
+} else {
+  "external smoke gates not passed: $(@($blockedExternalGates | ForEach-Object { $_.id }) -join ', ')"
+}
 
 $report = [ordered]@{
-  schemaVersion = "external_distribution_smoke_v1"
+  schemaVersion = "external_distribution_smoke_v2"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
   checks = $checks
   readinessPhraseChecks = $phraseChecks
+  externalGates = $externalGates
+  assetStatus = $assetStatus
+  failureReason = $failureReason
   releasePerformanceSmokeRan = [bool]$RunReleasePerformanceSmoke
   releasePerformanceExitCode = $releasePerformanceExitCode
   notes = @(
@@ -70,4 +103,5 @@ $reportPath = Join-Path $absoluteOutputDir ("external-distribution-smoke-{0}.jso
 $report | ConvertTo-Json -Depth 8 | Set-Content -Path $reportPath -Encoding UTF8
 Write-Host "External distribution smoke report: $reportPath"
 Write-Host "Status: $status"
-if ($status -ne "passed") { exit 1 }
+if ($status -eq "failed") { exit 1 }
+if ($status -eq "blocked_external_smoke_required") { exit 2 }

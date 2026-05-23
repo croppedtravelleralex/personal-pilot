@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 35,
+  "loop_iteration": 36,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P19 batch 4 provider production closure contract/UI",
-  "current_objective": "按批次执行第 4 批：把 CAPTCHA/SMS/Email provider closure gates、failure reason、latest report path 接入 preflight contract 和 Settings operator surface",
-  "last_result_summary": "Provider readiness 现在区分 credentials、manager wiring、CDP detect、CDP fill、operator UI、real smoke，并可读取最近 provider acceptance report 的 failureReason/reportPath；真实 provider acceptance 仍 blocked-external。",
-  "next_action_hint": "Run P19 gates, commit locally, retry push, then continue batch 5 external-condition smoke gates",
+  "current_focus": "P20 batch 5 external-condition smoke gates",
+  "current_objective": "按批次执行第 5 批：把外部分发 manual smoke、干净 Win11、跨机器 SessionBundle portability 的 gateResults/failureReason 写入可重复 report",
+  "last_result_summary": "external_distribution_smoke v2 区分 local asset gate 和 external smoke gates；session_bundle_portability_smoke v2 输出 cross-machine gateResults/failureReason，未跑外部环境时保持 blocked。",
+  "next_action_hint": "Run P20 gates, commit/push, then continue batch 6 headed runtime/external browser/AdsPower gates",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -210,6 +210,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Provider production readiness now exposes closure gates, separate CDP detect/fill statuses, real smoke status, failure reason, and latest acceptance report path without claiming real provider acceptance."
+    },
+    {
+      "title": "P20 batch 5 external condition gates",
+      "kind": "feature",
+      "status": "success",
+      "note": "External distribution and SessionBundle portability smokes now produce explicit external gate results and failure reasons without claiming manual or cross-machine acceptance."
     }
   ],
   "blocked_reason": "",

@@ -24,9 +24,9 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### Release / Distribution
 
-1. 执行外部分发前 manual operator smoke。`blocked-external`
-2. 在干净 Win11 机器验证安装、启动、卸载。`blocked-external`
-3. 验证全页面可打开。`blocked-external`
+1. 执行外部分发前 manual operator smoke。`blocked-external-gated`
+2. 在干净 Win11 机器验证安装、启动、卸载。`blocked-external-gated`
+3. 验证全页面可打开。`blocked-external-gated`
 4. 保持 release notes 与真实能力一致。`ready`
 5. 优化 cold start：`9301ms -> <= 2000ms`。`large-slice`
 6. 优化 idle RSS：`411MB -> <= 220MB`。`large-slice`
@@ -36,13 +36,13 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ### Session / Portability
 
-10. 第二环境导出/迁移/导入 bundle。`blocked-external`
-11. target machine preflight evidence。`blocked-external`
-12. target machine dry-run evidence。`blocked-external`
-13. target machine confirmed restore evidence。`blocked-external`
-14. restart continuity after restore evidence。`blocked-external`
+10. 第二环境导出/迁移/导入 bundle。`blocked-external-gated`
+11. target machine preflight evidence。`blocked-external-gated`
+12. target machine dry-run evidence。`blocked-external-gated`
+13. target machine confirmed restore evidence。`blocked-external-gated`
+14. restart continuity after restore evidence。`blocked-external-gated`
 15. profile portability UI 完善。`ready`
-16. portability failure reason viewer。`partial-overview-history`
+16. portability failure reason viewer。`partial-report-v2`
 17. portability report history。`done-overview`
 
 ### Provider Closure

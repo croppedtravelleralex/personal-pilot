@@ -34,6 +34,23 @@ $status = if ($crossMachineComplete) {
 } else {
   "local_contract_passed"
 }
+$gateResults = @(
+  [ordered]@{ id = "source_machine_named"; status = if (-not [string]::IsNullOrWhiteSpace($SourceMachine)) { "passed" } else { "not_run" }; requiredForCrossMachine = $true },
+  [ordered]@{ id = "target_machine_named"; status = if (-not [string]::IsNullOrWhiteSpace($TargetMachine)) { "passed" } else { "not_run" }; requiredForCrossMachine = $true },
+  [ordered]@{ id = "bundle_path_attached"; status = if (-not [string]::IsNullOrWhiteSpace($BundlePath)) { "passed" } else { "not_run" }; requiredForCrossMachine = $true },
+  [ordered]@{ id = "target_preflight"; status = $PreflightStatus; requiredForCrossMachine = $true },
+  [ordered]@{ id = "target_dry_run"; status = $DryRunStatus; requiredForCrossMachine = $true },
+  [ordered]@{ id = "target_confirmed_restore"; status = $ConfirmedRestoreStatus; requiredForCrossMachine = $true },
+  [ordered]@{ id = "restart_continuity_after_restore"; status = $RestartContinuityStatus; requiredForCrossMachine = $true }
+)
+$blockedGates = @($gateResults | Where-Object { $_.status -ne "passed" })
+$failureReason = if ($crossMachineComplete) {
+  ""
+} elseif ($CrossMachine) {
+  "cross-machine gates not passed: $(@($blockedGates | ForEach-Object { $_.id }) -join ', ')"
+} else {
+  "cross-machine smoke not requested; local contract only"
+}
 
 $checks = @(
   [ordered]@{ id = "export_contract"; status = "landed"; evidence = "export_session_bundle desktop command and tests exist" },
@@ -44,7 +61,7 @@ $checks = @(
 )
 
 $report = [ordered]@{
-  schemaVersion = "session_bundle_portability_smoke_v1"
+  schemaVersion = "session_bundle_portability_smoke_v2"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
@@ -59,6 +76,8 @@ $report = [ordered]@{
   dryRunStatus = $DryRunStatus
   confirmedRestoreStatus = $ConfirmedRestoreStatus
   restartContinuityStatus = $RestartContinuityStatus
+  gateResults = $gateResults
+  failureReason = $failureReason
   checks = $checks
   nextManualSteps = @(
     "Export a redacted test profile bundle from source machine.",
