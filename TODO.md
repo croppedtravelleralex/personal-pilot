@@ -40,9 +40,10 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Run Win11 local release gate without reopening scope (`scripts/windows_local_verify.ps1 -SkipContinuityTest`)
 - [x] Add P13 external distribution readiness doc with known limitations, manual smoke checklist, and release-note boundaries
 - [x] Add repeatable P14 smoke/audit entries for release performance, external distribution, provider acceptance preflight, SessionBundle portability, and taxonomy accounting
+- [x] Add P15 remaining-work register and first-priority execution gates
 - [ ] Execute manual operator smoke before external distribution
 
-## Overall End-State 70%
+## Overall End-State 60%
 
 - [x] Build Validation Board MVP for detector, leak, DNS, WebRTC, canvas, audio, worker, and transport evidence
 - [x] Keep Validation Board reports split into declared / applied / observed
@@ -58,7 +59,7 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Deepen fingerprint runtime projection from `12` to `26` env-backed fields while preserving declared / applied / observed separation
 - [x] Deepen fingerprint observed coverage beyond projected/applied fields
   - [x] Add Validation Board fingerprint observation audit from real WebRTC/canvas/audio/leak observed signals
-  - [x] Keep `80` declared controls, `26` runtime projected fields, and `450+` target-only signals out of observed proof counts
+  - [x] Keep `80` declared controls, `26` runtime projected fields, and `450` taxonomy seed out of observed proof counts
 - [x] Formalize `SessionBundle` and profile portability around the already-landed restart continuity assets
   - [x] Add confirmed restore write path after preflight
   - [x] Preserve dry-run as non-writing portability check
@@ -69,7 +70,7 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy
   - [x] Add behavior audit contract for `13` shipped primitives and `8` page archetypes
   - [x] Surface workflow/debug/manual-gate/recovery coverage in Automation
-  - [x] Preserve `450+` event taxonomy as target-only until real taxonomy is shipped
+  - [x] Preserve `450` event taxonomy seed as replay-runtime pending until real taxonomy execution is shipped
 - [x] Add runtime adapter / release smoke contract without hosting Chromium/Firefox forks
 - [x] Add release measurement pending fields and Overview adapter boundary visibility without using dev metrics as release evidence
 - [x] Add AdsPower boundary refresh guard: defer score refresh until B1-B5 evidence exists

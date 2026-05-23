@@ -12,6 +12,7 @@
 6. `docs/04-improvement-backlog.md`：待办池和风险。
 7. `docs/05-ai-maintenance-playbook.md`：AI 接手、更新和验收规则。
 8. `docs/24-external-distribution-readiness.md`：外部分发前限制、人工 smoke 和发布说明边界。
+9. `docs/25-overall-remaining-work-register.md`：`40% / 60%` 后的剩余工作全集和执行状态。
 
 ## 当前报告口径
 

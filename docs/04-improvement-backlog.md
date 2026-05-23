@@ -9,7 +9,7 @@
 | Recorder / Templates | native-first de-fallback closure | 已闭环 | release-default path 不依赖 fallback |
 | Release | Win11 final packaging / operator acceptance polish | 自动化门禁已通过；P13 已新增外部分发 readiness 文档；人工 smoke 待执行 | Type check、Vite build、Win11 baseline、Tauri release build、Windows local verify 同时通过并记录；外部分发前按 `docs/24-external-distribution-readiness.md` 完成人工 smoke |
 
-## Overall remaining `70%`
+## Overall remaining `60%`
 
 | 领域 | 待改进项 | 当前状态 | 退出条件 |
 | --- | --- | --- | --- |
@@ -19,6 +19,7 @@
 | Behavior | 从 `13` primitives 扩展 replayable `450+` taxonomy | P10 behavior audit contract 已落地；P14 新增 `450` behavior event taxonomy seed 和 audit path | 事件数量来自真实 taxonomy；taxonomy seed 仍需 replay runtime 证据才能算交付 |
 | Provider closure | CAPTCHA/SMS/Email production manager wiring/config | production readiness contract、acceptance checklist 和 Settings operator surface 已落地；P14 新增 provider acceptance preflight 脚本 | 真实 provider 验收、CDP detect/fill、operator UI 和失败处理闭环 |
 | Runtime | headed realism、kernel strategy、adapter boundary | adapter/release smoke contract 和 P11 measurement pending visibility 已落地；P14 新增 release performance smoke 脚本并测得 warning：`9301ms / 411MB / 14 processes`，超过 `2000ms / 220MB / 4 processes` 默认预算；headed runtime 未实现 | 有稳定 adapter contract、真实 runtime 验证证据，并给出性能超预算 mitigation |
+| Runtime | release performance mitigation | 已新增 `docs/release-performance-mitigation-plan.md` | 复测 release artifact，至少一项指标实质改善，剩余超预算原因写入 current-state |
 | Benchmark | AdsPower boundary refresh | P12 已落地 guard；评分刷新暂缓 | B1-B5 有新证据后再刷新评分；没有证据时只保留 deferred 结论 |
 
 ## 固定风险
@@ -32,4 +33,4 @@
 
 ## 维护规则
 
-新增 backlog 时必须标清属于 Mainline release evidence 还是 Overall `70%`。不能确定归属时先放 Overall，等有代码证据后再提升到 Mainline release gate。
+新增 backlog 时必须标清属于 Mainline release evidence 还是 Overall `60%`。不能确定归属时先放 Overall，等有代码证据后再提升到 Mainline release gate。

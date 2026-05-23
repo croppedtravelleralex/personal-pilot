@@ -33,6 +33,10 @@ Root markdown entrypoints stay thin and should only route readers to the canonic
   - external browser research and overall-track integration plan
 - `/docs/24-external-distribution-readiness.md`
   - external distribution readiness, manual operator smoke, known limitations, and release-note boundaries
+- `/docs/release-performance-mitigation-plan.md`
+  - release artifact cold start/RSS/process warning evidence and mitigation order
+- `/docs/25-overall-remaining-work-register.md`
+  - canonical register for remaining `40 / 60 / yellow` work packages
 - `/docs/agent-alexstudio-gateway-runbook.md`
   - gateway-specific runtime and acceptance guidance
 

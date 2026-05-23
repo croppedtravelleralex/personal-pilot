@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 30,
+  "loop_iteration": 31,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P14 overall 40/60 evidence infrastructure",
-  "current_objective": "将 overall end-state 从 30/70/yellow 推进到 40/60/yellow：新增 release/provider/session/taxonomy 可重复 evidence 入口和 450 taxonomy seed，同时保留真实 provider/跨机器/完整 replay/observed coverage 未闭环边界",
-  "last_result_summary": "新增 release performance smoke、external distribution smoke、provider acceptance preflight、SessionBundle portability smoke、taxonomy audit、fingerprint/behavior taxonomy seed，并在 Automation audit 中暴露 behavior taxonomy seed 状态",
-  "next_action_hint": "Run P14 smoke/audit gates and full project gates, commit/push, then continue real provider acceptance or second-machine portability smoke when external prerequisites exist",
+  "current_focus": "P15 prioritized remaining-work gates",
+  "current_objective": "先完成 5 项优先级：修旧口径、release performance mitigation、cross-machine portability gate、provider acceptance gate、首批 taxonomy evidence-backed family，并把剩余工作登记为可执行 register",
+  "last_result_summary": "新增 release performance mitigation plan、SessionBundle cross-machine runbook、provider production acceptance runbook、remaining work register；provider/session scripts 增强为真实门槛；taxonomy 前 5 个 family 已补 evidenceStatus/path",
+  "next_action_hint": "Run P15 validation gates, commit/push, then choose next ready package from docs/25-overall-remaining-work-register.md",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -180,6 +180,12 @@
       "kind": "feature",
       "status": "success",
       "note": "Release/provider/session/taxonomy evidence entrypoints and 450 taxonomy seeds move Overall to 40/60/yellow without claiming real provider closure, cross-machine portability, full observed fingerprint coverage, or full replay runtime."
+    },
+    {
+      "title": "P15 prioritized remaining-work gates",
+      "kind": "planning",
+      "status": "success",
+      "note": "First five priority items now have corrected live-truth docs, mitigation/runbook gates, stricter provider/session scripts, evidence-backed taxonomy family seeds, and a remaining-work register."
     }
   ],
   "blocked_reason": "",

@@ -1,4 +1,11 @@
 param(
+  [string]$Domain = "all",
+  [string]$ProviderName = "",
+  [string]$ManagerWiringStatus = "not_wired",
+  [string]$CdpDetectStatus = "not_run",
+  [string]$CdpFillStatus = "not_run",
+  [string]$OperatorUiStatus = "not_wired",
+  [string]$RealProviderSmokeStatus = "not_run",
   [string]$OutputDir = "data/reports/provider-acceptance"
 )
 
@@ -37,20 +44,50 @@ $domains = @(
   }
 )
 
-$items = foreach ($domain in $domains) {
+$selectedDomains = if ($Domain -eq "all") { $domains } else { @($domains | Where-Object { $_.domain -eq $Domain }) }
+if ($selectedDomains.Count -eq 0) {
+  throw "Domain must be one of all|captcha|sms|email. Got: $Domain"
+}
+
+$items = foreach ($domain in $selectedDomains) {
   $present = Test-AnyEnv $domain.env
   $credentialStatus = if ($present.Count -gt 0) { "credential_present" } else { "credential_missing" }
+  $realClosure = $credentialStatus -eq "credential_present" `
+    -and $ManagerWiringStatus -eq "wired" `
+    -and $CdpDetectStatus -eq "passed" `
+    -and $CdpFillStatus -eq "passed" `
+    -and $OperatorUiStatus -eq "wired" `
+    -and $RealProviderSmokeStatus -eq "passed"
   [ordered]@{
     domain = $domain.domain
+    providerName = $ProviderName
     credentialStatus = $credentialStatus
     presentCredentialNames = $present
+    managerWiringStatus = $ManagerWiringStatus
+    cdpDetectStatus = $CdpDetectStatus
+    cdpFillStatus = $CdpFillStatus
+    operatorUiStatus = $OperatorUiStatus
+    realProviderSmokeStatus = $RealProviderSmokeStatus
     requiredClosure = $domain.requiredClosure
-    acceptanceStatus = if ($present.Count -gt 0) { "ready_for_real_provider_smoke_after_manager_wiring" } else { "blocked_missing_credentials" }
+    acceptanceStatus = if ($realClosure) {
+      "accepted"
+    } elseif ($present.Count -gt 0) {
+      "ready_for_real_provider_smoke_after_manager_wiring"
+    } else {
+      "blocked_missing_credentials"
+    }
   }
 }
 
 $readyCredentialCount = @($items | Where-Object { $_.credentialStatus -eq "credential_present" }).Count
-$status = if ($readyCredentialCount -gt 0) { "credential_ready_but_runtime_closure_required" } else { "blocked_missing_credentials" }
+$acceptedCount = @($items | Where-Object { $_.acceptanceStatus -eq "accepted" }).Count
+$status = if ($acceptedCount -eq $items.Count) {
+  "accepted"
+} elseif ($readyCredentialCount -gt 0) {
+  "credential_ready_but_runtime_closure_required"
+} else {
+  "blocked_missing_credentials"
+}
 
 $report = [ordered]@{
   schemaVersion = "provider_acceptance_preflight_v1"
@@ -58,6 +95,7 @@ $report = [ordered]@{
   status = $status
   projectRoot = $projectRoot
   readyCredentialCount = $readyCredentialCount
+  acceptedCount = $acceptedCount
   items = $items
   notes = @(
     "This preflight intentionally does not call paid or external providers.",
@@ -71,4 +109,4 @@ $report | ConvertTo-Json -Depth 8 | Set-Content -Path $reportPath -Encoding UTF8
 Write-Host "Provider acceptance preflight report: $reportPath"
 Write-Host "Status: $status"
 
-if ($status -eq "blocked_missing_credentials") { exit 2 }
+if ($status -ne "accepted") { exit 2 }

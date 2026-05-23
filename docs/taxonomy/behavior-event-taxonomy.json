@@ -16,11 +16,11 @@
     "outcomes": ["planned", "executed", "skipped", "failed", "aborted", "recovered"]
   },
   "families": [
-    { "id": "readiness_wait", "targetCount": 40, "currentEvidence": "wait_for_readiness primitive" },
-    { "id": "settle_idle", "targetCount": 38, "currentEvidence": "idle and wait_for_content_stable primitives" },
-    { "id": "scroll_scan", "targetCount": 48, "currentEvidence": "scroll_progressive and scroll_to_ratio primitives" },
-    { "id": "hover_focus", "targetCount": 42, "currentEvidence": "hover_candidate, focus_element, blur_element primitives" },
-    { "id": "typing_input", "targetCount": 44, "currentEvidence": "type_with_rhythm and clear_with_corrections primitives" },
+    { "id": "readiness_wait", "targetCount": 40, "evidenceStatus": "primitive_backed", "runtimePath": "src/behavior/mod.rs build_behavior_plan", "currentEvidence": "wait_for_readiness primitive" },
+    { "id": "settle_idle", "targetCount": 38, "evidenceStatus": "primitive_backed", "runtimePath": "src/behavior/mod.rs build_behavior_plan", "currentEvidence": "idle and wait_for_content_stable primitives" },
+    { "id": "scroll_scan", "targetCount": 48, "evidenceStatus": "primitive_backed", "runtimePath": "src/behavior/mod.rs build_behavior_plan", "currentEvidence": "scroll_progressive and scroll_to_ratio primitives" },
+    { "id": "hover_focus", "targetCount": 42, "evidenceStatus": "primitive_backed", "runtimePath": "src/behavior/mod.rs build_behavior_plan", "currentEvidence": "hover_candidate, focus_element, blur_element primitives" },
+    { "id": "typing_input", "targetCount": 44, "evidenceStatus": "primitive_backed", "runtimePath": "src/behavior/mod.rs build_behavior_plan", "currentEvidence": "type_with_rhythm and clear_with_corrections primitives" },
     { "id": "content_pause", "targetCount": 36, "currentEvidence": "pause_on_content primitive" },
     { "id": "session_persist", "targetCount": 30, "currentEvidence": "persist_session_state primitive" },
     { "id": "budget_recovery", "targetCount": 40, "currentEvidence": "soft_abort_if_budget_exceeded primitive" },

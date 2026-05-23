@@ -11,11 +11,11 @@
     "Every promoted signal must name collector scope, runtime adapter, target-profile-browser flag, and failure reason when applicable."
   ],
   "families": [
-    { "id": "browser_api_surface", "targetCount": 44, "currentEvidence": "desktop WebView and profile runtime probes for WebRTC/canvas/audio/storage subset" },
-    { "id": "network_transport", "targetCount": 42, "currentEvidence": "DNS and HTTPS transport observed collector v1" },
-    { "id": "webrtc_ip_leak", "targetCount": 36, "currentEvidence": "profile runtime WebRTC warning/signal with failure preservation" },
-    { "id": "canvas_rendering", "targetCount": 38, "currentEvidence": "canvas sample exists but Lightpanda toDataURL failure must remain visible" },
-    { "id": "audio_stack", "targetCount": 34, "currentEvidence": "AudioContext availability/sample-rate warning evidence only" },
+    { "id": "browser_api_surface", "targetCount": 44, "evidenceStatus": "partial_observed", "collectorPath": "src/features/validation/browserProbe.ts", "currentEvidence": "desktop WebView and profile runtime probes for WebRTC/canvas/audio/storage subset" },
+    { "id": "network_transport", "targetCount": 42, "evidenceStatus": "partial_observed", "collectorPath": "src/desktop/mod.rs collect_validation_report", "currentEvidence": "DNS and HTTPS transport observed collector v1" },
+    { "id": "webrtc_ip_leak", "targetCount": 36, "evidenceStatus": "partial_observed", "collectorPath": "validation_probe Lightpanda/CDP", "currentEvidence": "profile runtime WebRTC warning/signal with failure preservation" },
+    { "id": "canvas_rendering", "targetCount": 38, "evidenceStatus": "partial_observed_with_failure", "collectorPath": "validation_probe Lightpanda/CDP and desktop WebView canvas probe", "currentEvidence": "canvas sample exists but Lightpanda toDataURL failure must remain visible" },
+    { "id": "audio_stack", "targetCount": 34, "evidenceStatus": "partial_observed_with_warning", "collectorPath": "validation_probe Lightpanda/CDP and desktop WebView audio probe", "currentEvidence": "AudioContext availability/sample-rate warning evidence only" },
     { "id": "webgl_gpu", "targetCount": 42, "currentEvidence": "declared/profile consistency only; observed collector not complete" },
     { "id": "fonts_text_metrics", "targetCount": 34, "currentEvidence": "declared/profile layer only" },
     { "id": "media_devices", "targetCount": 30, "currentEvidence": "target-only; collector needed" },
