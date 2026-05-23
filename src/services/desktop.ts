@@ -5,6 +5,7 @@ import type {
   DesktopBrowserEnvironmentPolicyDraft,
   DesktopBrowserEnvironmentPolicyMutationResult,
   DesktopBrowserEnvironmentPolicySnapshot,
+  DesktopBehaviorAuditContract,
   DesktopCompileTemplateRunRequest,
   DesktopCompileTemplateRunResult,
   DesktopCreateProfileInput,
@@ -502,6 +503,9 @@ export const readProviderProductionReadiness =
 
 export const readReleaseSmokeContract = (): Promise<DesktopReleaseSmokeContract> =>
   invokeDesktop("read_release_smoke_contract");
+
+export const readBehaviorAuditContract = (): Promise<DesktopBehaviorAuditContract> =>
+  invokeDesktop("read_behavior_audit_contract");
 
 export const openLocalAssetEntry = (entryId: DesktopLocalAssetEntryId): Promise<void> =>
   invokeDesktop("open_local_asset_entry", { entryId });

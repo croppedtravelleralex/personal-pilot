@@ -6,10 +6,10 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P9 provider production readiness operator closure",
-  "current_objective": "CAPTCHA/SMS/Email provider readiness 已暴露 acceptance checklist 和 Settings operator surface，但真实 provider smoke 仍需凭证和外部服务验收",
-  "last_result_summary": "Provider readiness contract 现在包含 acceptanceStatus 和 acceptanceChecklist；Settings 页面展示 credentials、manager wiring、CDP automation、operator UI、provider count、blockers 和 next action",
-  "next_action_hint": "Run P9 full gates, commit/push, then start P10 behavior taxonomy/workflow audit expansion",
+  "current_focus": "P10 behavior taxonomy and workflow audit",
+  "current_objective": "Behavior audit contract 已接入 Automation 页面，明确 13 shipped primitives、8 page archetypes 和 450+ target-only event taxonomy 的边界",
+  "last_result_summary": "Behavior audit 现在报告 workflow graph、debug trace、manual gate、recovery semantics、target taxonomy 覆盖状态，并用测试锁定 13/8/450+ 不能混报",
+  "next_action_hint": "Run P10 full gates, commit/push, then start P11 runtime adapter/headed realism/performance measurement",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -150,6 +150,12 @@
       "kind": "feature",
       "status": "success",
       "note": "CAPTCHA/SMS/Email readiness now exposes acceptance checklists and Settings operator visibility while preserving real provider smoke as blocked without credentials and wiring evidence."
+    },
+    {
+      "title": "P10 behavior taxonomy and workflow audit",
+      "kind": "feature",
+      "status": "success",
+      "note": "Automation now exposes a behavior audit contract for shipped primitives, page archetypes, workflow/debug/manual-gate/recovery coverage, and target-only 450+ taxonomy boundaries."
     }
   ],
   "blocked_reason": "",

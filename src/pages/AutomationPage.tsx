@@ -152,6 +152,16 @@ export function AutomationPage() {
           }
           tone={manualGateCount > 0 ? "warning" : "success"}
         />
+        <StatCard
+          label="Behavior"
+          value={formatCount(viewModel.metrics.shippedPrimitiveCount)}
+          hint={
+            viewModel.behaviorAudit
+              ? `${viewModel.behaviorAudit.targetEventTaxonomyLabel} event taxonomy remains target-only`
+              : "Behavior audit loading"
+          }
+          tone={viewModel.behaviorAudit ? "warning" : "neutral"}
+        />
       </div>
 
       <div className="toolbar-card automation-center__hero">
@@ -242,6 +252,52 @@ export function AutomationPage() {
             features beyond the desktop commands already connected in this repo.
           </div>
         </div>
+      </div>
+
+      <div className="toolbar-card toolbar-card--subtle">
+        <div>
+          <span className="shell__eyebrow">Behavior Audit</span>
+          <h3>Replay taxonomy is audited separately from shipped primitives.</h3>
+          <p>
+            {viewModel.behaviorAudit?.summary ??
+              viewModel.behaviorAuditError ??
+              "Loading behavior audit contract from the desktop service."}
+          </p>
+        </div>
+        {viewModel.behaviorAudit ? (
+          <div className="automation-metric-strip automation-metric-strip--compact">
+            <article className="automation-metric-strip__item">
+              <span className="automation-metric-strip__label">Shipped primitives</span>
+              <strong>{viewModel.behaviorAudit.shippedPrimitiveCount}</strong>
+              <small>{viewModel.behaviorAudit.supportedPrimitives.join(", ")}</small>
+            </article>
+            <article className="automation-metric-strip__item">
+              <span className="automation-metric-strip__label">Page archetypes</span>
+              <strong>{viewModel.behaviorAudit.pageArchetypeCount}</strong>
+              <small>{viewModel.behaviorAudit.pageArchetypes.join(", ")}</small>
+            </article>
+            <article className="automation-metric-strip__item">
+              <span className="automation-metric-strip__label">Target taxonomy</span>
+              <strong>{viewModel.behaviorAudit.targetEventTaxonomyLabel}</strong>
+              <small>{viewModel.behaviorAudit.warnings.join(" ")}</small>
+            </article>
+          </div>
+        ) : null}
+        {viewModel.behaviorAudit ? (
+          <div className="contract-list">
+            {viewModel.behaviorAudit.coverage.map((item) => (
+              <article className="contract-card" key={item.id}>
+                <div className="contract-card__top">
+                  <strong>{item.label}</strong>
+                  <span className={`badge badge--${item.status === "target_only" ? "warning" : "info"}`}>
+                    {item.status}
+                  </span>
+                </div>
+                <p>{item.evidence}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="automation-center__grid">

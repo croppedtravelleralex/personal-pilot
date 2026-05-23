@@ -462,6 +462,25 @@ export interface DesktopReleaseSmokeContract {
   summary: string;
 }
 
+export interface DesktopBehaviorAuditCoverageItem {
+  id: string;
+  label: string;
+  status: string;
+  evidence: string;
+}
+
+export interface DesktopBehaviorAuditContract {
+  generatedAt: string;
+  shippedPrimitiveCount: number;
+  targetEventTaxonomyLabel: string;
+  pageArchetypeCount: number;
+  supportedPrimitives: string[];
+  pageArchetypes: string[];
+  coverage: DesktopBehaviorAuditCoverageItem[];
+  warnings: string[];
+  summary: string;
+}
+
 export type DesktopJsonValue =
   | string
   | number

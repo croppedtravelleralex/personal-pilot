@@ -12,6 +12,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
+    behavior::{PAGE_ARCHETYPES, SUPPORTED_PRIMITIVES},
     db::init::DbPool,
     network_identity::{
         fingerprint_consistency::assess_fingerprint_profile_consistency,
@@ -499,6 +500,29 @@ pub struct DesktopReleaseSmokeContract {
     pub idle_rss_target_mb: i64,
     pub process_count_target: i64,
     pub adapter_contracts: Vec<DesktopRuntimeAdapterContractItem>,
+    pub warnings: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopBehaviorAuditCoverageItem {
+    pub id: String,
+    pub label: String,
+    pub status: String,
+    pub evidence: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopBehaviorAuditContract {
+    pub generated_at: String,
+    pub shipped_primitive_count: usize,
+    pub target_event_taxonomy_label: String,
+    pub page_archetype_count: usize,
+    pub supported_primitives: Vec<String>,
+    pub page_archetypes: Vec<String>,
+    pub coverage: Vec<DesktopBehaviorAuditCoverageItem>,
     pub warnings: Vec<String>,
     pub summary: String,
 }
@@ -2661,6 +2685,64 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
         ready_count,
         blocked_count,
         items,
+        summary,
+    }
+}
+
+pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
+    let supported_primitives = SUPPORTED_PRIMITIVES.iter().map(|item| item.to_string()).collect();
+    let page_archetypes = PAGE_ARCHETYPES.iter().map(|item| item.to_string()).collect();
+    let coverage = vec![
+        DesktopBehaviorAuditCoverageItem {
+            id: "workflow_graph".to_string(),
+            label: "Workflow graph".to_string(),
+            status: "partial".to_string(),
+            evidence: "compile_behavior_plan produces deterministic phased steps per page archetype".to_string(),
+        },
+        DesktopBehaviorAuditCoverageItem {
+            id: "debug_trace".to_string(),
+            label: "Debug trace".to_string(),
+            status: "partial".to_string(),
+            evidence: "BehaviorTraceSummary tracks planned/executed/failed/aborted/session_persisted fields".to_string(),
+        },
+        DesktopBehaviorAuditCoverageItem {
+            id: "manual_gate".to_string(),
+            label: "Manual gate".to_string(),
+            status: "partial".to_string(),
+            evidence: "Automation run detail exposes manual gate confirm/reject commands, but behavior taxonomy does not yet require gate semantics per event".to_string(),
+        },
+        DesktopBehaviorAuditCoverageItem {
+            id: "recovery_semantics".to_string(),
+            label: "Recovery semantics".to_string(),
+            status: "partial".to_string(),
+            evidence: "soft_abort_if_budget_exceeded and run retry/cancel exist, but replay recovery taxonomy is not complete".to_string(),
+        },
+        DesktopBehaviorAuditCoverageItem {
+            id: "target_taxonomy".to_string(),
+            label: "450+ event taxonomy".to_string(),
+            status: "target_only".to_string(),
+            evidence: "Target size remains a roadmap goal; only shipped primitives are counted as delivered".to_string(),
+        },
+    ];
+    let warnings = vec![
+        "13 shipped primitives are not the 450+ target taxonomy".to_string(),
+        "workflow/debug/manual-gate/recovery coverage is audit coverage, not full replay taxonomy closure".to_string(),
+    ];
+    let summary = format!(
+        "Behavior audit: {} shipped primitives across {} page archetypes; 450+ event taxonomy remains target-only.",
+        SUPPORTED_PRIMITIVES.len(),
+        PAGE_ARCHETYPES.len()
+    );
+
+    DesktopBehaviorAuditContract {
+        generated_at: now_ts_string(),
+        shipped_primitive_count: SUPPORTED_PRIMITIVES.len(),
+        target_event_taxonomy_label: "450+".to_string(),
+        page_archetype_count: PAGE_ARCHETYPES.len(),
+        supported_primitives,
+        page_archetypes,
+        coverage,
+        warnings,
         summary,
     }
 }
@@ -8560,6 +8642,23 @@ mod tests {
             .any(|blocker| blocker.contains("production manager wiring")));
         assert_eq!(with_captcha_credential.ready_count, 0);
         env::remove_var("CAPSOLVER_API_KEY");
+    }
+
+    #[test]
+    fn behavior_audit_contract_preserves_shipped_vs_target_boundary() {
+        let contract = read_desktop_behavior_audit_contract();
+        assert_eq!(contract.shipped_primitive_count, 13);
+        assert_eq!(contract.page_archetype_count, 8);
+        assert_eq!(contract.target_event_taxonomy_label, "450+");
+        assert!(contract.supported_primitives.contains(&"wait_for_readiness".to_string()));
+        assert!(contract.supported_primitives.contains(&"soft_abort_if_budget_exceeded".to_string()));
+        assert!(contract.coverage.iter().any(|item| {
+            item.id == "target_taxonomy" && item.status == "target_only"
+        }));
+        assert!(contract
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("13 shipped primitives are not the 450+ target taxonomy")));
     }
 
     #[test]

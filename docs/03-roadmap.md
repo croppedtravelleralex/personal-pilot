@@ -49,8 +49,8 @@
    - 下一步补齐跨机器 profile portability 验收、lease / cooldown / health / rollback。
 
 4. Behavior and automation depth
-   - 从 `13` shipped primitives 扩展到 replayable `450+` event taxonomy。
-   - 补齐 workflow graph、debug、audit、manual gate 和 recovery 语义。
+   - 已新增 P10 behavior audit contract：`13` shipped primitives、`8` page archetypes、workflow graph、debug trace、manual gate、recovery semantics、`450+` target-only 边界可在 Automation surface 查看。
+   - 下一步才是把 audit contract 扩展为真实 replayable `450+` event taxonomy。
    - CAPTCHA/SMS/Email 已有 production readiness contract、acceptance checklist 和 Settings operator surface；下一步是真实 manager wiring、CDP detect/fill 和 provider acceptance。
 
 5. Runtime adapter and external integration

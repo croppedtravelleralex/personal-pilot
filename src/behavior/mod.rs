@@ -32,7 +32,7 @@ const DEFAULT_BROWSER_BUDGET_MAX_ADDED_LATENCY_MS: i64 = 12_000;
 const DEFAULT_BROWSER_BUDGET_TIMEOUT_RESERVE_MS: i64 = 3_000;
 const DEFAULT_BROWSER_BUDGET_MAX_STEP_COUNT: i64 = 24;
 
-const PAGE_ARCHETYPES: &[&str] = &[
+pub const PAGE_ARCHETYPES: &[&str] = &[
     "article",
     "search_results",
     "listing",
@@ -43,7 +43,7 @@ const PAGE_ARCHETYPES: &[&str] = &[
     "generic",
 ];
 
-const SUPPORTED_PRIMITIVES: &[&str] = &[
+pub const SUPPORTED_PRIMITIVES: &[&str] = &[
     "idle",
     "wait_for_readiness",
     "wait_for_content_stable",

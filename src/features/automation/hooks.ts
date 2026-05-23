@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import * as desktopServices from "../../services/desktop";
 import { useStore } from "../../store/createStore";
 import type {
+  DesktopBehaviorAuditContract,
   DesktopJsonValue,
   DesktopManualGateActionRequest,
   DesktopReadRunDetailQuery,
@@ -18,6 +19,7 @@ import type {
   AutomationRunArtifact,
   AutomationRunDetail,
   AutomationRunTimelineEntry,
+  BehaviorAuditView,
   PreparedLaunchCompilePreview,
 } from "./model";
 import {
@@ -244,6 +246,20 @@ function normalizeRunDetail(payload: ReadRunDetailResult): AutomationRunDetail {
   };
 }
 
+function normalizeBehaviorAudit(payload: DesktopBehaviorAuditContract): BehaviorAuditView {
+  return {
+    generatedAt: payload.generatedAt,
+    shippedPrimitiveCount: payload.shippedPrimitiveCount,
+    targetEventTaxonomyLabel: payload.targetEventTaxonomyLabel,
+    pageArchetypeCount: payload.pageArchetypeCount,
+    supportedPrimitives: payload.supportedPrimitives,
+    pageArchetypes: payload.pageArchetypes,
+    coverage: payload.coverage,
+    warnings: payload.warnings,
+    summary: payload.summary,
+  };
+}
+
 export function useAutomationCenterViewModel() {
   const runs = useTasksViewModel();
   const automation = useStore(automationStore, (current) => current);
@@ -272,6 +288,18 @@ export function useAutomationCenterViewModel() {
   const recorder = useRecorderViewModel(templates.selectedTemplate, {
     profileId: selectedRun?.personaId ?? null,
   });
+
+  useEffect(() => {
+    if (automation.behaviorAuditStatus !== "idle") {
+      return;
+    }
+    automationActions.behaviorAuditStarted();
+    void automationDesktop
+      .readBehaviorAuditContract()
+      .then((payload) => automationActions.behaviorAuditSucceeded(normalizeBehaviorAudit(payload)))
+      .catch((error) => automationActions.behaviorAuditFailed(toErrorMessage(error)));
+  }, [automation.behaviorAuditStatus]);
+
   const recommendation = useMemo(
     () => getRecommendedTemplate(selectedRun, templates.state.items),
     [selectedRun, templates.state.items],
@@ -731,6 +759,9 @@ export function useAutomationCenterViewModel() {
     runDetail: automation.runDetail,
     isRunDetailLoading,
     runDetailNotice,
+    behaviorAudit: automation.behaviorAudit,
+    behaviorAuditStatus: automation.behaviorAuditStatus,
+    behaviorAuditError: automation.behaviorAuditError,
     manualGate,
     isLaunchingRun,
     lastLaunchResult,
@@ -744,6 +775,7 @@ export function useAutomationCenterViewModel() {
       blockerCount: chainSummary.blockers.length,
       warningCount: chainSummary.warnings.length,
       recorderStepCount: recorder.state.snapshot?.stepCount ?? 0,
+      shippedPrimitiveCount: automation.behaviorAudit?.shippedPrimitiveCount ?? 13,
     },
     actions: {
       selectRun: automationActions.selectRun,

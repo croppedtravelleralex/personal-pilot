@@ -18,7 +18,7 @@ use persona_pilot::desktop::{
     load_desktop_profile_detail, load_desktop_profile_page, load_desktop_proxy_health,
     load_desktop_proxy_page, load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
     load_desktop_template_metadata_page, open_desktop_profiles,
-    read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
+    read_desktop_behavior_audit_contract, read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
     read_desktop_provider_production_readiness, read_desktop_release_smoke_contract,
     read_desktop_local_api_snapshot, read_desktop_local_asset_workspace, read_desktop_run_detail,
     read_desktop_settings, reject_desktop_manual_gate, resolve_desktop_local_asset_entry_path,
@@ -27,7 +27,7 @@ use persona_pilot::desktop::{
     restore_desktop_session_bundle, retry_desktop_task, run_desktop_proxy_batch_check,
     save_desktop_template, start_desktop_profiles, stop_desktop_profiles, sync_desktop_profiles,
     update_desktop_profile, update_desktop_template, DesktopAppendBehaviorRecordingStepRequest,
-    DesktopBrowserEnvironmentPolicyDraft, DesktopBrowserEnvironmentPolicyMutationResult,
+    DesktopBehaviorAuditContract, DesktopBrowserEnvironmentPolicyDraft, DesktopBrowserEnvironmentPolicyMutationResult,
     DesktopBrowserEnvironmentPolicySnapshot, DesktopCompileTemplateRunRequest,
     DesktopCompileTemplateRunResult, DesktopCreateProfileInput, DesktopImportExportSkeleton,
     DesktopLaunchTemplateRunRequest, DesktopLaunchTemplateRunResult, DesktopLocalApiMutationResult,
@@ -2200,6 +2200,11 @@ pub async fn restore_session_bundle(
 #[tauri::command]
 pub fn read_provider_production_readiness() -> Result<DesktopProviderProductionReadiness, String> {
     Ok(read_desktop_provider_production_readiness())
+}
+
+#[tauri::command]
+pub fn read_behavior_audit_contract() -> Result<DesktopBehaviorAuditContract, String> {
+    Ok(read_desktop_behavior_audit_contract())
 }
 
 #[tauri::command]

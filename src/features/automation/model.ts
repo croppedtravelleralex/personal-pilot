@@ -121,3 +121,22 @@ export interface AutomationContractGap {
   status: string;
   detail: string;
 }
+
+export interface BehaviorAuditCoverageItem {
+  id: string;
+  label: string;
+  status: string;
+  evidence: string;
+}
+
+export interface BehaviorAuditView {
+  generatedAt: string;
+  shippedPrimitiveCount: number;
+  targetEventTaxonomyLabel: string;
+  pageArchetypeCount: number;
+  supportedPrimitives: string[];
+  pageArchetypes: string[];
+  coverage: BehaviorAuditCoverageItem[];
+  warnings: string[];
+  summary: string;
+}

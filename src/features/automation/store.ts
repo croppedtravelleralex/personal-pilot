@@ -10,6 +10,7 @@ import type {
   AutomationRunDetail,
   AutomationRunDetailStatus,
   AutomationTaskWriteAction,
+  BehaviorAuditView,
   PreparedLaunchCompilePreview,
   LauncherMode,
   LauncherTargetScope,
@@ -33,6 +34,9 @@ interface AutomationState {
   manualGateStatus: AutomationManualGateStatus;
   manualGateFailureReason: string | null;
   activeTaskWriteAction: AutomationTaskWriteAction | null;
+  behaviorAudit: BehaviorAuditView | null;
+  behaviorAuditStatus: "idle" | "loading" | "ready" | "failed";
+  behaviorAuditError: string | null;
 }
 
 const DEFAULT_LAUNCHER_DRAFT: AutomationLauncherDraft = {
@@ -102,9 +106,34 @@ const automationStore = createStore<AutomationState>({
   manualGateStatus: "idle",
   manualGateFailureReason: null,
   activeTaskWriteAction: null,
+  behaviorAudit: null,
+  behaviorAuditStatus: "idle",
+  behaviorAuditError: null,
 });
 
 export const automationActions = {
+  behaviorAuditStarted() {
+    automationStore.setState((current) => ({
+      ...current,
+      behaviorAuditStatus: "loading",
+      behaviorAuditError: null,
+    }));
+  },
+  behaviorAuditSucceeded(behaviorAudit: BehaviorAuditView) {
+    automationStore.setState((current) => ({
+      ...current,
+      behaviorAudit,
+      behaviorAuditStatus: "ready",
+      behaviorAuditError: null,
+    }));
+  },
+  behaviorAuditFailed(error: string) {
+    automationStore.setState((current) => ({
+      ...current,
+      behaviorAuditStatus: "failed",
+      behaviorAuditError: error,
+    }));
+  },
   selectRun(selectedRun: DesktopTaskItem) {
     automationStore.setState((current) => ({
       ...current,
