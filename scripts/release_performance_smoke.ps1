@@ -1,7 +1,9 @@
 param(
   [string]$ExePath = "",
   [int]$ReadyWaitSeconds = 8,
+  [int]$ReadyPollMilliseconds = 250,
   [int]$IdleSampleSeconds = 5,
+  [switch]$CleanExistingInstances,
   [string]$OutputDir = "data/reports/release-smoke"
 )
 
@@ -60,6 +62,71 @@ function Measure-Tree([int]$RootPid) {
     processCount = $processes.Count
     rssMb = [int][Math]::Round($rssBytes / 1MB)
     pids = @($processes | Select-Object -ExpandProperty Id)
+    processBreakdown = @(
+      $processes |
+        Group-Object -Property ProcessName |
+        Sort-Object -Property Name |
+        ForEach-Object {
+          [ordered]@{
+            name = $_.Name
+            count = $_.Count
+            rssMb = [int][Math]::Round((($_.Group | Measure-Object -Property WorkingSet64 -Sum).Sum) / 1MB)
+          }
+        }
+    )
+  }
+}
+
+function Stop-ExistingInstances([string]$Exe) {
+  $exeName = [System.IO.Path]::GetFileNameWithoutExtension($Exe)
+  $candidateNames = @($exeName, "personal-pilot-tauri", "persona-pilot-desktop", "PersonaPilot") |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -Unique
+
+  foreach ($name in $candidateNames) {
+    Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
+      Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+  }
+  Start-Sleep -Milliseconds 500
+}
+
+function Wait-ReleaseReady([int]$RootPid, [int]$TimeoutSeconds, [int]$PollMilliseconds) {
+  $poll = [Math]::Max(100, $PollMilliseconds)
+  $deadline = [DateTimeOffset]::Now.AddSeconds($TimeoutSeconds)
+  do {
+    $root = Get-Process -Id $RootPid -ErrorAction SilentlyContinue
+    if ($null -eq $root) {
+      return [pscustomobject]@{
+        ready = $false
+        reason = "release process exited before ready signal"
+        tree = $null
+      }
+    }
+    $tree = Measure-Tree $RootPid
+    $hasWebViewChild = @($tree.processBreakdown | Where-Object {
+      $_.name -like "*WebView*" -or $_.name -like "*msedge*"
+    }).Count -gt 0
+    if ($root.MainWindowHandle -ne 0 -or $hasWebViewChild -or $tree.processCount -gt 1) {
+      return [pscustomobject]@{
+        ready = $true
+        reason = if ($root.MainWindowHandle -ne 0) {
+          "main_window_handle"
+        } elseif ($hasWebViewChild) {
+          "webview_process_detected"
+        } else {
+          "child_process_detected"
+        }
+        tree = $tree
+      }
+    }
+    Start-Sleep -Milliseconds $poll
+  } while ([DateTimeOffset]::Now -lt $deadline)
+
+  return [pscustomobject]@{
+    ready = $true
+    reason = "timeout_survival"
+    tree = Measure-Tree $RootPid
   }
 }
 
@@ -68,6 +135,10 @@ $exe = Resolve-ReleaseExe $projectRoot $ExePath
 $absoluteOutputDir = Join-Path $projectRoot $OutputDir
 New-Item -ItemType Directory -Force -Path $absoluteOutputDir | Out-Null
 
+if ($CleanExistingInstances) {
+  Stop-ExistingInstances $exe
+}
+
 $startedAt = Get-Date
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $process = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
@@ -75,13 +146,14 @@ $status = "passed"
 $failureReason = $null
 $readyMs = $null
 $idle = $null
+$readyReason = $null
 
 try {
-  Start-Sleep -Seconds $ReadyWaitSeconds
-  $refreshed = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
-  if ($null -eq $refreshed) {
+  $ready = Wait-ReleaseReady $process.Id $ReadyWaitSeconds $ReadyPollMilliseconds
+  $readyReason = $ready.reason
+  if (-not $ready.ready) {
     $status = "failed"
-    $failureReason = "release process exited before ready wait completed"
+    $failureReason = $ready.reason
   } else {
     $readyMs = [int]$sw.ElapsedMilliseconds
     Start-Sleep -Seconds $IdleSampleSeconds
@@ -121,6 +193,7 @@ $report = [ordered]@{
   executablePath = $exe
   status = $status
   failureReason = $failureReason
+  readyReason = $readyReason
   coldStartTargetMs = $coldStartTargetMs
   measuredColdStartMs = $readyMs
   idleRssTargetMb = $idleRssTargetMb
@@ -128,9 +201,11 @@ $report = [ordered]@{
   processCountTarget = $processCountTarget
   measuredProcessCount = if ($null -ne $idle) { $idle.processCount } else { $null }
   pids = if ($null -ne $idle) { $idle.pids } else { @() }
+  processBreakdown = if ($null -ne $idle) { $idle.processBreakdown } else { @() }
+  cleanExistingInstances = [bool]$CleanExistingInstances
   notes = @(
     "Measures a release executable, not Vite/dev mode.",
-    "Ready time is a local operator smoke approximation based on process survival after wait window.",
+    "Ready time is a local operator smoke approximation based on main window, WebView/child process detection, or timeout survival.",
     "Use this as evidence input for release smoke, not as a full UX startup profiler."
   )
 }

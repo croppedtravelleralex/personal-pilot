@@ -8,9 +8,9 @@ P14 release artifact smoke 已通过 `scripts/release_performance_smoke.ps1` 生
 
 | 指标 | 目标 | 当前实测 | 状态 |
 | --- | ---: | ---: | --- |
-| cold start | `<= 2000ms` | `9301ms` | 超预算 |
-| idle RSS | `<= 220MB` | `411MB` | 超预算 |
-| process count | `<= 4` | `14` | 超预算 |
+| cold start | `<= 2000ms` | `2785ms` | 超预算，已改善 |
+| idle RSS | `<= 220MB` | `374MB` | 超预算，已改善 |
+| process count | `<= 4` | `8` | 超预算，已改善 |
 
 该结果不能写成 release performance green。它只能证明 release artifact 可被测量，并暴露了性能债。
 

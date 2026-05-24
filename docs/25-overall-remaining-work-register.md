@@ -28,9 +28,9 @@ Updated: 2026-05-23 (Asia/Shanghai)
 2. 在干净 Win11 机器验证安装、启动、卸载。`blocked-external-gated`
 3. 验证全页面可打开。`blocked-external-gated`
 4. 保持 release notes 与真实能力一致。`ready`
-5. 优化 cold start：`9301ms -> <= 2000ms`。`measured-report-ingested`
-6. 优化 idle RSS：`411MB -> <= 220MB`。`measured-report-ingested`
-7. 优化 process count：`14 -> <= 4` 或记录例外。`measured-report-ingested`
+5. 优化 cold start：`2785ms -> <= 2000ms`。`improved-still-warning`
+6. 优化 idle RSS：`374MB -> <= 220MB`。`improved-still-warning`
+7. 优化 process count：`8 -> <= 4` 或记录例外。`improved-still-warning`
 8. 生成 release performance history。`done`
 9. 将 release performance report 接入 Overview / Settings。`done-overview`
 
@@ -48,19 +48,19 @@ Updated: 2026-05-23 (Asia/Shanghai)
 ### Provider Closure
 
 18. CAPTCHA credentials 配置。`blocked-external`
-19. CAPTCHA manager wiring。`partial-contract-visible`
-20. CAPTCHA CDP detect。`partial-contract-visible`
-21. CAPTCHA CDP fill。`partial-contract-visible`
+19. CAPTCHA manager wiring。`provider-manager-gated`
+20. CAPTCHA CDP detect。`provider-manager-gated`
+21. CAPTCHA CDP fill。`provider-manager-gated`
 22. CAPTCHA real provider smoke。`blocked-external`
 23. CAPTCHA operator UI closure。`partial-settings-visible`
 24. SMS credentials 配置。`blocked-external`
-25. SMS manager wiring。`partial-contract-visible`
-26. SMS number purchase/status/cancel/finish flow。`large-slice`
-27. SMS CDP detect/fill。`partial-contract-visible`
+25. SMS manager wiring。`provider-manager-gated`
+26. SMS number purchase/status/cancel/finish flow。`manager-contract-gated`
+27. SMS CDP detect/fill。`provider-manager-gated`
 28. SMS real provider smoke。`blocked-external`
 29. SMS operator UI closure。`partial-settings-visible`
-30. Email session persistence hardening。`ready`
-31. Email CDP detect/fill。`partial-contract-visible`
+30. Email session persistence hardening。`manager-contract-gated`
+31. Email CDP detect/fill。`provider-manager-gated`
 32. Email real registration-flow smoke。`blocked-external`
 33. Provider failure reason taxonomy。`partial-preflight-v2`
 34. Provider evidence viewer。`partial-settings-latest-report`
@@ -77,12 +77,12 @@ Updated: 2026-05-23 (Asia/Shanghai)
 42. screen/display observed collector。`partial-desktop-webview`
 43. navigator/client hints observed collector。`partial-desktop-webview`
 44. permission/device capability observed collector。`partial-desktop-webview`
-45. detector/coherence observed matrix。`large-slice`
-46. observed coverage dashboard。`ready`
+45. detector/coherence observed matrix。`profile-browser-comparison-gated`
+46. observed coverage dashboard。`fingerprint-category-audit-expanded`
 47. observed coverage report history。`ready`
 48. profile-level full fingerprint evidence export。`ready`
-49. repeatability sampling report。`ready`
-50. desktop WebView vs profile browser comparison。`ready`
+49. repeatability sampling report。`pending-next-local-batch`
+50. desktop WebView vs profile browser comparison。`profile-browser-comparison-gated`
 
 ### 450 Fingerprint Taxonomy
 
@@ -102,11 +102,11 @@ Updated: 2026-05-23 (Asia/Shanghai)
 61. 为全部 behavior family 定义 audit payload。`done-taxonomy-semantics`
 62. 为全部 behavior family 定义 failure states。`done-taxonomy-semantics`
 63. 为全部 behavior family 定义 recovery behavior。`done-taxonomy-semantics`
-64. 扩展 `13` shipped primitives。`large-slice`
-65. workflow graph runtime。`large-slice`
-66. replay debugger。`large-slice`
+64. 扩展 `13` shipped primitives。`pending-next-local-batch`
+65. workflow graph runtime。`contract-graph-visible`
+66. replay debugger。`audit-contract-visible`
 67. per-event manual gate semantics。`large-slice`
-68. deterministic replay evidence。`large-slice`
+68. deterministic replay evidence。`evidence-gated`
 69. behavior event coverage dashboard。`ready`
 70. behavior event audit report history。`partial-taxonomy-history`
 

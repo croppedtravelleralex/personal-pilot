@@ -553,6 +553,23 @@ pub struct DesktopBehaviorAuditCoverageItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DesktopBehaviorAuditGraphNode {
+    pub id: String,
+    pub label: String,
+    pub primitive: String,
+    pub phase: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopBehaviorAuditGraphEdge {
+    pub from: String,
+    pub to: String,
+    pub condition: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopBehaviorAuditContract {
     pub generated_at: String,
     pub shipped_primitive_count: usize,
@@ -563,6 +580,10 @@ pub struct DesktopBehaviorAuditContract {
     pub page_archetype_count: usize,
     pub supported_primitives: Vec<String>,
     pub page_archetypes: Vec<String>,
+    pub workflow_graph_nodes: Vec<DesktopBehaviorAuditGraphNode>,
+    pub workflow_graph_edges: Vec<DesktopBehaviorAuditGraphEdge>,
+    pub replay_debugger_status: String,
+    pub deterministic_replay_evidence_status: String,
     pub coverage: Vec<DesktopBehaviorAuditCoverageItem>,
     pub warnings: Vec<String>,
     pub summary: String,
@@ -2885,6 +2906,8 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "taxonomy-audit" => Some("taxonomy_audit"),
         "external-distribution" => Some("external_distribution"),
         "runtime-adapter" => Some("runtime_adapter"),
+        "provider-manager" => Some("provider_manager"),
+        "profile-browser-comparison" => Some("profile_browser_comparison"),
         _ => None,
     }
 }
@@ -2984,6 +3007,8 @@ fn evidence_report_summary_from_json(
         ),
         "external_distribution" => format!("external distribution {status}"),
         "runtime_adapter" => format!("runtime adapter {status}"),
+        "provider_manager" => format!("provider manager {status}"),
+        "profile_browser_comparison" => format!("profile browser comparison {status}"),
         _ => format!("{kind} {status}"),
     };
 
@@ -3014,6 +3039,8 @@ pub fn list_desktop_evidence_reports(
         "taxonomy-audit",
         "external-distribution",
         "runtime-adapter",
+        "provider-manager",
+        "profile-browser-comparison",
     ] {
         let Some(kind) = evidence_report_kind_from_dir(dir_name) else {
             continue;
@@ -3048,6 +3075,60 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
     let page_archetypes = PAGE_ARCHETYPES.iter().map(|item| item.to_string()).collect();
     let target_event_taxonomy_path = "docs/taxonomy/behavior-event-taxonomy.json".to_string();
     let target_event_family_count = 11;
+    let workflow_graph_nodes = vec![
+        DesktopBehaviorAuditGraphNode {
+            id: "readiness".to_string(),
+            label: "Readiness".to_string(),
+            primitive: "wait_for_readiness".to_string(),
+            phase: "readiness".to_string(),
+        },
+        DesktopBehaviorAuditGraphNode {
+            id: "settle".to_string(),
+            label: "Settle".to_string(),
+            primitive: "idle|wait_for_content_stable".to_string(),
+            phase: "settle".to_string(),
+        },
+        DesktopBehaviorAuditGraphNode {
+            id: "scan".to_string(),
+            label: "Scan".to_string(),
+            primitive: "scroll_progressive|scroll_to_ratio".to_string(),
+            phase: "scan".to_string(),
+        },
+        DesktopBehaviorAuditGraphNode {
+            id: "focus_input".to_string(),
+            label: "Focus and input".to_string(),
+            primitive: "hover_candidate|focus_element|type_with_rhythm".to_string(),
+            phase: "focus/input".to_string(),
+        },
+        DesktopBehaviorAuditGraphNode {
+            id: "persist_recover".to_string(),
+            label: "Persist and recover".to_string(),
+            primitive: "persist_session_state|soft_abort_if_budget_exceeded".to_string(),
+            phase: "persist/recover".to_string(),
+        },
+    ];
+    let workflow_graph_edges = vec![
+        DesktopBehaviorAuditGraphEdge {
+            from: "readiness".to_string(),
+            to: "settle".to_string(),
+            condition: "page_ready_or_timeout".to_string(),
+        },
+        DesktopBehaviorAuditGraphEdge {
+            from: "settle".to_string(),
+            to: "scan".to_string(),
+            condition: "stable_or_budget_clipped".to_string(),
+        },
+        DesktopBehaviorAuditGraphEdge {
+            from: "scan".to_string(),
+            to: "focus_input".to_string(),
+            condition: "interactive_target_available".to_string(),
+        },
+        DesktopBehaviorAuditGraphEdge {
+            from: "focus_input".to_string(),
+            to: "persist_recover".to_string(),
+            condition: "task_step_completed_or_recovery_required".to_string(),
+        },
+    ];
     let coverage = vec![
         DesktopBehaviorAuditCoverageItem {
             id: "workflow_graph".to_string(),
@@ -3102,6 +3183,10 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
         page_archetype_count: PAGE_ARCHETYPES.len(),
         supported_primitives,
         page_archetypes,
+        workflow_graph_nodes,
+        workflow_graph_edges,
+        replay_debugger_status: "audit_contract_only".to_string(),
+        deterministic_replay_evidence_status: "pending_runtime_evidence".to_string(),
         coverage,
         warnings,
         summary,

@@ -222,7 +222,7 @@ export function ValidationPage() {
             <div className="validation-layer__top">
               <span>Covered</span>
               <span className="badge badge--info">
-                {fingerprintAudit.observedCategoryCount}/4
+                {fingerprintAudit.observedCategoryCount}/5
               </span>
             </div>
             <strong>{fingerprintAudit.coveredCategories.join(", ") || "none"}</strong>

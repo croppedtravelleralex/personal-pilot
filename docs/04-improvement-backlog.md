@@ -18,7 +18,7 @@
 | Session | 完整 `SessionBundle` 和 profile portability | profile-scoped export、import preflight、dry-run、confirmed local restore write path 已落地；P14 新增 portability smoke contract 脚本 | 跨机器 profile portability、restart continuity 和 restored payload 真实环境验收一起成立 |
 | Behavior | 从 `13` primitives 扩展 replayable `450+` taxonomy | P10 behavior audit contract 已落地；P14 新增 `450` behavior event taxonomy seed 和 audit path | 事件数量来自真实 taxonomy；taxonomy seed 仍需 replay runtime 证据才能算交付 |
 | Provider closure | CAPTCHA/SMS/Email production manager wiring/config | production readiness contract、acceptance checklist 和 Settings operator surface 已落地；P14 新增 provider acceptance preflight 脚本 | 真实 provider 验收、CDP detect/fill、operator UI 和失败处理闭环 |
-| Runtime | headed realism、kernel strategy、adapter boundary | adapter/release smoke contract、P11 measurement pending visibility 和 P21 runtime adapter evidence gate 已落地；P14 新增 release performance smoke 脚本并测得 warning：`9301ms / 411MB / 14 processes`，超过 `2000ms / 220MB / 4 processes` 默认预算；headed runtime 未实现 | 有稳定 adapter contract、真实 runtime 验证证据，并给出性能超预算 mitigation |
+| Runtime | headed realism、kernel strategy、adapter boundary | adapter/release smoke contract、P11 measurement pending visibility 和 P21 runtime adapter evidence gate 已落地；P14 新增 release performance smoke 脚本并测得 warning：`2785ms / 374MB / 8 processes`，超过 `2000ms / 220MB / 4 processes` 默认预算；headed runtime 未实现 | 有稳定 adapter contract、真实 runtime 验证证据，并给出性能超预算 mitigation |
 | Runtime | release performance mitigation | 已新增 `docs/release-performance-mitigation-plan.md` | 复测 release artifact，至少一项指标实质改善，剩余超预算原因写入 current-state |
 | Benchmark | AdsPower boundary refresh | P12 已落地 guard，P21 已新增 machine-readable deferred gate report；评分刷新暂缓 | B1-B5 有新证据后再刷新评分；没有证据时只保留 deferred 结论 |
 

@@ -503,6 +503,19 @@ export interface DesktopBehaviorAuditCoverageItem {
   evidence: string;
 }
 
+export interface DesktopBehaviorAuditGraphNode {
+  id: string;
+  label: string;
+  primitive: string;
+  phase: string;
+}
+
+export interface DesktopBehaviorAuditGraphEdge {
+  from: string;
+  to: string;
+  condition: string;
+}
+
 export interface DesktopBehaviorAuditContract {
   generatedAt: string;
   shippedPrimitiveCount: number;
@@ -513,6 +526,10 @@ export interface DesktopBehaviorAuditContract {
   pageArchetypeCount: number;
   supportedPrimitives: string[];
   pageArchetypes: string[];
+  workflowGraphNodes: DesktopBehaviorAuditGraphNode[];
+  workflowGraphEdges: DesktopBehaviorAuditGraphEdge[];
+  replayDebuggerStatus: string;
+  deterministicReplayEvidenceStatus: string;
   coverage: DesktopBehaviorAuditCoverageItem[];
   warnings: string[];
   summary: string;

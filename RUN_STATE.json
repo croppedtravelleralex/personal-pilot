@@ -1,15 +1,15 @@
 {
   "project": "PersonaPilot",
   "loop_enabled": false,
-  "loop_iteration": 43,
+  "loop_iteration": 49,
   "stage": "summarize",
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P22-P27 six-batch overall hardening",
-  "current_objective": "按 6 批继续推进剩余 Overall 工作：release report ingestion、portability report UI、fingerprint WebGL/font probes、taxonomy metadata、behavior semantics、live-truth guard",
-  "last_result_summary": "新 6 批已实现：release contract 读取最新实测、Settings 显示 portability report、Validation 新增 WebGL/font observed probes、fingerprint/behavior taxonomy 元数据深化、live_truth_guard 防口径回退。",
-  "next_action_hint": "Run full gates, commit, push, then plan next external-evidence or performance-mitigation batch",
+  "current_focus": "P28-P33 local-first implementation before manual/external smoke",
+  "current_objective": "先完成本机可实现功能，把需要人工、第二机器、真实 provider、外部浏览器实测的工作留到最后",
+  "last_result_summary": "Release smoke 增加 ready 轮询/进程树分解/旧实例清理；Behavior audit 增加 workflow graph/replay evidence 状态；Provider manager 和 profile-browser comparison 增加本机 gate；fingerprint audit 扩展 fingerprint observed category。",
+  "next_action_hint": "Run local gates, commit/push, then continue next local batch or schedule manual/external smoke pack last",
   "next_suggestions": [
     {
       "title": "Run Lightpanda/CDP validation smoke",
@@ -258,6 +258,36 @@
       "note": "live_truth_guard script prevents historical ratios and taxonomy target claims from becoming live truth.",
       "status": "success",
       "kind": "verify"
+    },
+    {
+      "status": "success",
+      "title": "P28 release performance smoke mitigation",
+      "note": "Release smoke now polls readiness, can clean existing instances, and records process breakdown.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P29 fingerprint observed audit expansion",
+      "note": "Fingerprint audit now counts fingerprint category signals such as WebGL and font/text metrics.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P30 behavior graph contract",
+      "note": "Behavior audit now exposes workflow graph nodes/edges and replay evidence statuses.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P31 provider manager gate",
+      "note": "Provider manager/CDP contract gate added without real provider calls.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P32 profile browser comparison gate",
+      "note": "Comparison gate reports whether desktop WebView and profile-browser evidence are both present.",
+      "kind": "feature"
     }
   ],
   "blocked_reason": "",

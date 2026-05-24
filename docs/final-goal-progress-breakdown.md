@@ -29,7 +29,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - Validation Board 已有 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history、profile-level export、P6 evidence metadata 和 P7 fingerprint observation audit；P5 已通过 WSL2 Lightpanda/CDP repeatable smoke，但 report 里的 WebRTC/audio warning 和 canvas failure 仍必须保留
 - 当前行为运行时只支持 `13` 个真实原语
 - `450` 指纹信号 taxonomy seed 和 `450` 事件 taxonomy seed 已落地；full observed coverage、full replay runtime、更强真实感、AdsPower 边界追赶仍是未来工作
-- P14 新增 release performance、external distribution、provider preflight、SessionBundle portability、taxonomy audit 的可重复 evidence 入口；release performance 当前为 warning：`9301ms / 411MB / 14 processes`
+- P14 新增 release performance、external distribution、provider preflight、SessionBundle portability、taxonomy audit 的可重复 evidence 入口；release performance 当前为 warning：`2785ms / 374MB / 8 processes`
 - 外部浏览器研究已完成，但集成计划仍是计划，尚未转化为运行时深度
 
 ## 已闭环的 7% 是什么
