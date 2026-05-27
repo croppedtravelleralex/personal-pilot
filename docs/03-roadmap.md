@@ -50,7 +50,7 @@
 
 2. Fingerprint runtime depth
    - 已从 `80` declared controls 和 `12` runtime projected fields 推进到 `26` runtime projected fields（`25` control-supported + derived `platform`）。
-   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；下一步继续加深真实采集，不把 taxonomy seed 或 projected/applied fields 报成 observed signals。
+   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；2026-05-28 已新增 Go 端环境注入编译器和 `Page.addScriptToEvaluateOnNewDocument` CDP 入口，覆盖 browser API/canvas/timezone/WebGL/media devices 基础 hook；下一步继续加深真实采集，不把 taxonomy seed 或 projected/applied fields 报成 observed signals。
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration
@@ -61,6 +61,7 @@
 4. Behavior and automation depth
    - 已新增 P10 behavior audit contract：`13` shipped primitives、`8` page archetypes、workflow graph、debug trace、manual gate、recovery semantics、`450+` target-only 边界可在 Automation surface 查看。
    - P14 已新增 `docs/taxonomy/behavior-event-taxonomy.json` 和 Automation taxonomy seed 可见性。
+   - 2026-05-28 已落地 Phase 2 P0 的 Go humanize 基础模型：Fitts Law 轨迹、粉噪、四段式点击、双击、拖拽和右键菜单计划，并以 Go 单测覆盖。
    - 下一步才是把 taxonomy seed 扩展为真实 replayable `450+` event runtime。
    - CAPTCHA/SMS/Email 已有 production readiness contract、acceptance checklist 和 Settings operator surface；下一步是真实 manager wiring、CDP detect/fill 和 provider acceptance。
 

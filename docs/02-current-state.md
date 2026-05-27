@@ -1,6 +1,6 @@
 # Current State
 
-Updated: 2026-05-27 (Asia/Shanghai)
+Updated: 2026-05-28 (Asia/Shanghai)
 
 ## 当前 live truth
 
@@ -77,6 +77,8 @@ Updated: 2026-05-27 (Asia/Shanghai)
 - P21 已新增 runtime adapter evidence gate：release contract 现在暴露 adapter capability/evidence requirements/process lifecycle/CDP attach 状态；scripts/runtime_adapter_evidence_gate.ps1 可生成 runtime-adapter report，并把 AdsPower refresh 保持为 deferred_by_evidence_gate，直到 B1-B5 证据齐全。
 - P22-P27 已执行新一轮 6 批本机推进：release smoke contract 读取最新实测 report；Settings Import/Export 显示最新 SessionBundle portability report；Validation desktop WebView 新增 WebGL 与 font/text metrics observed probes；fingerprint taxonomy 全 family 补 collector/layer/adapter/failure/repeatability/schema 元数据；behavior taxonomy 全 family 补 replay/audit/failure/recovery 定义；新增 `scripts/live_truth_guard.ps1` 防止 live-truth 口径回退。
 - P28-P33 已按本机优先继续推进：release performance smoke 支持 ready 轮询、进程树分解和旧实例清理；fingerprint audit 统计 desktop WebView `fingerprint` observed category；behavior audit contract 暴露 workflow graph/replay debugger/deterministic evidence 状态；新增 provider manager wiring gate 和 profile-browser comparison gate，外部/人工实测继续排到最后。
+- 2026-05-28 按 `docs/99-implementation-roadmap.md` 启动全量路线图首批实现：新增 `backend/internal/behavior/environment_injector.go`，可把 profile 环境参数编译为单次 `Page.addScriptToEvaluateOnNewDocument` 注入脚本，并协调 `Accept-Language` header；已覆盖 `navigator.webdriver/languages/platform/vendor/userAgent/hardwareConcurrency/deviceMemory`、plugins/mimeTypes、canvas `toDataURL/getImageData/fillText`、timezone/locale、WebGL vendor/renderer 和 media devices 基础 hook。该切片仍是注入编译与 CDP 调用入口，不等同于完整 450 observed proof。
+- 2026-05-28 已增强 Go behavior humanize 轨迹基础：新增 Fitts Law movement time、三段式 ease path、8-12Hz 等价粉噪、四段式点击、双击间隔/微移、拖拽和右键菜单计划；`go test ./backend/internal/behavior ./backend/internal/behavior/humanize` passed。它推进 Phase 2 P0 基础模型，但还未把所有 P1/P2 typing/scroll/lifecycle/workflow 事项闭环。
 - P34 修复 Launch API/key 与旧二进制产物问题：Go config loader 会展开 `${ENV}`；但 2026-05-25 用户已明确废弃多 exe 兼容入口路线，只保留 `personal-pilot-tauri.exe` 为主线，其余 exe 需剔除或退出主线。
 - 2026-05-24 已生成 API surface smoke report：`data/reports/api-surface/api-surface-smoke-1779621749594.json`，结果 `passed`，覆盖 health/profiles/cores/proxy/list/groups/behavior/recording/logs/manual/subscribe 等只读或低风险端点。
 - 2026-05-24 曾重跑并重建 root entry：`PersonaPilot.exe` 已从 Tauri/Vite UI 重新构建；该路线现在已被用户明确排除，并已在 2026-05-26 清理出根目录。
@@ -102,9 +104,9 @@ Updated: 2026-05-27 (Asia/Shanghai)
 
 - Validation Board 已有前端 MVP，并已接入 DNS/transport 首批 observed native collector、desktop WebView scoped WebRTC/canvas/audio/storage browser probes、profile browser runtime `validation_probe` action、本地 JSON report、history list、profile-level evidence export、P5 smoke 脚本、P6 explicit evidence metadata 和 P7 fingerprint observation audit。WebRTC/audio capability warning、canvas `toDataURL` missing 等真实失败/警告原因必须保留在 report 中。
 - CAPTCHA/SMS/Email 仍是 handler/route 与服务代码边界部分落地；P9 已有 production readiness checklist 和 Settings operator surface；P14 已新增 `scripts/provider_acceptance_preflight.ps1`，P19 已升级为 v2 blockers/failureReason report 并接入 Settings latest report path；尚未完成真实 provider 验收、manager wiring 和自动化闭环。
-- runtime materialization depth 已从 `12` 扩到 `26` projected fields；P7 已有 observed audit summary，但仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
+- runtime materialization depth 已从 `12` 扩到 `26` projected fields；2026-05-28 新增环境注入编译器可生成 browser API / canvas / timezone / WebGL / media devices 基础 hook，但尚未接入完整 profile-browser observed proof；仍不能把 `80` declared controls 或 `450+` target signals 报成已 observed。
 - `450+` fingerprint signal taxonomy 已有 machine-readable seed：`docs/taxonomy/fingerprint-signal-taxonomy.json`，并可用 `scripts/taxonomy_audit.ps1` 校验计数；full observation coverage 未落地。
-- `450+` event taxonomy 已有 machine-readable seed：`docs/taxonomy/behavior-event-taxonomy.json`，Automation behavior audit 可显示 taxonomy seed 状态；完整 replay runtime 未交付。
+- `450+` event taxonomy 已有 machine-readable seed：`docs/taxonomy/behavior-event-taxonomy.json`，Automation behavior audit 可显示 taxonomy seed 状态；2026-05-28 已补 P0 鼠标轨迹/点击/拖拽/右键计划模型，完整 replay runtime 未交付。
 - `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；P14 已新增 `scripts/session_bundle_portability_smoke.ps1` 记录本机 contract 和跨机器 manual steps，P20 已升级为 v2 gateResults/failureReason；跨机器 profile portability 仍需真实第二环境验收。
 - headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前已有 adapter/release measurement contract、Overview 可见性、P12 AdsPower refresh guard 和 P21 runtime adapter evidence gate，不是 headed runtime 实现，也不是 AdsPower 评分上调。
 - external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。2026-05-27 已在 `docs/18-external-browser-integration-plan.md` 固化并深化 Camoufox `90` 分方案：定位为可选单任务生产级 Runner，覆盖配置、检测、执行、取消、清理、artifact、基础 profile/proxy 映射和 release smoke；性能策略为默认按任务启动、不常驻、不预热、并发默认 `1`、artifact 按需、capability 缓存、release idle 与 task-run 指标分开记账；不包含 remote server、browser pool、自动安装、高级 trust score 或深度指纹拟真。当前代码已出现 Camoufox skeleton 和设置/能力检测合同，但 runner 仍显式 `runner_not_implemented`、`browser_launch_attempted=false`，所以只能写成 contract-ready，不能写成 runtime-ready。E 切片新增 `scripts/camoufox_smoke.ps1` 作为非破坏性验证入口，当前预期状态为 `contract_ready_runtime_smoke_required`。
@@ -115,5 +117,5 @@ Updated: 2026-05-27 (Asia/Shanghai)
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
 1. 交由用户验收 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe` 当前构建外观。
 2. 验收时重点看 Dashboard / 实例列表 / 代理池 / 内核管理是否显示当前真实 `4/93/3` 数据，且功能按钮仍通过 core bridge 工作；历史 `95` 代理数只能作为 2026-05-25 当时快照，不再写成当前数据。
-3. 下一轮继续推进统一服务边界，重点处理 `src/modules/synchronizer/api.ts` 的 typed facade，以及 browser 模块内动态 `desktopRpc(property, args)` 的进一步显式化。
-4. 下一轮继续做深度细节测试：重点检查主线 UI 按钮、Wails 兼容 API 等价链路、Settings/runtime 操作、事件监控 history 页面和 report/history 页面。
+3. 下一轮继续执行 `docs/99-implementation-roadmap.md`：优先补 Phase 1 P1/P2 WebGL/audio/fonts/media/WebRTC 与 consistency matrix，随后推进 Phase 2 typing/scroll P1，不要跳到 browser pool 或 workflow。
+4. 继续推进统一服务边界，重点处理 `src/modules/synchronizer/api.ts` 的 typed facade，以及 browser 模块内动态 `desktopRpc(property, args)` 的进一步显式化。

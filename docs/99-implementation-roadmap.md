@@ -11,25 +11,25 @@
 
 ### P0
 
-- [ ] **1.1** `backend/internal/behavior/environment_injector.go`
-  - [ ] JS 脚本模板引擎（参数→JS 片段编译）
-  - [ ] 批量脚本生成（单次 CDP 注入）
-  - [ ] CDP `Page.addScriptToEvaluateOnNewDocument` 集成
-- [ ] **1.2** `browser_api_surface` 族注入 (44 个参数)
-  - [ ] `navigator.webdriver` → `undefined`
-  - [ ] `navigator.plugins` → 原生 Chrome 插件列表
-  - [ ] `navigator.mimeTypes` → 匹配 plugins
-  - [ ] `navigator.languages` → 从 Profile 读取
-  - [ ] `navigator.platform` / `vendor` / `userAgent` 一致性链
-  - [ ] `navigator.hardwareConcurrency` / `deviceMemory` → 配置值
-- [ ] **1.3** `canvas_rendering` 族注入 (38 个参数)
-  - [ ] `toDataURL()` hook + 亚像素噪声（基于 profile seed）
-  - [ ] `getImageData()` 返回值偏移
-  - [ ] `fillText()` 字形扰动
-- [ ] **1.4** `timezone_locale` 族注入 (34 个参数)
-  - [ ] `Intl.DateTimeFormat().resolvedOptions()` 注入
-  - [ ] `Date.getTimezoneOffset()` 偏差注入
-  - [ ] `Accept-Language` header 一致性协调
+- [x] **1.1** `backend/internal/behavior/environment_injector.go`
+  - [x] JS 脚本模板引擎（参数→JS 片段编译）
+  - [x] 批量脚本生成（单次 CDP 注入）
+  - [x] CDP `Page.addScriptToEvaluateOnNewDocument` 集成
+- [~] **1.2** `browser_api_surface` 族注入 (44 个参数)
+  - [x] `navigator.webdriver` → `undefined`
+  - [x] `navigator.plugins` → profile 插件列表
+  - [x] `navigator.mimeTypes` → 匹配 plugins
+  - [x] `navigator.languages` → 从 Profile 读取
+  - [x] `navigator.platform` / `vendor` / `userAgent` 一致性链
+  - [x] `navigator.hardwareConcurrency` / `deviceMemory` → 配置值
+- [~] **1.3** `canvas_rendering` 族注入 (38 个参数)
+  - [x] `toDataURL()` hook + 亚像素噪声（基于 profile seed）
+  - [x] `getImageData()` 返回值偏移
+  - [x] `fillText()` 字形扰动
+- [~] **1.4** `timezone_locale` 族注入 (34 个参数)
+  - [x] `Intl.DateTimeFormat().resolvedOptions()` 注入
+  - [x] `Date.getTimezoneOffset()` 偏差注入
+  - [x] `Accept-Language` header 一致性协调
 
 ### P1
 
@@ -68,20 +68,20 @@
 
 ### P0
 
-- [ ] **2.1** `backend/internal/behavior/humanize/trajectory_fitts.go`
-  - [ ] Fitts' Law 速度模型: `MT = a + b·log₂(D/W+1)`
-  - [ ] 三段式路径: 加速段/匀速段/减速段
-- [ ] **2.2** `backend/internal/behavior/humanize/trajectory_noise.go`
-  - [ ] 1/f 粉噪声发生器（Voss-McCartney 算法，8-12Hz）
-  - [ ] 噪声叠加到现有 Bezier 轨迹
-- [ ] **2.3** `backend/internal/behavior/humanize/trajectory_click.go`
-  - [ ] 四段式点击: 预压(20ms) → 触峰 → 后压(50ms) → 释放
-- [ ] **2.4** `backend/internal/behavior/humanize/trajectory_doubleclick.go`
-  - [ ] N(300ms, 50ms) 双键间隔，首击后微移 <5px
-- [ ] **2.5** `backend/internal/behavior/humanize/trajectory_drag.go`
-  - [ ] 拖拽模型: 按下→慢移→微停→继续→松开
-- [ ] **2.6** `backend/internal/behavior/humanize/trajectory_context.go`
-  - [ ] 右键菜单: Hover→pause→contextMenu event
+- [x] **2.1** `backend/internal/behavior/humanize/trajectory_fitts.go`
+  - [x] Fitts' Law 速度模型: `MT = a + b·log₂(D/W+1)`
+  - [x] 三段式路径: 加速段/匀速段/减速段
+- [x] **2.2** `backend/internal/behavior/humanize/trajectory_noise.go`
+  - [x] 1/f 粉噪声发生器（8-12Hz 等价 octaves）
+  - [x] 噪声叠加到 Fitts 轨迹
+- [x] **2.3** `backend/internal/behavior/humanize/trajectory_click.go`
+  - [x] 四段式点击: 预压(20ms) → 触峰 → 后压(50ms) → 释放
+- [x] **2.4** `backend/internal/behavior/humanize/trajectory_doubleclick.go`
+  - [x] N(300ms, 50ms) 双键间隔，首击后微移 <5px
+- [x] **2.5** `backend/internal/behavior/humanize/trajectory_drag.go`
+  - [x] 拖拽模型: 按下→慢移→微停→继续→松开
+- [x] **2.6** `backend/internal/behavior/humanize/trajectory_context.go`
+  - [x] 右键菜单: Hover→pause→contextMenu event
 
 ### P1
 
