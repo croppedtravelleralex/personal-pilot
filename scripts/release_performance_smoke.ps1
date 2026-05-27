@@ -20,8 +20,7 @@ function Resolve-ReleaseExe([string]$ProjectRoot, [string]$RequestedPath) {
 
   $candidates = @(
     (Join-Path $ProjectRoot "src-tauri\target\release\personal-pilot-tauri.exe"),
-    (Join-Path $ProjectRoot "src-tauri\target\release\persona-pilot-desktop.exe"),
-    (Join-Path $ProjectRoot "src-tauri\target\release\PersonaPilot.exe")
+    (Join-Path $ProjectRoot "personal-pilot-tauri.exe")
   )
   foreach ($candidate in $candidates) {
     if (Test-Path $candidate) {
@@ -79,7 +78,7 @@ function Measure-Tree([int]$RootPid) {
 
 function Stop-ExistingInstances([string]$Exe) {
   $exeName = [System.IO.Path]::GetFileNameWithoutExtension($Exe)
-  $candidateNames = @($exeName, "personal-pilot-tauri", "persona-pilot-desktop", "PersonaPilot") |
+  $candidateNames = @($exeName, "personal-pilot-tauri") |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
     Select-Object -Unique
 

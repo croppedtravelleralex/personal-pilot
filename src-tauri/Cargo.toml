@@ -1,6 +1,6 @@
 [package]
-name = "persona-pilot-desktop"
-version = "0.1.0"
+name = "personal-pilot-tauri"
+version = "1.1.0"
 description = "PersonaPilot local Windows desktop"
 authors = ["Codex"]
 edition = "2021"

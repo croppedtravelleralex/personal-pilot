@@ -8,7 +8,8 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 
 ## 可分发资产
 
-- Win11 NSIS installer：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`
+- Win11 主线入口：`personal-pilot-tauri.exe`
+- Win11 NSIS installer：`src-tauri/target/release/bundle/nsis/personal-pilot_1.1.0_x64-setup.exe`
 - 自动化 release gate 已通过：`scripts/windows_local_verify.ps1 -SkipContinuityTest`
 - 基础技术栈符合项目规则：Tauri 2 + Vite + React + TypeScript
 - Native / system capability 统一通过 `src/services/desktop.ts` 暴露
