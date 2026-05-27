@@ -1,5 +1,6 @@
 import ReactDOM from "react-dom/client";
 
+import "../services/tauriWailsBridge";
 import { App } from "./App";
 import "./styles.css";
 
