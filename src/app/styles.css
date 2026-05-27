@@ -61,6 +61,8 @@ textarea {
 
 .shell__main {
   min-width: 0;
+  max-height: 100vh;
+  overflow-y: auto;
   padding: 32px;
 }
 
@@ -138,7 +140,21 @@ textarea {
 
 .nav-rail__items {
   display: grid;
-  gap: 12px;
+  gap: 22px;
+}
+
+.nav-rail__section {
+  display: grid;
+  gap: 10px;
+}
+
+.nav-rail__section-title {
+  padding: 0 4px;
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .nav-rail__item {
@@ -149,6 +165,7 @@ textarea {
   border-radius: var(--radius-md);
   background: transparent;
   color: #122338;
+  text-decoration: none;
   text-align: left;
   cursor: pointer;
   transition:
@@ -456,6 +473,7 @@ textarea {
 }
 
 .badge--succeeded,
+.badge--success,
 .badge--info {
   background: rgba(25, 112, 79, 0.12);
   color: var(--success);
@@ -633,6 +651,10 @@ textarea {
 
 .details-grid__value {
   margin-bottom: 14px !important;
+}
+
+.settings-details__wide {
+  grid-column: 1 / -1;
 }
 
 .details-grid__actions {
@@ -1938,6 +1960,10 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 16px;
+}
+
+.settings-form--spaced {
+  margin-top: 18px;
 }
 
 .settings-form__wide {

@@ -16,6 +16,8 @@ import { useTasksViewModel } from "../tasks/hooks";
 import type {
   AutomationNoticeTone,
   AutomationLaunchOutcome,
+  AutomationRunExplain,
+  AutomationRunExplainItem,
   AutomationRunArtifact,
   AutomationRunDetail,
   AutomationRunTimelineEntry,
@@ -64,8 +66,26 @@ type ReadRunDetailResult = {
   manualGateStatus?: string | null;
   updatedAt?: string | null;
   createdAt?: string | null;
+  updatedAtLabel?: string | null;
+  createdAtLabel?: string | null;
+  taskStatus?: string;
+  runnerKind?: string | null;
+  runAttempt?: number | null;
+  artifactCount?: number;
+  logCount?: number;
+  timelineCount?: number;
   artifacts?: unknown[];
   timeline?: unknown[];
+  summary?: {
+    taskStatus?: string;
+    runStatus?: string;
+    runAttempt?: number | null;
+    runnerKind?: string | null;
+    artifactCount?: number;
+    logCount?: number;
+    timelineCount?: number;
+  };
+  raw?: unknown;
 };
 
 type AutomationDesktopBridge = typeof desktopServices & {
@@ -118,6 +138,205 @@ function formatTimeLabel(value: string | null): string | null {
   }).format(date);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getRecordPath(
+  source: Record<string, unknown> | null,
+  path: string[],
+): unknown {
+  return path.reduce<unknown>((current, key) => {
+    const record = asRecord(current);
+    return record ? record[key] : undefined;
+  }, source);
+}
+
+function getStringPath(
+  source: Record<string, unknown> | null,
+  path: string[],
+): string | null {
+  const value = getRecordPath(source, path);
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function getNumberPath(
+  source: Record<string, unknown> | null,
+  path: string[],
+): number | null {
+  const value = getRecordPath(source, path);
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getBooleanPath(
+  source: Record<string, unknown> | null,
+  path: string[],
+): boolean | null {
+  const value = getRecordPath(source, path);
+  return typeof value === "boolean" ? value : null;
+}
+
+function formatExplainValue(value: string | number | boolean | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return null;
+  }
+
+  return text.length > 160 ? `${text.slice(0, 157)}...` : text;
+}
+
+function makeExplainItem(
+  label: string,
+  value: string | number | boolean | null | undefined,
+): AutomationRunExplainItem | null {
+  const formatted = formatExplainValue(value);
+  return formatted ? { label, value: formatted } : null;
+}
+
+function compactItems(
+  items: Array<AutomationRunExplainItem | null>,
+  limit = 6,
+): AutomationRunExplainItem[] {
+  return items.filter((item): item is AutomationRunExplainItem => Boolean(item)).slice(0, limit);
+}
+
+function getStringArrayPath(
+  source: Record<string, unknown> | null,
+  path: string[],
+): string[] {
+  const value = getRecordPath(source, path);
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function pickFirstString(
+  sources: Array<[Record<string, unknown> | null, string[]]>,
+): string | null {
+  for (const [source, path] of sources) {
+    const value = getStringPath(source, path);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function buildRunExplain(payload: ReadRunDetailResult): AutomationRunExplain {
+  const raw = asRecord(payload.raw);
+  const taskResult = asRecord(getRecordPath(raw, ["taskResult"]));
+  const runResult = asRecord(getRecordPath(raw, ["runResult"]));
+  const result = runResult ?? taskResult ?? raw;
+  const summary = asRecord(payload.summary ?? null);
+  const fingerprintExplain = asRecord(
+    getRecordPath(result, ["fingerprint_runtime_explain"]),
+  );
+  const fingerprintConsistency = asRecord(
+    getRecordPath(fingerprintExplain, ["fingerprint_consistency"]),
+  );
+  const proxyGrowth = asRecord(getRecordPath(result, ["proxy_growth_explain"]));
+  const selectionExplain = asRecord(getRecordPath(result, ["selection_explain"]));
+  const networkPolicy = asRecord(getRecordPath(result, ["network_policy_json"]));
+  const resolvedProxy = asRecord(getRecordPath(networkPolicy, ["resolved_proxy"]));
+  const supportedActions = getStringArrayPath(result, ["supported_actions"]);
+
+  return {
+    engine: compactItems([
+      makeExplainItem(
+        "Engine",
+        pickFirstString([
+          [result, ["runner"]],
+          [result, ["engine"]],
+          [summary, ["runnerKind"]],
+        ]) ?? payload.runnerKind ?? payload.summary?.runnerKind ?? null,
+      ),
+      makeExplainItem(
+        "Mode",
+        pickFirstString([
+          [result, ["runner_mode"]],
+          [result, ["runnerMode"]],
+          [result, ["runtimeAdapter"]],
+        ]),
+      ),
+      makeExplainItem("Stage", getStringPath(result, ["execution_stage"])),
+      makeExplainItem(
+        "Attempt",
+        getNumberPath(result, ["attempt"]) ?? payload.runAttempt ?? payload.summary?.runAttempt ?? null,
+      ),
+      makeExplainItem("Real browser", getBooleanPath(result, ["real_browser_execution"])),
+      makeExplainItem("Launch attempted", getBooleanPath(result, ["browser_launch_attempted"])),
+    ]),
+    capability: compactItems([
+      makeExplainItem(
+        "Supported actions",
+        supportedActions.length > 0 ? supportedActions.slice(0, 8).join(", ") : null,
+      ),
+      makeExplainItem("Artifacts linked", payload.artifactCount ?? payload.summary?.artifactCount ?? null),
+      makeExplainItem("Logs indexed", payload.logCount ?? payload.summary?.logCount ?? null),
+      makeExplainItem("Timeline entries", payload.timelineCount ?? payload.summary?.timelineCount ?? null),
+      makeExplainItem("Error kind", getStringPath(result, ["error_kind"])),
+      makeExplainItem("Failure scope", getStringPath(result, ["failure_scope"])),
+    ]),
+    profile: compactItems([
+      makeExplainItem(
+        "Fingerprint profile",
+        pickFirstString([
+          [result, ["fingerprint_profile_id"]],
+          [result, ["fingerprintProfileId"]],
+          [result, ["fingerprint_profile", "id"]],
+        ]),
+      ),
+      makeExplainItem(
+        "Behavior profile",
+        pickFirstString([
+          [result, ["behavior_profile_id"]],
+          [result, ["behaviorProfileId"]],
+        ]),
+      ),
+      makeExplainItem("Fingerprint source", getStringPath(fingerprintExplain, ["source"])),
+      makeExplainItem("Consumption", getStringPath(fingerprintExplain, ["consumption_status"])),
+      makeExplainItem("Budget", getStringPath(fingerprintExplain, ["fingerprint_budget_tag"])),
+      makeExplainItem("Consistency", getStringPath(fingerprintConsistency, ["overall_status"])),
+    ]),
+    proxy: compactItems([
+      makeExplainItem(
+        "Proxy",
+        pickFirstString([
+          [result, ["proxy_id"]],
+          [result, ["proxyId"]],
+          [resolvedProxy, ["id"]],
+        ]),
+      ),
+      makeExplainItem(
+        "Resolution",
+        pickFirstString([
+          [networkPolicy, ["proxy_resolution_status"]],
+          [selectionExplain, ["proxy_resolution_status"]],
+        ]),
+      ),
+      makeExplainItem("Provider", getStringPath(resolvedProxy, ["provider"])),
+      makeExplainItem(
+        "Region",
+        getStringPath(resolvedProxy, ["region"]) ??
+          getStringPath(proxyGrowth, ["selected_proxy_region"]),
+      ),
+      makeExplainItem("Trust score", getNumberPath(resolvedProxy, ["score"])),
+      makeExplainItem(
+        "Pool health",
+        getStringPath(proxyGrowth, ["health_assessment", "status"]) ??
+          getStringPath(proxyGrowth, ["region_match", "reason"]),
+      ),
+    ]),
+  };
+}
+
 function normalizeArtifact(item: unknown, index: number): AutomationRunArtifact {
   const value = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
   const id = typeof value.id === "string" ? value.id : `artifact-${index + 1}`;
@@ -133,6 +352,7 @@ function normalizeArtifact(item: unknown, index: number): AutomationRunArtifact 
     label,
     path: typeof value.path === "string" ? value.path : null,
     status: typeof value.status === "string" ? value.status : null,
+    createdAtLabel: formatTimeLabel(typeof value.createdAt === "string" ? value.createdAt : null),
   };
 }
 
@@ -225,6 +445,7 @@ function normalizeRunDetail(payload: ReadRunDetailResult): AutomationRunDetail {
     : [];
   const headline =
     payload.title ??
+    payload.headline ??
     (payload.manualGateRequestId
       ? "Manual gate is holding this run."
       : `Run ${status}`);
@@ -238,11 +459,12 @@ function normalizeRunDetail(payload: ReadRunDetailResult): AutomationRunDetail {
     failureReason: payload.failureReason ?? null,
     manualGateRequestId: payload.manualGateRequestId ?? null,
     manualGateStatus: payload.manualGateStatus ?? null,
-    updatedAtLabel: formatTimeLabel(payload.updatedAt ?? null),
-    createdAtLabel: formatTimeLabel(payload.createdAt ?? null),
+    updatedAtLabel: payload.updatedAtLabel ?? formatTimeLabel(payload.updatedAt ?? null),
+    createdAtLabel: payload.createdAtLabel ?? formatTimeLabel(payload.createdAt ?? null),
     artifacts,
     timeline,
-    raw: payload,
+    explain: buildRunExplain(payload),
+    raw: null,
   };
 }
 

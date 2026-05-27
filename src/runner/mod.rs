@@ -1,3 +1,4 @@
+pub mod camoufox;
 pub mod engine;
 pub mod fake;
 pub mod lightpanda;
@@ -18,6 +19,7 @@ pub use types::{
 #[derive(Debug, Clone, Copy)]
 pub enum RunnerKind {
     Fake,
+    Camoufox,
     Lightpanda,
 }
 
@@ -29,6 +31,7 @@ impl RunnerKind {
             .to_ascii_lowercase()
             .as_str()
         {
+            "camoufox" => RunnerKind::Camoufox,
             "lightpanda" => RunnerKind::Lightpanda,
             _ => RunnerKind::Fake,
         }

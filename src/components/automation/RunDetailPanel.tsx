@@ -3,6 +3,7 @@ import { Panel } from "../Panel";
 import type {
   AutomationContractGap,
   AutomationNoticeTone,
+  AutomationRunExplain,
   AutomationRunDetail,
   PreparedLaunchPlan,
 } from "../../features/automation/model";
@@ -92,6 +93,43 @@ function formatManualGateStatus(status: string | null | undefined): string {
   return status ? formatStatusLabel(status) : "CLEAR";
 }
 
+function hasExplainItems(explain: AutomationRunExplain | null | undefined): boolean {
+  return Boolean(
+    explain &&
+      (explain.engine.length > 0 ||
+        explain.capability.length > 0 ||
+        explain.profile.length > 0 ||
+        explain.proxy.length > 0),
+  );
+}
+
+const EXPLAIN_GROUPS: Array<{
+  key: keyof AutomationRunExplain;
+  label: string;
+  fallback: string;
+}> = [
+  {
+    key: "engine",
+    label: "Engine explain",
+    fallback: "Engine did not return a lightweight explain summary.",
+  },
+  {
+    key: "capability",
+    label: "Capability explain",
+    fallback: "Capability fields were not returned for this run.",
+  },
+  {
+    key: "profile",
+    label: "Profile explain",
+    fallback: "Profile/fingerprint explain fields are not present on this run.",
+  },
+  {
+    key: "proxy",
+    label: "Proxy explain",
+    fallback: "Proxy selection explain fields are not present on this run.",
+  },
+];
+
 export function RunDetailPanel({
   selectedRun,
   selectedTemplate,
@@ -129,6 +167,7 @@ export function RunDetailPanel({
       : null);
   const detailStatus = runDetail?.status ?? selectedRun?.status ?? "idle";
   const selectedTimelinePreview = recorderSnapshot?.steps.slice(0, 4) ?? [];
+  const explainAvailable = hasExplainItems(runDetail?.explain);
   const truthBoundaryCards = [
     {
       label: "Run detail source",
@@ -140,8 +179,14 @@ export function RunDetailPanel({
       label: "Artifacts",
       detail:
         (runDetail?.artifacts.length ?? 0) > 0
-          ? "Artifacts shown below come from the current run detail payload."
-          : "Only returned artifacts, final URL, and content preview are shown. No hidden vendor artifact registry is implied.",
+          ? "Artifacts shown below are existing run artifact references from the desktop read path."
+          : "Only returned artifact references, final URL, and content preview are shown. No hidden vendor artifact registry is implied.",
+    },
+    {
+      label: "Explain payload",
+      detail: explainAvailable
+        ? "Engine, capability, profile, and proxy explain fields are normalized into short UI summaries; large raw runner payloads are not kept here."
+        : "No lightweight explain fields were returned for this run yet.",
     },
     {
       label: "Operator decisions",
@@ -277,6 +322,35 @@ export function RunDetailPanel({
             detail="Select a run on the board to populate runtime detail, action controls, and launch alignment."
           />
         )}
+
+        {runDetail && explainAvailable ? (
+          <div className="details-grid details-grid--two">
+            {EXPLAIN_GROUPS.map((group) => {
+              const items = runDetail.explain[group.key];
+
+              return (
+                <article className="contract-card" key={group.key}>
+                  <div className="contract-card__top">
+                    <strong>{group.label}</strong>
+                    <span className="badge badge--info">lightweight</span>
+                  </div>
+                  {items.length > 0 ? (
+                    <div className="details-grid details-grid--two">
+                      {items.map((item) => (
+                        <article className="details-grid__item" key={`${group.key}-${item.label}`}>
+                          <dt>{item.label}</dt>
+                          <dd>{item.value}</dd>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>{group.fallback}</p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
 
         <div className="details-grid details-grid--two">
           <article className="details-grid__item">
@@ -443,7 +517,7 @@ export function RunDetailPanel({
                 <p className="record-card__content">{artifact.path ?? "Artifact path not returned."}</p>
                 <div className="record-card__footer">
                   <span>{artifact.id}</span>
-                  <span>Run artifact</span>
+                  <span>{artifact.createdAtLabel ?? "Run artifact"}</span>
                 </div>
               </article>
             ))}

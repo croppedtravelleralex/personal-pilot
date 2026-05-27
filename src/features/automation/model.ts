@@ -80,6 +80,7 @@ export interface AutomationRunArtifact {
   label: string;
   path: string | null;
   status: string | null;
+  createdAtLabel: string | null;
 }
 
 export interface AutomationRunTimelineEntry {
@@ -88,6 +89,18 @@ export interface AutomationRunTimelineEntry {
   status: string;
   detail: string | null;
   createdAt: string | null;
+}
+
+export interface AutomationRunExplainItem {
+  label: string;
+  value: string;
+}
+
+export interface AutomationRunExplain {
+  engine: AutomationRunExplainItem[];
+  capability: AutomationRunExplainItem[];
+  profile: AutomationRunExplainItem[];
+  proxy: AutomationRunExplainItem[];
 }
 
 export interface AutomationRunDetail {
@@ -103,6 +116,7 @@ export interface AutomationRunDetail {
   createdAtLabel: string | null;
   artifacts: AutomationRunArtifact[];
   timeline: AutomationRunTimelineEntry[];
+  explain: AutomationRunExplain;
   raw: unknown;
 }
 

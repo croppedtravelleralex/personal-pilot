@@ -65,6 +65,7 @@ const PACKAGED_DIRECTORY_ITEMS: Array<{
 const RUNNER_KIND_OPTIONS = [
   { value: "fake", label: "Fake" },
   { value: "lightpanda", label: "Lightpanda" },
+  { value: "camoufox", label: "Camoufox" },
 ];
 
 const LOCAL_API_START_MODE_OPTIONS = [
@@ -125,6 +126,12 @@ function getProviderBadgeTone(status: string): "success" | "warning" | "failed" 
   return "failed";
 }
 
+function getCamoufoxCapabilityTone(status: string | null): "success" | "warning" | "failed" {
+  if (status === "available") return "success";
+  if (status === "blocked") return "failed";
+  return "warning";
+}
+
 function renderBooleanSelect(
   value: string,
   onChange: (nextValue: string) => void,
@@ -151,6 +158,7 @@ export function SettingsPage() {
     runtimeIsDirty,
     localApiIsDirty,
     browserEnvironmentIsDirty,
+    camoufoxIsDirty,
     actions,
   } = useSettingsViewModel();
   const runtime = useRuntimeViewModel();
@@ -161,6 +169,8 @@ export function SettingsPage() {
   const importExportSkeleton = state.importExportSkeleton;
   const providerProductionReadiness = state.providerProductionReadiness;
   const latestPortabilityReport = state.latestPortabilityReport;
+  const camoufoxSnapshot = state.camoufoxSnapshot;
+  const camoufoxCapability = state.camoufoxCapability;
   const runtimeSnapshot = runtime.state.snapshot;
   const readyAssetCount =
     assetWorkspace?.entries.filter((entry) => entry.status === "ready").length ?? 0;
@@ -195,7 +205,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="automation-metric-strip automation-metric-strip--compact">
+      <div className="automation-metric-strip">
         <article className="automation-metric-strip__item">
           <span className="automation-metric-strip__label">Runtime policy</span>
           <strong>{snapshot ? formatRunnerLabel(snapshot.runnerKind) : "Pending"}</strong>
@@ -225,6 +235,15 @@ export function SettingsPage() {
             {assetWorkspace
               ? "Ready vs provision-on-demand entries inside the local asset workspace"
               : "Asset workspace snapshot not loaded yet"}
+          </small>
+        </article>
+        <article className="automation-metric-strip__item">
+          <span className="automation-metric-strip__label">Camoufox</span>
+          <strong>{camoufoxSnapshot?.settings.enabled ? "Enabled" : "Disabled"}</strong>
+          <small>
+            {camoufoxCapability
+              ? `${formatStatusLabel(camoufoxCapability.status)} / ${camoufoxCapability.code}`
+              : "Capability is checked manually"}
           </small>
         </article>
       </div>
@@ -777,6 +796,170 @@ export function SettingsPage() {
               <span className="field__hint">
                 This policy stays local and deliberately frames future profile bootstrap,
                 extensions, bookmarks, and recorder/compiler attach points.
+              </span>
+            </label>
+          </div>
+        </Panel>
+
+        <Panel
+          title="Camoufox Runner"
+          subtitle="Optional local runner configuration and explicit capability check without background polling"
+          actions={
+            <div className="inline-actions">
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => actions.resetCamoufoxDraft()}
+              >
+                Reset Camoufox draft
+              </button>
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => void actions.checkCamoufoxCapability()}
+                disabled={state.isCheckingCamoufoxCapability}
+              >
+                {state.isCheckingCamoufoxCapability ? "Checking..." : "Check capability"}
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={() => void actions.applyCamoufoxDraft()}
+                disabled={!camoufoxIsDirty || state.pendingAction !== null}
+              >
+                {state.pendingAction === "applyCamoufox" ? "Applying..." : "Apply Camoufox"}
+              </button>
+            </div>
+          }
+        >
+          {camoufoxSnapshot ? (
+            <div className="details-grid details-grid--two">
+              <div className="details-grid__item">
+                <dt>Settings path</dt>
+                <dd>{camoufoxSnapshot.settingsPath}</dd>
+              </div>
+              <div className="details-grid__item">
+                <dt>Updated</dt>
+                <dd>{formatRelativeTimestamp(camoufoxSnapshot.settings.updatedAt)}</dd>
+              </div>
+              <div className="details-grid__item">
+                <dt>Capability</dt>
+                <dd>
+                  <span
+                    className={`badge badge--${getCamoufoxCapabilityTone(
+                      camoufoxCapability?.status ?? null,
+                    )}`}
+                  >
+                    {camoufoxCapability
+                      ? formatStatusLabel(camoufoxCapability.status)
+                      : "Not checked"}
+                  </span>
+                </dd>
+              </div>
+              <div className="details-grid__item">
+                <dt>Checked</dt>
+                <dd>
+                  {camoufoxCapability
+                    ? formatRelativeTimestamp(camoufoxCapability.checkedAt)
+                    : "Manual check pending"}
+                </dd>
+              </div>
+              <div className="details-grid__item settings-details__wide">
+                <dt>Capability detail</dt>
+                <dd>
+                  {camoufoxCapability
+                    ? `${camoufoxCapability.code}: ${camoufoxCapability.detail}`
+                    : "Use Check capability after editing the executable path."}
+                </dd>
+              </div>
+            </div>
+          ) : (
+            <EmptyState
+              title="Camoufox settings unavailable"
+              detail="Refresh to load the local Camoufox settings snapshot."
+            />
+          )}
+
+          <div className="settings-form settings-form--spaced">
+            <label className="field">
+              <span className="field__label">Enabled</span>
+              {renderBooleanSelect(state.camoufoxDraft.enabled, (nextValue) =>
+                actions.updateCamoufoxDraftField("enabled", nextValue),
+              )}
+            </label>
+
+            <label className="field">
+              <span className="field__label">Headless</span>
+              {renderBooleanSelect(state.camoufoxDraft.headless, (nextValue) =>
+                actions.updateCamoufoxDraftField("headless", nextValue),
+              )}
+            </label>
+
+            <label className="field settings-form__wide">
+              <span className="field__label">Python path</span>
+              <input
+                className="field__input"
+                type="text"
+                value={state.camoufoxDraft.pythonPath}
+                placeholder="Optional python.exe path"
+                onChange={(event) =>
+                  actions.updateCamoufoxDraftField("pythonPath", event.target.value)
+                }
+              />
+            </label>
+
+            <label className="field settings-form__wide">
+              <span className="field__label">Executable path</span>
+              <input
+                className="field__input"
+                type="text"
+                value={state.camoufoxDraft.executablePath}
+                placeholder="Path to Camoufox executable"
+                onChange={(event) =>
+                  actions.updateCamoufoxDraftField("executablePath", event.target.value)
+                }
+              />
+            </label>
+
+            <label className="field settings-form__wide">
+              <span className="field__label">Profile root</span>
+              <input
+                className="field__input"
+                type="text"
+                value={state.camoufoxDraft.profileRoot}
+                placeholder="Optional profile workspace root"
+                onChange={(event) =>
+                  actions.updateCamoufoxDraftField("profileRoot", event.target.value)
+                }
+              />
+            </label>
+
+            <label className="field">
+              <span className="field__label">Timeout (ms)</span>
+              <input
+                className="field__input"
+                type="number"
+                min="0"
+                value={state.camoufoxDraft.timeoutMs}
+                onChange={(event) =>
+                  actions.updateCamoufoxDraftField("timeoutMs", event.target.value)
+                }
+              />
+            </label>
+
+            <label className="field settings-form__wide">
+              <span className="field__label">Extra args</span>
+              <textarea
+                className="field__textarea"
+                value={state.camoufoxDraft.extraArgs}
+                placeholder="One argument per line"
+                onChange={(event) =>
+                  actions.updateCamoufoxDraftField("extraArgs", event.target.value)
+                }
+              />
+              <span className="field__hint">
+                Python path, headless, and timeout are stored as managed Camoufox args until the
+                native schema grows dedicated fields.
               </span>
             </label>
           </div>

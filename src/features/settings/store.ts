@@ -1,10 +1,13 @@
 import {
   applyBrowserEnvironmentPolicy,
+  applyCamoufoxSettings,
   applyLocalApiSettings,
   applyRuntimeSettings,
+  checkCamoufoxCapability,
   openLocalAssetEntry,
   openLocalDirectory,
   readBrowserEnvironmentPolicy,
+  readCamoufoxSettings,
   listEvidenceReports,
   readImportExportSkeleton,
   readLocalApiSnapshot,
@@ -19,6 +22,9 @@ import { createStore } from "../../store/createStore";
 import type {
   DesktopBrowserEnvironmentPolicyDraft as DesktopBrowserEnvironmentPolicyInput,
   DesktopBrowserEnvironmentPolicySnapshot,
+  DesktopCamoufoxCapability,
+  DesktopCamoufoxSettingsDraft as DesktopCamoufoxSettingsInput,
+  DesktopCamoufoxSettingsSnapshot,
   DesktopDirectoryTarget,
   DesktopEvidenceReportSummary,
   DesktopImportExportSkeleton,
@@ -64,13 +70,24 @@ export interface BrowserEnvironmentPolicyDraft {
   headlessAllowed: string;
 }
 
+export interface CamoufoxSettingsDraft {
+  enabled: string;
+  pythonPath: string;
+  executablePath: string;
+  profileRoot: string;
+  headless: string;
+  timeoutMs: string;
+  extraArgs: string;
+}
+
 type SettingsPendingAction =
   | "applyRuntime"
   | "restoreRuntime"
   | "applyLocalApi"
   | "restoreLocalApi"
   | "applyBrowserEnvironment"
-  | "restoreBrowserEnvironment";
+  | "restoreBrowserEnvironment"
+  | "applyCamoufox";
 
 interface SettingsState {
   snapshot: DesktopSettingsSnapshot | null;
@@ -80,14 +97,20 @@ interface SettingsState {
   importExportSkeleton: DesktopImportExportSkeleton | null;
   providerProductionReadiness: DesktopProviderProductionReadiness | null;
   latestPortabilityReport: DesktopEvidenceReportSummary | null;
+  camoufoxSnapshot: DesktopCamoufoxSettingsSnapshot | null;
+  camoufoxCapability: DesktopCamoufoxCapability | null;
   draft: RuntimeSettingsDraft;
   loadedDraft: RuntimeSettingsDraft | null;
   localApiDraft: LocalApiSettingsDraft;
   loadedLocalApiDraft: LocalApiSettingsDraft | null;
   browserEnvironmentDraft: BrowserEnvironmentPolicyDraft;
   loadedBrowserEnvironmentDraft: BrowserEnvironmentPolicyDraft | null;
+  camoufoxDraft: CamoufoxSettingsDraft;
+  loadedCamoufoxDraft: CamoufoxSettingsDraft | null;
   isLoading: boolean;
   refreshRequestId: number;
+  camoufoxCapabilityRequestId: number;
+  isCheckingCamoufoxCapability: boolean;
   error: string | null;
   info: string | null;
   openingTarget: DesktopDirectoryTarget | null;
@@ -141,6 +164,38 @@ function createBrowserEnvironmentDraftFromSnapshot(
   };
 }
 
+function readArgValue(args: string[], key: string): string {
+  const prefix = `${key}=`;
+  return args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length) ?? "";
+}
+
+function readBooleanArgValue(args: string[], key: string, fallback: string): string {
+  const value = readArgValue(args, key).trim().toLowerCase();
+  if (value === "true" || value === "1" || value === "yes" || value === "on") {
+    return "true";
+  }
+  if (value === "false" || value === "0" || value === "no" || value === "off") {
+    return "false";
+  }
+  return fallback;
+}
+
+function createCamoufoxDraftFromSnapshot(
+  snapshot: DesktopCamoufoxSettingsSnapshot,
+): CamoufoxSettingsDraft {
+  const args = snapshot.settings.defaultArgs;
+  const managedPrefixes = ["--python-path=", "--headless=", "--timeout-ms="];
+  return {
+    enabled: String(snapshot.settings.enabled),
+    pythonPath: readArgValue(args, "--python-path"),
+    executablePath: snapshot.settings.executablePath,
+    profileRoot: snapshot.settings.profileRoot,
+    headless: readBooleanArgValue(args, "--headless", "false"),
+    timeoutMs: readArgValue(args, "--timeout-ms") || "30000",
+    extraArgs: args.filter((arg) => !managedPrefixes.some((prefix) => arg.startsWith(prefix))).join("\n"),
+  };
+}
+
 export const DEFAULT_RUNTIME_SETTINGS_DRAFT: RuntimeSettingsDraft = {
   runnerKind: "fake",
   workerCount: "1",
@@ -172,6 +227,16 @@ export const DEFAULT_BROWSER_ENVIRONMENT_POLICY_DRAFT: BrowserEnvironmentPolicyD
   allowBookmarksSeed: "true",
   allowProfileArchiveImport: "true",
   headlessAllowed: "false",
+};
+
+export const DEFAULT_CAMOUFOX_SETTINGS_DRAFT: CamoufoxSettingsDraft = {
+  enabled: "false",
+  pythonPath: "",
+  executablePath: "",
+  profileRoot: "",
+  headless: "false",
+  timeoutMs: "30000",
+  extraArgs: "",
 };
 
 export function areSettingsDraftEqual(
@@ -222,6 +287,21 @@ export function areBrowserEnvironmentPolicyDraftEqual(
   );
 }
 
+export function areCamoufoxSettingsDraftEqual(
+  left: CamoufoxSettingsDraft,
+  right: CamoufoxSettingsDraft,
+): boolean {
+  return (
+    left.enabled === right.enabled &&
+    left.pythonPath === right.pythonPath &&
+    left.executablePath === right.executablePath &&
+    left.profileRoot === right.profileRoot &&
+    left.headless === right.headless &&
+    left.timeoutMs === right.timeoutMs &&
+    left.extraArgs === right.extraArgs
+  );
+}
+
 function shouldReplaceDraft<T>(
   currentDraft: T,
   currentLoadedDraft: T | null,
@@ -238,14 +318,20 @@ export const settingsStore = createStore<SettingsState>({
   importExportSkeleton: null,
   providerProductionReadiness: null,
   latestPortabilityReport: null,
+  camoufoxSnapshot: null,
+  camoufoxCapability: null,
   draft: DEFAULT_RUNTIME_SETTINGS_DRAFT,
   loadedDraft: null,
   localApiDraft: DEFAULT_LOCAL_API_SETTINGS_DRAFT,
   loadedLocalApiDraft: null,
   browserEnvironmentDraft: DEFAULT_BROWSER_ENVIRONMENT_POLICY_DRAFT,
   loadedBrowserEnvironmentDraft: null,
+  camoufoxDraft: DEFAULT_CAMOUFOX_SETTINGS_DRAFT,
+  loadedCamoufoxDraft: null,
   isLoading: false,
   refreshRequestId: 0,
+  camoufoxCapabilityRequestId: 0,
+  isCheckingCamoufoxCapability: false,
   error: null,
   info: null,
   openingTarget: null,
@@ -272,6 +358,7 @@ export const settingsActions = {
         assetWorkspace,
         importExportSkeleton,
         providerProductionReadiness,
+        camoufoxSnapshot,
         evidenceReports,
       ] = await Promise.all([
         readSettings(),
@@ -280,6 +367,7 @@ export const settingsActions = {
         readLocalAssetWorkspace(),
         readImportExportSkeleton(),
         readProviderProductionReadiness(),
+        readCamoufoxSettings(),
         listEvidenceReports(),
       ]);
 
@@ -291,6 +379,7 @@ export const settingsActions = {
       const loadedLocalApiDraft = createLocalApiDraftFromSnapshot(localApiSnapshot);
       const loadedBrowserEnvironmentDraft =
         createBrowserEnvironmentDraftFromSnapshot(browserEnvironmentSnapshot);
+      const loadedCamoufoxDraft = createCamoufoxDraftFromSnapshot(camoufoxSnapshot);
 
       settingsStore.setState((current) => {
         const preservedDrafts: string[] = [];
@@ -315,6 +404,12 @@ export const settingsActions = {
         ) {
           preservedDrafts.push("browser environment");
         }
+        if (
+          current.loadedCamoufoxDraft !== null &&
+          !areCamoufoxSettingsDraftEqual(current.camoufoxDraft, current.loadedCamoufoxDraft)
+        ) {
+          preservedDrafts.push("Camoufox");
+        }
 
         return {
           ...current,
@@ -325,6 +420,7 @@ export const settingsActions = {
           importExportSkeleton,
           providerProductionReadiness,
           latestPortabilityReport: evidenceReports.reports.find((report) => report.kind === "session_portability") ?? null,
+          camoufoxSnapshot,
           draft: shouldReplaceDraft(
             current.draft,
             current.loadedDraft,
@@ -349,6 +445,14 @@ export const settingsActions = {
             ? loadedBrowserEnvironmentDraft
             : current.browserEnvironmentDraft,
           loadedBrowserEnvironmentDraft,
+          camoufoxDraft: shouldReplaceDraft(
+            current.camoufoxDraft,
+            current.loadedCamoufoxDraft,
+            areCamoufoxSettingsDraftEqual,
+          )
+            ? loadedCamoufoxDraft
+            : current.camoufoxDraft,
+          loadedCamoufoxDraft,
           isLoading: false,
           error: null,
           info:
@@ -460,6 +564,22 @@ export const settingsActions = {
     }));
   },
 
+  updateCamoufoxDraftField<Key extends keyof CamoufoxSettingsDraft>(
+    field: Key,
+    value: CamoufoxSettingsDraft[Key],
+  ) {
+    settingsStore.setState((current) => ({
+      ...current,
+      camoufoxDraft: {
+        ...current.camoufoxDraft,
+        [field]: value,
+      },
+      camoufoxCapability:
+        field === "executablePath" ? null : current.camoufoxCapability,
+      info: null,
+    }));
+  },
+
   resetRuntimeDraft() {
     settingsStore.setState((current) => ({
       ...current,
@@ -491,6 +611,17 @@ export const settingsActions = {
     }));
   },
 
+  resetCamoufoxDraft() {
+    settingsStore.setState((current) => ({
+      ...current,
+      camoufoxDraft: current.loadedCamoufoxDraft ?? current.camoufoxDraft,
+      camoufoxCapability: null,
+      info: current.loadedCamoufoxDraft
+        ? "Camoufox draft reset to the latest desktop snapshot."
+        : "No Camoufox snapshot is available yet.",
+    }));
+  },
+
   resetAllDraftsToLoaded() {
     settingsStore.setState((current) => ({
       ...current,
@@ -498,6 +629,8 @@ export const settingsActions = {
       localApiDraft: current.loadedLocalApiDraft ?? current.localApiDraft,
       browserEnvironmentDraft:
         current.loadedBrowserEnvironmentDraft ?? current.browserEnvironmentDraft,
+      camoufoxDraft: current.loadedCamoufoxDraft ?? current.camoufoxDraft,
+      camoufoxCapability: null,
       info: "All local drafts reset to the latest loaded desktop snapshots.",
     }));
   },
@@ -688,6 +821,77 @@ export const settingsActions = {
       }));
     }
   },
+
+  async applyCamoufoxDraft() {
+    settingsStore.setState((current) => ({
+      ...current,
+      pendingAction: "applyCamoufox",
+      error: null,
+      info: null,
+    }));
+
+    try {
+      const draft = toDesktopCamoufoxSettingsDraft(settingsStore.getState().camoufoxDraft);
+      const result = await applyCamoufoxSettings(draft);
+      const nextSnapshot: DesktopCamoufoxSettingsSnapshot = {
+        settingsPath: result.settingsPath,
+        settings: result.settings,
+      };
+      const loadedCamoufoxDraft = createCamoufoxDraftFromSnapshot(nextSnapshot);
+
+      settingsStore.setState((current) => ({
+        ...current,
+        camoufoxSnapshot: nextSnapshot,
+        camoufoxDraft: loadedCamoufoxDraft,
+        loadedCamoufoxDraft,
+        camoufoxCapability: null,
+        pendingAction: null,
+        error: null,
+        info: result.message,
+      }));
+    } catch (error) {
+      settingsStore.setState((current) => ({
+        ...current,
+        pendingAction: null,
+        error: toErrorMessage(error),
+      }));
+    }
+  },
+
+  async checkCamoufoxCapability() {
+    const requestId = settingsStore.getState().camoufoxCapabilityRequestId + 1;
+    const executablePath = settingsStore.getState().camoufoxDraft.executablePath.trim();
+    settingsStore.setState((current) => ({
+      ...current,
+      camoufoxCapabilityRequestId: requestId,
+      isCheckingCamoufoxCapability: true,
+      error: null,
+      info: null,
+    }));
+
+    try {
+      const capability = await checkCamoufoxCapability({ executablePath });
+      if (settingsStore.getState().camoufoxCapabilityRequestId !== requestId) {
+        return;
+      }
+      settingsStore.setState((current) => ({
+        ...current,
+        camoufoxCapability: capability,
+        isCheckingCamoufoxCapability: false,
+        error: null,
+        info: `Camoufox capability check finished: ${capability.code}.`,
+      }));
+    } catch (error) {
+      if (settingsStore.getState().camoufoxCapabilityRequestId !== requestId) {
+        return;
+      }
+      settingsStore.setState((current) => ({
+        ...current,
+        isCheckingCamoufoxCapability: false,
+        error: toErrorMessage(error),
+      }));
+    }
+  },
 };
 
 function parsePositiveInteger(value: string, fieldLabel: string, allowZero = false): number {
@@ -793,5 +997,28 @@ function toDesktopBrowserEnvironmentPolicyDraft(
       "Allow profile archive import",
     ),
     headlessAllowed: parseBooleanValue(draft.headlessAllowed, "Headless allowed"),
+  };
+}
+
+function toDesktopCamoufoxSettingsDraft(
+  draft: CamoufoxSettingsDraft,
+): DesktopCamoufoxSettingsInput {
+  const timeoutMs = parsePositiveInteger(draft.timeoutMs, "Camoufox timeout", true);
+  const extraArgs = draft.extraArgs
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const defaultArgs = [
+    draft.pythonPath.trim() ? `--python-path=${draft.pythonPath.trim()}` : null,
+    `--headless=${parseBooleanValue(draft.headless, "Camoufox headless")}`,
+    `--timeout-ms=${timeoutMs}`,
+    ...extraArgs,
+  ].filter((value): value is string => Boolean(value));
+
+  return {
+    enabled: parseBooleanValue(draft.enabled, "Camoufox enabled"),
+    executablePath: draft.executablePath.trim(),
+    profileRoot: draft.profileRoot.trim(),
+    defaultArgs,
   };
 }

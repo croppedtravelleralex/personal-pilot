@@ -6,6 +6,11 @@ import type {
   DesktopBrowserEnvironmentPolicyMutationResult,
   DesktopBrowserEnvironmentPolicySnapshot,
   DesktopBehaviorAuditContract,
+  DesktopCamoufoxCapability,
+  DesktopCamoufoxCapabilityRequest,
+  DesktopCamoufoxSettingsDraft,
+  DesktopCamoufoxSettingsMutationResult,
+  DesktopCamoufoxSettingsSnapshot,
   DesktopCompileTemplateRunRequest,
   DesktopCompileTemplateRunResult,
   DesktopCreateProfileInput,
@@ -107,7 +112,41 @@ interface DesktopEnvironmentInfo {
 
 interface DesktopCoreStartStatus {
   eventUrl?: string | null;
+  bridgeUrl?: string | null;
+  pid?: number | null;
   [key: string]: unknown;
+}
+
+export interface DesktopDashboardStatsResponse {
+  totalInstances?: number;
+  runningInstances?: number;
+  proxyCount?: number;
+  coreCount?: number;
+  memUsedMB?: number;
+  appVersion?: string;
+}
+
+export interface DesktopLicenseStatusResponse {
+  maxLimit?: number;
+}
+
+export interface DesktopEventLogQueryInput {
+  after: string;
+  before: string;
+  namespace: string;
+  severity: string;
+  eventName: string;
+  limit: number;
+  offset: number;
+}
+
+export interface DesktopEventLogEntry {
+  id: number;
+  eventName: string;
+  namespace: string;
+  severity: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 }
 
 interface TauriEventApi {
@@ -137,6 +176,14 @@ interface TauriWindowApi {
   getCurrentWindow?: () => TauriWindowHandle;
 }
 
+interface WailsRuntimeShim {
+  EventsOn?: <T = unknown>(
+    eventName: string,
+    callback: (payload: T) => void,
+  ) => Unlisten;
+  BrowserOpenURL?: (url: string) => void;
+}
+
 interface TauriGlobal {
   core?: {
     invoke?: DesktopInvoke;
@@ -160,6 +207,7 @@ interface DesktopWindow extends Window {
   __TAURI__?: TauriGlobal;
   __TAURI_IPC__?: (message: IpcMessage) => void;
   __TAURI_INTERNALS__?: unknown;
+  runtime?: WailsRuntimeShim;
 }
 
 const desktopWindow = window as DesktopWindow;
@@ -177,6 +225,7 @@ const rpcNameMap: Record<string, string> = {
 const commandArgNames: Record<string, string[]> = {
   apply_browser_environment_policy: ["draft"],
   apply_broadcast_plan: ["request"],
+  apply_camoufox_settings: ["draft"],
   apply_local_api_settings: ["draft"],
   apply_runtime_settings: ["draft"],
   apply_window_layout: ["layout"],
@@ -184,6 +233,7 @@ const commandArgNames: Record<string, string[]> = {
   cancel_task: ["taskId"],
   change_proxy_ip: ["request"],
   check_profile_proxies: ["request"],
+  check_camoufox_capability: ["request"],
   check_proxy_batch: ["request"],
   compile_template_run: ["request"],
   confirm_manual_gate: ["request"],
@@ -327,13 +377,40 @@ function buildRpcArgs(command: string, args: unknown[]): InvokeArgs {
   return { args };
 }
 
-export function desktopRpc<T = unknown>(
+let coreStartPromise: Promise<DesktopCoreStartStatus> | null = null;
+
+export function hasDesktopRuntime(): boolean {
+  return Boolean(
+    desktopWindow.__TAURI__ ||
+      desktopWindow.__TAURI_IPC__ ||
+      desktopWindow.__TAURI_INTERNALS__,
+  );
+}
+
+export function desktopCoreStart(): Promise<DesktopCoreStartStatus> {
+  if (!coreStartPromise) {
+    coreStartPromise = invokeDesktop<DesktopCoreStartStatus>("start_personal_pilot_core").catch(
+      (error) => {
+        coreStartPromise = null;
+        throw error;
+      },
+    );
+  }
+  return coreStartPromise;
+}
+
+export async function desktopRpc<T = unknown>(
   name: string,
   args: unknown[] = [],
   _options?: { timeoutMs?: number },
 ): Promise<T> {
-  const command = rpcNameMap[name] ?? pascalToSnake(name);
-  return invokeDesktop<T>(command, buildRpcArgs(command, args));
+  await desktopCoreStart();
+  return invokeDesktop<T>("call_personal_pilot_core", {
+    request: {
+      name,
+      args,
+    },
+  });
 }
 
 export function desktopListen<T = unknown>(
@@ -351,6 +428,35 @@ export function desktopListen<T = unknown>(
   }
 
   return listen<T>(eventName, (event) => callback(event.payload));
+}
+
+export function desktopRuntimeListen<T = unknown>(
+  eventName: string,
+  callback: (payload: T) => void,
+): Unlisten {
+  const runtimeUnlisten = desktopWindow.runtime?.EventsOn?.(eventName, callback);
+  if (runtimeUnlisten) {
+    return runtimeUnlisten;
+  }
+
+  let disposed = false;
+  let unlisten: Unlisten | null = null;
+  void desktopListen<T>(eventName, callback)
+    .then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+        return;
+      }
+      unlisten = nextUnlisten;
+    })
+    .catch(() => {
+      // Runtime event subscription is best-effort in non-desktop previews.
+    });
+
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
 }
 
 export function desktopEnvironment(): Promise<DesktopEnvironmentInfo> {
@@ -389,6 +495,16 @@ export function desktopWindowMinimize(): void {
   void currentWindow()?.minimize?.();
 }
 
+export function desktopOpenExternalUrl(url: string): void {
+  if (!url) return;
+  const runtimeOpen = desktopWindow.runtime?.BrowserOpenURL;
+  if (runtimeOpen) {
+    runtimeOpen(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export async function desktopSaveBackupPath(defaultPath: string): Promise<string | null> {
   const save = desktopWindow.__TAURI__?.dialog?.save;
   if (!save) {
@@ -417,9 +533,37 @@ export async function desktopOpenBackupPath(): Promise<string | null> {
   return Array.isArray(selected) ? selected[0] ?? null : selected;
 }
 
-export function desktopCoreStart(): Promise<DesktopCoreStartStatus> {
-  return Promise.resolve({});
-}
+export const readDashboardStats = (): Promise<DesktopDashboardStatsResponse | null> =>
+  desktopRpc<DesktopDashboardStatsResponse | null>("GetDashboardStats");
+
+export const readLicenseStatus = (): Promise<DesktopLicenseStatusResponse | null> =>
+  desktopRpc<DesktopLicenseStatusResponse | null>("GetLicenseStatus");
+
+export const reloadDesktopConfig = (): Promise<void> => desktopRpc<void>("ReloadConfig");
+
+export const generateDesktopCdKeys = (count: number): Promise<string[] | null> =>
+  desktopRpc<string[] | null>("GenerateCDKeys", [count]);
+
+export const fetchRemoteAuthorProfileFromDesktop = (
+  authorURL: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> =>
+  desktopRpc<Record<string, unknown>>("FetchRemoteAuthorProfile", [authorURL, timeoutMs], {
+    timeoutMs,
+  });
+
+export const queryEventLog = (
+  query: DesktopEventLogQueryInput,
+): Promise<DesktopEventLogEntry[]> => desktopRpc<DesktopEventLogEntry[]>("EventLogQuery", [query]);
+
+export const countEventLog = (query: DesktopEventLogQueryInput): Promise<number> =>
+  desktopRpc<number>("EventLogCount", [query]);
+
+export const pruneEventLog = (before: string): Promise<number> =>
+  desktopRpc<number>("EventLogPrune", [before]);
+
+export const exportEventLog = (query: DesktopEventLogQueryInput): Promise<string> =>
+  desktopRpc<string>("EventLogExport", [query]);
 
 export const collectValidationReport = (
   browserSignals: DesktopValidationBrowserSignal[] = [],
@@ -477,6 +621,19 @@ export const applyBrowserEnvironmentPolicy = (
 export const restoreBrowserEnvironmentPolicyDefaults =
   (): Promise<DesktopBrowserEnvironmentPolicyMutationResult> =>
     invokeDesktop("restore_browser_environment_policy_defaults");
+
+export const readCamoufoxSettings = (): Promise<DesktopCamoufoxSettingsSnapshot> =>
+  invokeDesktop("read_camoufox_settings");
+
+export const applyCamoufoxSettings = (
+  draft: DesktopCamoufoxSettingsDraft,
+): Promise<DesktopCamoufoxSettingsMutationResult> =>
+  invokeDesktop("apply_camoufox_settings", { draft });
+
+export const checkCamoufoxCapability = (
+  request: DesktopCamoufoxCapabilityRequest = {},
+): Promise<DesktopCamoufoxCapability> =>
+  invokeDesktop("check_camoufox_capability", { request });
 
 export const readLocalAssetWorkspace = (): Promise<DesktopLocalAssetWorkspaceSnapshot> =>
   invokeDesktop("read_local_asset_workspace");

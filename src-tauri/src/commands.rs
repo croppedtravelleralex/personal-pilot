@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     env,
     fs::{self, OpenOptions},
+    io::{BufRead, BufReader, Write},
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     os::windows::process::CommandExt,
     path::{Path, PathBuf},
@@ -14,32 +15,34 @@ use persona_pilot::desktop::{
     apply_desktop_runtime_settings, change_desktop_proxy_ip, check_desktop_profile_proxies,
     compile_desktop_template_run, confirm_desktop_manual_gate, create_desktop_profile,
     delete_desktop_template, export_desktop_session_bundle, launch_desktop_template_run,
-    load_desktop_logs,
-    load_desktop_profile_detail, load_desktop_profile_page, load_desktop_proxy_health,
-    load_desktop_proxy_page, load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
+    list_desktop_evidence_reports, load_desktop_logs, load_desktop_profile_detail,
+    load_desktop_profile_page, load_desktop_proxy_health, load_desktop_proxy_page,
+    load_desktop_proxy_usage, load_desktop_status, load_desktop_tasks,
     load_desktop_template_metadata_page, open_desktop_profiles,
-    list_desktop_evidence_reports, read_desktop_behavior_audit_contract, read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
+    preflight_desktop_session_bundle_import, read_desktop_behavior_audit_contract,
+    read_desktop_browser_environment_policy, read_desktop_import_export_skeleton,
+    read_desktop_local_api_snapshot, read_desktop_local_asset_workspace,
     read_desktop_provider_production_readiness, read_desktop_release_smoke_contract,
-    read_desktop_local_api_snapshot, read_desktop_local_asset_workspace, read_desktop_run_detail,
-    read_desktop_settings, reject_desktop_manual_gate, resolve_desktop_local_asset_entry_path,
-    preflight_desktop_session_bundle_import, restore_desktop_browser_environment_policy_defaults,
+    read_desktop_run_detail, read_desktop_settings, reject_desktop_manual_gate,
+    resolve_desktop_local_asset_entry_path, restore_desktop_browser_environment_policy_defaults,
     restore_desktop_local_api_defaults, restore_desktop_runtime_settings_defaults,
     restore_desktop_session_bundle, retry_desktop_task, run_desktop_proxy_batch_check,
     save_desktop_template, start_desktop_profiles, stop_desktop_profiles, sync_desktop_profiles,
     update_desktop_profile, update_desktop_template, DesktopAppendBehaviorRecordingStepRequest,
-    DesktopBehaviorAuditContract, DesktopBrowserEnvironmentPolicyDraft, DesktopBrowserEnvironmentPolicyMutationResult,
-    DesktopBrowserEnvironmentPolicySnapshot, DesktopCompileTemplateRunRequest,
-    DesktopCompileTemplateRunResult, DesktopCreateProfileInput, DesktopEvidenceReportHistory, DesktopImportExportSkeleton,
-    DesktopLaunchTemplateRunRequest, DesktopLaunchTemplateRunResult, DesktopLocalApiMutationResult,
-    DesktopLocalApiSettingsDraft, DesktopLocalApiSnapshot, DesktopLocalAssetWorkspaceSnapshot,
-    DesktopLogPage, DesktopLogQuery, DesktopManualGateActionRequest,
-    DesktopProfileBatchActionRequest, DesktopProfileBatchActionResult, DesktopProfileDetail,
-    DesktopProfileMutationResult, DesktopProfilePage, DesktopProfilePageQuery,
-    DesktopProviderProductionReadiness, DesktopProxyBatchCheckRequest, DesktopProxyBatchCheckResponse, DesktopProxyChangeIpRequest,
+    DesktopBehaviorAuditContract, DesktopBrowserEnvironmentPolicyDraft,
+    DesktopBrowserEnvironmentPolicyMutationResult, DesktopBrowserEnvironmentPolicySnapshot,
+    DesktopCompileTemplateRunRequest, DesktopCompileTemplateRunResult, DesktopCreateProfileInput,
+    DesktopEvidenceReportHistory, DesktopImportExportSkeleton, DesktopLaunchTemplateRunRequest,
+    DesktopLaunchTemplateRunResult, DesktopLocalApiMutationResult, DesktopLocalApiSettingsDraft,
+    DesktopLocalApiSnapshot, DesktopLocalAssetWorkspaceSnapshot, DesktopLogPage, DesktopLogQuery,
+    DesktopManualGateActionRequest, DesktopProfileBatchActionRequest,
+    DesktopProfileBatchActionResult, DesktopProfileDetail, DesktopProfileMutationResult,
+    DesktopProfilePage, DesktopProfilePageQuery, DesktopProviderProductionReadiness,
+    DesktopProxyBatchCheckRequest, DesktopProxyBatchCheckResponse, DesktopProxyChangeIpRequest,
     DesktopProxyChangeIpResult, DesktopProxyHealth, DesktopProxyPage, DesktopProxyPageQuery,
     DesktopProxyUsageItem, DesktopReadRunDetailQuery, DesktopRecorderSnapshot,
-    DesktopRecorderSnapshotQuery, DesktopReleaseSmokeContract, DesktopRunDetail, DesktopRuntimeSettingsDraft,
-    DesktopSessionBundleExport, DesktopSessionBundleExportRequest,
+    DesktopRecorderSnapshotQuery, DesktopReleaseSmokeContract, DesktopRunDetail,
+    DesktopRuntimeSettingsDraft, DesktopSessionBundleExport, DesktopSessionBundleExportRequest,
     DesktopSessionBundleImportPreflight, DesktopSessionBundleImportPreflightRequest,
     DesktopSessionBundleRestoreRequest, DesktopSessionBundleRestoreResult,
     DesktopSettingsMutationResult, DesktopSettingsSnapshot, DesktopStartBehaviorRecordingRequest,
@@ -59,9 +62,7 @@ use tauri::State;
 #[cfg(target_os = "windows")]
 use windows::Win32::{
     Foundation::{BOOL, HWND, LPARAM, RECT},
-    Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    },
+    Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
     UI::WindowsAndMessaging::{
         BringWindowToTop, EnumWindows, GetForegroundWindow, GetSystemMetrics, GetWindowRect,
         GetWindowTextLengthW, GetWindowTextW, IsIconic, IsWindow, IsWindowVisible,
@@ -70,7 +71,7 @@ use windows::Win32::{
     },
 };
 
-use crate::state::{DesktopState, ManagedRuntimeProcess};
+use crate::state::{CoreBridgeReady, DesktopState, ManagedRuntimeProcess};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 const LOCAL_RUNTIME_HEALTH_URL: &str = "http://127.0.0.1:3000/health";
@@ -180,7 +181,9 @@ fn validation_report_summary(report: &DesktopValidationReport) -> DesktopValidat
     }
 }
 
-fn read_validation_reports_from_dir(report_dir: &Path) -> Result<Vec<DesktopValidationReport>, String> {
+fn read_validation_reports_from_dir(
+    report_dir: &Path,
+) -> Result<Vec<DesktopValidationReport>, String> {
     let mut reports = Vec::new();
     let entries = fs::read_dir(report_dir).map_err(|error| {
         format!(
@@ -190,7 +193,8 @@ fn read_validation_reports_from_dir(report_dir: &Path) -> Result<Vec<DesktopVali
     })?;
 
     for entry in entries {
-        let entry = entry.map_err(|error| format!("Failed to read validation report entry: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Failed to read validation report entry: {error}"))?;
         let path = entry.path();
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
             continue;
@@ -203,10 +207,16 @@ fn read_validation_reports_from_dir(report_dir: &Path) -> Result<Vec<DesktopVali
             continue;
         }
         let raw = fs::read_to_string(&path).map_err(|error| {
-            format!("Failed to read validation report {}: {error}", path.display())
+            format!(
+                "Failed to read validation report {}: {error}",
+                path.display()
+            )
         })?;
         let mut report: DesktopValidationReport = serde_json::from_str(&raw).map_err(|error| {
-            format!("Failed to parse validation report {}: {error}", path.display())
+            format!(
+                "Failed to parse validation report {}: {error}",
+                path.display()
+            )
         })?;
         for signal in &mut report.signals {
             normalize_validation_signal_metadata(signal);
@@ -277,7 +287,8 @@ fn derive_validation_signal_metadata(
         .to_string();
     let runtime_adapter = if detail.contains("fake-runner") {
         "fake".to_string()
-    } else if detail.contains("profile-browser-runtime") || detail.contains("cdp-runtime-evaluate") {
+    } else if detail.contains("profile-browser-runtime") || detail.contains("cdp-runtime-evaluate")
+    {
         "lightpanda".to_string()
     } else if detail.contains("desktop-webview") {
         "desktop_webview".to_string()
@@ -285,7 +296,8 @@ fn derive_validation_signal_metadata(
         "native".to_string()
     };
     let target_profile_browser = detail.contains("target-profile-browser=true")
-        || (collector_scope == "profile-browser-runtime" && !detail.contains("target-profile-browser=false"));
+        || (collector_scope == "profile-browser-runtime"
+            && !detail.contains("target-profile-browser=false"));
     let failure_reason = if status == "failed" {
         Some(summary.to_string())
     } else {
@@ -311,7 +323,8 @@ fn normalize_validation_signal_metadata(signal: &mut DesktopValidationSignal) {
     if signal.runtime_adapter.trim().is_empty() {
         signal.runtime_adapter = metadata.runtime_adapter;
     }
-    signal.target_profile_browser = signal.target_profile_browser || metadata.target_profile_browser;
+    signal.target_profile_browser =
+        signal.target_profile_browser || metadata.target_profile_browser;
     if signal.failure_reason.is_none() {
         signal.failure_reason = metadata.failure_reason;
     }
@@ -326,7 +339,11 @@ fn collect_dns_signal() -> DesktopValidationSignal {
             validation_signal(
                 "dns-example-com",
                 "dns",
-                if unique_count > 0 { "succeeded" } else { "failed" },
+                if unique_count > 0 {
+                    "succeeded"
+                } else {
+                    "failed"
+                },
                 "example.com DNS resolution",
                 if unique_count > 0 {
                     format!("Resolved example.com to {unique_count} unique address(es).")
@@ -391,15 +408,15 @@ fn normalize_browser_validation_signal(
         );
     }
 
-    if !matches!(
-        signal.status.as_str(),
-        "succeeded" | "warning" | "failed"
-    ) {
+    if !matches!(signal.status.as_str(), "succeeded" | "warning" | "failed") {
         signal.status = "warning".to_string();
     }
 
     signal.layer = "observed".to_string();
-    signal.id = format!("browser-{}", signal.id.trim().replace(char::is_whitespace, "-"));
+    signal.id = format!(
+        "browser-{}",
+        signal.id.trim().replace(char::is_whitespace, "-")
+    );
     signal.label = format!("{}", signal.label.trim());
     if signal.label.is_empty() {
         signal.label = "Browser validation signal".to_string();
@@ -581,7 +598,9 @@ async fn build_validation_report(
         ],
         signals,
         report_path: report_path.to_string_lossy().to_string(),
-        summary: format!("{signal_count} observed signal(s), {succeeded} succeeded, {failed} failed."),
+        summary: format!(
+            "{signal_count} observed signal(s), {succeeded} succeeded, {failed} failed."
+        ),
     };
 
     let payload = serde_json::to_string_pretty(&report)
@@ -621,8 +640,241 @@ pub struct DesktopRuntimeStatus {
     pub last_exit_code: Option<i32>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCoreBridgeStatus {
+    pub status: String,
+    pub running: bool,
+    pub managed: bool,
+    pub pid: Option<u32>,
+    pub started_at: Option<String>,
+    pub bridge_url: Option<String>,
+    pub event_url: Option<String>,
+    pub binary_path: Option<String>,
+    pub log_dir: Option<String>,
+    pub stdout_path: Option<String>,
+    pub stderr_path: Option<String>,
+    pub last_exit_code: Option<i32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCoreRpcRequest {
+    pub name: String,
+    #[serde(default)]
+    pub args: Vec<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCamoufoxSettings {
+    pub enabled: bool,
+    pub executable_path: String,
+    pub profile_root: String,
+    #[serde(default)]
+    pub default_args: Vec<String>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCamoufoxSettingsDraft {
+    pub enabled: Option<bool>,
+    pub executable_path: Option<String>,
+    pub profile_root: Option<String>,
+    #[serde(default)]
+    pub default_args: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCamoufoxSettingsSnapshot {
+    pub settings_path: String,
+    pub settings: DesktopCamoufoxSettings,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCamoufoxSettingsMutationResult {
+    pub action: String,
+    pub settings_path: String,
+    pub settings: DesktopCamoufoxSettings,
+    pub updated_at: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCamoufoxCapabilityRequest {
+    pub executable_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopCamoufoxCapability {
+    pub status: String,
+    pub ok: bool,
+    pub code: String,
+    pub executable_path: String,
+    pub detail: String,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CoreReadyLine {
+    bridge_url: String,
+    event_url: Option<String>,
+    bridge_token: String,
+    pid: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CoreRpcResponse {
+    ok: bool,
+    result: Option<Value>,
+    error: Option<String>,
+}
+
 fn normalize_error(error: anyhow::Error) -> String {
     format!("{error:#}")
+}
+
+fn camoufox_settings_path(state: &DesktopState) -> PathBuf {
+    let snapshot = read_desktop_settings(Some(&state.database_url));
+    PathBuf::from(snapshot.project_root)
+        .join("data")
+        .join("engines")
+        .join("camoufox")
+        .join("settings.json")
+}
+
+fn default_camoufox_settings() -> DesktopCamoufoxSettings {
+    DesktopCamoufoxSettings {
+        enabled: false,
+        executable_path: String::new(),
+        profile_root: String::new(),
+        default_args: Vec::new(),
+        updated_at: now_ts_string(),
+    }
+}
+
+fn read_camoufox_settings_from_path(path: &Path) -> Result<DesktopCamoufoxSettings, String> {
+    if !path.exists() {
+        return Ok(default_camoufox_settings());
+    }
+
+    let raw = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "camoufox_settings_read_failed: failed to read {}: {error}",
+            path.display()
+        )
+    })?;
+    serde_json::from_str(&raw).map_err(|error| {
+        format!(
+            "camoufox_settings_parse_failed: failed to parse {}: {error}",
+            path.display()
+        )
+    })
+}
+
+fn normalize_camoufox_settings_draft(
+    current: DesktopCamoufoxSettings,
+    draft: DesktopCamoufoxSettingsDraft,
+) -> DesktopCamoufoxSettings {
+    DesktopCamoufoxSettings {
+        enabled: draft.enabled.unwrap_or(current.enabled),
+        executable_path: draft
+            .executable_path
+            .unwrap_or(current.executable_path)
+            .trim()
+            .to_string(),
+        profile_root: draft
+            .profile_root
+            .unwrap_or(current.profile_root)
+            .trim()
+            .to_string(),
+        default_args: draft
+            .default_args
+            .unwrap_or(current.default_args)
+            .into_iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect(),
+        updated_at: now_ts_string(),
+    }
+}
+
+fn write_camoufox_settings_to_path(
+    path: &Path,
+    settings: &DesktopCamoufoxSettings,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "camoufox_settings_dir_create_failed: failed to create {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    let payload = serde_json::to_string_pretty(settings).map_err(|error| {
+        format!("camoufox_settings_serialize_failed: failed to serialize settings: {error}")
+    })?;
+    fs::write(path, payload).map_err(|error| {
+        format!(
+            "camoufox_settings_write_failed: failed to write {}: {error}",
+            path.display()
+        )
+    })
+}
+
+fn assess_camoufox_capability(executable_path: &str) -> DesktopCamoufoxCapability {
+    let checked_at = now_ts_string();
+    let trimmed = executable_path.trim();
+    if trimmed.is_empty() {
+        return DesktopCamoufoxCapability {
+            status: "blocked".to_string(),
+            ok: false,
+            code: "camoufox_path_empty".to_string(),
+            executable_path: String::new(),
+            detail: "Camoufox executable path is empty.".to_string(),
+            checked_at,
+        };
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if !candidate.exists() {
+        return DesktopCamoufoxCapability {
+            status: "blocked".to_string(),
+            ok: false,
+            code: "camoufox_path_not_found".to_string(),
+            executable_path: trimmed.to_string(),
+            detail: format!("Camoufox executable path does not exist: {trimmed}"),
+            checked_at,
+        };
+    }
+
+    if !candidate.is_file() {
+        return DesktopCamoufoxCapability {
+            status: "blocked".to_string(),
+            ok: false,
+            code: "camoufox_path_not_file".to_string(),
+            executable_path: trimmed.to_string(),
+            detail: format!("Camoufox executable path is not a file: {trimmed}"),
+            checked_at,
+        };
+    }
+
+    DesktopCamoufoxCapability {
+        status: "available".to_string(),
+        ok: true,
+        code: "camoufox_path_available".to_string(),
+        executable_path: trimmed.to_string(),
+        detail: "Camoufox executable path exists. Runtime launch is not checked in this skeleton."
+            .to_string(),
+        checked_at,
+    }
 }
 
 fn now_ts_string() -> String {
@@ -722,33 +974,41 @@ fn resolve_directory_target(
 }
 
 fn resolve_runtime_binary(project_root: &Path) -> Result<PathBuf, String> {
-    let release_binary = project_root
-        .join("target")
-        .join("release")
-        .join("PersonaPilot.exe");
-    if release_binary.exists() {
-        return Ok(release_binary);
-    }
-
-    let debug_binary = project_root
-        .join("target")
-        .join("debug")
-        .join("PersonaPilot.exe");
-    if debug_binary.exists() {
-        return Ok(debug_binary);
-    }
-
     Err(format!(
-        "Local runtime binary not found. Build PersonaPilot first at {} or {}.",
-        release_binary.display(),
-        debug_binary.display()
+        "Legacy PersonaPilot runtime launch has been retired. Use the mainline {} entry and the personal-pilot core bridge instead.",
+        project_root.join("personal-pilot-tauri.exe").display()
     ))
+}
+
+fn resolve_core_bridge_binary(project_root: &Path) -> Result<PathBuf, String> {
+    let candidates = [
+        project_root.join("bin").join("personal-pilot-core.exe"),
+        project_root
+            .join("bin")
+            .join("personal-pilot-core-x86_64-pc-windows-msvc.exe"),
+    ];
+    candidates
+        .into_iter()
+        .find(|path| path.exists())
+        .ok_or_else(|| {
+            format!(
+                "personal-pilot-core.exe not found under {}. Run scripts/build-sidecar.ps1 first.",
+                project_root.join("bin").display()
+            )
+        })
 }
 
 fn runtime_log_paths(snapshot: &DesktopSettingsSnapshot) -> (PathBuf, PathBuf, PathBuf) {
     let log_dir = PathBuf::from(&snapshot.logs_dir).join("runtime");
     let stdout_path = log_dir.join("persona-runtime.stdout.log");
     let stderr_path = log_dir.join("persona-runtime.stderr.log");
+    (log_dir, stdout_path, stderr_path)
+}
+
+fn core_bridge_log_paths(snapshot: &DesktopSettingsSnapshot) -> (PathBuf, PathBuf, PathBuf) {
+    let log_dir = PathBuf::from(&snapshot.logs_dir).join("core-bridge");
+    let stdout_path = log_dir.join("personal-pilot-core.stdout.log");
+    let stderr_path = log_dir.join("personal-pilot-core.stderr.log");
     (log_dir, stdout_path, stderr_path)
 }
 
@@ -842,6 +1102,81 @@ fn build_runtime_status(state: &DesktopState) -> Result<DesktopRuntimeStatus, St
         stdout_path: None,
         stderr_path: None,
         last_exit_code: runtime.last_exit_code,
+    })
+}
+
+fn status_from_core_bridge_process(
+    process: &ManagedRuntimeProcess,
+    ready: Option<&CoreBridgeReady>,
+    last_exit_code: Option<i32>,
+) -> DesktopCoreBridgeStatus {
+    DesktopCoreBridgeStatus {
+        status: if ready.is_some() {
+            "managed_running".to_string()
+        } else {
+            "starting".to_string()
+        },
+        running: true,
+        managed: true,
+        pid: Some(process.pid),
+        started_at: Some(process.started_at.clone()),
+        bridge_url: ready.map(|value| value.bridge_url.clone()),
+        event_url: ready.and_then(|value| value.event_url.clone()),
+        binary_path: Some(process.binary_path.clone()),
+        log_dir: Some(process.log_dir.clone()),
+        stdout_path: Some(process.stdout_path.clone()),
+        stderr_path: Some(process.stderr_path.clone()),
+        last_exit_code,
+    }
+}
+
+fn build_core_bridge_status(state: &DesktopState) -> Result<DesktopCoreBridgeStatus, String> {
+    let mut bridge = state
+        .core_bridge
+        .lock()
+        .map_err(|_| "Failed to lock personal-pilot core bridge state".to_string())?;
+    let last_exit_code = bridge.last_exit_code;
+    let ready = bridge.ready.clone();
+
+    if let Some(process) = bridge.managed_process.as_mut() {
+        match process.child.try_wait() {
+            Ok(None) => {
+                return Ok(status_from_core_bridge_process(
+                    process,
+                    ready.as_ref(),
+                    last_exit_code,
+                ));
+            }
+            Ok(Some(status)) => {
+                bridge.last_exit_code = status.code();
+                bridge.managed_process = None;
+                bridge.ready = None;
+            }
+            Err(error) => {
+                return Err(format!(
+                    "Failed to inspect personal-pilot core process: {error}"
+                ));
+            }
+        }
+    }
+
+    Ok(DesktopCoreBridgeStatus {
+        status: if bridge.last_exit_code.is_some() {
+            "managed_stopped".to_string()
+        } else {
+            "stopped".to_string()
+        },
+        running: false,
+        managed: false,
+        pid: None,
+        started_at: None,
+        bridge_url: None,
+        event_url: None,
+        binary_path: None,
+        log_dir: None,
+        stdout_path: None,
+        stderr_path: None,
+        last_exit_code: bridge.last_exit_code,
     })
 }
 
@@ -1925,7 +2260,9 @@ mod tests {
             status: "failed".to_string(),
             label: "Canvas profile browser render probe".to_string(),
             summary: "Canvas profile probe failed: canvas.toDataURL is not a function".to_string(),
-            detail: Some("scope=profile-browser-runtime; collector=cdp-runtime-evaluate".to_string()),
+            detail: Some(
+                "scope=profile-browser-runtime; collector=cdp-runtime-evaluate".to_string(),
+            ),
             collector_scope: String::new(),
             runtime_adapter: String::new(),
             target_profile_browser: false,
@@ -2011,12 +2348,20 @@ pub fn export_validation_profile_evidence(
         .map(|value| {
             value
                 .chars()
-                .map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' })
+                .map(|ch| {
+                    if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                        ch
+                    } else {
+                        '_'
+                    }
+                })
                 .collect::<String>()
         })
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "all-profiles".to_string());
-    let export_path = report_dir.join(format!("profile-evidence-export-{safe_profile}-{exported_at}.json"));
+    let export_path = report_dir.join(format!(
+        "profile-evidence-export-{safe_profile}-{exported_at}.json"
+    ));
     let report_count = reports.len();
     let payload = DesktopValidationProfileExportPayload {
         export_id: export_id.clone(),
@@ -2150,6 +2495,56 @@ pub fn restore_browser_environment_policy_defaults(
 }
 
 #[tauri::command]
+pub fn read_camoufox_settings(
+    state: State<'_, DesktopState>,
+) -> Result<DesktopCamoufoxSettingsSnapshot, String> {
+    let settings_path = camoufox_settings_path(&state);
+    let settings = read_camoufox_settings_from_path(&settings_path)?;
+    Ok(DesktopCamoufoxSettingsSnapshot {
+        settings_path: settings_path.to_string_lossy().to_string(),
+        settings,
+    })
+}
+
+#[tauri::command]
+pub fn apply_camoufox_settings(
+    state: State<'_, DesktopState>,
+    draft: DesktopCamoufoxSettingsDraft,
+) -> Result<DesktopCamoufoxSettingsMutationResult, String> {
+    let settings_path = camoufox_settings_path(&state);
+    let current = read_camoufox_settings_from_path(&settings_path)?;
+    let settings = normalize_camoufox_settings_draft(current, draft);
+    write_camoufox_settings_to_path(&settings_path, &settings)?;
+    Ok(DesktopCamoufoxSettingsMutationResult {
+        action: "apply_camoufox_settings".to_string(),
+        settings_path: settings_path.to_string_lossy().to_string(),
+        updated_at: settings.updated_at.clone(),
+        message: format!(
+            "Camoufox settings were written to {}.",
+            settings_path.display()
+        ),
+        settings,
+    })
+}
+
+#[tauri::command]
+pub fn check_camoufox_capability(
+    state: State<'_, DesktopState>,
+    request: Option<DesktopCamoufoxCapabilityRequest>,
+) -> Result<DesktopCamoufoxCapability, String> {
+    let explicit_path = request.and_then(|value| value.executable_path);
+    let executable_path = match explicit_path {
+        Some(value) => value,
+        None => {
+            let settings_path = camoufox_settings_path(&state);
+            read_camoufox_settings_from_path(&settings_path)?.executable_path
+        }
+    };
+
+    Ok(assess_camoufox_capability(&executable_path))
+}
+
+#[tauri::command]
 pub fn read_local_asset_workspace(
     state: State<'_, DesktopState>,
 ) -> Result<DesktopLocalAssetWorkspaceSnapshot, String> {
@@ -2211,7 +2606,9 @@ pub fn read_behavior_audit_contract() -> Result<DesktopBehaviorAuditContract, St
 pub fn read_release_smoke_contract(
     state: State<'_, DesktopState>,
 ) -> Result<DesktopReleaseSmokeContract, String> {
-    Ok(read_desktop_release_smoke_contract(Some(&state.database_url)))
+    Ok(read_desktop_release_smoke_contract(Some(
+        &state.database_url,
+    )))
 }
 
 #[tauri::command]
@@ -2272,6 +2669,201 @@ pub fn read_local_runtime_status(
     state: State<'_, DesktopState>,
 ) -> Result<DesktopRuntimeStatus, String> {
     build_runtime_status(&state)
+}
+
+#[tauri::command]
+pub fn start_personal_pilot_core(
+    state: State<'_, DesktopState>,
+) -> Result<DesktopCoreBridgeStatus, String> {
+    {
+        let mut bridge = state
+            .core_bridge
+            .lock()
+            .map_err(|_| "Failed to lock personal-pilot core bridge state".to_string())?;
+        let last_exit_code = bridge.last_exit_code;
+        let ready = bridge.ready.clone();
+
+        if let Some(process) = bridge.managed_process.as_mut() {
+            match process.child.try_wait() {
+                Ok(None) => {
+                    return Ok(status_from_core_bridge_process(
+                        process,
+                        ready.as_ref(),
+                        last_exit_code,
+                    ));
+                }
+                Ok(Some(status)) => {
+                    bridge.last_exit_code = status.code();
+                    bridge.managed_process = None;
+                    bridge.ready = None;
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "Failed to inspect personal-pilot core process: {error}"
+                    ));
+                }
+            }
+        }
+    }
+
+    let snapshot = read_desktop_settings(Some(&state.database_url));
+    let project_root = PathBuf::from(&snapshot.project_root);
+    let binary_path = resolve_core_bridge_binary(&project_root)?;
+    let (log_dir, stdout_path, stderr_path) = core_bridge_log_paths(&snapshot);
+    fs::create_dir_all(&log_dir).map_err(|error| {
+        format!(
+            "Failed to create personal-pilot core log directory {}: {error}",
+            log_dir.display()
+        )
+    })?;
+
+    let stderr_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stderr_path)
+        .map_err(|error| {
+            format!(
+                "Failed to open personal-pilot core stderr log {}: {error}",
+                stderr_path.display()
+            )
+        })?;
+
+    let mut child = Command::new(&binary_path)
+        .current_dir(&project_root)
+        .arg("-app-root")
+        .arg(&project_root)
+        .arg("-version")
+        .arg("1.1.0")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::from(stderr_file))
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|error| {
+            format!(
+                "Failed to start personal-pilot core {}: {error}",
+                binary_path.display()
+            )
+        })?;
+    let pid = child.id();
+    let started_at = now_ts_string();
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "personal-pilot core stdout pipe was not available".to_string())?;
+    let mut reader = BufReader::new(stdout);
+    let mut ready: Option<CoreBridgeReady> = None;
+    let mut stdout_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stdout_path)
+        .map_err(|error| {
+            format!(
+                "Failed to open personal-pilot core stdout log {}: {error}",
+                stdout_path.display()
+            )
+        })?;
+
+    let ready_prefix = "PERSONAL_PILOT_CORE_READY ";
+    for _ in 0..200 {
+        let mut line = String::new();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|error| format!("Failed to read personal-pilot core readiness: {error}"))?;
+        if bytes == 0 {
+            break;
+        }
+        let _ = std::io::Write::write_all(&mut stdout_file, line.as_bytes());
+        if let Some(raw) = line.trim().strip_prefix(ready_prefix) {
+            let parsed: CoreReadyLine = serde_json::from_str(raw).map_err(|error| {
+                format!("Failed to parse personal-pilot core readiness: {error}")
+            })?;
+            ready = Some(CoreBridgeReady {
+                bridge_url: parsed.bridge_url,
+                event_url: parsed.event_url,
+                bridge_token: parsed.bridge_token,
+                pid: parsed.pid.unwrap_or(pid),
+            });
+            break;
+        }
+    }
+
+    let ready = match ready {
+        Some(value) => value,
+        None => {
+            let _ = child.kill();
+            return Err("personal-pilot core did not report readiness".to_string());
+        }
+    };
+
+    std::thread::spawn(move || {
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = writeln!(stdout_file, "{line}");
+        }
+    });
+
+    let mut bridge = state
+        .core_bridge
+        .lock()
+        .map_err(|_| "Failed to lock personal-pilot core bridge state".to_string())?;
+    bridge.last_exit_code = None;
+    bridge.ready = Some(ready);
+    bridge.managed_process = Some(ManagedRuntimeProcess {
+        child,
+        pid,
+        started_at,
+        binary_path: binary_path.to_string_lossy().to_string(),
+        log_dir: log_dir.to_string_lossy().to_string(),
+        stdout_path: stdout_path.to_string_lossy().to_string(),
+        stderr_path: stderr_path.to_string_lossy().to_string(),
+    });
+    drop(bridge);
+    build_core_bridge_status(&state)
+}
+
+#[tauri::command]
+pub async fn call_personal_pilot_core(
+    state: State<'_, DesktopState>,
+    request: DesktopCoreRpcRequest,
+) -> Result<Value, String> {
+    let ready = {
+        let bridge = state
+            .core_bridge
+            .lock()
+            .map_err(|_| "Failed to lock personal-pilot core bridge state".to_string())?;
+        bridge.ready.clone()
+    }
+    .ok_or_else(|| "personal-pilot core bridge is not ready".to_string())?;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("{}/rpc", ready.bridge_url.trim_end_matches('/')))
+        .header("X-Personal-Pilot-Bridge-Token", ready.bridge_token)
+        .json(&json!({ "method": request.name, "args": request.args }))
+        .send()
+        .await
+        .map_err(|error| format!("Failed to call personal-pilot core RPC: {error}"))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("Failed to read personal-pilot core RPC response: {error}"))?;
+    if !status.is_success() {
+        return Err(format!(
+            "personal-pilot core RPC returned HTTP {}: {}",
+            status.as_u16(),
+            body
+        ));
+    }
+    let payload: CoreRpcResponse = serde_json::from_str(&body).map_err(|error| {
+        format!("Failed to parse personal-pilot core RPC response: {error}; body={body}")
+    })?;
+    if !payload.ok {
+        return Err(payload
+            .error
+            .unwrap_or_else(|| "personal-pilot core RPC failed".to_string()));
+    }
+    Ok(payload.result.unwrap_or(Value::Null))
 }
 
 #[tauri::command]
@@ -2986,11 +3578,7 @@ pub fn set_main_sync_window(
 
     synchronizer.snapshot = snapshot.clone();
     let msg = format!("Set main sync window to {window_id}.");
-    Ok(sync_action_result(
-        "set_main_sync_window",
-        snapshot,
-        &msg,
-    ))
+    Ok(sync_action_result("set_main_sync_window", snapshot, &msg))
 }
 
 #[tauri::command]
@@ -3150,9 +3738,5 @@ pub fn focus_sync_window(
     let snapshot = capture_live_synchronizer_snapshot(&synchronizer.snapshot)?;
     synchronizer.snapshot = snapshot.clone();
     let msg = format!("Focused sync window {window_id}.");
-    Ok(sync_action_result(
-        "focus_sync_window",
-        snapshot,
-        &msg,
-    ))
+    Ok(sync_action_result("focus_sync_window", snapshot, &msg))
 }

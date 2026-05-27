@@ -300,6 +300,47 @@ export interface DesktopBrowserEnvironmentPolicyMutationResult {
   message: string;
 }
 
+export interface DesktopCamoufoxSettings {
+  enabled: boolean;
+  executablePath: string;
+  profileRoot: string;
+  defaultArgs: string[];
+  updatedAt: string;
+}
+
+export interface DesktopCamoufoxSettingsDraft {
+  enabled?: boolean;
+  executablePath?: string;
+  profileRoot?: string;
+  defaultArgs?: string[];
+}
+
+export interface DesktopCamoufoxSettingsSnapshot {
+  settingsPath: string;
+  settings: DesktopCamoufoxSettings;
+}
+
+export interface DesktopCamoufoxSettingsMutationResult {
+  action: string;
+  settingsPath: string;
+  settings: DesktopCamoufoxSettings;
+  updatedAt: string;
+  message: string;
+}
+
+export interface DesktopCamoufoxCapabilityRequest {
+  executablePath?: string;
+}
+
+export interface DesktopCamoufoxCapability {
+  status: string;
+  ok: boolean;
+  code: string;
+  executablePath: string;
+  detail: string;
+  checkedAt: string;
+}
+
 export type DesktopLocalAssetEntryId =
   | "runtimePolicy"
   | "localApiConfig"

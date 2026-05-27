@@ -1,11 +1,14 @@
 # Current State
 
-Updated: 2026-05-23 (Asia/Shanghai)
+Updated: 2026-05-27 (Asia/Shanghai)
 
 ## 当前 live truth
 
 - Mainline delivery：`100% / 0% / green` (3 P0 items closed)
 - Overall end-state：`40% / 60% / yellow`
+- 当前用户确认的唯一主线 UI 是截图所示 `personal-pilot` 1.1.0 壳，唯一用户入口为 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`。
+- 后续所有更新、新增功能和修复都必须集成到 `personal-pilot-tauri.exe` 对应 UI；`PersonaPilot.exe`、`portable.exe`、`src-tauri/target/release/persona-pilot-desktop.exe` 和第二套 UI 不再代表主线。
+- 第二套 Tauri/Vite/React 构建产物和 `gateway-ui/` 静态 UI 已从主工作树清理；后续不得继续把新功能只落到旁路 exe/UI。
 - 第一族控制 schema 已声明 `80` 个 core control fields。
 - 当前 runtime projection 是 `26` 个 env-backed fingerprint fields，其中 `25` 个来自 first-family control fields，另含 derived `platform`。
 - 当前 behavior runtime 已交付 `13` 个 primitives；P10 已新增 behavior audit contract，覆盖 `8` 个 page archetypes、workflow/debug/manual-gate/recovery audit 状态；P14 已新增 machine-readable `450` event taxonomy seed，但仍不是完整 replay runtime。
@@ -17,15 +20,27 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ## Runtime Alive
 
-- Tauri desktop release build 可生成 Win11 NSIS installer。
+- 2026-05-27 已重新构建 Tauri 承载的 `personal-pilot-tauri.exe`，并覆盖根目录验收入口 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`；最新 SHA256 `9CFAC4FD7DD57913B20B7C49AF7AE4BDBDC7A382BED7AEC5B6C38AE1ACEBFA62`，大小 `19,916,288` bytes。
+- 该第一版保留 `personal-pilot` 1.1.0 UI 壳，并通过 `tauriWailsBridge` 启动 `bin/personal-pilot-core.exe` 兼容旧 Wails API；2026-05-25 核验 `GetDashboardStats` / `BrowserProfileList` / `BrowserCoreList` / `BrowserProxyList` 均通过。
+- 当前验收数据链路已确认不是空壳：dashboard/core bridge 返回 `browser_profiles=4`、`browser_proxies=95`、`browser_cores=3`，app version `1.1.0`。
+- 2026-05-25 已修复设置页空白：根因是 `ThemeSwitcher` 使用 `useTheme`，但 app root 未包 `ThemeProvider`；现已在 `src/app/bootstrap.tsx` 包裹 `ThemeProvider`，Settings route smoke passed。
+- 2026-05-25 已修复窗口黑色坏图标：根因是 `src-tauri/icons/icon.ico` 只有 `155` bytes 的无效 ico；现已用现有 PNG 资源重新生成有效 `13,322` bytes ico，并重新打包 release exe。
+- 2026-05-26 已固化 `react-router-dom@6.30.3` 到 `package.json` / `pnpm-lock.yaml`，避免干净安装依赖缺失；已将 release / external / fingerprint / workbench 验证脚本默认目标收敛到根目录 `personal-pilot-tauri.exe`。
+- `data/app.db` 仍保留真实数据：`browser_profiles=4`、`browser_proxies=95`、`browser_cores=3`、`browser_bookmarks=7`、`event_log=36334`。
+- 后续迁功能或剔除第二套 UI 前，仍必须继续验证 Wails 兼容 API 等价链路，不能只看 UI 外观。
+- `persona-pilot-desktop.exe` / `PersonaPilot.exe` / `portable.exe` / 根目录 `benchmark.exe` / 根目录 `deepseek-register.exe` 已从当前工作树清理；`bin/` 下 sidecar 和工具产物不属于用户入口，按需保留。
 - Runtime alive 只代表应用和本地能力可启动/调用，不等同于 Overall 终态闭环。
 - Gateway real-upstream acceptance 仍需按 `upstream_configured=false` guardrail 单独验收。
 
 ## Build Status
 
-- 2026-05-23 已通过 `scripts/windows_local_verify.ps1 -SkipContinuityTest`：type check、Vite production build、Win11 Tauri baseline、`cargo test --lib -- --test-threads=1`、Tauri release build、`cargo test --quiet`。
-- Tauri release installer 已生成：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`。
-- 后续 meaningful code change 仍需重新跑对应门禁；operator manual smoke 和 continuity integration test 可按发布需要追加。
+- 2026-05-25 第一版构建通过 `pnpm build` / `pnpm tauri build`，生成 `src-tauri/target/release/personal-pilot-tauri.exe` 和 NSIS installer `src-tauri/target/release/bundle/nsis/personal-pilot_1.1.0_x64-setup.exe`。
+- 2026-05-27 已确认根目录 `personal-pilot-tauri.exe` 已由 `src-tauri/target/release/personal-pilot-tauri.exe` 覆盖，hash `9CFAC4FD7DD57913B20B7C49AF7AE4BDBDC7A382BED7AEC5B6C38AE1ACEBFA62`，大小 `19,916,288` bytes。
+- 2026-05-25 Win11/Tauri baseline enforcement passed。
+- 2026-05-25 root `personal-pilot-tauri.exe` 启动验证 passed：进程 `personal-pilot-tauri`，窗口标题 `personal-pilot`，响应正常；兼容 core bridge 当前进程为 `bin/personal-pilot-core.exe`。
+- 2026-05-25 错误 Tauri 第一版 release smoke：`14779ms` cold start、`489MB` idle RSS、`7` processes，状态 warning；该报告只作为回滚原因，不代表当前可验收入口性能。
+- 2026-05-23 的 Tauri release gate 和 2026-05-24/25 的 `persona-pilot-desktop.exe` 构建只能作为历史/旁路证据；主线门禁需要改为验证 `personal-pilot-tauri.exe`。
+- 后续 meaningful code change 仍需重新跑对应门禁；但门禁目标必须改成 `personal-pilot-tauri.exe`，operator manual smoke 和 continuity integration test 可按发布需要追加。
 - P13 已新增外部分发前检查文档：`docs/24-external-distribution-readiness.md`，用于记录 known limitations、manual smoke checklist 和发布说明边界。
 
 ## Reporting Rule From Now On
@@ -36,9 +51,9 @@ Updated: 2026-05-23 (Asia/Shanghai)
 
 ## 已确认落地
 
-- Win11 desktop shell 基于 Tauri 2 + Vite + React + TypeScript 已落地。
-- `src/services/desktop.ts` 是 native / invoke 的统一边界。
-- Dashboard / Profiles / Proxies / Automation / Synchronizer / Logs / Settings 已在真实 operator surface 上。
+- Win11 desktop shell 已有两条历史路线：用户当前确认只保留 `personal-pilot-tauri.exe` 1.1.0 / Wails v2 + React UI；Tauri 2 + Vite + React + TypeScript 路线不再作为主线 UI。
+- `src/services/desktop.ts` 是 Tauri 路线的 native / invoke 统一边界；主线 Wails UI 中仍存在 `wailsjs` 调用和 `tauriWailsBridge` 兼容层，需作为迁移/收敛风险处理。
+- 截图主线 UI 包含 Dashboard / 实例列表 / 实例工作台 / 行为录制 / 自动化接口 / 内核管理 / 代理池配置 / 默认书签 / 标签管理 / 事件监控 / 系统设置 / 使用教程 / 日志查看。
 - `Tasks -> Automation` surface unification 已完成。
 - provider-aware / sticky-aware `changeProxyIp` local desktop contract 已落地。
 - Recorder desktop step-write 已落地。
@@ -53,13 +68,24 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - P17 扩展 desktop WebView observed probes：timezone/locale、hardware/os、screen/display、navigator hints、permissions/media devices 已有 desktop WebView scoped signals；它们仍不是 profile browser proof。
 - Automation 已接入 P10 behavior audit contract：报告 `13` shipped primitives、`8` page archetypes、workflow graph/debug trace/manual gate/recovery semantics 覆盖状态，并明确 `450+` event taxonomy 仍是 target-only。
 - P18 已把 behavior taxonomy 前 5 个 family 补成 replay-semantics backed：readiness_wait、settle_idle、scroll_scan、hover_focus、typing_input 均有 replaySemantics、auditPayload、failureStates、recoveryBehavior；完整 `450` replay runtime 仍未交付。
-- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P14 已新增 `scripts/release_performance_smoke.ps1` 并产出 release exe report，当前 release smoke contract 会读取最新 report；最近实测为 warning：`2785ms` cold start、`374MB` idle RSS、`8` processes，均超过默认预算；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平。
+- Runtime adapter / release smoke contract 已接入桌面 API：记录 Fake、Lightpanda、headed_external adapter 边界、release installer 路径、Win11 baseline 和性能预算目标；P11 已新增 measured/pending 字段并在 Overview 展示 target vs measured 状态；P14 已新增 `scripts/release_performance_smoke.ps1` 并产出 release exe report，当前 release smoke contract 会读取最新 report；最近 root entry 实测为 warning：`2437ms` cold start、`465MB` idle RSS、`9` processes，均超过默认预算；P12 已把 AdsPower benchmark refresh 固定为 evidence-gated boundary guard，没有 B1-B5 新证据时不得刷新评分或宣称追平。
 - P16 已新增 unified evidence report history：release performance、provider acceptance、SessionBundle portability、taxonomy audit、external distribution smoke 的本地 JSON report 可通过桌面 API 读取，并在 Overview 显示最近报告。
 - P19 已深化 provider production closure contract：Settings 现在区分 credentials、manager wiring、CDP detect、CDP fill、operator UI、real provider smoke、failure reason 和 latest report path；scripts/provider_acceptance_preflight.ps1 输出 v2 blockers/failureReason。真实 provider acceptance 仍必须有凭证和真实 smoke 证据。
 - P20 已升级外部条件 smoke gates：`external_distribution_smoke.ps1` v2 区分 local asset gate 与 manual/clean-Win11/page/provider/session external gates；`session_bundle_portability_smoke.ps1` v2 输出 cross-machine gateResults/failureReason。未跑第二环境或人工 smoke 时必须保留 blocked 状态。
 - P21 已新增 runtime adapter evidence gate：release contract 现在暴露 adapter capability/evidence requirements/process lifecycle/CDP attach 状态；scripts/runtime_adapter_evidence_gate.ps1 可生成 runtime-adapter report，并把 AdsPower refresh 保持为 deferred_by_evidence_gate，直到 B1-B5 证据齐全。
 - P22-P27 已执行新一轮 6 批本机推进：release smoke contract 读取最新实测 report；Settings Import/Export 显示最新 SessionBundle portability report；Validation desktop WebView 新增 WebGL 与 font/text metrics observed probes；fingerprint taxonomy 全 family 补 collector/layer/adapter/failure/repeatability/schema 元数据；behavior taxonomy 全 family 补 replay/audit/failure/recovery 定义；新增 `scripts/live_truth_guard.ps1` 防止 live-truth 口径回退。
 - P28-P33 已按本机优先继续推进：release performance smoke 支持 ready 轮询、进程树分解和旧实例清理；fingerprint audit 统计 desktop WebView `fingerprint` observed category；behavior audit contract 暴露 workflow graph/replay debugger/deterministic evidence 状态；新增 provider manager wiring gate 和 profile-browser comparison gate，外部/人工实测继续排到最后。
+- P34 修复 Launch API/key 与旧二进制产物问题：Go config loader 会展开 `${ENV}`；但 2026-05-25 用户已明确废弃多 exe 兼容入口路线，只保留 `personal-pilot-tauri.exe` 为主线，其余 exe 需剔除或退出主线。
+- 2026-05-24 已生成 API surface smoke report：`data/reports/api-surface/api-surface-smoke-1779621749594.json`，结果 `passed`，覆盖 health/profiles/cores/proxy/list/groups/behavior/recording/logs/manual/subscribe 等只读或低风险端点。
+- 2026-05-24 曾重跑并重建 root entry：`PersonaPilot.exe` 已从 Tauri/Vite UI 重新构建；该路线现在已被用户明确排除，并已在 2026-05-26 清理出根目录。
+- 2026-05-26 已对根目录 `personal-pilot-tauri.exe` 运行 release smoke：`data/reports/release-smoke/release-performance-smoke-1779797166703.json`，结果 `warning`：`2437ms` cold start、`465MB` idle RSS、`9` processes；仍不能写成 release performance green。
+- 2026-05-26 已重跑 external distribution smoke：`data/reports/external-distribution/external-distribution-smoke-1779797144455.json`，本机资产检查已按单入口 `personal-pilot-tauri.exe` 通过，但状态仍为 `blocked_external_smoke_required`，因为 manual operator smoke、干净 Win11 安装/启动/卸载、页面导航、provider readiness、SessionBundle smoke 未提供外部证据。
+- 2026-05-26 本轮尝试派出 3 个 subagent 做入口验证、UI 收敛风险扫描和文档一致性扫描；本地 agent 分发器均返回 `503 Service Unavailable`，因此同等检查已由主线程接管完成。
+- 2026-05-27 主线程复核当前根目录 `personal-pilot-tauri.exe`：文件存在，大小 `19,916,288` bytes，SHA256 `9CFAC4FD7DD57913B20B7C49AF7AE4BDBDC7A382BED7AEC5B6C38AE1ACEBFA62`，与当前 release 产物一致。
+- 2026-05-27 已完成本轮主线 UI API 收口：`src/modules/dashboard/api.ts`、`src/modules/profile/api.ts` 和 `src/modules/monitor/EventMonitorPage.tsx` 已改为通过 `src/services/desktop.ts` typed wrapper 或模块 facade 调用；`EventMonitorPage` 历史查询已补 `300ms` debounce 和 stale-result 保护。当前剩余较大的统一边界风险主要集中在 `src/modules/synchronizer/api.ts` 的动态 sidecar RPC facade，以及 browser 模块内较薄的动态代理。
+- 2026-05-27 已把主线路由 `/settings`、`/browser/logs` 收回 canonical desktop console 页面：`src/pages/SettingsPage.tsx` 和 `src/pages/LogsPage.tsx`。原 `src/modules/settings/SettingsPage.tsx` 与 `src/modules/browser/pages/BrowserLogsPage.tsx` 现仅保留为兼容导出壳，避免第二套页面继续偏离 typed desktop facade、分页日志接口和 Win11 主线 UI。
+- 2026-05-27 已定位并修复实例详情/编辑/复制页的主线回归：`src/app/App.tsx` 路由参数名是 `:profileId`，但 `BrowserDetailPage`、`BrowserEditPage`、`BrowserCopyPage` 之前错误读取 `id`，导致列表可显示 `4` 个实例而点进详情/编辑时找不到当前实例，表现为详情空白或默认到 `0`。本次修复只改参数读取，不改后端 `BrowserProfileList` / `GetDashboardStats` 真数据链路。
+- 2026-05-24 已新增并运行 items 5-10 总闸：`data/reports/overall-remaining/overall-remaining-gate-1779621870664.json`，结果 `blocked_or_partial`；items `6/7/10` passed，items `5/8/9` 仍因 profile-browser validation、runtime adapter/headed external、AdsPower refresh evidence 不足而 blocked。
 
 ## 未完成边界
 
@@ -79,12 +105,13 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - `450+` event taxonomy 已有 machine-readable seed：`docs/taxonomy/behavior-event-taxonomy.json`，Automation behavior audit 可显示 taxonomy seed 状态；完整 replay runtime 未交付。
 - `SessionBundle` profile-level export、import preflight、dry-run 和 confirmed local restore write path 已落地；P14 已新增 `scripts/session_bundle_portability_smoke.ps1` 记录本机 contract 和跨机器 manual steps，P20 已升级为 v2 gateResults/failureReason；跨机器 profile portability 仍需真实第二环境验收。
 - headed runtime realism、kernel strategy、AdsPower-grade catch-up 仍是整体目标轨道；当前已有 adapter/release measurement contract、Overview 可见性、P12 AdsPower refresh guard 和 P21 runtime adapter evidence gate，不是 headed runtime 实现，也不是 AdsPower 评分上调。
-- external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。
+- external browser integration 已有计划和 contract 边界，但不是已交付 runtime depth；主仓库仍不托管 Chromium/Firefox fork。2026-05-27 已在 `docs/18-external-browser-integration-plan.md` 固化并深化 Camoufox `90` 分方案：定位为可选单任务生产级 Runner，覆盖配置、检测、执行、取消、清理、artifact、基础 profile/proxy 映射和 release smoke；性能策略为默认按任务启动、不常驻、不预热、并发默认 `1`、artifact 按需、capability 缓存、release idle 与 task-run 指标分开记账；不包含 remote server、browser pool、自动安装、高级 trust score 或深度指纹拟真。当前代码已出现 Camoufox skeleton 和设置/能力检测合同，但 runner 仍显式 `runner_not_implemented`、`browser_launch_attempted=false`，所以只能写成 contract-ready，不能写成 runtime-ready。E 切片新增 `scripts/camoufox_smoke.ps1` 作为非破坏性验证入口，当前预期状态为 `contract_ready_runtime_smoke_required`。
 - 外部分发前必须执行或明确跳过 `docs/24-external-distribution-readiness.md` 的人工 operator smoke，并保留 provider、profile portability、release measurement warning、AdsPower refresh 和 `450+` taxonomy 限制。
 
 ## 当前下一步
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
-1. 运行 P14 smoke/audit 脚本，保存 evidence report：release performance、external distribution、provider preflight、session portability、taxonomy audit
-2. 在第二台/干净 Win11 环境执行真正跨机器 SessionBundle portability smoke
-3. 配置真实 provider credentials 后执行 provider acceptance，再推进 CDP detect/fill/operator closure
+1. 交由用户验收 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe` 当前构建外观。
+2. 验收时重点看 Dashboard / 实例列表 / 代理池 / 内核管理是否显示真实 `4/95/3` 数据，且功能按钮仍通过 core bridge 工作。
+3. 下一轮继续推进统一服务边界，重点处理 `src/modules/synchronizer/api.ts` 的 typed facade，以及 browser 模块内动态 `desktopRpc(property, args)` 的进一步显式化。
+4. 下一轮继续做深度细节测试：重点检查主线 UI 按钮、Wails 兼容 API 等价链路、Settings/runtime 操作、事件监控 history 页面和 report/history 页面。

@@ -20,14 +20,22 @@
    - fallback 只作为异常恢复，不作为 release-default route
 
 4. Mainline release gate — **已完成自动化门禁**
-   - 2026-05-23 已通过 `scripts/windows_local_verify.ps1 -SkipContinuityTest`
-   - 覆盖 typecheck、Vite build、Win11 baseline、Rust lib/full tests、Tauri release build
-   - 生成 Win11 NSIS installer：`src-tauri/target/release/bundle/nsis/PersonaPilot_0.1.0_x64-setup.exe`
-   - P13 已新增 `docs/24-external-distribution-readiness.md`，后续发布前按该清单追加人工 operator smoke 和 continuity integration test
+   - 2026-05-23 曾通过 `scripts/windows_local_verify.ps1 -SkipContinuityTest`
+   - 该 gate 覆盖 typecheck、Vite build、Win11 baseline、Rust lib/full tests、Tauri release build
+   - 注意：这属于历史 Tauri/PersonaPilot 0.1.0 路线证据；2026-05-25 后主线 gate 必须改为验证 `personal-pilot-tauri.exe` 1.1.0
+   - P13 已新增 `docs/24-external-distribution-readiness.md`，后续发布前按新的单入口清单追加人工 operator smoke 和 continuity integration test
 
-## Now：Overall remaining `70%`
+## Now：Overall remaining `60%`
 
 目标：从 closeout-ready desktop app 走向完整平台能力。此轨道已从 `30% / 70% / yellow` 推进到 `40% / 60% / yellow`，原因是 P14 新增了 release/provider/session/taxonomy 的可重复 evidence 入口和 machine-readable taxonomy seed；这些仍不得冒充完整生产闭环。
+
+0. Single UI / exe convergence
+   - 用户已确认唯一主线 UI 是截图所示 `personal-pilot` 1.1.0 / Wails v2 + React UI。
+   - 唯一用户入口为 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`。
+   - 2026-05-25 第一版已把 Tauri release 产物名、产品名、根目录验收入口和启动 UI 壳收敛到该 exe，并已核验 `tauriWailsBridge` / core bridge 可读取真实 `4/95/3` 数据。
+   - 下一步优先由用户验收第一版 UI，再把第二套 Tauri/Vite UI 中的新功能迁回此 UI。
+   - `PersonaPilot.exe`、`portable.exe`、`persona-pilot-desktop.exe`、根目录工具 exe、`gateway-ui/` 和未接主线的 UI 代码已清理或隔离，不得再接收新功能。
+   - 2026-05-27 主线程复核：旧入口/旁路 UI 没有重新成为主线；`src/modules/dashboard/api.ts`、`src/modules/profile/api.ts`、`src/modules/monitor/EventMonitorPage.tsx` 已收口到 `services/desktop.ts` typed wrapper 或模块 facade，当前剩余边界风险主要在 `src/modules/synchronizer/api.ts` 和 browser 模块的动态 desktop facade。
 
 1. Validation foundation
    - Validation Board 前端 MVP 已落地。
@@ -62,6 +70,13 @@
    - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
    - P12 已把 AdsPower benchmark refresh 固定为 boundary guard；P21 新增 runtime adapter evidence gate report：等 B1-B5 有新证据后再重算评分。
+   - Camoufox 下一步按 `docs/18-external-browser-integration-plan.md` 的 `90` 分方案推进：先做可选 Runner 的设置、能力检测、错误码和单任务执行闭环，再接入基础 profile/proxy 映射；remote server、browser pool 和深度指纹拟真不进入第一主链。2026-05-27 已补充性能最优落点：默认按任务启动、不常驻、不启动时预热、并发默认 `1`、artifact 按需采集、capability 缓存、release idle 与 task-run 指标分开记账。当前新增 `scripts/camoufox_smoke.ps1` 用于检查 skeleton / settings / desktop wrapper 合同；预期状态仍是 `contract_ready_runtime_smoke_required`，下一步必须补真实打开页面、artifact、取消/超时清理和 task-run 性能证据。
+
+6. Retire duplicate UI paths
+   - 2026-05-26 已删除根目录旁路 exe、`src-tauri/target/release/persona-pilot-desktop.exe` 和仓库内 `gateway-ui/` 静态 UI。
+   - Gateway dashboard 静态 UI 不再作为仓库内置资产；如需临时使用，必须通过 `GATEWAY_UI_DIR` 显式指向外部目录。
+   - 第二套 UI 不再作为发布入口；后续只允许以历史参考或外部迁移来源存在。
+   - 下一步不再做旧 UI 复活式迁移；改为在截图主线 UI 内继续缩小动态 facade 面积，保持 `tauriWailsBridge` 作为过渡兼容层，优先把 synchronizer/browser 剩余 API 迁到统一 typed facade。
 
 ## Later：成熟度与评分刷新
 
