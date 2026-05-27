@@ -23,8 +23,6 @@ function Test-RequiredPath([string]$RelativePath) {
 }
 
 $checks = @(
-  (Test-RequiredPath "src-tauri\target\release\bundle\nsis\personal-pilot_1.1.0_x64-setup.exe"),
-  (Test-RequiredPath "src-tauri\target\release\personal-pilot-tauri.exe"),
   (Test-RequiredPath "personal-pilot-tauri.exe"),
   (Test-RequiredPath "docs\24-external-distribution-readiness.md"),
   (Test-RequiredPath "docs\02-current-state.md"),

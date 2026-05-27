@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "desktop:release": "tauri build",
+    "desktop:release": "tauri build && powershell -ExecutionPolicy Bypass -File scripts/sync-main-entry.ps1",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri"

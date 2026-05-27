@@ -351,17 +351,17 @@ curl -X POST http://127.0.0.1:19876/api/fingerprint/randomize \
 | `POST /api/instances/{id}/cast` | 将浏览器画面实时投射到 Web 页面（VNC 模式） |
 | `POST /api/instances/{id}/collaborate` | 邀请其他人共同操控同一浏览器实例 |
 
-### 3.15 浏览器配置克隆与批量创建
+### 3.15 浏览器配置克隆与多实例创建
 
 | 端点 | 功能 |
 |------|------|
 | `POST /api/profiles/{id}/clone` | 克隆配置（批量生成多个类似配置，自动递增名称） |
-| `POST /api/profiles/batch-create` | 批量创建配置（指定基模板 + 数量 + 命名规则） |
+| `POST /api/profiles/batch-create` | 多实例配置创建（指定基模板 + 数量 + 命名规则） |
 | `POST /api/profiles/{id}/export` | 导出配置为可移植 JSON |
 | `POST /api/profiles/import` | 导入配置 |
 
 ```bash
-# 批量创建 50 个淘宝店铺配置，自动编号
+# 多实例创建 50 个淘宝店铺配置，自动编号
 curl -X POST http://127.0.0.1:19876/api/profiles/batch-create \
   -d '{
     "templateId": "tmpl-taobao-base",
@@ -844,7 +844,7 @@ curl -X GET http://127.0.0.1:19876/api/audit/errors?since=24h&severity=error
 | **会话录播回放** | 录下完整操作过程可回放查看（类似浏览器回放） | 取证/调试 |
 | **水印截图** | 自动截图时在图片中嵌入配置 ID + 时间戳（肉眼不可见） | 防截屏泄露溯源 |
 | **剪贴板隔离** | 不同配置之间剪贴板隔离，防 Ctrl+C/V 数据串台 | 操作安全 |
-| **键盘输入加密** | 输入密码时在应用层加密后再传给 CDP | 防 keylogger |
+| **键盘输入加密** | 输入密码时在应用层加密后再传给 CDP | 防输入事件监控 |
 | **防篡改审计日志** | 操作日志使用哈希链存储，防事后篡改 | 合规 |
 
 ## 5.10 部署与运维

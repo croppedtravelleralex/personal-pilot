@@ -580,7 +580,7 @@ println!("Recognized: {}", result);
 
 ### CAPTCHA Relevance
 
-PaddleOCR is **not a CAPTCHA solver** — it's a general-purpose document OCR engine. Use for:
+PaddleOCR is **not a human verification solver** — it's a general-purpose document OCR engine. Use for:
 
 - Chinese text CAPTCHA recognition (where ddddocr fails)
 - Distorted/rotated text CAPTCHA (PaddleOCR handles orientation)
@@ -733,11 +733,11 @@ const page = await browser.newPage();
 │       │              │              │                     │
 │  ┌────▼──────────────▼──────────────▼─────┐              │
 │  │        CAPTCHA Detection Layer          │              │
-│  │  (iframe detection, siteKey extraction) │              │
+│  │  (iframe detection, siteKey reading) │              │
 │  └────────────────┬───────────────────────┘              │
 │                   │                                      │
 │  ┌────────────────▼───────────────────────┐              │
-│  │        CAPTCHA Solver Abstraction       │              │
+│  │        Human Verification Abstraction       │              │
 │  │  ┌──────────┐ ┌──────────┐ ┌────────┐ │              │
 │  │  │ Service  │ │ Service  │ │Service │ │              │
 │  │  │ Router   │ │ Balancer │ │Fallback│ │              │

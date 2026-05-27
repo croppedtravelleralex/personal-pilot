@@ -9,7 +9,7 @@ PersonaPilot 是一个面向 Windows 11 的本地桌面 operator console，用�
 - 主线交付：`100% / 0% / green`。
 - 整体终态：`40% / 60% / yellow`。
 - Win11 release gate 已于 2026-05-23 通过。
-- 当前主线入口是根目录 `personal-pilot-tauri.exe`；release build 会生成 `src-tauri/target/release/personal-pilot-tauri.exe` 和 `src-tauri/target/release/bundle/nsis/personal-pilot_1.1.0_x64-setup.exe`。
+- 当前主线入口只保留根目录 `personal-pilot-tauri.exe`；release build 的 target 产物只作为临时构建输出，完成后必须同步到根目录并清理。除该 root exe 外，不允许保留其他用户可打开 GUI exe 或旁路 UI。
 - Validation Board 已进入桌面导航，并严格区分 `declared / applied / observed` evidence。
 - P13 已新增外部分发前检查入口：`docs/24-external-distribution-readiness.md`。
 

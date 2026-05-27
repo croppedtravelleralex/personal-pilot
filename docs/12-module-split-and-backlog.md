@@ -314,7 +314,7 @@ app.go                          — 核心 App 结构体 + 生命周期 + Wails 
 | `GET /api/audit/errors` | GET | 错误日志聚合 | - |
 | `POST /api/integration/telegram` | POST | Telegram通知配置 | webhook |
 | `POST /api/integration/email` | POST | 邮件通知配置 | webhook |
-| `POST /api/profiles/batch-create` | POST | 批量创建配置 | browser |
+| `POST /api/profiles/batch-create` | POST | 多实例配置创建 | browser |
 | `POST /api/ai/instruction` | POST | 自然语言→操作序列 | LLM + behavior |
 
 ---

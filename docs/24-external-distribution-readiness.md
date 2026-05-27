@@ -9,7 +9,7 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 ## 可分发资产
 
 - Win11 主线入口：`personal-pilot-tauri.exe`
-- Win11 NSIS installer：`src-tauri/target/release/bundle/nsis/personal-pilot_1.1.0_x64-setup.exe`
+- 当前仓库只保留这一份用户可打开 GUI exe；安装包和 `src-tauri/target/release/*.exe` 只允许作为临时构建输出，不作为持久入口。
 - 自动化 release gate 已通过：`scripts/windows_local_verify.ps1 -SkipContinuityTest`
 - 基础技术栈符合项目规则：Tauri 2 + Vite + React + TypeScript
 - Native / system capability 统一通过 `src/services/desktop.ts` 暴露
@@ -19,7 +19,7 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 
 1. Provider closure：CAPTCHA / SMS / Email 已有 readiness surface 和 blockers，但真实 provider smoke、manager wiring、CDP detect/fill 和 operator 闭环未完成。
 2. Profile portability：`SessionBundle` export/import/preflight/dry-run/confirmed local restore 已落地，但跨机器 portability smoke 未完成。
-3. Runtime measurement：P14 已有 release artifact 实测入口和 report；当前 `personal-pilot-tauri.exe` smoke 为 warning，`2785ms` cold start、`374MB` idle RSS、`8` processes 均超过默认预算，外部分发前应先做性能 mitigation 或明确记录例外。
+3. Runtime measurement：P14 已有 release artifact 实测入口和 report；当前 `personal-pilot-tauri.exe` smoke 为 warning，`10274ms` cold start、`672MB` idle RSS、`22` processes 均超过默认预算，外部分发前应先做性能 mitigation 或明确记录例外。
 4. Validation evidence：P5 Lightpanda/CDP smoke 可重复生成 profile runtime evidence report，但 WebRTC/audio warning、canvas failure 等 failure reason 必须保留。
 5. Fingerprint depth：当前是 `80` declared controls / `26` runtime-projected fields / `450` taxonomy seed，不是全量 observed fingerprint coverage。
 6. Behavior depth：当前是 `13` shipped primitives / `8` page archetypes / `450` taxonomy seed，不是完整 replay taxonomy。

@@ -242,10 +242,10 @@ func (s *SessionStore) Delete(id string) error
 │                 Account Registration Pipeline            │
 ├─────────────────────────────────────────────────────────┤
 │ 1. 创建临时邮箱 (POST /api/email/inbox)                  │
-│ 2. 购买接码号码 (POST /api/sms/number)  // 如果需要      │
+│ 2. 购买通知网关号码 (POST /api/sms/number)  // 如果需要      │
 │ 3. CDP: 导航到注册页                                     │
 │ 4. CDP: 填入邮箱 + 手机号                               │
-│ 5. CDP: 处理 Turnstile/reCAPTCHA (captcha solver)       │
+│ 5. CDP: 处理 Turnstile/reCAPTCHA (human verification handler)       │
 │ 6. CDP: 点击发送验证码                                   │
 │ 7. 并行等待:                                            │
 │    ├─ Email 验证码 (POST /api/email/inbox/{id}/wait-code)│

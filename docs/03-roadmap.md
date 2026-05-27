@@ -32,10 +32,10 @@
 0. Single UI / exe convergence
    - 用户已确认唯一主线 UI 是截图所示 `personal-pilot` 1.1.0 / Wails v2 + React UI。
    - 唯一用户入口为 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`。
-   - 2026-05-25 第一版已把 Tauri release 产物名、产品名、根目录验收入口和启动 UI 壳收敛到该 exe，并已核验 `tauriWailsBridge` / core bridge 可读取真实 `4/95/3` 数据。
-   - 下一步优先由用户验收第一版 UI，再把第二套 Tauri/Vite UI 中的新功能迁回此 UI。
-   - `PersonaPilot.exe`、`portable.exe`、`persona-pilot-desktop.exe`、根目录工具 exe、`gateway-ui/` 和未接主线的 UI 代码已清理或隔离，不得再接收新功能。
-   - 2026-05-27 主线程复核：旧入口/旁路 UI 没有重新成为主线；`src/modules/dashboard/api.ts`、`src/modules/profile/api.ts`、`src/modules/monitor/EventMonitorPage.tsx` 已收口到 `services/desktop.ts` typed wrapper 或模块 facade，当前剩余边界风险主要在 `src/modules/synchronizer/api.ts` 和 browser 模块的动态 desktop facade。
+   - 2026-05-27 已把 Tauri release 产物名、产品名、根目录验收入口和启动 UI 壳收敛到该 exe，并已核验 `tauriWailsBridge` / core bridge 可读取当前真实 `4/93/3` 数据。
+   - 第二套 Tauri/Vite 控制台 UI 源码已删除；后续如需吸收其功能，必须重新实现在 `src/modules/**` 主线 UI 内。
+   - `PersonaPilot.exe`、`portable.exe`、`persona-pilot-desktop.exe`、`src-tauri/target/release/*.exe`、安装包 exe、根目录工具 exe、`gateway-ui/` 和未接主线的 UI 代码已清理，不得再接收新功能。
+   - 构建后只允许持久保留根目录 `personal-pilot-tauri.exe`；`bin/` sidecar、代理工具和 `chrome/` 浏览器引擎是运行依赖，不是用户入口。
 
 1. Validation foundation
    - Validation Board 前端 MVP 已落地。
@@ -73,9 +73,9 @@
    - Camoufox 下一步按 `docs/18-external-browser-integration-plan.md` 的 `90` 分方案推进：先做可选 Runner 的设置、能力检测、错误码和单任务执行闭环，再接入基础 profile/proxy 映射；remote server、browser pool 和深度指纹拟真不进入第一主链。2026-05-27 已补充性能最优落点：默认按任务启动、不常驻、不启动时预热、并发默认 `1`、artifact 按需采集、capability 缓存、release idle 与 task-run 指标分开记账。当前新增 `scripts/camoufox_smoke.ps1` 用于检查 skeleton / settings / desktop wrapper 合同；预期状态仍是 `contract_ready_runtime_smoke_required`，下一步必须补真实打开页面、artifact、取消/超时清理和 task-run 性能证据。
 
 6. Retire duplicate UI paths
-   - 2026-05-26 已删除根目录旁路 exe、`src-tauri/target/release/persona-pilot-desktop.exe` 和仓库内 `gateway-ui/` 静态 UI。
+   - 2026-05-27 已删除第二套 Tauri/Vite 控制台 UI 源码、根目录旁路 exe、`src-tauri/target/release` 持久 GUI exe 和仓库内 `gateway-ui` 静态 UI。
    - Gateway dashboard 静态 UI 不再作为仓库内置资产；如需临时使用，必须通过 `GATEWAY_UI_DIR` 显式指向外部目录。
-   - 第二套 UI 不再作为发布入口；后续只允许以历史参考或外部迁移来源存在。
+   - 第二套 UI 不再作为发布入口，也不保留源码目录；后续只允许从历史提交中取设计参考。
    - 下一步不再做旧 UI 复活式迁移；改为在截图主线 UI 内继续缩小动态 facade 面积，保持 `tauriWailsBridge` 作为过渡兼容层，优先把 synchronizer/browser 剩余 API 迁到统一 typed facade。
 
 ## Later：成熟度与评分刷新

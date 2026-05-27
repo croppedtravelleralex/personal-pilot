@@ -1,6 +1,6 @@
 # Overall Remaining Work Register
 
-Updated: 2026-05-23 (Asia/Shanghai)
+Updated: 2026-05-27 (Asia/Shanghai)
 
 ## 使用规则
 
@@ -28,9 +28,9 @@ Updated: 2026-05-23 (Asia/Shanghai)
 2. 在干净 Win11 机器验证安装、启动、卸载。`blocked-external-gated`
 3. 验证全页面可打开。`blocked-external-gated`
 4. 保持 release notes 与真实能力一致。`ready`
-5. 优化 cold start：`2785ms -> <= 2000ms`。`improved-still-warning`
-6. 优化 idle RSS：`374MB -> <= 220MB`。`improved-still-warning`
-7. 优化 process count：`8 -> <= 4` 或记录例外。`improved-still-warning`
+5. 优化 cold start：`10274ms -> <= 2000ms`。`warning`
+6. 优化 idle RSS：`672MB -> <= 220MB`。`warning`
+7. 优化 process count：`22 -> <= 4` 或记录例外。`warning`
 8. 生成 release performance history。`done`
 9. 将 release performance report 接入 Overview / Settings。`done-overview`
 

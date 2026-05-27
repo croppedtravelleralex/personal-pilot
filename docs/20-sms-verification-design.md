@@ -1,4 +1,4 @@
-# Personal Pilot — SMS Verification (接码) Module Design
+# Personal Pilot — SMS Verification (通知网关) Module Design
 
 > SMS 验证码接收平台集成方案设计。覆盖 5sim / SMSPool / HeroSMS 三大平台，号码生命周期管理，OTP 提取与自动化填充。
 > Part of the "缺口补全" initiative (CAPTCHA + SMS + Email API exposure).
@@ -11,10 +11,10 @@
 |------|----------|------|
 | 邮箱验证码 | ✅ 已实现 (`internal/email/`) | 可通过新 Email API 暴露 |
 | 验证码提取 | ✅ 已实现 | email regex 已有，SMS 模块也具备提取逻辑 |
-| **SMS 接码** | ⚠️ 部分落地 (`backend/internal/sms/`) | 已有 Manager、5sim、SMSPool、handler/route；仍缺 production manager wiring/config、真实服务验收与自动化填入闭环 |
+| **SMS 通知网关** | ⚠️ 部分落地 (`backend/internal/sms/`) | 已有 Manager、5sim、SMSPool、handler/route；仍缺 production manager wiring/config、真实服务验收与自动化填入闭环 |
 | **号码池管理** | ⚠️ 部分落地 | 已有 NumberPool/Blacklist/Metrics；预取策略和持久化仍需强化 |
 | **OTP 提取** | ⚠️ 部分落地 | 已覆盖基础 SMS 文本，需更多国家/平台样本验证 |
-| **接码平台集成** | ⚠️ 部分落地 | 5sim/SMSPool 代码已接入；HeroSMS/sms-activate 未落地；运行时 manager 尚未初始化 |
+| **通知网关平台集成** | ⚠️ 部分落地 | 5sim/SMSPool 代码已接入；HeroSMS/sms-activate 未落地；运行时 manager 尚未初始化 |
 
 ---
 
@@ -83,7 +83,7 @@ backend/internal/sms/
 ```go
 package sms
 
-// Provider 是所有接码平台的统一接口
+// Provider 是所有通知网关平台的统一接口
 type Provider interface {
     Name() string
 
@@ -371,11 +371,11 @@ func (f *SMSFiller) WaitAndFillOTP(ctx context.Context, number *sms.Number, time
 | `/api/sms/number/{id}/status` | GET | 查询号码状态 | handler/route 已有，manager wiring 未接入 |
 | `/api/sms/number/{id}/cancel` | POST | 取消/释放号码 | handler/route 已有，manager wiring 未接入 |
 | `/api/sms/number/{id}/finish` | POST | 确认完成 | 未落地 |
-| `/api/sms/balance` | GET | 查询接码余额 | handler/route 已有，manager wiring 未接入 |
+| `/api/sms/balance` | GET | 查询通知网关余额 | handler/route 已有，manager wiring 未接入 |
 | `/api/sms/prices` | GET | 查询各服务价格 | 未落地 |
-| `/api/sms/config` | GET | 接码配置 | 未落地 |
-| `/api/sms/config` | PUT | 更新接码配置 | 未落地 |
-| `/api/sms/stats` | GET | 接码统计(成功率/花费) | 未落地 |
+| `/api/sms/config` | GET | 通知网关配置 | 未落地 |
+| `/api/sms/config` | PUT | 更新通知网关配置 | 未落地 |
+| `/api/sms/stats` | GET | 通知网关统计(成功率/花费) | 未落地 |
 
 ### 请求/响应体
 
@@ -430,7 +430,7 @@ func (f *SMSFiller) WaitAndFillOTP(ctx context.Context, number *sms.Number, time
 ## 八、数据库变更
 
 ```sql
--- 接码配置表
+-- 通知网关配置表
 CREATE TABLE IF NOT EXISTS sms_config (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     primary_provider  TEXT NOT NULL DEFAULT '5sim',
@@ -445,7 +445,7 @@ CREATE TABLE IF NOT EXISTS sms_config (
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 接码号码记录表
+-- 通知网关号码记录表
 CREATE TABLE IF NOT EXISTS sms_orders (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     order_id        TEXT NOT NULL,           -- 平台订单号
@@ -463,7 +463,7 @@ CREATE TABLE IF NOT EXISTS sms_orders (
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 接码统计表
+-- 通知网关统计表
 CREATE TABLE IF NOT EXISTS sms_stats (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     provider        TEXT NOT NULL,
@@ -484,7 +484,7 @@ CREATE TABLE IF NOT EXISTS sms_stats (
 ```yaml
 # config.yaml 新增
 sms:
-  primary_provider: "5sim"               # 首选接码平台
+  primary_provider: "5sim"               # 首选通知网关平台
   primary_api_key: "${FIVESIM_API_KEY}"  # 环境变量注入
   fallback_provider: "smspool"
   fallback_api_key: "${SMSPOOL_API_KEY}"
@@ -552,7 +552,7 @@ sms:
 | **Phase 4** | CDP 集成 + 注册自动化流程闭环 | 未落地 | 填号、触发发送、轮询、填码 |
 | **Phase 5** | HeroSMS 适配器 + 余额告警 + 看板 | 未落地 | sms-activate 兼容层与告警 |
 
-当前已具备后端服务边界，尚不能宣称完整账号注册接码闭环。
+当前已具备后端服务边界，尚不能宣称完整账号注册通知网关闭环。
 
 ## 十二、风险与缓解
 
@@ -560,5 +560,5 @@ sms:
 |------|------|------|------|
 | 5sim 关键号码缺货 | 无法购买 | 中 | 多 provider 自动切换，支持服务预取 |
 | 目标平台识别虚拟号码 | 注册失败 | 高 | 优先 SMSPool (non-VoIP)，提高单次成功率 |
-| 接码成本超出预算 | 运营成本 | 中 | 成本追踪告警 + 国家/服务级别限价 |
+| 通知网关成本超出预算 | 运营成本 | 中 | 成本追踪告警 + 国家/服务级别限价 |
 | 号码黑名单 | 号码被风控 | 高 | 内置黑名单去重 + 失败自动更换号码 |

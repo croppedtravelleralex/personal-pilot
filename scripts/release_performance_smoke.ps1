@@ -19,7 +19,6 @@ function Resolve-ReleaseExe([string]$ProjectRoot, [string]$RequestedPath) {
   }
 
   $candidates = @(
-    (Join-Path $ProjectRoot "src-tauri\target\release\personal-pilot-tauri.exe"),
     (Join-Path $ProjectRoot "personal-pilot-tauri.exe")
   )
   foreach ($candidate in $candidates) {

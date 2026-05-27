@@ -1,6 +1,6 @@
 # Root Entrypoint Map
 
-Updated: 2026-05-23
+Updated: 2026-05-27
 
 ## Purpose
 
@@ -60,6 +60,10 @@ Use one dual-axis rule everywhere:
 Use `/docs/13-adspower-deep-comparison.md` and `/docs/18-external-browser-integration-plan.md` only for the second route.
 Use `/docs/19-phase-plan-and-scorecard.md` when the user asks for detailed phase planning, scoring, or a full benchmark summary.
 Use `/docs/24-external-distribution-readiness.md` before external distribution or release-note drafting.
+
+## Executable And UI Rule
+
+Only `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe` is a user-openable GUI entry. `src-tauri/target/` and root `target/` are temporary build outputs and may be deleted. Do not reintroduce `PersonaPilot.exe`, `portable.exe`, `persona-pilot-desktop.exe`, installer exe as a persistent entry, `gateway-ui/`, or any second UI shell. Runtime dependencies under `bin/` and browser engines under `chrome/` are not user entries.
 
 ## Secondary Root Files
 

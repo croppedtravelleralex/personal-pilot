@@ -24,7 +24,7 @@
 
 ```
                     ┌──────────────────────────────┐
-                    │    CAPTCHA Solver Manager     │
+                    │    Human Verification Manager     │
                     │    (internal/captcha/)        │
                     │    统一接口 + 自动降级          │
                     └──────┬───────────────┬───────┘
@@ -47,7 +47,7 @@
 ### 三层演进策略
 
 ```
-已落地      : Capsolver / 2Captcha solver 代码 + launchcode handler/route
+已落地      : Capsolver / 2Captcha 适配代码 + launchcode handler/route
 下一步      : production manager wiring/config → 端点不再 service unavailable
 再下一步    : CDP 检测/截图/sitekey 抽取 → 自动提交 solver
 后续可选    : ddddocr 本地 OCR、Anti-Captcha、Turnstile 深度交互

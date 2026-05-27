@@ -146,7 +146,7 @@ pub async fn gateway_state_from_env() -> AnyhowResult<GatewayState> {
     );
     let ui_dir = std::env::var("GATEWAY_UI_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("gateway-ui"));
+        .unwrap_or_else(|_| PathBuf::from("__external_gateway_ui_not_configured__"));
     let database_url = std::env::var("GATEWAY_DATABASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -743,6 +743,13 @@ mod tests {
             std::env::temp_dir().display(),
             uuid::Uuid::new_v4()
         );
+        let ui_dir = std::env::temp_dir().join(format!("gateway-ui-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&ui_dir).expect("create gateway test ui dir");
+        std::fs::write(
+            ui_dir.join("index.html"),
+            r#"<html><head><base href="./"><script src="./app.js"></script></head><body>Behavior Realism Dashboard</body></html>"#,
+        )
+        .expect("write gateway test ui index");
         let db = init_db(&db_url).await.expect("init gateway test db");
         GatewayState {
             admin_token: Some("admin-token".to_string()),
@@ -755,7 +762,7 @@ mod tests {
                 upstream_base_url: None,
                 upstream_bearer_token: None,
                 runtime_mode: "dev".to_string(),
-                ui_dir: PathBuf::from("gateway-ui"),
+                ui_dir,
                 database_url: db_url,
                 control_base_url: "http://127.0.0.1:3000".to_string(),
                 control_api_key: None,

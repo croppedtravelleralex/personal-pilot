@@ -566,7 +566,7 @@ curl -s -X POST "$BASE_URL/proxies/proxy-us-1/verify" -H "$AUTH_HEADER"
 
 ### 7.6 POST /proxies/verify-batch
 
-批量创建 verify 任务。
+多实例创建 verify 任务。
 
 ```bash
 curl -s -X POST "$BASE_URL/proxies/verify-batch" \

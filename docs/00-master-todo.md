@@ -256,7 +256,7 @@
 ### 集成外部系统
 
 - [ ] **验证码打码自动化闭环** — 2Captcha/Capsolver solver 代码与 handler/route 已部分落地；仍需 production manager wiring/config、CDP 检测、截图/sitekey 抽取、回填、Anti-Captcha/本地 OCR 可选扩展
-- [ ] **SMS 验证码自动化闭环** — 5sim/SMSPool provider 代码与 handler/route 已部分落地；仍需 production manager wiring/config、真实验收、finish/prices/config/stats、CDP 填号/填码、sms-activate/HeroSMS 可选扩展
+- [ ] **SMS 通知自动化闭环** — 5sim/SMSPool provider 代码与 handler/route 已部分落地；仍需 production manager wiring/config、真实验收、finish/prices/config/stats、CDP 填号/填码、sms-activate/HeroSMS 可选扩展
 - [ ] **临时邮箱自动化闭环** — inbox/wait-code REST API 已部分落地；session persistence 仍是 best-effort，仍需邮件列表/详情/config/stats 和注册流水线自动填充
 - [ ] **浏览器扩展自动注入** — 预装扩展到配置
 
@@ -318,7 +318,7 @@
 
 ### 配置批量操作
 
-- [ ] `POST /api/profiles/batch-create` — 批量创建配置
+- [ ] `POST /api/profiles/batch-create` — 多实例配置创建
 - [ ] **配置生命周期管理** — 过期策略、N 天不活动自动归档
 
 ### 元素调试
