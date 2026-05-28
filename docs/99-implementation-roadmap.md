@@ -8,7 +8,7 @@
 
 ## Phase 1: 客户端环境参数注入系统
 
-**来源：** `docs/26-environment-compatibility-runtime-design.md`  
+**来源：** `docs/26-environment-compatibility-runtime-design.md`
 **估时：** 5d
 
 ### P0
@@ -65,7 +65,7 @@
 
 ## Phase 2: 交互行为引擎增强
 
-**来源：** `docs/30-behavioral-fidelity-layer.md`  
+**来源：** `docs/30-behavioral-fidelity-layer.md`
 **估时：** 8d
 
 ### P0
@@ -117,7 +117,7 @@
 
 ## Phase 3: 账号活跃度维护引擎
 
-**来源：** `docs/26-environment-compatibility-runtime-design.md`  
+**来源：** `docs/26-environment-compatibility-runtime-design.md`
 **估时：** 5d
 
 - [x] **3.1** `backend/internal/behavior/lifecycle/`（本机 runtime/store 证据 passed；真实账号调度归 Overall 外部验收）
@@ -137,8 +137,8 @@
 
 ## Phase 4: 工作流引擎与插件系统
 
-**来源：** `docs/27-workflow-plugin-system-design.md`  
-**依赖：** Phase 1 + 2  
+**来源：** `docs/27-workflow-plugin-system-design.md`
+**依赖：** Phase 1 + 2
 **估时：** 10d
 
 ### P0
@@ -186,7 +186,7 @@
 
 ## Phase 5: 扩展功能构建
 
-**来源：** `docs/34—38`  
+**来源：** `docs/34—38`
 **估时：** 15d
 
 ### 5.1 环境参数样板采集
@@ -229,6 +229,54 @@
 - [x] **5.5.2** Chromium 启动参数集成 contract
 - [x] **5.5.3** Xray/Sing-Box 出站配置集成
 
+## Phase 6: 信任继承与环境一致性治理架构 **（设计就绪，待实现）**
+
+**来源：** `docs/39-adversarial-trust-inheritance.md`
+**估时：** 待估算
+
+> 本 Phase 的核心理念详见设计文档。以下仅列出实现项，不做详细展开。
+
+### P0 — 修复集成断层
+
+- [ ] **6.1** `environment_injector.go` 集成修复
+  - [ ] 在 `browser/Manager.StartInstance()` 中调用 `CDPExecutor.ApplyEnvironmentInjection()`
+  - [ ] 当前该方法实现完整但从未被调用
+- [ ] **6.2** `transport/` 包集成修复
+  - [ ] 当前 `transport/` 包被 0 个外部包引用，为死骨架
+  - [ ] 接入 `proxy/xray.go` 和 `proxy/singbox.go` 的出站配置生成
+
+### P1 — 五层纵深防御
+
+- [ ] **6.3** 传输一致性层
+  - [ ] 预置 3-4 个浏览器 TLS 握手参数模板（Chrome/Edge/Firefox）
+  - [ ] Xray/Sing-Box 出站配置绑定 runtime family/alpn/header order
+  - [ ] HTTP/2 策略与请求头顺序模板
+- [ ] **6.4** 凭证继承层
+  - [ ] `session/credential.go` — CredentialChain 数据结构
+  - [ ] `session/token_store.go` — Token 加密持久化（复用 AES-GCM）
+  - [ ] OAuth2 code exchange + refresh 流程
+  - [ ] SQLite `adversarial_credential_chains` 表
+- [ ] **6.5** 设备族指纹层
+  - [ ] `behavior/fingerprint_generator.go` — 设备族定义与生成器
+  - [ ] 预置至少 2 个设备族（商务办公本 + 家用台式机）
+  - [ ] 接入现有 consistency_matrix.go 的 4 维预检 + fingerprint_consistency.go 的 10 维评分
+- [ ] **6.6** 行为噪声层（扩展现有 humanize/）
+  - [ ] 贝塞尔曲线变体支持
+  - [ ] 视线扫描模拟
+  - [ ] 页面间过渡行为
+  - [ ] 上下文感知噪声 Profile
+- [ ] **6.7** 反馈闭环层
+  - [ ] `feedback/detector.go` — 风险/验证信号检测
+  - [ ] `feedback/analyzer.go` — 风险模式分析 + 人工复核建议
+  - [ ] 复用 `events.EmitAndLog()` → `automation.RuleEngine` 驱动闭环
+  - [ ] 预置 `automation_rules` 启动数据（risk:* 事件 → 暂停任务/人工复核/记录证据）
+
+### P2 — 验证与增强
+
+- [ ] **6.8** environment_audit.go 扩展到全部 8+ 个注入族
+- [ ] **6.9** 跨机器凭证迁移验证（SessionBundle + adversarial_credential_chains）
+- [ ] **6.10** 传输层参数表自动更新机制（追踪浏览器版本变化）
+
 ---
 
 ## 任务汇总
@@ -240,4 +288,5 @@
 | 3 | 账号活跃度维护引擎 | 6 | 5d | P1+P2 |
 | 4 | 工作流引擎与插件系统 | 13 | 10d | P1+P2 |
 | 5 | 扩展功能 | 18 | 15d | 递进 |
-| **合计** | | **~65** | **~43d** | |
+| **6** | **信任继承与环境一致性治理** | **10** | **待估** | **P1+P2+events** |
+| **合计** | | **~75** | **~43d+** | |

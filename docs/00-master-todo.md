@@ -416,4 +416,7 @@
 | **P2** | 差异化能力 | 80+ | ~4-5 月 |
 | **P3** | 高级编排 + 团队 | 30 | ~2-3 月 |
 | **P4+** | 平台化 + 企业 + AI | 15 | ~5-6 月 |
+| **Phase6*** | 信任继承与环境一致性治理 | 10 | 待估 |
 | **总计** | | **~190+** | **~12-18 月** |
+
+> \* Phase6 详见 `docs/39-adversarial-trust-inheritance.md`，已纳入 `docs/99-implementation-roadmap.md` 作为 Phase 6
