@@ -302,8 +302,11 @@ export async function setDefaultBrowserCore(coreId: string): Promise<boolean> {
   return true
 }
 
-export async function validateBrowserCorePath(corePath: string): Promise<BrowserCoreValidateResult> {
+export async function validateBrowserCorePath(corePath: string, kind: BrowserCoreInput['kind'] = 'chromium'): Promise<BrowserCoreValidateResult> {
   const bindings: any = await getBindings()
+  if (bindings?.BrowserCoreValidateForKind) {
+    return (await bindings.BrowserCoreValidateForKind(corePath, kind || 'chromium')) || { valid: false, message: '验证失败' }
+  }
   if (bindings?.BrowserCoreValidate) {
     return (await bindings.BrowserCoreValidate(corePath)) || { valid: false, message: '验证失败' }
   }

@@ -56,14 +56,13 @@ func (m *Manager) ResolveLightpandaExecutable(core Core) (string, error) {
 
 // ResolveBrowserBinary resolves the correct binary for a given core based on its Kind.
 func (m *Manager) ResolveBrowserBinary(core Core) (string, error) {
-	kind := strings.TrimSpace(core.Kind)
-	if kind == "" {
-		kind = config.CoreKindChromium
-	}
+	kind := normalizeCoreKind(strings.TrimSpace(core.Kind))
 
 	switch kind {
 	case config.CoreKindLightpanda:
 		return m.ResolveLightpandaExecutable(core)
+	case config.CoreKindCamoufox:
+		return m.ResolveCamoufoxExecutable(core)
 	default:
 		return m.ResolveCoreExecutable(core)
 	}

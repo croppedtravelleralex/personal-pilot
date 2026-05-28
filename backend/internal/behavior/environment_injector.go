@@ -23,10 +23,19 @@ type EnvironmentInjectionProfile struct {
 	AcceptLanguage      string            `json:"acceptLanguage"`
 	WebGLVendor         string            `json:"webglVendor"`
 	WebGLRenderer       string            `json:"webglRenderer"`
+	WebGLExtensions     []string          `json:"webglExtensions"`
+	AudioNoise          float64           `json:"audioNoise"`
+	WebRTCPolicy        WebRTCPolicy      `json:"webRtcPolicy"`
+	MediaPermission     string            `json:"mediaPermission"`
 	Plugins             []PluginInjection `json:"plugins"`
 	MediaDevices        []MediaDeviceSpec `json:"mediaDevices"`
 	FontAllowlist       []string          `json:"fontAllowlist"`
 	Headers             map[string]string `json:"headers"`
+}
+
+type WebRTCPolicy struct {
+	Mode       string   `json:"mode"`
+	AllowHosts []string `json:"allowHosts"`
 }
 
 type PluginInjection struct {
@@ -134,21 +143,89 @@ func CompileEnvironmentInjectionScript(profile EnvironmentInjectionProfile) (Env
       if (parameter === 37446 && profile.webglRenderer) return profile.webglRenderer;
       return originalGetParameter.call(this, parameter);
     };
+    const originalGetSupportedExtensions = proto.getSupportedExtensions;
+    proto.getSupportedExtensions = function() {
+      const actual = (originalGetSupportedExtensions && originalGetSupportedExtensions.call(this)) || [];
+      const allowed = new Set(profile.webglExtensions || []);
+      if (!allowed.size) return actual;
+      return actual.filter((name) => allowed.has(name));
+    };
   };
   webglPatch(window.WebGLRenderingContext && WebGLRenderingContext.prototype);
   webglPatch(window.WebGL2RenderingContext && WebGL2RenderingContext.prototype);
+
+  if (window.AnalyserNode && AnalyserNode.prototype && AnalyserNode.prototype.getFloatFrequencyData) {
+    const originalGetFloatFrequencyData = AnalyserNode.prototype.getFloatFrequencyData;
+    AnalyserNode.prototype.getFloatFrequencyData = function(array) {
+      originalGetFloatFrequencyData.call(this, array);
+      const noise = Number(profile.audioNoise || 0) || stableNoise('audio-frequency');
+      for (let i = 0; i < array.length; i++) array[i] = array[i] + noise;
+    };
+  }
+  if (window.AudioBuffer && AudioBuffer.prototype && AudioBuffer.prototype.copyFromChannel) {
+    const originalCopyFromChannel = AudioBuffer.prototype.copyFromChannel;
+    AudioBuffer.prototype.copyFromChannel = function(destination, channelNumber, startInChannel) {
+      originalCopyFromChannel.call(this, destination, channelNumber, startInChannel);
+      const noise = Number(profile.audioNoise || 0) || stableNoise('audio-buffer');
+      for (let i = 0; i < destination.length; i++) destination[i] = destination[i] + noise / 1000;
+    };
+  }
+
+  if (document.fonts && profile.fontAllowlist && profile.fontAllowlist.length) {
+    const allowedFonts = Object.freeze(profile.fontAllowlist.slice());
+    defineGetter(Document.prototype, 'fonts', new Proxy(document.fonts, {
+      get(target, prop) {
+        if (prop === 'check') return (query) => allowedFonts.some((font) => String(query || '').includes(font));
+        if (prop === Symbol.iterator) return function*() { yield* []; };
+        return Reflect.get(target, prop);
+      }
+    }));
+    window.__personaPilotAllowedFonts = allowedFonts;
+  }
 
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
     navigator.mediaDevices.enumerateDevices = async () => (profile.mediaDevices || []).map((d) => ({
       kind: d.kind, label: d.label, groupId: d.groupId, deviceId: d.id
     }));
+    if (navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia = async () => {
+        if (profile.mediaPermission === 'deny') throw new DOMException('Permission denied', 'NotAllowedError');
+        return new MediaStream();
+      };
+    }
+  }
+
+  if (window.RTCPeerConnection) {
+    const OriginalRTCPeerConnection = window.RTCPeerConnection;
+    const shouldAllowCandidate = (line) => {
+      const policy = profile.webRtcPolicy || {};
+      if (policy.mode === 'allow_all') return true;
+      const hosts = new Set(policy.allowHosts || []);
+      if (!hosts.size) return false;
+      return Array.from(hosts).some((host) => String(line || '').includes(host));
+    };
+    const filterSDP = (sdp) => String(sdp || '').split('\n').filter((line) => !line.startsWith('a=candidate:') || shouldAllowCandidate(line)).join('\n');
+    window.RTCPeerConnection = function(...args) {
+      const pc = new OriginalRTCPeerConnection(...args);
+      const originalCreateOffer = pc.createOffer.bind(pc);
+      pc.createOffer = async (...offerArgs) => {
+        const offer = await originalCreateOffer(...offerArgs);
+        return Object.assign({}, offer, { sdp: filterSDP(offer.sdp) });
+      };
+      const originalSetLocalDescription = pc.setLocalDescription.bind(pc);
+      pc.setLocalDescription = async (description) => originalSetLocalDescription(description && description.sdp ? Object.assign({}, description, { sdp: filterSDP(description.sdp) }) : description);
+      pc.addEventListener('icecandidate', (event) => {
+        if (event.candidate && !shouldAllowCandidate(event.candidate.candidate)) event.stopImmediatePropagation();
+      }, true);
+      return pc;
+    };
   }
 })();`, encoded))
 
 	return EnvironmentInjectionPlan{
 		Script:          script,
 		HeaderOverrides: normalized.Headers,
-		AppliedFamilies: []string{"browser_api_surface", "canvas_rendering", "timezone_locale", "webgl_gpu", "fonts_text_metrics", "media_devices"},
+		AppliedFamilies: []string{"browser_api_surface", "canvas_rendering", "timezone_locale", "webgl_gpu", "audio_stack", "fonts_text_metrics", "media_devices", "webrtc_ip_leak"},
 		Warnings:        warnings,
 	}, nil
 }
@@ -196,6 +273,14 @@ func normalizeEnvironmentProfile(profile EnvironmentInjectionProfile) Environmen
 		profile.DeviceMemory = 0
 	}
 	sort.Strings(profile.FontAllowlist)
+	sort.Strings(profile.WebGLExtensions)
+	sort.Strings(profile.WebRTCPolicy.AllowHosts)
+	if profile.WebRTCPolicy.Mode == "" {
+		profile.WebRTCPolicy.Mode = "block_private_candidates"
+	}
+	if profile.MediaPermission == "" {
+		profile.MediaPermission = "prompt"
+	}
 	return profile
 }
 

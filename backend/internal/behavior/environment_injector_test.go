@@ -19,6 +19,11 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 		TimezoneOffset:      &offset,
 		WebGLVendor:         "Intel Inc.",
 		WebGLRenderer:       "Intel Iris",
+		WebGLExtensions:     []string{"WEBGL_debug_renderer_info"},
+		AudioNoise:          0.001,
+		FontAllowlist:       []string{"Segoe UI", "Arial"},
+		MediaPermission:     "allow",
+		WebRTCPolicy:        WebRTCPolicy{Mode: "filtered", AllowHosts: []string{"203.0.113.1"}},
 		Plugins: []PluginInjection{{
 			Name: "Chrome PDF Plugin", Filename: "internal-pdf-viewer", MimeType: "application/pdf",
 		}},
@@ -34,7 +39,14 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 		"CanvasRenderingContext2D.prototype.getImageData",
 		"Intl.DateTimeFormat.prototype.resolvedOptions",
 		"Date.prototype.getTimezoneOffset",
+		"getSupportedExtensions",
+		"AnalyserNode.prototype.getFloatFrequencyData",
+		"AudioBuffer.prototype.copyFromChannel",
+		"Document.prototype, 'fonts'",
 		"enumerateDevices",
+		"getUserMedia",
+		"RTCPeerConnection",
+		"a=candidate:",
 	}
 	for _, needle := range needles {
 		if !strings.Contains(plan.Script, needle) {
@@ -44,7 +56,7 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 	if plan.HeaderOverrides["Accept-Language"] != "en-US,en;q=0.9" {
 		t.Fatalf("Accept-Language = %q", plan.HeaderOverrides["Accept-Language"])
 	}
-	if len(plan.AppliedFamilies) < 6 {
+	if len(plan.AppliedFamilies) < 8 {
 		t.Fatalf("applied families = %v", plan.AppliedFamilies)
 	}
 	if len(plan.Warnings) != 0 {

@@ -93,6 +93,8 @@ export function BrowserCoreSetDefault(arg1:string):Promise<void>;
 
 export function BrowserCoreValidate(arg1:string):Promise<browser.CoreValidateResult>;
 
+export function BrowserCoreValidateForKind(arg1:string,arg2:string):Promise<browser.CoreValidateResult>;
+
 export function BrowserExportCookies(arg1:string):Promise<string>;
 
 export function BrowserGetAllTags():Promise<Array<string>>;

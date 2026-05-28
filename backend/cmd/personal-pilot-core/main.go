@@ -134,6 +134,7 @@ var allowedRPCMethods = map[string]struct{}{
 	"BrowserCoreScan":                      {},
 	"BrowserCoreSetDefault":                {},
 	"BrowserCoreValidate":                  {},
+	"BrowserCoreValidateForKind":           {},
 	"BrowserExportCookies":                 {},
 	"BrowserGetAllTags":                    {},
 	"BrowserGetCookies":                    {},

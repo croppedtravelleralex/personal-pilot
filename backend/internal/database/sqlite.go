@@ -226,6 +226,12 @@ var migrations = []migration{
 				updated_at TEXT NOT NULL
 			)`,
 		},
+	}, {
+		version: 12,
+		desc:    "browser cores add kind",
+		stmts: []string{
+			`ALTER TABLE browser_cores ADD COLUMN kind TEXT NOT NULL DEFAULT 'chromium'`,
+		},
 	},
 }
 

@@ -6,10 +6,25 @@ import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserS
 import { fetchBrowserCores, saveBrowserCore, deleteBrowserCore, setDefaultBrowserCore, validateBrowserCorePath, openCorePath, fetchBrowserSettings, saveBrowserSettings, fetchCoreExtendedInfo, scanBrowserCores, BrowserCoreDownload, fetchBrowserProxies } from '../api'
 import { EventsOn, EventsOff, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 
+const CORE_KIND_OPTIONS = [
+  { value: 'chromium', label: 'Chromium' },
+  { value: 'lightpanda', label: 'Lightpanda' },
+  { value: 'camoufox', label: 'Camoufox' },
+] as const
+
+function normalizeCoreKind(kind?: string): BrowserCoreInput['kind'] {
+  return kind === 'lightpanda' || kind === 'camoufox' ? kind : 'chromium'
+}
+
+function coreKindLabel(kind?: string): string {
+  return CORE_KIND_OPTIONS.find(item => item.value === normalizeCoreKind(kind))?.label || 'Chromium'
+}
+
 interface CoreDisplayInfo {
   coreId: string
   coreName: string
   corePath: string
+  kind: BrowserCoreInput['kind']
   isDefault: boolean
   pathValid: boolean
   pathMessage: string
@@ -46,7 +61,7 @@ export function CoreManagementPage() {
   // 编辑弹窗状态
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingCore, setEditingCore] = useState<BrowserCore | null>(null)
-  const [editForm, setEditForm] = useState({ coreName: '', corePath: '' })
+  const [editForm, setEditForm] = useState<{ coreName: string; corePath: string; kind: BrowserCoreInput['kind'] }>({ coreName: '', corePath: '', kind: 'chromium' })
   const [saving, setSaving] = useState(false)
   const [pathValidating, setPathValidating] = useState(false)
   const [pathValidResult, setPathValidResult] = useState<BrowserCoreValidateResult | null>(null)
@@ -106,12 +121,14 @@ export function CoreManagementPage() {
       // 验证所有路径并合并扩展信息
       const displayInfoList: CoreDisplayInfo[] = await Promise.all(
         coreList.map(async (core) => {
-          const result = await validateBrowserCorePath(core.corePath)
+          const kind = normalizeCoreKind(core.kind)
+          const result = await validateBrowserCorePath(core.corePath, kind)
           const extended = extendedMap.get(core.coreId)
           return {
             coreId: core.coreId,
             coreName: core.coreName,
             corePath: core.corePath,
+            kind,
             isDefault: core.isDefault,
             pathValid: result.valid,
             pathMessage: result.message,
@@ -127,14 +144,14 @@ export function CoreManagementPage() {
   }
 
   // 防抖验证路径
-  const validatePath = useCallback(async (path: string) => {
+  const validatePath = useCallback(async (path: string, kind: BrowserCoreInput['kind']) => {
     if (!path.trim()) {
       setPathValidResult(null)
       return
     }
     setPathValidating(true)
     try {
-      const result = await validateBrowserCorePath(path)
+      const result = await validateBrowserCorePath(path, kind)
       setPathValidResult(result)
     } finally {
       setPathValidating(false)
@@ -146,15 +163,21 @@ export function CoreManagementPage() {
     fetchBrowserProxies().then(setProxies)
     const timer = setTimeout(() => {
       if (editModalOpen && editForm.corePath) {
-        validatePath(editForm.corePath)
+        validatePath(editForm.corePath, editForm.kind)
       }
     }, 500)
     return () => clearTimeout(timer)
-  }, [editForm.corePath, editModalOpen, validatePath])
+  }, [editForm.corePath, editForm.kind, editModalOpen, validatePath])
 
   // 表格列定义
   const columns: TableColumn<CoreDisplayInfo>[] = [
     { key: 'coreName', title: '内核名称', width: '150px' },
+    {
+      key: 'kind',
+      title: '引擎',
+      width: '100px',
+      render: (val) => <Badge variant="default">{coreKindLabel(String(val || ''))}</Badge>,
+    },
     { key: 'corePath', title: '内核路径', width: '180px' },
     {
       key: 'chromeVersion',
@@ -235,7 +258,7 @@ export function CoreManagementPage() {
   // 新增内核
   const handleAdd = () => {
     setEditingCore(null)
-    setEditForm({ coreName: '', corePath: '' })
+    setEditForm({ coreName: '', corePath: '', kind: 'chromium' })
     setPathValidResult(null)
     setEditModalOpen(true)
   }
@@ -245,7 +268,7 @@ export function CoreManagementPage() {
     const core = cores.find(c => c.coreId === record.coreId)
     if (core) {
       setEditingCore(core)
-      setEditForm({ coreName: core.coreName, corePath: core.corePath })
+      setEditForm({ coreName: core.coreName, corePath: core.corePath, kind: normalizeCoreKind(core.kind) })
       setPathValidResult({ valid: record.pathValid, message: record.pathMessage })
       setEditModalOpen(true)
     }
@@ -267,6 +290,7 @@ export function CoreManagementPage() {
         coreId: editingCore?.coreId || `core-${Date.now()}`,
         coreName: editForm.coreName.trim(),
         corePath: editForm.corePath.trim(),
+        kind: editForm.kind,
         isDefault: editingCore?.isDefault || false,
       }
       await saveBrowserCore(input)
@@ -550,6 +574,15 @@ export function CoreManagementPage() {
               onChange={e => setEditForm(prev => ({ ...prev, coreName: e.target.value }))}
               placeholder="例如：Chrome 142"
             />
+          </FormItem>
+          <FormItem label="浏览器引擎" required>
+            <select
+              value={editForm.kind}
+              onChange={e => { setEditForm(prev => ({ ...prev, kind: normalizeCoreKind(e.target.value) })); setPathValidResult(null) }}
+              className="w-full h-9 px-3 rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
+            >
+              {CORE_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
           </FormItem>
           <FormItem label="内核路径" required>
             <Input

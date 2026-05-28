@@ -97,7 +97,15 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		_ = a.browserMgr.SaveProfiles()
 	}
 
-	chromeBinaryPath, err := a.browserMgr.ResolveChromeBinary(profile)
+	selectedCore, err := a.browserMgr.ResolveProfileCore(profile)
+	if err != nil {
+		startErr := fmt.Errorf("实例启动失败：%w", err)
+		log.Error("内核配置解析失败", logger.F("profile_id", profileId), logger.F("error", err.Error()), logger.F("reason", startErr.Error()))
+		profile.LastError = startErr.Error()
+		return profile, startErr
+	}
+
+	chromeBinaryPath, err := a.browserMgr.ResolveBrowserBinary(selectedCore)
 	if err != nil {
 		startErr := fmt.Errorf("实例启动失败：%w", err)
 		log.Error("内核路径解析失败", logger.F("profile_id", profileId), logger.F("error", err.Error()), logger.F("reason", startErr.Error()))
@@ -241,11 +249,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		return profile, startErr
 	}
 
-	args := []string{
-		fmt.Sprintf("--user-data-dir=%s", userDataDir),
-		fmt.Sprintf("--remote-debugging-port=%d", assignedDebugPort),
-		"--disable-session-crashed-bubble",
-	}
+	args := browser.BuildCoreLaunchArgs(selectedCore.Kind, assignedDebugPort, userDataDir)
 
 	hasFingerprint := false
 	for _, arg := range profile.FingerprintArgs {

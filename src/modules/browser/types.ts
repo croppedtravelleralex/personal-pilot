@@ -62,13 +62,17 @@ export interface BrowserCore {
   coreId: string
   coreName: string
   corePath: string
+  kind?: BrowserCoreKind
   isDefault: boolean
 }
+
+export type BrowserCoreKind = 'chromium' | 'lightpanda' | 'camoufox'
 
 export interface BrowserCoreInput {
   coreId: string
   coreName: string
   corePath: string
+  kind?: BrowserCoreKind
   isDefault: boolean
 }
 

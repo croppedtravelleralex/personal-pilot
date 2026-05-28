@@ -81,6 +81,7 @@ type CoreInput struct {
 	CoreId    string `json:"coreId"`
 	CoreName  string `json:"coreName"`
 	CorePath  string `json:"corePath"`
+	Kind      string `json:"kind,omitempty"`
 	IsDefault bool   `json:"isDefault"`
 }
 

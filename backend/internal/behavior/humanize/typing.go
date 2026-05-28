@@ -9,6 +9,10 @@ const (
 	TypingEventKey       TypingEventType = 0
 	TypingEventBackspace TypingEventType = 1
 	TypingEventPause     TypingEventType = 2
+	TypingEventModifier  TypingEventType = 3
+	TypingEventIME       TypingEventType = 4
+	TypingEventTab       TypingEventType = 5
+	TypingEventClipboard TypingEventType = 6
 )
 
 // TypingEvent is one step in a typing plan.
@@ -17,6 +21,7 @@ type TypingEvent struct {
 	Ch         rune   // only for Key
 	IntervalMs uint32 // for Key and Backspace
 	DurationMs uint32 // for Pause
+	Action     string // for Modifier/IME/Clipboard
 }
 
 // TypingPlan is a complete sequence of typing events for a text string.
@@ -148,4 +153,124 @@ func adjacentKey(ch rune) rune {
 		return n
 	}
 	return ch
+}
+
+// TypingContext tunes intervals for field-level typing semantics.
+type TypingContext struct {
+	FieldKind        string
+	MinutesElapsed   uint32
+	CaptchaCellCount uint32
+}
+
+func BuildContextTypingPlan(text string, context TypingContext, config *HumanizationConfig) TypingPlan {
+	plan := BuildTypingPlan(text, config)
+	multiplier := 1.0 + float64(context.MinutesElapsed)*0.025
+	if context.FieldKind == "password" {
+		multiplier *= 1.4
+	}
+	if multiplier != 1.0 {
+		for i := range plan.Events {
+			if plan.Events[i].IntervalMs > 0 {
+				plan.Events[i].IntervalMs = uint32(float64(plan.Events[i].IntervalMs) * multiplier)
+			}
+			if plan.Events[i].DurationMs > 0 {
+				plan.Events[i].DurationMs = uint32(float64(plan.Events[i].DurationMs) * multiplier)
+			}
+		}
+		plan.TotalMs = sumTypingPlanMs(plan.Events)
+	}
+	if context.FieldKind == "captcha" && context.CaptchaCellCount > 1 {
+		plan = insertCaptchaCellPauses(plan, context.CaptchaCellCount)
+	}
+	return plan
+}
+
+func BuildIMEPlan(pinyin string, candidateMoves uint32, config *HumanizationConfig) TypingPlan {
+	plan := BuildTypingPlan(pinyin, config)
+	for i := uint32(0); i < candidateMoves; i++ {
+		plan.Events = append(plan.Events, TypingEvent{Type: TypingEventIME, Action: "candidate_arrow", IntervalMs: randRangeUint32(120, 260)})
+	}
+	plan.Events = append(plan.Events, TypingEvent{Type: TypingEventIME, Action: "candidate_enter", IntervalMs: randRangeUint32(120, 220)})
+	plan.TotalMs = sumTypingPlanMs(plan.Events)
+	return plan
+}
+
+func BuildModifierKeyPlan(sequence string, config *HumanizationConfig) TypingPlan {
+	interval := uint32(90)
+	if config != nil {
+		interval = max(60, config.Timing.PreActionDelayMs+40)
+	}
+	return TypingPlan{Events: []TypingEvent{
+		{Type: TypingEventModifier, Action: "ctrl_down", IntervalMs: interval},
+		{Type: TypingEventModifier, Action: sequence, IntervalMs: randRangeUint32(45, 90)},
+		{Type: TypingEventModifier, Action: "ctrl_up", IntervalMs: randRangeUint32(30, 70)},
+	}, TotalMs: interval + 90 + 70}
+}
+
+func BuildTabSwitchPlan(fields uint32) TypingPlan {
+	if fields == 0 {
+		return TypingPlan{}
+	}
+	events := make([]TypingEvent, 0, fields)
+	var total uint32
+	for i := uint32(0); i < fields; i++ {
+		interval := uint32(sampleNormal(500, 200, 700))
+		if interval < 120 {
+			interval = 120
+		}
+		events = append(events, TypingEvent{Type: TypingEventTab, Action: "tab", IntervalMs: interval})
+		total += interval
+	}
+	return TypingPlan{Events: events, TotalMs: total}
+}
+
+func BuildClipboardPlan(config *HumanizationConfig) TypingPlan {
+	plan := TypingPlan{}
+	for _, action := range []string{"ctrl+a", "ctrl+c", "ctrl+v"} {
+		part := BuildModifierKeyPlan(action, config)
+		plan.Events = append(plan.Events, part.Events...)
+	}
+	plan.TotalMs = sumTypingPlanMs(plan.Events)
+	return plan
+}
+
+func FingerSpeedRatio(ch rune) float64 {
+	switch ch {
+	case 'q', 'a', 'z', 'p':
+		return 0.40
+	case 'w', 's', 'x', 'o', 'l':
+		return 0.55
+	case 'e', 'd', 'c', 'i', 'k':
+		return 0.70
+	case 'r', 't', 'f', 'g', 'v', 'b', 'y', 'u', 'h', 'j', 'n', 'm':
+		return 0.80
+	default:
+		return 0.65
+	}
+}
+
+func sumTypingPlanMs(events []TypingEvent) uint32 {
+	var total uint32
+	for _, event := range events {
+		total += event.IntervalMs + event.DurationMs
+	}
+	return total
+}
+
+func insertCaptchaCellPauses(plan TypingPlan, cells uint32) TypingPlan {
+	if cells <= 1 {
+		return plan
+	}
+	keysSeen := uint32(0)
+	next := make([]TypingEvent, 0, len(plan.Events)+int(cells))
+	for _, event := range plan.Events {
+		next = append(next, event)
+		if event.Type == TypingEventKey {
+			keysSeen++
+			if keysSeen < cells {
+				next = append(next, TypingEvent{Type: TypingEventPause, DurationMs: randRangeUint32(180, 420)})
+			}
+		}
+	}
+	return TypingPlan{Events: next, TotalMs: sumTypingPlanMs(next)}
 }

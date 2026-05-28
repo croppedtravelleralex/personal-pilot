@@ -218,6 +218,7 @@ type LaunchServer struct {
 	captchaManager *captcha.Manager
 	emailService   *email.EmailService
 	smsManager     *sms.Manager
+	workflow       *workflowRuntime
 }
 
 // NewLaunchServer 创建 LaunchServer
@@ -228,6 +229,7 @@ func NewLaunchServer(service *LaunchCodeService, starter BrowserStarter, recordi
 		recording:  recording,
 		browserMgr: mgr,
 		port:       port,
+		workflow:   newWorkflowRuntime(),
 	}
 	srv.SetAPIAuthConfig(APIAuthConfig{})
 	return srv
@@ -322,6 +324,10 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/workbench/right-click", s.handleWorkbenchRightClick)
 	mux.HandleFunc("/api/workbench/wait", s.handleWorkbenchWait)
 	mux.HandleFunc("/api/workbench/actions", s.handleWorkbenchActions)
+	// Workflow endpoints
+	mux.HandleFunc("/api/workflow", s.handleWorkflowCreate)
+	mux.HandleFunc("/api/workflow/", s.handleWorkflowByID)
+	mux.HandleFunc("/api/plugin/install", s.handlePluginInstall)
 	// Recording & behavior endpoints
 	mux.HandleFunc("/api/recording/start", s.handleRecordingStart)
 	mux.HandleFunc("/api/recording/stop", s.handleRecordingStop)

@@ -50,7 +50,7 @@
 
 2. Fingerprint runtime depth
    - 已从 `80` declared controls 和 `12` runtime projected fields 推进到 `26` runtime projected fields（`25` control-supported + derived `platform`）。
-   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；2026-05-28 已新增 Go 端环境注入编译器和 `Page.addScriptToEvaluateOnNewDocument` CDP 入口，覆盖 browser API/canvas/timezone/WebGL/media devices 基础 hook；下一步继续加深真实采集，不把 taxonomy seed 或 projected/applied fields 报成 observed signals。
+   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；2026-05-28 已新增 Go 端环境注入编译器和 `Page.addScriptToEvaluateOnNewDocument` CDP 入口，覆盖 browser API/canvas/timezone/WebGL/media devices 基础 hook；`roadmap_evidence_smoke` 已证明本机实现覆盖，`profile_browser_environment_probe.mjs` 已用真实 Chromium profile-browser 观测 1.2/1.3/1.4 通过。下一步继续加深真实采集，不把 taxonomy seed 或 projected/applied fields 报成 full observed coverage。
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration
@@ -71,7 +71,8 @@
    - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
    - P12 已把 AdsPower benchmark refresh 固定为 boundary guard；P21 新增 runtime adapter evidence gate report：等 B1-B5 有新证据后再重算评分。
-   - Camoufox 下一步按 `docs/18-external-browser-integration-plan.md` 的 `90` 分方案推进：先做可选 Runner 的设置、能力检测、错误码和单任务执行闭环，再接入基础 profile/proxy 映射；remote server、browser pool 和深度指纹拟真不进入第一主链。2026-05-27 已补充性能最优落点：默认按任务启动、不常驻、不启动时预热、并发默认 `1`、artifact 按需采集、capability 缓存、release idle 与 task-run 指标分开记账。当前新增 `scripts/camoufox_smoke.ps1` 用于检查 skeleton / settings / desktop wrapper 合同；预期状态仍是 `contract_ready_runtime_smoke_required`，下一步必须补真实打开页面、artifact、取消/超时清理和 task-run 性能证据。
+   - Camoufox 下一步按 `docs/18-external-browser-integration-plan.md` 的 `90` 分方案推进：2026-05-28 已先把它作为主线 `browser_cores.kind=camoufox` 内核类型接入 Go core manager、SQLite、sidecar RPC、实例启动参数分发和主线 UI 选择；remote server、browser pool 和深度指纹拟真不进入第一主链。当前 `scripts/camoufox_smoke.ps1 -AllowBlocked` 状态仍是 `contract_ready_runtime_smoke_required`，下一步必须补真实打开页面、artifact、取消/超时清理和 task-run 性能证据。
+   - 2026-05-28 已全量执行 evidence gates：roadmap 本机证据 passed-with-external-pending、Chromium profile-browser 专项证据 passed、taxonomy/live-truth passed；provider、runtime adapter、external distribution 仍 blocked；profile-browser comparison 为 partial（缺同份 desktop-webview 对照）；SessionBundle 为 local-contract passed，跨机器 evidence pending。
 
 6. Retire duplicate UI paths
    - 2026-05-27 已删除第二套 Tauri/Vite 控制台 UI 源码、根目录旁路 exe、`src-tauri/target/release` 持久 GUI exe 和仓库内 `gateway-ui` 静态 UI。

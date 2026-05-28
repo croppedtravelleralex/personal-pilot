@@ -1083,6 +1083,7 @@ export namespace browser {
 	    coreId: string;
 	    coreName: string;
 	    corePath: string;
+	    kind?: string;
 	    isDefault: boolean;
 
 	    static createFrom(source: any = {}) {
@@ -1094,6 +1095,7 @@ export namespace browser {
 	        this.coreId = source["coreId"];
 	        this.coreName = source["coreName"];
 	        this.corePath = source["corePath"];
+	        this.kind = source["kind"];
 	        this.isDefault = source["isDefault"];
 	    }
 	}
