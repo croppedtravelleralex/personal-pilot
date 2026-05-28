@@ -306,6 +306,10 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if err := db.ensureBrowserCoreKindColumn(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -336,6 +340,65 @@ func (db *DB) applyMigration(m migration) error {
 	}
 
 	return tx.Commit()
+}
+
+func (db *DB) ensureBrowserCoreKindColumn() error {
+	hasKind, err := db.tableHasColumn("browser_cores", "kind")
+	if err != nil {
+		return fmt.Errorf("检查 browser_cores.kind 失败: %w", err)
+	}
+	if hasKind {
+		return nil
+	}
+	if _, err := db.conn.Exec(`ALTER TABLE browser_cores ADD COLUMN kind TEXT NOT NULL DEFAULT 'chromium'`); err != nil && !isColumnExistsError(err) {
+		return fmt.Errorf("修复 browser_cores.kind 失败: %w", err)
+	}
+	if _, err := db.conn.Exec(
+		`INSERT OR IGNORE INTO schema_migrations (version, desc) VALUES (?, ?)`,
+		12, "browser cores add kind",
+	); err != nil {
+		return fmt.Errorf("记录 browser_cores.kind 修复版本失败: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) tableHasColumn(tableName, columnName string) (bool, error) {
+	if !isSafeIdentifier(tableName) {
+		return false, fmt.Errorf("invalid table name: %s", tableName)
+	}
+	rows, err := db.conn.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, tableName))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+		if strings.EqualFold(name, columnName) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func isSafeIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // isColumnExistsError 检查是否是列已存在的错误（SQLite 错误信息）

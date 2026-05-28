@@ -217,6 +217,22 @@ func (a *App) autoDetectCores() {
 	}
 }
 
+func (a *App) ensureCamoufoxCorePreset() {
+	log := logger.New("Browser")
+	if a == nil || a.browserMgr == nil || a.browserMgr.CoreDAO == nil {
+		return
+	}
+	dao, ok := a.browserMgr.CoreDAO.(*browser.SQLiteCoreDAO)
+	if !ok {
+		return
+	}
+	if err := dao.EnsureCamoufoxPreset(); err != nil {
+		log.Warn("Camoufox 内核预置初始化失败", logger.F("error", err.Error()))
+		return
+	}
+	a.config.Browser.Cores = a.browserMgr.ListCores()
+}
+
 // scanChromeDir 扫描指定目录，将包含浏览器可执行文件的子文件夹识别为内核。
 // 如果目录本身包含可执行文件（旧版单内核结构），则直接返回该目录作为内核。
 func (a *App) syncDetectedCoresToStore() {

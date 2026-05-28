@@ -2,7 +2,7 @@
 
 > 所有待实现功能，按依赖关系分 5 个 Phase，按 P0-P2 排列。
 >
-> 2026-05-28 更新：Phase 1 P1/P2、Phase 2 P1 与 Phase 3-5 roadmap 文件级待办均已有可测试实现或 adapter/contract 实现；Camoufox 已作为主线 browser core kind 接入内核管理/校验/启动参数分发/UI 选择。`scripts/roadmap_evidence_smoke.ps1` 最新 report 为 `data/reports/roadmap-evidence/roadmap-evidence-smoke-1779951732878.json`，状态 `passed_with_external_evidence_pending`；`scripts/profile_browser_environment_probe.mjs` 已生成真实 Chromium profile-browser 观测报告 `data/validation-reports/profile-browser-environment-1779951691042.json`，状态 `passed`。仍需用真实 provider、跨机器、Camoufox runtime 和外部分发 smoke 证明生产闭环。
+> 2026-05-28 更新：Phase 1 P1/P2、Phase 2 P1 与 Phase 3-5 roadmap 文件级待办均已有可测试实现或 adapter/contract 实现；Camoufox 已作为主线 browser core kind 接入内核管理/校验/启动参数分发/UI 选择。2026-05-28 回归修复要求：Camoufox 不能只停留在源码类型或文档口径，`data/app.db` 必须存在 `browser_cores.kind` 且至少一条 `kind=camoufox` 的可见 core row；根目录 `personal-pilot-tauri.exe` 对应的 `bin/personal-pilot-core.exe` / Tauri sidecar 副本必须同步重建。当前本机 DB 已有 `core-camoufox-manual`，显示名 `Camoufox（配置路径后可用）`。`scripts/roadmap_evidence_smoke.ps1` 最新 report 为 `data/reports/roadmap-evidence/roadmap-evidence-smoke-1779951732878.json`，状态 `passed_with_external_evidence_pending`；`scripts/profile_browser_environment_probe.mjs` 已生成真实 Chromium profile-browser 观测报告 `data/validation-reports/profile-browser-environment-1779951691042.json`，状态 `passed`。仍需用真实 provider、跨机器、Camoufox runtime 和外部分发 smoke 证明生产闭环。
 
 ---
 

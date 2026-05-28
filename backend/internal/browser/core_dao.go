@@ -24,6 +24,33 @@ func NewSQLiteCoreDAO(db *sql.DB) *SQLiteCoreDAO {
 	return &SQLiteCoreDAO{db: db}
 }
 
+// EnsureCamoufoxPreset keeps Camoufox visible in core management even before
+// the user has installed or configured its executable path.
+func (d *SQLiteCoreDAO) EnsureCamoufoxPreset() error {
+	var count int
+	if err := d.db.QueryRow(`
+		SELECT COUNT(1)
+		FROM browser_cores
+		WHERE LOWER(COALESCE(kind, '')) = 'camoufox'`).Scan(&count); err != nil {
+		return fmt.Errorf("查询 Camoufox 内核预置失败: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	_, err := d.db.Exec(`
+		INSERT OR IGNORE INTO browser_cores
+			(core_id, core_name, core_path, kind, is_default, sort_order, created_at)
+		VALUES
+			('core-camoufox-manual', 'Camoufox（配置路径后可用）', 'camoufox', 'camoufox', 0, 50, ?)`,
+		time.Now().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("创建 Camoufox 内核预置失败: %w", err)
+	}
+	return nil
+}
+
 // List 查询所有内核，按 sort_order 升序
 func (d *SQLiteCoreDAO) List() ([]Core, error) {
 	rows, err := d.db.Query(`

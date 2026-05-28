@@ -21,14 +21,14 @@ Updated: 2026-05-28 (Asia/Shanghai)
 
 ## Runtime Alive
 
-- 2026-05-28 已重新构建 Tauri 承载的 `personal-pilot-tauri.exe`，并覆盖根目录验收入口 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`；最新 SHA256 `75063F9906CCDE8BCDACD7622F2349BD819D755C2B9D4F095CA736D70C4D06DE`，大小 `20,104,192` bytes。
-- 该第一版保留 `personal-pilot` 1.1.0 UI 壳，并通过 `tauriWailsBridge` 启动 `bin/personal-pilot-core.exe` 兼容旧 Wails API；2026-05-25 核验 `GetDashboardStats` / `BrowserProfileList` / `BrowserCoreList` / `BrowserProxyList` 均通过。
-- 当前验收数据链路已确认不是空壳：dashboard/core bridge 返回 `browser_profiles=4`、`browser_proxies=93`、`browser_cores=3`，app version `1.1.0`。
+- 2026-05-28 已重新构建 Tauri 承载的 `personal-pilot-tauri.exe`，并覆盖根目录验收入口 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`；最新 SHA256 `3E1DF50E92328A525794174EBED3BF987DDB58663CA9686D02FF5FE0F9E2453D`，大小 `20,104,192` bytes。
+- 该第一版保留 `personal-pilot` 1.1.0 UI 壳，并通过 `tauriWailsBridge` 启动 `bin/personal-pilot-core.exe` 兼容旧 Wails API；2026-05-28 已重建 `bin/personal-pilot-core.exe` 和 Tauri sidecar 副本 `bin/personal-pilot-core-x86_64-pc-windows-msvc.exe`，避免根目录入口继续拉起旧 core。
+- 当前验收数据链路已确认不是空壳：本地 `data/app.db` 保留 `browser_profiles=4`、`browser_proxies=93`，`browser_cores=4`，其中包括 `kind=camoufox` 的 `core-camoufox-manual` 预置项。
 - 2026-05-25 曾修复设置页空白：根因是 `ThemeSwitcher` 使用 `useTheme`，但当时第二套 console app root 未包 `ThemeProvider`。当前主线已回到 `src/main.tsx` / `src/App.tsx` / `src/modules/**` 的 `personal-pilot` 1.1.0 UI；旧 console bootstrap 已随第二套控制台 UI 删除。
 - 2026-05-25 已修复窗口黑色坏图标：根因是 `src-tauri/icons/icon.ico` 只有 `155` bytes 的无效 ico；现已用现有 PNG 资源重新生成有效 `13,322` bytes ico，并重新打包 release exe。
 - 2026-05-26 已固化 `react-router-dom@6.30.3` 到 `package.json` / `pnpm-lock.yaml`，避免干净安装依赖缺失；已将 release / external / fingerprint / workbench 验证脚本默认目标收敛到根目录 `personal-pilot-tauri.exe`。
-- `data/app.db` 仍保留真实数据：`browser_profiles=4`、`browser_proxies=93`、`browser_cores=3`、`browser_bookmarks=7`。
-- 2026-05-27 复核 `personal-pilot-core` 真实 RPC：`GetDashboardStats` 返回实例 `4`、代理 `93`、内核 `3`；`BrowserProfileList` / `BrowserProxyList` / `BrowserCoreList` 分别返回 `4 / 93 / 3`。
+- `data/app.db` 仍保留真实数据：`browser_profiles=4`、`browser_proxies=93`、`browser_cores=4`、`browser_bookmarks=7`。
+- 2026-05-28 复核 `personal-pilot-core` 真实 RPC：`BrowserCoreList` 返回 `4` 条内核，其中 `kind=camoufox` 的 `Camoufox（配置路径后可用）` 可见；`data/app.db` 当前为实例 `4`、代理 `93`、内核 `4`。
 - 后续迁功能或剔除 UI 前，仍必须继续验证 Wails 兼容 API 等价链路，不能只看 UI 外观。
 - `persona-pilot-desktop.exe` / `PersonaPilot.exe` / `portable.exe` / 根目录 `benchmark.exe` / 根目录 `deepseek-register.exe` 已从当前工作树清理；`bin/` 下 sidecar 和工具产物不属于用户入口，按需保留。
 - Runtime alive 只代表应用和本地能力可启动/调用，不等同于 Overall 终态闭环。
@@ -37,7 +37,7 @@ Updated: 2026-05-28 (Asia/Shanghai)
 ## Build Status
 
 - 2026-05-27 构建规则已收口：`pnpm desktop:release` 先执行 Tauri build，再运行 `scripts/sync-main-entry.ps1`，只保留根目录 `personal-pilot-tauri.exe`，并清理 `src-tauri/target/release` 下的临时 GUI exe / installer exe；`target/` 与 `src-tauri/target/` 均视为可删除构建输出。
-- 2026-05-28 已通过 `pnpm desktop:release` 重新构建并同步根目录 `personal-pilot-tauri.exe`，hash `75063F9906CCDE8BCDACD7622F2349BD819D755C2B9D4F095CA736D70C4D06DE`，大小 `20,104,192` bytes。
+- 2026-05-28 已通过 `pnpm desktop:release` 重新构建并同步根目录 `personal-pilot-tauri.exe`，hash `3E1DF50E92328A525794174EBED3BF987DDB58663CA9686D02FF5FE0F9E2453D`，大小 `20,104,192` bytes。
 - 2026-05-25 Win11/Tauri baseline enforcement passed。
 - 2026-05-25 root `personal-pilot-tauri.exe` 启动验证 passed：进程 `personal-pilot-tauri`，窗口标题 `personal-pilot`，响应正常；兼容 core bridge 当前进程为 `bin/personal-pilot-core.exe`。
 - 2026-05-25 错误 Tauri 第一版 release smoke：`14779ms` cold start、`489MB` idle RSS、`7` processes，状态 warning；该报告只作为回滚原因，不代表当前可验收入口性能。
@@ -81,7 +81,7 @@ Updated: 2026-05-28 (Asia/Shanghai)
 - 2026-05-28 已增强 Go behavior humanize 轨迹基础：新增 Fitts Law movement time、三段式 ease path、8-12Hz 等价粉噪、四段式点击、双击间隔/微移、拖拽和右键菜单计划；`go test ./backend/internal/behavior ./backend/internal/behavior/humanize` passed。它推进 Phase 2 P0 基础模型。
 - 2026-05-28 继续按 `docs/99-implementation-roadmap.md` 推进：Phase 1 P1/P2 已补 WebGL extension filter、audio frequency/buffer noise、font allowlist/document.fonts hook、media getUserMedia permission stub、WebRTC offer/SDP/ICE candidate filter，以及 `backend/internal/browser/consistency_matrix.go`；Phase 2 P1 已补 typing finger/IME/modifier/fatigue/context/tab/clipboard 和 scroll inertia/content/reread/infinite/microjitter plan；Phase 3-5 新增 lifecycle/workflow/reference/session/pool/discovery/transport contract 包。验证：`go test ./backend/internal/...` passed。Phase 3-5 仍是 contract-ready，不等同真实调度器、真实浏览器池、跨机器加密迁移或传输层内核闭环。
 - 2026-05-28 继续同步推进 roadmap 第二批：lifecycle 已补 SQLite `Store` 和 `AssessRisk`；workflow 已补 CDP events→steps recorder、playback plan、executor route、form mapper、provider adapters，以及 LaunchCode `/api/workflow` create/execute/status/export 和 `/api/plugin/install`；SessionBundle 已补 AES-GCM encrypt/decrypt 和 default runtime mapping；pool 已补 prewarm plan；discovery 已补 form/challenge/flow inference 与 workflow template conversion；transport 已补 Xray/Sing-Box outbound config 和 header-order template。验证：`go test ./backend/internal/...` passed。仍需真实 provider 凭证 smoke、profile-browser observed proof、跨机器 portability、真实 browser prewarm 和出站代理运行证据。
-- 2026-05-28 Camoufox 已作为主线浏览器内核类型接入：`browser_cores.kind` SQLite 迁移、Go core DAO/解析/校验、实例启动参数分发、sidecar RPC `BrowserCoreValidateForKind`、内核管理 UI/基础配置 UI/实例列表设置 UI 的 Chromium / Lightpanda / Camoufox 选择均已落地；Camoufox 启动参数使用 `--profile` + `--remote-debugging-port`，不再套用 Chromium `--user-data-dir`。验证：`go test ./backend/...`、`pnpm typecheck`、`pnpm build`、Win11/Tauri baseline、`pnpm desktop:release` passed；`scripts/camoufox_smoke.ps1 -AllowBlocked` 仍为 `contract_ready_runtime_smoke_required`，因为真实 Camoufox 打开页面、artifact、取消/超时清理和 task-run 性能证据未跑。
+- 2026-05-28 Camoufox 已作为主线浏览器内核类型接入：`browser_cores.kind` SQLite 迁移、Go core DAO/解析/校验、实例启动参数分发、sidecar RPC `BrowserCoreValidateForKind`、内核管理 UI/基础配置 UI/实例列表设置 UI 的 Chromium / Lightpanda / Camoufox 选择均已落地；Camoufox 启动参数使用 `--profile` + `--remote-debugging-port`，不再套用 Chromium `--user-data-dir`。同日修复 live DB 未迁移和旧 sidecar 未重建导致“内核管理仍无 Camoufox”的回归：`data/app.db` 已补 `browser_cores.kind` 与 `core-camoufox-manual`，启动时会自修复缺失 `kind` 列并确保 Camoufox 预置项可见。验证：`go test ./backend/cmd/personal-pilot-core ./backend/internal/database ./backend/internal/browser`、`pnpm typecheck`、`pnpm build` passed；`scripts/camoufox_smoke.ps1 -AllowBlocked` 仍为 `contract_ready_runtime_smoke_required`，因为真实 Camoufox 打开页面、artifact、取消/超时清理和 task-run 性能证据未跑。
 - 2026-05-28 已补 roadmap profile-browser 证据：新增 `scripts/profile_browser_environment_probe.mjs`，用仓库内 fingerprint Chromium 通过 CDP 真实观测 browser API / canvas / timezone-locale 注入效果；report `data/validation-reports/profile-browser-environment-1779951691042.json` 与 `data/reports/profile-browser-environment/profile-browser-environment-1779951691042.json` 均为 `passed`。随后复跑 roadmap evidence `data/reports/roadmap-evidence/roadmap-evidence-smoke-1779951732878.json` 仍为 `passed_with_external_evidence_pending`；profile-browser comparison gate 进入 `partial_comparison_only`，原因是最新 validation report 是 profile-browser 专项报告，不含同份 desktop-webview 对照信号。
 - 2026-05-28 已执行全量剩余证据 gate 并同步 report：provider acceptance `data/reports/provider-acceptance/provider-acceptance-preflight-1779940254070.json` 为 `blocked_missing_credentials`；SessionBundle portability `data/reports/session-portability/session-bundle-portability-smoke-1779940254019.json` 为 `local_contract_passed`；runtime adapter gate `data/reports/runtime-adapter/runtime-adapter-evidence-gate-1779940253967.json` 为 `blocked_evidence_required`；external distribution `data/reports/external-distribution/external-distribution-smoke-1779940275059.json` 为 `blocked_external_smoke_required`；taxonomy audit `data/reports/taxonomy-audit/taxonomy-audit-1779940275062.json` passed；live truth guard `data/reports/governance/live-truth-guard-1779941218292.json` passed。
 - P34 修复 Launch API/key 与旧二进制产物问题：Go config loader 会展开 `${ENV}`；但 2026-05-25 用户已明确废弃多 exe 兼容入口路线，只保留 `personal-pilot-tauri.exe` 为主线，其余 exe 需剔除或退出主线。
@@ -90,7 +90,7 @@ Updated: 2026-05-28 (Asia/Shanghai)
 - 2026-05-27 已对根目录 `personal-pilot-tauri.exe` 运行 release smoke：`data/reports/release-smoke/release-performance-smoke-1779895292285.json`，结果 `warning`：`10274ms` cold start、`672MB` idle RSS、`22` processes；仍不能写成 release performance green。
 - 2026-05-27 已重跑 external distribution smoke：`data/reports/external-distribution/external-distribution-smoke-1779895317484.json`，本机资产检查按单入口 `personal-pilot-tauri.exe` 执行，但状态仍为 `blocked_external_smoke_required`，因为 manual operator smoke、干净 Win11 安装/启动/卸载、页面导航、provider readiness、SessionBundle smoke 未提供外部证据。
 - 2026-05-26 本轮尝试派出 3 个 subagent 做入口验证、UI 收敛风险扫描和文档一致性扫描；本地 agent 分发器均返回 `503 Service Unavailable`，因此同等检查已由主线程接管完成。
-- 2026-05-28 主线程复核当前根目录 `personal-pilot-tauri.exe`：文件存在，大小 `20,104,192` bytes，SHA256 `75063F9906CCDE8BCDACD7622F2349BD819D755C2B9D4F095CA736D70C4D06DE`，`src-tauri/target/release` 无持久 GUI exe。
+- 2026-05-28 主线程复核当前根目录 `personal-pilot-tauri.exe`：文件存在，大小 `20,104,192` bytes，SHA256 `3E1DF50E92328A525794174EBED3BF987DDB58663CA9686D02FF5FE0F9E2453D`，`src-tauri/target/release` 无持久 GUI exe。
 - 2026-05-27 已完成本轮主线 UI API 收口：`src/modules/dashboard/api.ts`、`src/modules/profile/api.ts` 和 `src/modules/monitor/EventMonitorPage.tsx` 已改为通过 `src/services/desktop.ts` typed wrapper 或模块 facade 调用；`EventMonitorPage` 历史查询已补 `300ms` debounce 和 stale-result 保护。当前剩余较大的统一边界风险主要集中在 `src/modules/synchronizer/api.ts` 的动态 sidecar RPC facade，以及 browser 模块内较薄的动态代理。
 - 2026-05-27 第二套 console UI 清理后，主线页面入口以 `src/App.tsx` 和 `src/modules/**` 为准；保留的 `src/pages/`、`src/components/`、`src/features/`、`src/hooks/`、`src/utils/` 仅为 Win11 baseline layout placeholder，不承载用户界面。
 - 2026-05-27 曾定位实例详情/编辑/复制页历史回归：旧第二套 UI 的详情路由参数名和页面读取字段不一致。该 UI 已删除；当前仍必须用 `BrowserProfileList` / `GetDashboardStats` 真数据链路验证实例不是 `0`。
@@ -121,6 +121,6 @@ Updated: 2026-05-28 (Asia/Shanghai)
 
 Mainline P0、自动化 release gate、Validation Board 前端 MVP 已闭环。下一步方向：
 1. 交由用户验收 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe` 当前构建外观。
-2. 验收时重点看 Dashboard / 实例列表 / 代理池 / 内核管理是否显示当前真实 `4/93/3` 数据，且功能按钮仍通过 core bridge 工作；历史 `95` 代理数只能作为 2026-05-25 当时快照，不再写成当前数据。
+2. 验收时重点看 Dashboard / 实例列表 / 代理池 / 内核管理是否显示当前真实 `4/93/4` 数据，内核管理必须显示 `Camoufox（配置路径后可用）`，且功能按钮仍通过 core bridge 工作；历史 `95` 代理数只能作为 2026-05-25 当时快照，不再写成当前数据。
 3. `docs/99-implementation-roadmap.md` 文件级待办已全部勾完；下一步优先做 Overall 外部证据闭环，包括 provider 凭证 smoke、同份 desktop/profile comparison report、cross-machine SessionBundle portability、真实 Camoufox runtime、真实 browser prewarm 和 Xray/Sing-Box 出站运行验证。
 4. 继续推进统一服务边界，重点处理 `src/modules/synchronizer/api.ts` 的 typed facade，以及 browser 模块内动态 `desktopRpc(property, args)` 的进一步显式化。
