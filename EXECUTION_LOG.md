@@ -385,3 +385,18 @@
 
 - 执行建议第 1 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：默认推进当前最优先事项
 - 执行建议第 2 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：保持双任务推进节奏
+
+## Workflow Action Dispatch
+
+- 读取目标文档并重新排序下一阶段事项 [doc_sync]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：先对齐 VISION/CURRENT_DIRECTION/TODO，避免跑偏
+- 生成 3–5 个下一阶段建议 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：为执行前两个动作提供稳定输入
+
+## Workflow Action Dispatch
+
+- 执行建议第 1 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：默认推进当前最优先事项
+- 执行建议第 2 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：保持双任务推进节奏
+
+## Workflow Action Dispatch
+
+- 执行建议第 1 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：默认推进当前最优先事项
+- 执行建议第 2 项 [feature]: 已执行最小真实动作：将建议写入 EXECUTION_LOG.md；原因：保持双任务推进节奏
