@@ -18,8 +18,9 @@ use persona_pilot::{
         proxy_health::{proxy_health_tick_interval_seconds_from_env, run_proxy_health_tick},
     },
     runner::{
-        fake::FakeRunner, lightpanda::LightpandaRunner, runner_concurrency_from_env,
-        runner_reclaim_seconds_from_env, spawn_runner_workers, RunnerKind, TaskRunner,
+        camoufox::CamoufoxRunner, fake::FakeRunner, lightpanda::LightpandaRunner,
+        runner_concurrency_from_env, runner_reclaim_seconds_from_env, spawn_runner_workers,
+        RunnerKind, TaskRunner,
     },
     workflow::{
         run_minimal_cycle_steps, tick_workflow_file, WorkflowExecutionState, WorkflowStage,
@@ -57,6 +58,7 @@ async fn main() -> Result<()> {
 
     let runner: Arc<dyn TaskRunner> = match RunnerKind::from_env() {
         RunnerKind::Fake => Arc::new(FakeRunner),
+        RunnerKind::Camoufox => Arc::new(CamoufoxRunner),
         RunnerKind::Lightpanda => Arc::new(LightpandaRunner::default()),
     };
 
