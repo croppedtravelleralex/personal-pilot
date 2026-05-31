@@ -490,9 +490,11 @@ pub struct DesktopEvidenceReportSummary {
     pub report_id: String,
     pub kind: String,
     pub status: String,
+    pub evidence_level: String,
     pub generated_at: String,
     pub report_path: String,
     pub failure_reason: Option<String>,
+    pub next_action: Option<String>,
     pub summary: String,
 }
 
@@ -2782,7 +2784,10 @@ fn provider_readiness_item(
         real_provider_smoke_status,
         acceptance_status,
         closure_gates: closure_gates.iter().map(|item| item.to_string()).collect(),
-        acceptance_checklist: acceptance_checklist.iter().map(|item| item.to_string()).collect(),
+        acceptance_checklist: acceptance_checklist
+            .iter()
+            .map(|item| item.to_string())
+            .collect(),
         blockers,
         failure_reason,
         latest_report_path,
@@ -2900,12 +2905,18 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
 
 fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
     match dir_name {
+        "m4-acceptance" => Some("m4_acceptance"),
         "release-smoke" => Some("release_performance"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "taxonomy-audit" => Some("taxonomy_audit"),
         "external-distribution" => Some("external_distribution"),
         "runtime-adapter" => Some("runtime_adapter"),
+        "taxonomy-coverage" => Some("taxonomy_coverage"),
+        "transport-binary-smoke" => Some("transport_binary_smoke"),
+        "remote-proxy-tls" => Some("remote_proxy_tls"),
+        "headed-external-smoke" => Some("headed_external_smoke"),
+        "camoufox-binary-task" => Some("camoufox_binary_task"),
         "provider-manager" => Some("provider_manager"),
         "profile-browser-comparison" => Some("profile_browser_comparison"),
         _ => None,
@@ -2935,6 +2946,74 @@ fn latest_report_value(database_url: &str, dir_name: &str) -> Option<Value> {
     reports.sort_by(|left, right| right.0.cmp(&left.0));
     reports.into_iter().next().map(|(_, value)| value)
 }
+
+fn latest_ranked_report_value<F>(database_url: &str, dir_name: &str, rank: F) -> Option<Value>
+where
+    F: Fn(&Value) -> i32,
+{
+    let reports_dir = data_root_from_database_url(database_url)
+        .join("reports")
+        .join(dir_name);
+    let entries = fs::read_dir(reports_dir).ok()?;
+    let mut reports = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|item| item.to_str()) != Some("json") {
+            continue;
+        }
+        let raw = fs::read_to_string(&path).ok()?;
+        let value = serde_json::from_str::<Value>(&raw).ok()?;
+        let generated_at = value
+            .get("generatedAt")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| path_timestamp_or_now(&path));
+        reports.push((rank(&value), generated_at, value));
+    }
+    reports.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
+    reports.into_iter().next().map(|(_, _, value)| value)
+}
+
+fn headed_external_report_rank(value: &Value) -> i32 {
+    let status = value.get("status").and_then(Value::as_str).unwrap_or("");
+    let Some(task) = value.get("realBinaryTask") else {
+        return 0;
+    };
+    if task.get("status").and_then(Value::as_str) != Some("passed") {
+        return 0;
+    }
+    let result = task.get("result");
+    let action = result
+        .and_then(|item| item.get("action"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let signal_count = result
+        .and_then(|item| item.get("validation_signals"))
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let repeatability_status = value
+        .get("repeatability")
+        .and_then(|item| item.get("status"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    if status == "passed_real_binary_repeatability"
+        && repeatability_status == "passed_repeatability_partial_coherence"
+    {
+        30
+    } else if status == "passed_real_binary_validation_probe"
+        && action == "validation_probe"
+        && signal_count > 0
+    {
+        20
+    } else if status == "passed_real_binary_task" {
+        10
+    } else {
+        0
+    }
+}
+
 fn evidence_report_summary_from_json(
     kind: &str,
     path: &Path,
@@ -2960,7 +3039,29 @@ fn evidence_report_summary_from_json(
         .and_then(Value::as_str)
         .filter(|item| !item.is_empty())
         .map(ToOwned::to_owned);
+    let evidence_level = evidence_level_from_report(kind, &status, value);
+    let next_action = evidence_next_action(kind, &status, value, failure_reason.as_deref());
     let summary = match kind {
+        "m4_acceptance" => {
+            let passed = value
+                .get("summary")
+                .and_then(|summary| summary.get("passed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let expected_blocked = value
+                .get("summary")
+                .and_then(|summary| summary.get("expectedBlocked"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let failed = value
+                .get("summary")
+                .and_then(|summary| summary.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            format!(
+                "M4 acceptance {status}: passed={passed} expectedBlocked={expected_blocked} failed={failed}"
+            )
+        }
         "release_performance" => format!(
             "release performance {status}: cold_start={}ms rss={}MB processes={}",
             value
@@ -3007,6 +3108,165 @@ fn evidence_report_summary_from_json(
         ),
         "external_distribution" => format!("external distribution {status}"),
         "runtime_adapter" => format!("runtime adapter {status}"),
+        "taxonomy_coverage" => {
+            let fingerprint_count = value
+                .get("fingerprint")
+                .and_then(|fingerprint| fingerprint.get("materializedSignalCount"))
+                .and_then(Value::as_i64)
+                .map(|item| item.to_string())
+                .unwrap_or_else(|| "pending".to_string());
+            let behavior_count = value
+                .get("behavior")
+                .and_then(|behavior| behavior.get("materializedEventCount"))
+                .and_then(Value::as_i64)
+                .map(|item| item.to_string())
+                .unwrap_or_else(|| "pending".to_string());
+            format!(
+                "taxonomy coverage {status}: fingerprint={fingerprint_count} behavior={behavior_count}"
+            )
+        }
+        "transport_binary_smoke" => format!("transport binary smoke {status}"),
+        "remote_proxy_tls" => {
+            let exit_ip = value
+                .get("observed")
+                .and_then(|observed| observed.get("exitIp"))
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("pending");
+            let ja3_hash = value
+                .get("observed")
+                .and_then(|observed| observed.get("tlsJa3Hash"))
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("pending");
+            let ja4 = value
+                .get("observed")
+                .and_then(|observed| observed.get("tlsJa4"))
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("pending");
+            let direct_baseline_status = value
+                .get("directBaseline")
+                .and_then(|baseline| baseline.get("status"))
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("pending");
+            let direct_exit_diff = value
+                .get("directBaseline")
+                .and_then(|baseline| baseline.get("exitIpDifferentFromProxied"))
+                .and_then(Value::as_bool)
+                .map(|item| item.to_string())
+                .unwrap_or_else(|| "pending".to_string());
+            format!("remote proxy TLS {status}: exitIp={exit_ip} ja3Hash={ja3_hash} ja4={ja4} directBaseline={direct_baseline_status} directExitDiff={direct_exit_diff}")
+        }
+        "headed_external_smoke" => {
+            let task = value.get("realBinaryTask");
+            let result = task.and_then(|item| item.get("result"));
+            let action = task
+                .and_then(|item| item.get("action"))
+                .or_else(|| result.and_then(|item| item.get("action")))
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("pending");
+            let final_url = task
+                .and_then(|item| item.get("finalUrl"))
+                .or_else(|| result.and_then(|item| item.get("final_url")))
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("pending");
+            let validation_probe = task.and_then(|item| item.get("validationProbe"));
+            let validation_signals = result.and_then(|item| item.get("validation_signals"));
+            let signal_count = validation_probe
+                .and_then(|item| item.get("signalCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    validation_signals
+                        .and_then(Value::as_array)
+                        .map(|items| items.len() as i64)
+                });
+            let warning_count = validation_probe
+                .and_then(|item| item.get("warningCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    validation_signals.and_then(Value::as_array).map(|items| {
+                        items
+                            .iter()
+                            .filter(|item| {
+                                item.get("status").and_then(Value::as_str) == Some("warning")
+                            })
+                            .count() as i64
+                    })
+                });
+            let mut categories = validation_probe
+                .and_then(|item| item.get("categories"))
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .filter(|item| !item.is_empty())
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            if categories.is_empty() {
+                if let Some(items) = validation_signals.and_then(Value::as_array) {
+                    categories = items
+                        .iter()
+                        .filter_map(|item| item.get("category").and_then(Value::as_str))
+                        .filter(|item| !item.is_empty())
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>();
+                    categories.sort();
+                    categories.dedup();
+                }
+            }
+            let repeatability = value.get("repeatability");
+            let repeatability_status = repeatability
+                .and_then(|item| item.get("status"))
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty());
+            let repeatability_text = repeatability_status.map(|status| {
+                let passed = repeatability
+                    .and_then(|item| item.get("passedCount"))
+                    .and_then(Value::as_i64)
+                    .unwrap_or_default();
+                let requested = repeatability
+                    .and_then(|item| item.get("requestedCount"))
+                    .and_then(Value::as_i64)
+                    .unwrap_or_default();
+                format!(" repeatability={status} {passed}/{requested}")
+            });
+            if signal_count.unwrap_or_default() > 0 {
+                let signal_count = signal_count.unwrap_or_default();
+                let warning_count = warning_count.unwrap_or_default();
+                let categories = if categories.is_empty() {
+                    "pending".to_string()
+                } else {
+                    categories.join(",")
+                };
+                format!("headed external smoke {status}: action={action} finalUrl={final_url} signals={signal_count} warnings={warning_count} categories={categories}{}", repeatability_text.unwrap_or_default())
+            } else {
+                format!(
+                    "headed external smoke {status}: action={action} finalUrl={final_url}{}",
+                    repeatability_text.unwrap_or_default()
+                )
+            }
+        }
+        "camoufox_binary_task" => {
+            let action = value
+                .get("action")
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("pending");
+            let screenshot_present = value
+                .get("screenshotPresent")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            format!(
+                "camoufox binary task {status}: action={action} screenshotPresent={screenshot_present}"
+            )
+        }
         "provider_manager" => format!("provider manager {status}"),
         "profile_browser_comparison" => format!("profile browser comparison {status}"),
         _ => format!("{kind} {status}"),
@@ -3016,11 +3276,109 @@ fn evidence_report_summary_from_json(
         report_id,
         kind: kind.to_string(),
         status,
+        evidence_level,
         generated_at,
         report_path: path.to_string_lossy().to_string(),
         failure_reason,
+        next_action,
         summary,
     }
+}
+
+fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String {
+    match (kind, status) {
+        ("remote_proxy_tls", "passed_remote_proxy_tls_observed") => "remote_proxy_tls_observed",
+        ("remote_proxy_tls", "partial_remote_proxy_egress_observed") => {
+            "remote_proxy_egress_partial"
+        }
+        ("remote_proxy_tls", "blocked_remote_proxy_required") => "blocked_missing_remote_proxy",
+        ("m4_acceptance", "expected_blocked") => "expected_external_blockers",
+        ("headed_external_smoke", "passed_real_binary_validation_probe") => {
+            "profile_browser_observed"
+        }
+        ("headed_external_smoke", "passed_real_binary_task") => "real_binary_task_observed",
+        ("runtime_adapter", "blocked_evidence_required") => {
+            let remote_status = value
+                .get("remoteProxyTlsEvidence")
+                .and_then(|item| item.get("status"))
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            if remote_status == "passed" {
+                "blocked_remaining_b1_b5_evidence"
+            } else {
+                "blocked_missing_remote_proxy_or_b1_b5_evidence"
+            }
+        }
+        (_, item) if item.contains("passed") || item.contains("observed") => "observed",
+        (_, item) if item.contains("blocked") => "blocked",
+        (_, item) if item.contains("failed") => "failed",
+        (_, item) if item.contains("warning") || item.contains("partial") => "partial",
+        _ => "contract_or_not_run",
+    }
+    .to_string()
+}
+
+fn evidence_next_action(
+    kind: &str,
+    status: &str,
+    value: &Value,
+    failure_reason: Option<&str>,
+) -> Option<String> {
+    let action = match (kind, status) {
+        ("m4_acceptance", "expected_blocked") => Some(
+            "Use this as the M4 local aggregation gate; close external blockers with provider, remote proxy, profile-browser comparison, and cross-machine reports."
+                .to_string(),
+        ),
+        ("m4_acceptance", "failed") => Some(
+            "Fix live truth drift, missing reports, unreadable reports, or blocker misclassification, then rerun scripts/m4_acceptance_gate.ps1."
+                .to_string(),
+        ),
+        ("remote_proxy_tls", "blocked_remote_proxy_required") => Some(
+            "Set PERSONA_PILOT_REMOTE_PROXY_URL or pass -ProxyUrl, then rerun scripts/remote_proxy_tls_probe.ps1."
+                .to_string(),
+        ),
+        ("remote_proxy_tls", "partial_remote_proxy_egress_observed") => Some(
+            "Keep the proxied egress report, then use a target that returns JA3/JA4 fields or verify ExpectedExitIp."
+                .to_string(),
+        ),
+        ("remote_proxy_tls", "passed_remote_proxy_tls_observed") => Some(
+            "Rerun scripts/runtime_adapter_evidence_gate.ps1 so the AdsPower evidence gate consumes this proxy/TLS proof."
+                .to_string(),
+        ),
+        ("runtime_adapter", "blocked_evidence_required") => {
+            let b1b5 = value.get("b1b5Evidence");
+            let remote = b1b5
+                .and_then(|item| item.get("transportRemoteProxyTls"))
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            let session = b1b5
+                .and_then(|item| item.get("sessionPortability"))
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            let provider = b1b5
+                .and_then(|item| item.get("providerProductionClosure"))
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            Some(format!(
+                "Complete B1-B5 evidence before refreshing score: remoteProxyTls={remote}, sessionPortability={session}, providerClosure={provider}."
+            ))
+        }
+        ("provider_acceptance", item) if item.contains("blocked") => Some(
+            "Configure real provider credentials and rerun scripts/provider_acceptance_preflight.ps1."
+                .to_string(),
+        ),
+        ("session_portability", item) if item.contains("local_contract") || item.contains("blocked") => Some(
+            "Run the SessionBundle restore smoke on a second Win11 machine and attach the resulting report."
+                .to_string(),
+        ),
+        ("external_distribution", item) if item.contains("blocked") => Some(
+            "Run the manual clean-Win11 operator smoke from docs/24-external-distribution-readiness.md."
+                .to_string(),
+        ),
+        _ => None,
+    };
+
+    action.or_else(|| failure_reason.map(ToOwned::to_owned))
 }
 
 pub fn list_desktop_evidence_reports(
@@ -3033,12 +3391,18 @@ pub fn list_desktop_evidence_reports(
     let mut reports = Vec::new();
 
     for dir_name in [
+        "m4-acceptance",
         "release-smoke",
         "provider-acceptance",
         "session-portability",
         "taxonomy-audit",
         "external-distribution",
         "runtime-adapter",
+        "taxonomy-coverage",
+        "transport-binary-smoke",
+        "remote-proxy-tls",
+        "headed-external-smoke",
+        "camoufox-binary-task",
         "provider-manager",
         "profile-browser-comparison",
     ] {
@@ -3071,8 +3435,14 @@ pub fn list_desktop_evidence_reports(
 }
 
 pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
-    let supported_primitives = SUPPORTED_PRIMITIVES.iter().map(|item| item.to_string()).collect();
-    let page_archetypes = PAGE_ARCHETYPES.iter().map(|item| item.to_string()).collect();
+    let supported_primitives = SUPPORTED_PRIMITIVES
+        .iter()
+        .map(|item| item.to_string())
+        .collect();
+    let page_archetypes = PAGE_ARCHETYPES
+        .iter()
+        .map(|item| item.to_string())
+        .collect();
     let target_event_taxonomy_path = "docs/taxonomy/behavior-event-taxonomy.json".to_string();
     let target_event_family_count = 11;
     let workflow_graph_nodes = vec![
@@ -3133,14 +3503,14 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
         DesktopBehaviorAuditCoverageItem {
             id: "workflow_graph".to_string(),
             label: "Workflow graph".to_string(),
-            status: "partial".to_string(),
-            evidence: "compile_behavior_plan produces deterministic phased steps per page archetype".to_string(),
+            status: "runtime_evidence_backed".to_string(),
+            evidence: "compile_behavior_plan produces deterministic phased steps per page archetype and runner artifacts store behavior_trace_summary/behavior_trace_lines".to_string(),
         },
         DesktopBehaviorAuditCoverageItem {
             id: "debug_trace".to_string(),
             label: "Debug trace".to_string(),
-            status: "partial".to_string(),
-            evidence: "BehaviorTraceSummary tracks planned/executed/failed/aborted/session_persisted fields".to_string(),
+            status: "runtime_evidence_backed".to_string(),
+            evidence: "BehaviorTraceSummary tracks planned/executed/failed/aborted/session_persisted fields and raw behavior_trace can be persisted as an artifact".to_string(),
         },
         DesktopBehaviorAuditCoverageItem {
             id: "manual_gate".to_string(),
@@ -3165,7 +3535,7 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
     ];
     let warnings = vec![
         "13 shipped primitives are not the 450+ target taxonomy".to_string(),
-        "workflow/debug/manual-gate/recovery coverage is audit coverage, not full replay taxonomy closure".to_string(),
+        "workflow/debug deterministic replay evidence exists for shipped primitives, but manual-gate/recovery coverage is not full 450+ replay taxonomy closure".to_string(),
     ];
     let summary = format!(
         "Behavior audit: {} shipped primitives across {} page archetypes; 450+ event taxonomy remains target-only.",
@@ -3185,8 +3555,8 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
         page_archetypes,
         workflow_graph_nodes,
         workflow_graph_edges,
-        replay_debugger_status: "audit_contract_only".to_string(),
-        deterministic_replay_evidence_status: "pending_runtime_evidence".to_string(),
+        replay_debugger_status: "behavior_trace_artifact_visible".to_string(),
+        deterministic_replay_evidence_status: "shipped_primitives_runtime_evidence".to_string(),
         coverage,
         warnings,
         summary,
@@ -3226,6 +3596,73 @@ pub fn read_desktop_release_smoke_contract(
         .as_ref()
         .and_then(|report| report.get("status"))
         .and_then(Value::as_str);
+    let latest_camoufox_binary_report = latest_report_value(&database_url, "camoufox-binary-task");
+    let camoufox_binary_passed = latest_camoufox_binary_report
+        .as_ref()
+        .and_then(|report| report.get("status"))
+        .and_then(Value::as_str)
+        == Some("passed");
+    let latest_headed_external_report = latest_ranked_report_value(
+        &database_url,
+        "headed-external-smoke",
+        headed_external_report_rank,
+    );
+    let headed_external_real_binary_passed = latest_headed_external_report
+        .as_ref()
+        .and_then(|report| report.get("status"))
+        .and_then(Value::as_str)
+        .map(|status| {
+            matches!(
+                status,
+                "passed_real_binary_task"
+                    | "passed_real_binary_validation_probe"
+                    | "passed_real_binary_repeatability"
+            )
+        })
+        .unwrap_or(false)
+        && latest_headed_external_report
+            .as_ref()
+            .and_then(|report| report.get("realBinaryTask"))
+            .and_then(|task| task.get("status"))
+            .and_then(Value::as_str)
+            == Some("passed");
+    let headed_external_validation_signals: Vec<String> = latest_headed_external_report
+        .as_ref()
+        .and_then(|report| report.get("realBinaryTask"))
+        .and_then(|task| task.get("result"))
+        .and_then(|result| result.get("validation_signals"))
+        .and_then(Value::as_array)
+        .map(|signals| {
+            let mut categories = signals
+                .iter()
+                .filter_map(|signal| signal.get("category").and_then(Value::as_str))
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            categories.sort();
+            categories.dedup();
+            categories
+        })
+        .unwrap_or_default();
+    let headed_external_validation_probe_observed = headed_external_real_binary_passed
+        && latest_headed_external_report
+            .as_ref()
+            .and_then(|report| report.get("realBinaryTask"))
+            .and_then(|task| task.get("result"))
+            .and_then(|result| result.get("action"))
+            .and_then(Value::as_str)
+            == Some("validation_probe")
+        && !headed_external_validation_signals.is_empty();
+    let headed_external_repeatability_observed = latest_headed_external_report
+        .as_ref()
+        .and_then(|report| report.get("status"))
+        .and_then(Value::as_str)
+        == Some("passed_real_binary_repeatability")
+        && latest_headed_external_report
+            .as_ref()
+            .and_then(|report| report.get("repeatability"))
+            .and_then(|repeatability| repeatability.get("status"))
+            .and_then(Value::as_str)
+            == Some("passed_repeatability_partial_coherence");
     let measurement_status = latest_release_status
         .map(|status| format!("measured_{status}"))
         .unwrap_or_else(|| "pending_operator_measurement".to_string());
@@ -3250,7 +3687,9 @@ pub fn read_desktop_release_smoke_contract(
             process_lifecycle_status: "in_process".to_string(),
             cdp_attach_status: "not_applicable".to_string(),
             adapter_capabilities: vec!["contract_tests".to_string()],
-            evidence_requirements: vec!["must not be counted as browser runtime evidence".to_string()],
+            evidence_requirements: vec![
+                "must not be counted as browser runtime evidence".to_string()
+            ],
             blockers: vec!["not real browser evidence".to_string()],
         },
         DesktopRuntimeAdapterContractItem {
@@ -3276,28 +3715,129 @@ pub fn read_desktop_release_smoke_contract(
             ],
         },
         DesktopRuntimeAdapterContractItem {
-            adapter_id: "headed_external".to_string(),
-            status: "planned_contract_only".to_string(),
-            runner_kind: "future".to_string(),
-            profile_runtime_evidence: "not_implemented".to_string(),
-            fingerprint_runtime_depth: "not_implemented".to_string(),
-            external_kernel_boundary:
-                "must remain adapter boundary, not Chromium/Firefox fork host".to_string(),
-            process_lifecycle_status: "not_implemented".to_string(),
-            cdp_attach_status: "not_implemented".to_string(),
+            adapter_id: "camoufox".to_string(),
+            status: "minimal_cdp_runner_source_test_backed".to_string(),
+            runner_kind: "camoufox".to_string(),
+            profile_runtime_evidence: "minimal_cdp_actions_and_validation_probe".to_string(),
+            fingerprint_runtime_depth:
+                "profile browser validation probe exists; full 450 fingerprint coverage remains pending"
+                    .to_string(),
+            external_kernel_boundary: "external_process_not_repo_fork".to_string(),
+            process_lifecycle_status: "spawn_wait_cleanup_contract".to_string(),
+            cdp_attach_status: "Target.createTarget_attach_Page.navigate_contract".to_string(),
             adapter_capabilities: vec![
-                "future_headed_process_lifecycle".to_string(),
-                "future_cdp_session_attach".to_string(),
-                "future_profile_runtime_compatibility_report".to_string(),
+                "open_page".to_string(),
+                "fetch".to_string(),
+                "get_html".to_string(),
+                "get_title".to_string(),
+                "get_final_url".to_string(),
+                "extract_text".to_string(),
+                "validation_probe".to_string(),
             ],
             evidence_requirements: vec![
-                "external browser process lifecycle smoke".to_string(),
-                "CDP attach/detect/fill smoke".to_string(),
+                "PERSONA_PILOT_CAMOUFOX_CONFIG real binary task-run smoke".to_string(),
+                "timeout/cleanup process residue proof".to_string(),
+                "release performance report with Camoufox task-run metrics".to_string(),
+            ],
+            blockers: if camoufox_binary_passed {
+                vec![
+                    "full headed runtime fingerprint/leak/coherence evidence remains pending"
+                        .to_string(),
+                ]
+            } else {
+                vec![
+                    "real Camoufox binary task-run smoke not recorded in this contract".to_string(),
+                    "full headed runtime fingerprint/leak/coherence evidence remains pending"
+                        .to_string(),
+                ]
+            },
+        },
+        DesktopRuntimeAdapterContractItem {
+            adapter_id: "headed_external".to_string(),
+            status: if headed_external_repeatability_observed {
+                "real_binary_repeatability_recorded".to_string()
+            } else if headed_external_validation_probe_observed {
+                "real_binary_validation_probe_recorded".to_string()
+            } else if headed_external_real_binary_passed {
+                "real_binary_task_recorded".to_string()
+            } else {
+                "minimal_cdp_runner_source_test_backed".to_string()
+            },
+            runner_kind: "headed_external".to_string(),
+            profile_runtime_evidence: if headed_external_repeatability_observed {
+                "profile_browser_validation_probe_repeatability_observed".to_string()
+            } else if headed_external_validation_probe_observed {
+                "profile_browser_validation_probe_observed".to_string()
+            } else if headed_external_real_binary_passed {
+                "minimal_real_binary_task_passed".to_string()
+            } else {
+                "minimal_cdp_actions_and_validation_probe".to_string()
+            },
+            fingerprint_runtime_depth: if headed_external_repeatability_observed {
+                format!(
+                    "repeatable partial headed profile-browser observed signals: {}; full 450 fingerprint coverage remains pending",
+                    headed_external_validation_signals.join(", ")
+                )
+            } else if headed_external_validation_probe_observed {
+                format!(
+                    "partial headed profile-browser observed signals: {}; full 450 fingerprint coverage remains pending",
+                    headed_external_validation_signals.join(", ")
+                )
+            } else {
+                "profile browser validation probe exists; full 450 fingerprint coverage remains pending"
+                    .to_string()
+            },
+            external_kernel_boundary:
+                "external_process_not_repo_fork; not Chromium/Firefox fork host".to_string(),
+            process_lifecycle_status: if headed_external_real_binary_passed {
+                "passed".to_string()
+            } else {
+                "spawn_wait_cleanup_contract".to_string()
+            },
+            cdp_attach_status: if headed_external_real_binary_passed {
+                "passed".to_string()
+            } else {
+                "Target.createTarget_attach_Page.navigate_contract".to_string()
+            },
+            adapter_capabilities: vec![
+                "open_page".to_string(),
+                "fetch".to_string(),
+                "get_html".to_string(),
+                "get_title".to_string(),
+                "get_final_url".to_string(),
+                "extract_text".to_string(),
+                "validation_probe".to_string(),
+            ],
+            evidence_requirements: vec![
+                "PERSONA_PILOT_HEADED_EXTERNAL_CONFIG real binary task-run smoke".to_string(),
+                "timeout/cleanup process residue proof".to_string(),
                 "profile runtime compatibility report".to_string(),
             ],
-            blockers: vec![
-                "adapter implementation and evidence smoke are not implemented".to_string(),
-            ],
+            blockers: if headed_external_real_binary_passed {
+                if headed_external_repeatability_observed {
+                    vec![
+                        "long-task headed runtime, remote proxy/TLS proof, and 450 observed coverage remain pending"
+                            .to_string(),
+                    ]
+                } else if headed_external_validation_probe_observed {
+                    vec![
+                        "complete headed runtime repeatability/coherence matrix and 450 observed coverage remain pending"
+                            .to_string(),
+                    ]
+                } else {
+                    vec![
+                        "full headed runtime fingerprint/leak/coherence evidence remains pending"
+                            .to_string(),
+                    ]
+                }
+            } else {
+                vec![
+                    "real headed_external binary task-run smoke not recorded in this contract"
+                        .to_string(),
+                    "full headed runtime fingerprint/leak/coherence evidence remains pending"
+                        .to_string(),
+                ]
+            },
         },
     ];
     let mut warnings = Vec::new();
@@ -9169,23 +9709,35 @@ mod tests {
             contract.target_event_taxonomy_path,
             "docs/taxonomy/behavior-event-taxonomy.json"
         );
-        assert!(contract.supported_primitives.contains(&"wait_for_readiness".to_string()));
-        assert!(contract.supported_primitives.contains(&"soft_abort_if_budget_exceeded".to_string()));
-        assert!(contract.coverage.iter().any(|item| {
-            item.id == "target_taxonomy" && item.status == "taxonomy_seed"
-        }));
+        assert!(contract
+            .supported_primitives
+            .contains(&"wait_for_readiness".to_string()));
+        assert!(contract
+            .supported_primitives
+            .contains(&"soft_abort_if_budget_exceeded".to_string()));
+        assert!(contract
+            .coverage
+            .iter()
+            .any(|item| { item.id == "target_taxonomy" && item.status == "taxonomy_seed" }));
+        assert_eq!(
+            contract.deterministic_replay_evidence_status,
+            "shipped_primitives_runtime_evidence"
+        );
+        assert_eq!(
+            contract.replay_debugger_status,
+            "behavior_trace_artifact_visible"
+        );
         assert!(contract
             .warnings
             .iter()
-            .any(|warning| warning.contains("13 shipped primitives are not the 450+ target taxonomy")));
+            .any(|warning| warning
+                .contains("13 shipped primitives are not the 450+ target taxonomy")));
     }
 
     #[test]
     fn evidence_report_history_reads_local_smoke_reports() {
-        let temp_root = std::env::temp_dir().join(format!(
-            "persona_pilot_evidence_history_{}",
-            Uuid::new_v4()
-        ));
+        let temp_root =
+            std::env::temp_dir().join(format!("persona_pilot_evidence_history_{}", Uuid::new_v4()));
         let reports_dir = temp_root.join("reports").join("release-smoke");
         fs::create_dir_all(&reports_dir).expect("create reports dir");
         let report_path = reports_dir.join("release-performance-smoke-test.json");
@@ -9204,24 +9756,283 @@ mod tests {
         )
         .expect("write report");
 
-        let db_url = format!("sqlite://{}", temp_root.join("persona.db").to_string_lossy());
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
         assert_eq!(history.report_count, 1);
         let report = &history.reports[0];
         assert_eq!(report.kind, "release_performance");
         assert_eq!(report.status, "warning");
-        assert_eq!(report.failure_reason.as_deref(), Some("idle_rss_target_exceeded"));
+        assert_eq!(
+            report.failure_reason.as_deref(),
+            Some("idle_rss_target_exceeded")
+        );
         assert!(report.summary.contains("411MB"));
 
         let _ = fs::remove_dir_all(temp_root);
     }
 
     #[test]
-    fn release_smoke_contract_tracks_adapter_boundary_without_kernel_fork_claims() {
+    fn evidence_report_history_reads_m4_acceptance_reports() {
         let temp_root = std::env::temp_dir().join(format!(
-            "persona_pilot_release_contract_{}",
+            "persona_pilot_m4_acceptance_history_{}",
             Uuid::new_v4()
         ));
+        let reports_dir = temp_root.join("reports").join("m4-acceptance");
+        fs::create_dir_all(&reports_dir).expect("create m4 reports dir");
+        fs::write(
+            reports_dir.join("m4-acceptance-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m4_acceptance_gate_v1",
+                "generatedAt": "2026-05-31T00:00:00Z",
+                "status": "expected_blocked",
+                "summary": {
+                    "passed": 1,
+                    "expectedBlocked": 4,
+                    "failed": 0,
+                    "total": 5
+                },
+                "failureReason": "",
+                "expectedBlockedReason": "provider acceptance requires credentials"
+            })
+            .to_string(),
+        )
+        .expect("write m4 report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        assert_eq!(history.report_count, 1);
+        let report = &history.reports[0];
+        assert_eq!(report.kind, "m4_acceptance");
+        assert_eq!(report.status, "expected_blocked");
+        assert_eq!(report.evidence_level, "expected_external_blockers");
+        assert!(report.summary.contains("passed=1"));
+        assert!(report.summary.contains("expectedBlocked=4"));
+        assert!(report.summary.contains("failed=0"));
+        assert!(report
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("M4 local aggregation gate"));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn evidence_report_history_reads_remote_proxy_tls_reports() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_remote_proxy_tls_history_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("remote-proxy-tls");
+        fs::create_dir_all(&reports_dir).expect("create remote proxy tls reports dir");
+        fs::write(
+            reports_dir.join("remote-proxy-tls-probe-test.json"),
+            serde_json::json!({
+                "schemaVersion": "remote_proxy_tls_probe_v1",
+                "generatedAt": "2026-05-30T00:00:00Z",
+                "status": "passed_remote_proxy_tls_observed",
+                "failureReason": "",
+                "observed": {
+                    "exitIp": "203.0.113.10",
+                    "tlsJa3Hash": "abc123",
+                    "tlsJa4": "t13d1516h2"
+                },
+                "directBaseline": {
+                    "status": "observed",
+                    "exitIpDifferentFromProxied": true
+                }
+            })
+            .to_string(),
+        )
+        .expect("write remote proxy tls report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        assert_eq!(history.report_count, 1);
+        let report = &history.reports[0];
+        assert_eq!(report.kind, "remote_proxy_tls");
+        assert_eq!(report.status, "passed_remote_proxy_tls_observed");
+        assert!(report.summary.contains("203.0.113.10"));
+        assert!(report.summary.contains("abc123"));
+        assert!(report.summary.contains("t13d1516h2"));
+        assert!(report.summary.contains("directBaseline=observed"));
+        assert!(report.summary.contains("directExitDiff=true"));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn evidence_report_history_explains_blocked_remote_proxy_tls_reports() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_blocked_remote_proxy_tls_history_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("remote-proxy-tls");
+        fs::create_dir_all(&reports_dir).expect("create remote proxy tls reports dir");
+        fs::write(
+            reports_dir.join("remote-proxy-tls-probe-blocked.json"),
+            serde_json::json!({
+                "schemaVersion": "remote_proxy_tls_probe_v1",
+                "generatedAt": "2026-05-30T00:04:00Z",
+                "status": "blocked_remote_proxy_required",
+                "failureReason": "No remote proxy URL was provided; set -ProxyUrl or PERSONA_PILOT_REMOTE_PROXY_URL before claiming remote egress/TLS evidence.",
+                "observed": {},
+                "directBaseline": {
+                    "status": "not_run_remote_proxy_required"
+                }
+            })
+            .to_string(),
+        )
+        .expect("write blocked remote proxy tls report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        assert_eq!(history.report_count, 1);
+        let report = &history.reports[0];
+        assert_eq!(report.kind, "remote_proxy_tls");
+        assert_eq!(report.status, "blocked_remote_proxy_required");
+        assert_eq!(report.evidence_level, "blocked_missing_remote_proxy");
+        assert!(report.summary.contains("exitIp=pending"));
+        assert!(report
+            .summary
+            .contains("directBaseline=not_run_remote_proxy_required"));
+        assert!(report
+            .failure_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("No remote proxy URL"));
+        assert!(report
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("PERSONA_PILOT_REMOTE_PROXY_URL"));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn evidence_report_history_reads_runtime_task_and_taxonomy_reports() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_runtime_report_history_{}",
+            Uuid::new_v4()
+        ));
+        let reports_root = temp_root.join("reports");
+        fs::create_dir_all(reports_root.join("headed-external-smoke"))
+            .expect("create headed external reports dir");
+        fs::create_dir_all(reports_root.join("camoufox-binary-task"))
+            .expect("create camoufox binary reports dir");
+        fs::create_dir_all(reports_root.join("taxonomy-coverage"))
+            .expect("create taxonomy coverage reports dir");
+
+        fs::write(
+            reports_root
+                .join("headed-external-smoke")
+                .join("headed-external-smoke-test.json"),
+            serde_json::json!({
+                "schemaVersion": "headed_external_smoke_v2",
+                "generatedAt": "2026-05-30T00:03:00Z",
+                "status": "passed_real_binary_validation_probe",
+                "failureReason": "",
+                "realBinaryTask": {
+                    "action": "validation_probe",
+                    "finalUrl": "https://example.com/",
+                    "validationProbe": {
+                        "signalCount": 3,
+                        "warningCount": 1,
+                        "categories": ["canvas", "detector", "webrtc"]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .expect("write headed external report");
+        fs::write(
+            reports_root
+                .join("camoufox-binary-task")
+                .join("camoufox-binary-task-smoke-test.json"),
+            serde_json::json!({
+                "schemaVersion": "camoufox_binary_page_open_smoke_v1",
+                "generatedAt": "2026-05-30T00:02:00Z",
+                "status": "passed",
+                "failureReason": "",
+                "action": "headless_screenshot_open_page",
+                "screenshotPresent": true
+            })
+            .to_string(),
+        )
+        .expect("write camoufox binary report");
+        fs::write(
+            reports_root
+                .join("taxonomy-coverage")
+                .join("taxonomy-coverage-materialized-test.json"),
+            serde_json::json!({
+                "schemaVersion": "taxonomy_coverage_materialization_v1",
+                "generatedAt": "2026-05-30T00:01:00Z",
+                "status": "passed_materialized_contract",
+                "failureReason": "",
+                "fingerprint": { "materializedSignalCount": 450 },
+                "behavior": { "materializedEventCount": 461 }
+            })
+            .to_string(),
+        )
+        .expect("write taxonomy coverage report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        assert_eq!(history.report_count, 3);
+
+        let headed = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "headed_external_smoke")
+            .expect("headed external report");
+        assert_eq!(headed.status, "passed_real_binary_validation_probe");
+        assert!(headed.summary.contains("validation_probe"));
+        assert!(headed.summary.contains("https://example.com/"));
+        assert!(headed.summary.contains("signals=3"));
+        assert!(headed.summary.contains("warnings=1"));
+        assert!(headed.summary.contains("canvas,detector,webrtc"));
+
+        let camoufox = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "camoufox_binary_task")
+            .expect("camoufox binary report");
+        assert_eq!(camoufox.status, "passed");
+        assert!(camoufox.summary.contains("headless_screenshot_open_page"));
+        assert!(camoufox.summary.contains("screenshotPresent=true"));
+
+        let taxonomy = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "taxonomy_coverage")
+            .expect("taxonomy coverage report");
+        assert_eq!(taxonomy.status, "passed_materialized_contract");
+        assert!(taxonomy.summary.contains("fingerprint=450"));
+        assert!(taxonomy.summary.contains("behavior=461"));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn release_smoke_contract_tracks_adapter_boundary_without_kernel_fork_claims() {
+        let temp_root =
+            std::env::temp_dir().join(format!("persona_pilot_release_contract_{}", Uuid::new_v4()));
         let reports_dir = temp_root.join("reports").join("release-smoke");
         fs::create_dir_all(&reports_dir).expect("create release reports dir");
         fs::write(
@@ -9238,7 +10049,10 @@ mod tests {
             .to_string(),
         )
         .expect("write release report");
-        let db_url = format!("sqlite://{}", temp_root.join("persona.db").to_string_lossy());
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
         let contract = read_desktop_release_smoke_contract(Some(&db_url));
         assert_eq!(contract.cold_start_target_ms, 2000);
         assert_eq!(contract.measured_cold_start_ms, Some(9301));
@@ -9251,7 +10065,7 @@ mod tests {
             .measurement_notes
             .iter()
             .any(|note| note.contains("cold_start_target_exceeded")));
-        assert_eq!(contract.adapter_contracts.len(), 3);
+        assert_eq!(contract.adapter_contracts.len(), 4);
         let fake = contract
             .adapter_contracts
             .iter()
@@ -9270,6 +10084,19 @@ mod tests {
         assert!(lightpanda
             .fingerprint_runtime_depth
             .contains("26 projected fields"));
+        let camoufox = contract
+            .adapter_contracts
+            .iter()
+            .find(|item| item.adapter_id == "camoufox")
+            .expect("camoufox adapter contract");
+        assert_eq!(camoufox.runner_kind, "camoufox");
+        assert!(camoufox
+            .adapter_capabilities
+            .contains(&"validation_probe".to_string()));
+        assert!(camoufox
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("real Camoufox binary")));
         let headed = contract
             .adapter_contracts
             .iter()
@@ -9278,6 +10105,11 @@ mod tests {
         assert!(headed
             .external_kernel_boundary
             .contains("not Chromium/Firefox fork host"));
+        assert_eq!(headed.status, "minimal_cdp_runner_source_test_backed");
+        assert!(headed
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("real headed_external binary")));
         assert!(contract
             .warnings
             .iter()
@@ -9292,6 +10124,192 @@ mod tests {
             .measurement_notes
             .iter()
             .any(|note| note.contains("release artifacts, not dev-mode metrics")));
+    }
+
+    #[test]
+    fn release_smoke_contract_promotes_headed_external_real_binary_evidence() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_headed_external_contract_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("headed-external-smoke");
+        fs::create_dir_all(&reports_dir).expect("create headed external reports dir");
+        fs::write(
+            reports_dir.join("headed-external-smoke-test.json"),
+            serde_json::json!({
+                "schemaVersion": "headed_external_smoke_v2",
+                "generatedAt": "2026-05-30T00:00:00Z",
+                "status": "passed_real_binary_task",
+                "realBinaryTask": {
+                    "status": "passed",
+                    "realBrowserExecution": true,
+                    "browserLaunchAttempted": true,
+                    "finalUrl": "https://example.com/",
+                    "title": "Example Domain"
+                }
+            })
+            .to_string(),
+        )
+        .expect("write headed external report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let contract = read_desktop_release_smoke_contract(Some(&db_url));
+        let headed = contract
+            .adapter_contracts
+            .iter()
+            .find(|item| item.adapter_id == "headed_external")
+            .expect("headed adapter contract");
+        assert_eq!(headed.status, "real_binary_task_recorded");
+        assert_eq!(headed.process_lifecycle_status, "passed");
+        assert_eq!(headed.cdp_attach_status, "passed");
+        assert_eq!(
+            headed.profile_runtime_evidence,
+            "minimal_real_binary_task_passed"
+        );
+        assert!(!headed
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("real headed_external binary")));
+        assert!(headed
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("full headed runtime fingerprint")));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn release_smoke_contract_promotes_headed_external_validation_probe_evidence() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_headed_external_probe_contract_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("headed-external-smoke");
+        fs::create_dir_all(&reports_dir).expect("create headed external reports dir");
+        fs::write(
+            reports_dir.join("headed-external-smoke-test.json"),
+            serde_json::json!({
+                "schemaVersion": "headed_external_smoke_v2",
+                "generatedAt": "2026-05-30T00:00:00Z",
+                "status": "passed_real_binary_task",
+                "realBinaryTask": {
+                    "status": "passed",
+                    "realBrowserExecution": true,
+                    "browserLaunchAttempted": true,
+                    "finalUrl": "https://example.com/",
+                    "title": "Example Domain",
+                    "result": {
+                        "action": "validation_probe",
+                        "validation_signals": [
+                            { "category": "detector", "status": "succeeded" },
+                            { "category": "canvas", "status": "succeeded" },
+                            { "category": "webrtc", "status": "warning" }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .expect("write headed external report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let contract = read_desktop_release_smoke_contract(Some(&db_url));
+        let headed = contract
+            .adapter_contracts
+            .iter()
+            .find(|item| item.adapter_id == "headed_external")
+            .expect("headed adapter contract");
+        assert_eq!(headed.status, "real_binary_validation_probe_recorded");
+        assert_eq!(
+            headed.profile_runtime_evidence,
+            "profile_browser_validation_probe_observed"
+        );
+        assert!(headed
+            .fingerprint_runtime_depth
+            .contains("canvas, detector, webrtc"));
+        assert!(headed
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("repeatability/coherence")));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn release_smoke_contract_keeps_stronger_headed_external_evidence_when_source_report_is_newer()
+    {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_headed_external_ranked_contract_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("headed-external-smoke");
+        fs::create_dir_all(&reports_dir).expect("create headed external reports dir");
+        fs::write(
+            reports_dir.join("headed-external-smoke-strong.json"),
+            serde_json::json!({
+                "schemaVersion": "headed_external_smoke_v2",
+                "generatedAt": "2026-05-30T14:17:45Z",
+                "status": "passed_real_binary_validation_probe",
+                "realBinaryTask": {
+                    "status": "passed",
+                    "realBrowserExecution": true,
+                    "browserLaunchAttempted": true,
+                    "finalUrl": "https://example.com/",
+                    "title": "Example Domain",
+                    "result": {
+                        "action": "validation_probe",
+                        "validation_signals": [
+                            { "category": "detector", "status": "succeeded" },
+                            { "category": "canvas", "status": "succeeded" },
+                            { "category": "webrtc", "status": "warning" }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .expect("write strong headed external report");
+        fs::write(
+            reports_dir.join("headed-external-smoke-newer-source-only.json"),
+            serde_json::json!({
+                "schemaVersion": "headed_external_smoke_v2",
+                "generatedAt": "2026-05-30T17:41:35Z",
+                "status": "passed_source_contract",
+                "realBinaryTask": {
+                    "status": "failed",
+                    "failureReason": "source-only or unrelated smoke did not produce real browser evidence"
+                }
+            })
+            .to_string(),
+        )
+        .expect("write newer source-only headed external report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let contract = read_desktop_release_smoke_contract(Some(&db_url));
+        let headed = contract
+            .adapter_contracts
+            .iter()
+            .find(|item| item.adapter_id == "headed_external")
+            .expect("headed adapter contract");
+        assert_eq!(headed.status, "real_binary_validation_probe_recorded");
+        assert_eq!(
+            headed.profile_runtime_evidence,
+            "profile_browser_validation_probe_observed"
+        );
+        assert!(headed
+            .fingerprint_runtime_depth
+            .contains("canvas, detector, webrtc"));
+
+        let _ = fs::remove_dir_all(temp_root);
     }
 
     #[test]

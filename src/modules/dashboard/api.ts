@@ -1,4 +1,6 @@
 import type { DashboardStats } from './types'
+import { listEvidenceReports } from '../../services/desktop'
+import type { DesktopEvidenceReportHistory } from '../../types/desktop'
 
 const getBindings = async () => {
   try {
@@ -41,6 +43,20 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     memUsedMB: 0,
     maxProfileLimit: DEFAULT_UNLIMITED,
     appVersion: 'unknown',
+  }
+}
+
+export async function fetchEvidenceReportHistory(): Promise<DesktopEvidenceReportHistory> {
+  try {
+    return await listEvidenceReports()
+  } catch (e) {
+    console.error('fetchEvidenceReportHistory error:', e)
+    return {
+      generatedAt: new Date().toISOString(),
+      reportCount: 0,
+      reports: [],
+      summary: 'Evidence report history unavailable',
+    }
   }
 }
 

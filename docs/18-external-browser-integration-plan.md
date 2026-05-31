@@ -676,7 +676,7 @@ camoufox_process_cleanup_failed
 
 | Agent | 责任 | 写入范围 | 验收 |
 | --- | --- | --- | --- |
-| A Runner contract | RunnerKind、类型、错误码、CamoufoxRunner skeleton | `src/runner/mod.rs`、`src/runner/types.rs`、`src/runner/camoufox.rs`、`src-tauri/src/state.rs` | Rust 编译；Fake/Lightpanda 不变 |
+| A Runner contract | RunnerKind、类型、错误码、CamoufoxRunner 最小 CDP 执行器 | `src/runner/mod.rs`、`src/runner/types.rs`、`src/runner/camoufox.rs`、`src-tauri/src/state.rs` | Rust 编译；Fake/Lightpanda 不变；真实 binary smoke 另跑 |
 | B Settings/capability | 设置读写、能力检测命令、desktop wrapper | `src-tauri/src/commands.rs`、`src/services/desktop.ts`、`src/types/desktop.ts`、`src/features/settings/*` | 设置页可显示 capability；无路径不报崩 |
 | C Artifact/detail | artifact 写入合同和 RunDetail 展示调整 | `src/runner/engine.rs`、`src/desktop/mod.rs`、`src/components/automation/RunDetailPanel.tsx` | run detail artifact 可见；大内容不进 store |
 | D Profile/proxy mapping | fingerprint/proxy 轻量映射和 explain | `src/network_identity/*`、`src/runner/camoufox.rs` | applied/ignored 字段可测 |
@@ -722,13 +722,15 @@ Worker 切片边界：
 
 本轮 E 只负责验证口径、脚本入口和维护文档同步，不修改 `src` 代码，不接管其他 worker 的 runner / settings / mapping 实现。
 
-当前代码证据显示 Camoufox 已进入 skeleton / contract-ready 阶段，但不是 runtime-ready：
+当前代码证据显示 Camoufox 已从 skeleton 推进到最小 CDP runner，但还不是生产 runtime-ready：
 
 - `src/runner/mod.rs` 已有 `RunnerKind::Camoufox` 和 `PERSONA_PILOT_RUNNER=camoufox` 映射。
 - `src-tauri/src/state.rs` 可选择 `CamoufoxRunner`，默认 runner 仍不因此变为 Camoufox。
 - `src-tauri/src/commands.rs` 已有 `read_camoufox_settings`、`apply_camoufox_settings`、`check_camoufox_capability`，当前 capability 只检查路径存在性，不启动浏览器。
 - `src/services/desktop.ts` 已导出 `readCamoufoxSettings`、`applyCamoufoxSettings`、`checkCamoufoxCapability`，继续满足所有 Tauri invoke 只从 `src/services/desktop.ts` 出口。
-- `src/runner/camoufox.rs` 当前仍返回 `runner_disabled` / `runner_config_missing` / `runner_not_implemented`，并显式标记 `real_browser_execution=false`、`browser_launch_attempted=false`。
+- `src/runner/camoufox.rs` 当前支持 `open_page` / `fetch` / `get_html` / `get_title` / `get_final_url` / `extract_text` / `validation_probe`，可按 `PERSONA_PILOT_CAMOUFOX_CONFIG` spawn 外部 Camoufox binary 并通过 CDP 执行任务。
+- 未配置时仍返回 `runner_disabled` / `runner_config_missing` / `binary_not_found` 等明确失败；`PERSONA_PILOT_CAMOUFOX_TEST_WS` 可用于连接已有 CDP endpoint 做测试。
+- `validation_probe` 已采样 navigator、canvas、timezone、WebGL、audio、fonts、media devices、WebRTC、storage，但完整 `450` 指纹观测矩阵仍未交付。
 
 新增验证入口：
 
@@ -736,7 +738,7 @@ Worker 切片边界：
 powershell -ExecutionPolicy Bypass -File scripts/camoufox_smoke.ps1 -AllowBlocked
 ```
 
-该命令默认执行非破坏性合同检查并生成 `data/reports/camoufox-smoke/camoufox-smoke-*.json`。当前预期状态是 `contract_ready_runtime_smoke_required`，表示设置/runner skeleton 合同可被检查，但真实 Camoufox 启动、artifact、取消/超时清理和 task-run 性能尚未完成。
+该命令默认执行非破坏性源码/合同检查并生成 `data/reports/camoufox-smoke/camoufox-smoke-*.json`。当前预期状态可为 `passed`，表示最小 CDP runner 源码和本地测试合同成立；这仍不等于真实 Camoufox binary 已经打开页面。真实 Camoufox 启动、artifact、取消/超时清理和 task-run 性能仍必须在有本机配置后单独执行。
 
 如只想本地快速核对而不写 report，可用：
 

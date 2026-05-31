@@ -7,8 +7,9 @@
 3. 读 `docs/final-goal-progress-breakdown.md`。
 4. 读 `docs/19-phase-plan-and-scorecard.md`。
 5. 读 `docs/03-roadmap.md` 和 `docs/04-improvement-backlog.md`。
-6. 如任务涉及发布、外部分发或发布说明，读 `docs/24-external-distribution-readiness.md`。
-7. 需要执行任务时，再按范围读相关代码和测试。
+6. 如任务涉及 M4-M20 执行、harness、commit 切片或验收边界，读 `docs/40-m4-m20-execution-board.md`。
+7. 如任务涉及发布、外部分发或发布说明，读 `docs/24-external-distribution-readiness.md`。
+8. 需要执行任务时，再按范围读相关代码和测试。
 
 ## 默认事实
 
@@ -21,7 +22,7 @@
 ## 汇报规则
 
 - 先说明当前结论，再给证据。
-- Mainline remaining `0%` 与 Overall remaining `70%` 必须分开写。
+- Mainline remaining `0%` 与 Overall remaining `60%` 必须分开写。
 - 不把 AdsPower catch-up、`50+`、`450+` 写成当前 shipped runtime depth。
 - 不复活 `77% / 23%` 或 `82% / 18%` 作为 live truth。
 - 外部分发前要说明哪些限制已保留，哪些人工 smoke 尚未执行。

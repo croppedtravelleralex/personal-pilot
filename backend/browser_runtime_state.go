@@ -173,6 +173,7 @@ func (a *App) waitBrowserDebugReadyAsync(profileId string, debugPort int, timeou
 		logger.F("profile_id", profileId),
 		logger.F("debug_port", debugPort),
 	)
+	go a.applyProfileEnvironmentInjectionAsync(profileId, debugPort)
 	a.emitBrowserInstanceUpdated(snapshot)
 }
 

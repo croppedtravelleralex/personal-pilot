@@ -50,7 +50,7 @@
 
 2. Fingerprint runtime depth
    - 已从 `80` declared controls 和 `12` runtime projected fields 推进到 `26` runtime projected fields（`25` control-supported + derived `platform`）。
-   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；2026-05-28 已新增 Go 端环境注入编译器和 `Page.addScriptToEvaluateOnNewDocument` CDP 入口，覆盖 browser API/canvas/timezone/WebGL/media devices 基础 hook；`roadmap_evidence_smoke` 已证明本机实现覆盖，`profile_browser_environment_probe.mjs` 已用真实 Chromium profile-browser 观测 1.2/1.3/1.4 通过。下一步继续加深真实采集，不把 taxonomy seed 或 projected/applied fields 报成 full observed coverage。
+   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；2026-05-28 已新增 Go 端环境注入编译器和 `Page.addScriptToEvaluateOnNewDocument` CDP 入口，覆盖 browser API/canvas/timezone/WebGL/media devices 基础 hook；`roadmap_evidence_smoke` 已证明本机实现覆盖，`profile_browser_environment_probe.mjs` 已用真实 Chromium profile-browser 观测 1.2/1.3/1.4 通过。本轮继续把环境注入接入实例启动流程，并把 environment audit 扩到 8 个注入族；`taxonomy_coverage_materialize.ps1` 已物化 `450 / 450` 条 fingerprint signal contract；下一步继续加深真实采集，不把 taxonomy seed、materialized contract 或 projected/applied fields 报成 full observed coverage。
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration
@@ -60,19 +60,22 @@
 
 4. Behavior and automation depth
    - 已新增 P10 behavior audit contract：`13` shipped primitives、`8` page archetypes、workflow graph、debug trace、manual gate、recovery semantics、`450+` target-only 边界可在 Automation surface 查看。
-   - P14 已新增 `docs/taxonomy/behavior-event-taxonomy.json` 和 Automation taxonomy seed 可见性。
+   - P14 已新增 `docs/taxonomy/behavior-event-taxonomy.json` 和 Automation taxonomy seed 可见性；2026-05-28 `taxonomy_coverage_materialize.ps1` 已物化 `461 / 450` 条 behavior replay contract。
    - 2026-05-28 已落地 Phase 2 P0 的 Go humanize 基础模型：Fitts Law 轨迹、粉噪、四段式点击、双击、拖拽和右键菜单计划，并以 Go 单测覆盖。
-   - 下一步才是把 taxonomy seed 扩展为真实 replayable `450+` event runtime。
+   - 2026-05-28 已把 shipped primitives 的 workflow graph/debug trace 状态前推到 runtime evidence backed。
+   - 下一步才是把 materialized contract 扩展为真实 replayable `450+` live event runtime。
    - CAPTCHA/SMS/Email 已有 production readiness contract、acceptance checklist 和 Settings operator surface；下一步是真实 manager wiring、CDP detect/fill 和 provider acceptance。
 
 5. Runtime adapter and external integration
-   - Runtime adapter / release smoke contract 已接入，覆盖 Fake、Lightpanda、headed_external 边界和 release artifact 检查。
+   - Runtime adapter / release smoke contract 已接入，覆盖 Fake、Lightpanda、headed_external 边界和 release artifact 检查；`headed_external` 泛化 source contract 已落地，且 2026-05-30 已用仓库内 fingerprint Chromium 跑通真实 `get_title https://example.com` 单任务，report `data/reports/headed-external-smoke/headed-external-smoke-1780109927517.json` 为 `passed_real_binary_task`；同日继续跑通真实 `validation_probe`，report `data/reports/headed-external-smoke/headed-external-smoke-1780121855313.json` 为 `passed_real_binary_validation_probe`，包含 9 个 profile-browser validation signals。2026-05-31 已修复 headed_external evidence ranked selection 和 smoke stdout 污染，最新 headed report `data/reports/headed-external-smoke/headed-external-smoke-1780198191425.json` 仍为 `passed_real_binary_validation_probe`。
    - P11 已新增 release measurement target vs measured pending 字段，并在 Overview 暴露 adapter boundary；P14 已新增 `scripts/release_performance_smoke.ps1` 用 release exe 生成 cold start/RSS/process count report。
    - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
    - P12 已把 AdsPower benchmark refresh 固定为 boundary guard；P21 新增 runtime adapter evidence gate report：等 B1-B5 有新证据后再重算评分。
-   - Camoufox 下一步按 `docs/18-external-browser-integration-plan.md` 的 `90` 分方案推进：2026-05-28 已先把它作为主线 `browser_cores.kind=camoufox` 内核类型接入 Go core manager、SQLite、sidecar RPC、实例启动参数分发和主线 UI 选择；remote server、browser pool 和深度指纹拟真不进入第一主链。当前 `scripts/camoufox_smoke.ps1 -AllowBlocked` 状态仍是 `contract_ready_runtime_smoke_required`，下一步必须补真实打开页面、artifact、取消/超时清理和 task-run 性能证据。
-   - 2026-05-28 已全量执行 evidence gates：roadmap 本机证据 passed-with-external-pending、Chromium profile-browser 专项证据 passed、taxonomy/live-truth passed；provider、runtime adapter、external distribution 仍 blocked；profile-browser comparison 为 partial（缺同份 desktop-webview 对照）；SessionBundle 为 local-contract passed，跨机器 evidence pending。
+   - Camoufox 下一步按 `docs/18-external-browser-integration-plan.md` 的 `90` 分方案推进：2026-05-28 已先把它作为主线 `browser_cores.kind=camoufox` 内核类型接入 Go core manager、SQLite、sidecar RPC、实例启动参数分发和主线 UI 选择；本轮已把 Rust runner 从 skeleton 推进为最小 CDP runner，支持 open/html/text/title/final-url/validation-probe 和 stdout/stderr/content preview；真实 Camoufox binary 已通过 Firefox-compatible headless screenshot 打开 `https://example.com` 并产出持久 PNG。remote server、browser pool 和深度指纹拟真不进入第一主链；Chromium `/json/version` CDP attach 不宣称通过。
+   - Phase 6 传输一致性已从死骨架推进到 Xray/SingBox 安全 ALPN 合并和 runtime family explain metadata；真实 Xray/SingBox 本地二进制配置验证已通过：Xray `run -test` 返回 `Configuration OK`，SingBox `check -c` exit code 为 `0`。这仍只是 direct outbound 配置接受性，不是远程代理出站或 TLS/HTTP2 指纹观测。
+   - 2026-05-31 已刷新 runtime adapter gate：Camoufox source smoke 与 binary page-open passed，headed_external real binary validation probe 被 ranked selection 正确选中；最新 gate `data/reports/runtime-adapter/runtime-adapter-evidence-gate-1780198524266.json` 仍 blocked，但 `runtimeAdapterEvidence=partial_real_binary_validation_probe_recorded`、`fingerprintRuntimeDepth=partial_headed_profile_browser_observed`、`signalCount=9`；profile-browser comparison 为 `blocked_missing_desktop_webview_report`，provider 为 `blocked_missing_credentials`，远程代理/TLS 为 `blocked_remote_proxy_required`，SessionBundle 为 `local_contract_passed` 但跨机器 evidence pending；完整 runtime adapter / B1-B5 evidence、external distribution、AdsPower refresh 仍 blocked/deferred。
+   - 2026-05-31 已新增 M4-M20 execution board 和 M4 acceptance harness：`scripts/m4_acceptance_gate.ps1` 会把外部缺口分类为 `expected_blocked`，最新 M4 report 为 `expected_blocked` 且 `failed=0`；Dashboard 已展示 M4/性能/adapter/对比/provider/session/taxonomy/external reports。M4 下一步集中补同份 desktop/profile comparison、provider dry-run/operator closure、workflow task center 和 typed facade shrink；M5-M20 仍按证据切片推进。
 
 6. Retire duplicate UI paths
    - 2026-05-27 已删除第二套 Tauri/Vite 控制台 UI 源码、根目录旁路 exe、`src-tauri/target/release` 持久 GUI exe 和仓库内 `gateway-ui` 静态 UI。

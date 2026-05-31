@@ -83,6 +83,8 @@ type App struct {
 
 	behaviorEngines   map[string]*behavior.Engine // profileId → engine
 	behaviorEnginesMu sync.Mutex
+	envInjectionMu    sync.Mutex
+	envInjectionKeys  map[string]struct{}
 
 	recorders           map[string]*behavior.Recorder       // profileId → recorder
 	playbacks           map[string]*behavior.PlaybackEngine // profileId → playback
@@ -104,6 +106,7 @@ func NewApp(appRoot string, appVersion ...string) *App {
 		xrayBridgeRefs:    make(map[string]string),
 		singboxBridgeRefs: make(map[string]string),
 		crashTimestamps:   make(map[string][]time.Time),
+		envInjectionKeys:  make(map[string]struct{}),
 		recorders:         make(map[string]*behavior.Recorder),
 		playbacks:         make(map[string]*behavior.PlaybackEngine),
 	}

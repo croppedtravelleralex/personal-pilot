@@ -335,6 +335,7 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 			a.emitBrowserInstanceStarted(profile, false)
 
 			go a.waitBrowserProcess(profileId, monitor)
+			go a.applyProfileEnvironmentInjectionAsync(profileId, stableDebugPort)
 			// Phase 1: 启动后异步验证指纹 + 检测时区-IP 地理不匹配
 			go a.verifyFingerprintAndGeo(profileId, profile, stableDebugPort)
 			// Phase 3: 启动行为模拟引擎
@@ -831,6 +832,7 @@ func (a *App) markProfileStoppedLocked(profileId string, profile *BrowserProfile
 	profile.LaunchAudit = nil
 	profile.LastStopAt = time.Now().Format(time.RFC3339)
 	delete(a.browserMgr.BrowserProcesses, profileId)
+	a.clearProfileEnvironmentInjections(profileId)
 	a.releaseProfileXrayBridge(profileId)
 	a.releaseProfileSingBoxBridge(profileId)
 	go a.stopBehaviorEngine(profileId)

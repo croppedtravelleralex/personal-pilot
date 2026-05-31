@@ -10,6 +10,7 @@ import (
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/fsutil"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/transport"
 	goruntime "runtime"
 	"strings"
 	"sync"
@@ -468,6 +469,8 @@ func (m *SingBoxManager) buildConfig(key string, outbound map[string]interface{}
 		return "", err
 	}
 
+	transportProfile := transport.RuntimeProfile(transport.RuntimeFamilyChrome)
+	outbound = applySingBoxTransportProfile(outbound, transportProfile)
 	cfg := map[string]interface{}{
 		"log": map[string]interface{}{
 			"level":     "info",
@@ -509,6 +512,20 @@ func (m *SingBoxManager) buildConfig(key string, outbound map[string]interface{}
 		return "", err
 	}
 	return cfgPath, nil
+}
+
+func applySingBoxTransportProfile(outbound map[string]interface{}, profile transport.OutboundConfig) map[string]interface{} {
+	if outbound == nil {
+		outbound = map[string]interface{}{}
+	}
+	if len(profile.TLS.ALPN) > 0 {
+		tls, _ := outbound["tls"].(map[string]interface{})
+		if tls != nil {
+			tls["alpn"] = append([]string{}, profile.TLS.ALPN...)
+			outbound["tls"] = tls
+		}
+	}
+	return outbound
 }
 
 func (m *SingBoxManager) resolveWorkdir(key string) string {

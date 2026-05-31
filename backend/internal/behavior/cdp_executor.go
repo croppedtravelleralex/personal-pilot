@@ -1023,27 +1023,53 @@ func DefaultMouseProfile() MouseProfile {
 }
 
 func extractResultValue(raw []byte) string {
-	type simpleResp struct {
-		Result struct {
-			Value string `json:"value"`
-		} `json:"result"`
-	}
-	var s simpleResp
-	if err := json.Unmarshal(raw, &s); err == nil && s.Result.Value != "" {
-		return s.Result.Value
-	}
-
-	var nested struct {
-		Result struct {
-			Result struct {
-				Value string `json:"value"`
-			} `json:"result"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(raw, &nested); err == nil {
-		return nested.Result.Result.Value
+	if value, ok := runtimeEvaluateValue(raw); ok {
+		return value
 	}
 	return ""
+}
+
+func runtimeEvaluateValue(raw []byte) (string, bool) {
+	valueRaw, ok := runtimeEvaluateValueRaw(raw)
+	if !ok {
+		return "", false
+	}
+	var value interface{}
+	if err := json.Unmarshal(valueRaw, &value); err != nil {
+		return "", false
+	}
+	switch item := value.(type) {
+	case nil:
+		return "", true
+	case string:
+		return item, true
+	case bool:
+		if item {
+			return "true", true
+		}
+		return "false", true
+	default:
+		return fmt.Sprint(item), true
+	}
+}
+
+func runtimeEvaluateValueRaw(raw []byte) (json.RawMessage, bool) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, false
+	}
+	if value, ok := envelope["value"]; ok {
+		return value, true
+	}
+	if nested, ok := envelope["result"]; ok {
+		var nestedEnvelope map[string]json.RawMessage
+		if err := json.Unmarshal(nested, &nestedEnvelope); err == nil {
+			if value, ok := nestedEnvelope["value"]; ok {
+				return value, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func parseBoundsResult(raw []byte) (*humanize.ElementBounds, error) {

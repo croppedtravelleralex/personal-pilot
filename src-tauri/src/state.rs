@@ -13,8 +13,8 @@ use persona_pilot::{
         DesktopSynchronizerSnapshot,
     },
     runner::{
-        camoufox::CamoufoxRunner, fake::FakeRunner, lightpanda::LightpandaRunner, RunnerKind,
-        TaskRunner,
+        camoufox::CamoufoxRunner, fake::FakeRunner, headed_external::HeadedExternalRunner,
+        lightpanda::LightpandaRunner, RunnerKind, TaskRunner,
     },
 };
 use std::sync::Arc;
@@ -207,6 +207,7 @@ pub fn build_desktop_state() -> Result<DesktopState> {
     let runner: Arc<dyn TaskRunner> = match RunnerKind::from_env() {
         RunnerKind::Fake => Arc::new(FakeRunner),
         RunnerKind::Camoufox => Arc::new(CamoufoxRunner),
+        RunnerKind::HeadedExternal => Arc::new(HeadedExternalRunner),
         RunnerKind::Lightpanda => Arc::new(LightpandaRunner::default()),
     };
 

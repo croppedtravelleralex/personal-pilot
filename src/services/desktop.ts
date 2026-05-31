@@ -565,6 +565,79 @@ export const pruneEventLog = (before: string): Promise<number> =>
 export const exportEventLog = (query: DesktopEventLogQueryInput): Promise<string> =>
   desktopRpc<string>("EventLogExport", [query]);
 
+export const synchronizerListGroups = (): Promise<unknown[]> =>
+  desktopRpc<unknown[]>("SynchronizerListGroups");
+
+export const synchronizerBroadcastNavigate = (groupId: string, url: string): Promise<void> =>
+  desktopRpc<void>("SynchronizerBroadcastNavigate", [groupId, url]);
+
+export const synchronizerBroadcastRefresh = (groupId: string): Promise<void> =>
+  desktopRpc<void>("SynchronizerBroadcastRefresh", [groupId]);
+
+export const synchronizerNavigateProfile = (profileId: string, url: string): Promise<void> =>
+  desktopRpc<void>("SynchronizerNavigateProfile", [profileId, url]);
+
+export const synchronizerRefreshProfile = (profileId: string): Promise<void> =>
+  desktopRpc<void>("SynchronizerRefreshProfile", [profileId]);
+
+export const synchronizerCaptureScreenshot = (profileId: string): Promise<string> =>
+  desktopRpc<string>("SynchronizerCaptureScreenshot", [profileId]);
+
+export const synchronizerActivateProfile = (profileId: string): Promise<void> =>
+  desktopRpc<void>("SynchronizerActivateProfile", [profileId]);
+
+export const browserInstanceStatus = (profileId: string): Promise<unknown | null> =>
+  desktopRpc<unknown | null>("BrowserInstanceStatus", [profileId]);
+
+export const workbenchFingerprintHealthProfile = (profileId: string): Promise<unknown> =>
+  desktopRpc<unknown>("WorkbenchFingerprintHealthProfile", [profileId]);
+
+export const workbenchFingerprintProfile = (profileId: string): Promise<unknown> =>
+  desktopRpc<unknown>("WorkbenchFingerprintProfile", [profileId]);
+
+export const identityReportProfile = (profileId: string): Promise<unknown> =>
+  desktopRpc<unknown>("IdentityReportProfile", [profileId]);
+
+export const synchronizerArrangeProfiles = (
+  profileIds: string[],
+  layout: "grid" | "main-left",
+): Promise<unknown[]> =>
+  desktopRpc<unknown[]>("SynchronizerArrangeProfiles", [profileIds, layout]);
+
+export const synchronizerGetOperationLog = (limit = 50): Promise<unknown[]> =>
+  desktopRpc<unknown[]>("SynchronizerGetOperationLog", [limit]);
+
+export const synchronizerListTasks = (limit = 200): Promise<unknown[]> =>
+  desktopRpc<unknown[]>("SynchronizerListTasks", [limit]);
+
+export const synchronizerSaveTasks = (tasks: unknown[]): Promise<void> =>
+  desktopRpc<void>("SynchronizerSaveTasks", [tasks]);
+
+export const workbenchListDetectionResults = (
+  profileId = "",
+  kind = "",
+  limit = 50,
+): Promise<unknown[]> =>
+  desktopRpc<unknown[]>("WorkbenchListDetectionResults", [profileId, kind, limit]);
+
+export const workbenchSaveDetectionResult = (result: unknown): Promise<void> =>
+  desktopRpc<void>("WorkbenchSaveDetectionResult", [result]);
+
+export const workbenchGetUiState = (): Promise<unknown> =>
+  desktopRpc<unknown>("WorkbenchGetUiState");
+
+export const workbenchSaveUiState = (state: unknown): Promise<void> =>
+  desktopRpc<void>("WorkbenchSaveUiState", [state]);
+
+export const workbenchListDetectorSites = (): Promise<unknown[]> =>
+  desktopRpc<unknown[]>("WorkbenchListDetectorSites");
+
+export const workbenchRunDetectorSite = (
+  profileId: string,
+  detectorId: string,
+): Promise<unknown> =>
+  desktopRpc<unknown>("WorkbenchRunDetectorSite", [profileId, detectorId]);
+
 export const collectValidationReport = (
   browserSignals: DesktopValidationBrowserSignal[] = [],
 ): Promise<DesktopValidationReport> =>

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings } from 'lucide-react'
+import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings, Activity, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Card } from '../../shared/components'
-import { fetchDashboardStats, reloadConfig } from './api'
+import { fetchDashboardStats, fetchEvidenceReportHistory, reloadConfig } from './api'
 import type { DashboardStats } from './types'
+import type { DesktopEvidenceReportHistory, DesktopEvidenceReportSummary } from '../../types/desktop'
 
 interface StatCardProps {
   title: string
@@ -33,7 +34,99 @@ const QUICK_LINKS = [
   { to: '/settings', icon: <Settings className="h-5 w-5" />, label: '系统设置', desc: '全局参数配置' },
 ]
 
+const EVIDENCE_KINDS = [
+  { kind: 'm4_acceptance', label: 'M4 Gate' },
+  { kind: 'release_performance', label: 'Release 性能' },
+  { kind: 'runtime_adapter', label: 'Runtime Adapter' },
+  { kind: 'profile_browser_comparison', label: 'Browser 对比' },
+  { kind: 'remote_proxy_tls', label: '远程代理 TLS' },
+  { kind: 'headed_external_smoke', label: 'Headed Browser' },
+  { kind: 'camoufox_binary_task', label: 'Camoufox' },
+  { kind: 'provider_acceptance', label: 'Provider' },
+  { kind: 'session_portability', label: 'SessionBundle' },
+  { kind: 'taxonomy_coverage', label: 'Taxonomy 覆盖' },
+  { kind: 'taxonomy_audit', label: 'Taxonomy Audit' },
+  { kind: 'external_distribution', label: '外部分发' },
+]
+
 const UNLIMITED = Number.POSITIVE_INFINITY
+
+function statusTone(status: string) {
+  const normalized = status.toLowerCase()
+  if (
+    normalized.includes('expected_blocked') ||
+    normalized.includes('partial') ||
+    normalized.includes('warning') ||
+    normalized.includes('pending') ||
+    normalized.includes('materialized_contract') ||
+    normalized.includes('contract') ||
+    normalized === 'not_run'
+  ) {
+    return {
+      icon: <Clock className="h-4 w-4" />,
+      className: 'border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
+    }
+  }
+  if (normalized.includes('blocked') || normalized.includes('failed')) {
+    return {
+      icon: <AlertTriangle className="h-4 w-4" />,
+      className: 'border-[var(--color-error)]/30 bg-[var(--color-error)]/10 text-[var(--color-error)]',
+    }
+  }
+  if (normalized.includes('passed') || normalized === 'ready' || normalized.includes('observed')) {
+    return {
+      icon: <CheckCircle2 className="h-4 w-4" />,
+      className: 'border-[var(--color-success)]/30 bg-[var(--color-success)]/10 text-[var(--color-success)]',
+    }
+  }
+  return {
+    icon: <Clock className="h-4 w-4" />,
+    className: 'border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
+  }
+}
+
+function latestReportsByKind(history: DesktopEvidenceReportHistory): Record<string, DesktopEvidenceReportSummary> {
+  return history.reports.reduce<Record<string, DesktopEvidenceReportSummary>>((acc, report) => {
+    const current = acc[report.kind]
+    if (!current || report.generatedAt > current.generatedAt) {
+      acc[report.kind] = report
+    }
+    return acc
+  }, {})
+}
+
+function reportFileName(reportPath: string): string {
+  return reportPath.split(/[\\/]/).pop() || reportPath
+}
+
+function EvidenceRow({ label, report }: { label: string; report?: DesktopEvidenceReportSummary }) {
+  const status = report?.status ?? 'not_run'
+  const tone = statusTone(status)
+  return (
+    <div className="grid grid-cols-[minmax(92px,120px)_minmax(120px,1fr)] gap-3 border-b border-[var(--color-border-muted)] py-3 last:border-0 sm:grid-cols-[minmax(128px,168px)_minmax(160px,1fr)_minmax(160px,2fr)]">
+      <div className="min-w-0 text-sm font-medium text-[var(--color-text-primary)]">{label}</div>
+      <div className="min-w-0">
+        <span className={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${tone.className}`}>
+          <span className="shrink-0">{tone.icon}</span>
+          <span className="truncate">{status}</span>
+        </span>
+        {report?.evidenceLevel && (
+          <div className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">{report.evidenceLevel}</div>
+        )}
+      </div>
+      <div className="col-span-2 min-w-0 text-xs text-[var(--color-text-muted)] sm:col-span-1">
+        <div className="truncate">{report?.summary ?? 'no local evidence report'}</div>
+        {report?.reportPath && (
+          <div className="mt-1 truncate text-[var(--color-text-secondary)]" title={report.reportPath}>
+            {reportFileName(report.reportPath)}
+          </div>
+        )}
+        {report?.failureReason && <div className="mt-1 truncate text-[var(--color-error)]">{report.failureReason}</div>}
+        {report?.nextAction && <div className="mt-1 truncate text-[var(--color-text-secondary)]">{report.nextAction}</div>}
+      </div>
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -46,6 +139,12 @@ export function DashboardPage() {
     appVersion: 'unknown',
   })
   const [loading, setLoading] = useState(true)
+  const [evidenceHistory, setEvidenceHistory] = useState<DesktopEvidenceReportHistory>({
+    generatedAt: '',
+    reportCount: 0,
+    reports: [],
+    summary: '',
+  })
 
   useEffect(() => {
     void load()
@@ -55,13 +154,19 @@ export function DashboardPage() {
     setLoading(true)
     try {
       await reloadConfig()
-      setStats(await fetchDashboardStats())
+      const [nextStats, nextEvidenceHistory] = await Promise.all([
+        fetchDashboardStats(),
+        fetchEvidenceReportHistory(),
+      ])
+      setStats(nextStats)
+      setEvidenceHistory(nextEvidenceHistory)
     } finally {
       setLoading(false)
     }
   }
 
   const v = (n: number) => (loading ? '-' : n.toString())
+  const evidenceByKind = latestReportsByKind(evidenceHistory)
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -147,6 +252,18 @@ export function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      <Card
+        title="验收证据"
+        subtitle={loading ? 'loading reports' : `${evidenceHistory.reportCount} local reports`}
+        actions={<Activity className="h-4 w-4 text-[var(--color-text-muted)]" />}
+      >
+        <div className="divide-y divide-[var(--color-border-muted)]">
+          {EVIDENCE_KINDS.map((item) => (
+            <EvidenceRow key={item.kind} label={item.label} report={evidenceByKind[item.kind]} />
+          ))}
+        </div>
+      </Card>
     </div>
   )
 }

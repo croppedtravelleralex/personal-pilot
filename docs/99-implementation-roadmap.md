@@ -2,7 +2,7 @@
 
 > 所有待实现功能，按依赖关系分 5 个 Phase，按 P0-P2 排列。
 >
-> 2026-05-28 更新：Phase 1 P1/P2、Phase 2 P1 与 Phase 3-5 roadmap 文件级待办均已有可测试实现或 adapter/contract 实现；Camoufox 已作为主线 browser core kind 接入内核管理/校验/启动参数分发/UI 选择。2026-05-28 回归修复要求：Camoufox 不能只停留在源码类型或文档口径，`data/app.db` 必须存在 `browser_cores.kind` 且至少一条 `kind=camoufox` 的可见 core row；根目录 `personal-pilot-tauri.exe` 对应的 `bin/personal-pilot-core.exe` / Tauri sidecar 副本必须同步重建。当前本机 DB 已有 `core-camoufox-manual`，显示名 `Camoufox（配置路径后可用）`。`scripts/roadmap_evidence_smoke.ps1` 最新 report 为 `data/reports/roadmap-evidence/roadmap-evidence-smoke-1779951732878.json`，状态 `passed_with_external_evidence_pending`；`scripts/profile_browser_environment_probe.mjs` 已生成真实 Chromium profile-browser 观测报告 `data/validation-reports/profile-browser-environment-1779951691042.json`，状态 `passed`。仍需用真实 provider、跨机器、Camoufox runtime 和外部分发 smoke 证明生产闭环。
+> 2026-05-28 更新：Phase 1 P1/P2、Phase 2 P1 与 Phase 3-5 roadmap 文件级待办均已有可测试实现或 adapter/contract 实现；Camoufox 已作为主线 browser core kind 接入内核管理/校验/启动参数分发/UI 选择，并新增最小 CDP task runner（source/test/smoke 级证据）。Phase 6 已推进 P0 集成断层：环境注入进入实例启动流程，`transport/` 被 Xray/SingBox 配置生成引用，`environment_audit` 扩到 8 个注入族。2026-05-28 回归修复要求：Camoufox 不能只停留在源码类型或文档口径，`data/app.db` 必须存在 `browser_cores.kind` 且至少一条 `kind=camoufox` 的可见 core row；根目录 `personal-pilot-tauri.exe` 对应的 `bin/personal-pilot-core.exe` / Tauri sidecar 副本必须同步重建。当前本机 DB 已有 `core-camoufox-manual`，显示名 `Camoufox（配置路径后可用）`。`scripts/roadmap_evidence_smoke.ps1` 最新 report 为 `data/reports/roadmap-evidence/roadmap-evidence-smoke-1779976243311.json`，状态 `passed_with_external_evidence_pending`；`scripts/profile_browser_environment_probe.mjs` 已生成真实 Chromium profile-browser 观测报告 `data/validation-reports/profile-browser-environment-1779951691042.json`，状态 `passed`；taxonomy coverage 已物化 fingerprint `450 / 450`、behavior `461 / 450`；真实 Xray/SingBox 本地二进制配置验证已通过；真实 Camoufox binary page-open 已通过。仍需用真实 provider、跨机器、远程代理出站/TLS 指纹观测、真实 headed_external browser task-run 和外部分发 smoke 证明生产闭环。
 
 ---
 
@@ -229,7 +229,7 @@
 - [x] **5.5.2** Chromium 启动参数集成 contract
 - [x] **5.5.3** Xray/Sing-Box 出站配置集成
 
-## Phase 6: 信任继承与环境一致性治理架构 **（设计就绪，待实现）**
+## Phase 6: 信任继承与环境一致性治理架构 **（P0 已接入，P1/P2 外部证据待补）**
 
 **来源：** `docs/39-adversarial-trust-inheritance.md`
 **估时：** 待估算
@@ -238,19 +238,23 @@
 
 ### P0 — 修复集成断层
 
-- [ ] **6.1** `environment_injector.go` 集成修复
-  - [ ] 在 `browser/Manager.StartInstance()` 中调用 `CDPExecutor.ApplyEnvironmentInjection()`
-  - [ ] 当前该方法实现完整但从未被调用
-- [ ] **6.2** `transport/` 包集成修复
-  - [ ] 当前 `transport/` 包被 0 个外部包引用，为死骨架
-  - [ ] 接入 `proxy/xray.go` 和 `proxy/singbox.go` 的出站配置生成
+- [x] **6.1** `environment_injector.go` 集成修复
+  - [x] 实例 debug ready 后异步调用 `CDPExecutor.ApplyEnvironmentInjection()`
+  - [x] 同一 profile/debugPort/PID/launch timestamp 加去重，停止实例时清理去重记录
+  - [x] CDP 注入前启用 Page/Runtime/Network，并对当前页执行一次 `Runtime.evaluate`
+- [x] **6.2** `transport/` 包集成修复
+  - [x] `transport.RuntimeProfile()` 预置 Chrome/Edge/Firefox/Camoufox runtime family
+  - [x] `proxy/xray.go` 和 `proxy/singbox.go` 已引用 `transport/` 并安全合并 ALPN
+  - [x] 自定义 metadata 只保留给 report/explain，不写进 Xray/SingBox 真实 outbound JSON，避免外部内核拒绝未知字段
 
 ### P1 — 五层纵深防御
 
-- [ ] **6.3** 传输一致性层
-  - [ ] 预置 3-4 个浏览器 TLS 握手参数模板（Chrome/Edge/Firefox）
-  - [ ] Xray/Sing-Box 出站配置绑定 runtime family/alpn/header order
-  - [ ] HTTP/2 策略与请求头顺序模板
+- [ ] **6.3** 传输一致性层（部分实现）
+  - [x] 预置 Chrome/Edge/Firefox/Camoufox runtime family 模板
+  - [x] Xray/Sing-Box 出站配置安全合并 ALPN
+  - [x] HTTP/2 策略与请求头顺序模板进入 `transport.Metadata()` explain 合同
+  - [ ] 按真实 profile runtime family 自动选择模板
+  - [x] 用真实 Xray/Sing-Box 二进制验证生成 direct outbound 配置可被本地二进制接受（`data/reports/transport-binary-smoke/transport-binary-smoke-1779981454305.json` passed；远程代理出站/TLS 指纹观测仍未完成）
 - [ ] **6.4** 凭证继承层
   - [ ] `session/credential.go` — CredentialChain 数据结构
   - [ ] `session/token_store.go` — Token 加密持久化（复用 AES-GCM）
@@ -273,7 +277,7 @@
 
 ### P2 — 验证与增强
 
-- [ ] **6.8** environment_audit.go 扩展到全部 8+ 个注入族
+- [x] **6.8** environment_audit.go 扩展到全部 8+ 个注入族
 - [ ] **6.9** 跨机器凭证迁移验证（SessionBundle + adversarial_credential_chains）
 - [ ] **6.10** 传输层参数表自动更新机制（追踪浏览器版本变化）
 

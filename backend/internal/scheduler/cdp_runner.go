@@ -257,14 +257,11 @@ func (r *CDPTaskRunner) actionWait(conn *cdpConn, action TaskAction, timeout int
 		return fmt.Errorf("wait for %s: %w", sel, err)
 	}
 
-	// Parse result value
-	var evalResp struct {
-		Value bool `json:"value"`
-	}
-	if err := json.Unmarshal(result, &evalResp); err != nil {
+	value, err := runtimeEvaluateBool(result)
+	if err != nil {
 		return fmt.Errorf("wait parse result: %w", err)
 	}
-	if !evalResp.Value {
+	if !value {
 		return fmt.Errorf("wait for %s timed out after %dms", sel, timeout)
 	}
 
@@ -305,14 +302,12 @@ func (r *CDPTaskRunner) actionExtract(conn *cdpConn, action TaskAction, timeout 
 		return "", fmt.Errorf("extract %s: %w", sel, err)
 	}
 
-	var evalResp struct {
-		Value string `json:"value"`
-	}
-	if err := json.Unmarshal(result, &evalResp); err != nil {
+	value, err := runtimeEvaluateString(result)
+	if err != nil {
 		return "", fmt.Errorf("extract parse result: %w", err)
 	}
 
-	return evalResp.Value, nil
+	return value, nil
 }
 
 // actionCDP sends a generic CDP command.
@@ -335,4 +330,47 @@ func (r *CDPTaskRunner) actionCDP(conn *cdpConn, action TaskAction, timeout int)
 		return fmt.Errorf("cdp %s: %w", method, err)
 	}
 	return nil
+}
+
+func runtimeEvaluateValueRaw(result json.RawMessage) (json.RawMessage, bool) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(result, &envelope); err != nil {
+		return nil, false
+	}
+	if value, ok := envelope["value"]; ok {
+		return value, true
+	}
+	if nested, ok := envelope["result"]; ok {
+		var nestedEnvelope map[string]json.RawMessage
+		if err := json.Unmarshal(nested, &nestedEnvelope); err == nil {
+			if value, ok := nestedEnvelope["value"]; ok {
+				return value, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func runtimeEvaluateBool(result json.RawMessage) (bool, error) {
+	valueRaw, ok := runtimeEvaluateValueRaw(result)
+	if !ok {
+		return false, fmt.Errorf("missing Runtime.evaluate result.value")
+	}
+	var value bool
+	if err := json.Unmarshal(valueRaw, &value); err != nil {
+		return false, err
+	}
+	return value, nil
+}
+
+func runtimeEvaluateString(result json.RawMessage) (string, error) {
+	valueRaw, ok := runtimeEvaluateValueRaw(result)
+	if !ok {
+		return "", fmt.Errorf("missing Runtime.evaluate result.value")
+	}
+	var value string
+	if err := json.Unmarshal(valueRaw, &value); err != nil {
+		return "", err
+	}
+	return value, nil
 }

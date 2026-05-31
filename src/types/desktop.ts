@@ -51,9 +51,11 @@ export interface DesktopEvidenceReportSummary {
   reportId: string;
   kind: string;
   status: string;
+  evidenceLevel: string;
   generatedAt: string;
   reportPath: string;
   failureReason: string | null;
+  nextAction: string | null;
   summary: string;
 }
 

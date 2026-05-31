@@ -1,6 +1,6 @@
 # Overall Remaining Work Register
 
-Updated: 2026-05-27 (Asia/Shanghai)
+Updated: 2026-05-31 (Asia/Shanghai)
 
 ## 使用规则
 
@@ -77,12 +77,12 @@ Updated: 2026-05-27 (Asia/Shanghai)
 42. screen/display observed collector。`partial-desktop-webview`
 43. navigator/client hints observed collector。`partial-desktop-webview`
 44. permission/device capability observed collector。`partial-desktop-webview`
-45. detector/coherence observed matrix。`profile-browser-comparison-gated`
+45. detector/coherence observed matrix。`blocked_missing_desktop_webview_report`
 46. observed coverage dashboard。`fingerprint-category-audit-expanded`
 47. observed coverage report history。`ready`
 48. profile-level full fingerprint evidence export。`ready`
 49. repeatability sampling report。`pending-next-local-batch`
-50. desktop WebView vs profile browser comparison。`profile-browser-comparison-gated`
+50. desktop WebView vs profile browser comparison。`blocked_missing_desktop_webview_report`
 
 ### 450 Fingerprint Taxonomy
 
@@ -112,16 +112,16 @@ Updated: 2026-05-27 (Asia/Shanghai)
 
 ### Runtime / Adapter / External Browser
 
-71. headed runtime realism smoke。`blocked-evidence-gated`
-72. headed external adapter contract implementation。`partial-contract-matrix`
-73. headed runtime fingerprint evidence。`blocked-evidence-gated`
-74. headed runtime leak/coherence evidence。`blocked-evidence-gated`
+71. headed runtime realism smoke。`partial-real-binary-validation-probe-recorded`
+72. headed external adapter contract implementation。`partial-real-binary-validation-probe-recorded`
+73. headed runtime fingerprint evidence。`partial-profile-browser-observed-evidence-gated`
+74. headed runtime leak/coherence evidence。`partial-profile-browser-observed-evidence-gated`
 75. Fake/Lightpanda/headed adapter compare report。`done-runtime-adapter-report`
 76. adapter capability matrix。`done-contract-visible`
 77. adapter failure reason taxonomy。`partial-runtime-adapter-report`
 78. external browser process lifecycle contract。`partial-contract-visible`
-79. external browser CDP/session attach contract。`partial-contract-visible`
-80. external browser profile/runtime compatibility report。`blocked-evidence-gated`
+79. external browser CDP/session attach contract。`real-binary-validation-probe-passed`
+80. external browser profile/runtime compatibility report。`partial-profile-browser-validation-probe-passed`
 81. keep Chromium/Firefox forks out of the main repo。`always-on`
 
 ### AdsPower / Benchmark

@@ -235,13 +235,32 @@ func (e *CDPExecutor) ApplyEnvironmentInjection(profile EnvironmentInjectionProf
 	if err != nil {
 		return plan, err
 	}
+	if _, err := e.sendCommand("Page.enable", map[string]interface{}{}); err != nil {
+		return plan, fmt.Errorf("enable page domain for environment injection: %w", err)
+	}
+	if _, err := e.sendCommand("Runtime.enable", map[string]interface{}{}); err != nil {
+		return plan, fmt.Errorf("enable runtime domain for environment injection: %w", err)
+	}
 	if len(plan.HeaderOverrides) > 0 {
+		if _, err := e.sendCommand("Network.enable", map[string]interface{}{}); err != nil {
+			return plan, fmt.Errorf("enable network domain for environment headers: %w", err)
+		}
 		if _, err := e.sendCommand("Network.setExtraHTTPHeaders", map[string]interface{}{"headers": plan.HeaderOverrides}); err != nil {
 			return plan, fmt.Errorf("set environment headers: %w", err)
 		}
 	}
 	if _, err := e.sendCommand("Page.addScriptToEvaluateOnNewDocument", map[string]interface{}{"source": plan.Script}); err != nil {
 		return plan, fmt.Errorf("inject environment script: %w", err)
+	}
+	// Apply the same hook to the already-open page. The new-document hook covers
+	// future navigations; this call prevents the current about:blank/start page from
+	// staying unpatched until the next navigation.
+	if _, err := e.sendCommand("Runtime.evaluate", map[string]interface{}{
+		"expression":    plan.Script,
+		"awaitPromise":  true,
+		"returnByValue": true,
+	}); err != nil {
+		plan.Warnings = append(plan.Warnings, "current_page_environment_patch_failed")
 	}
 	return plan, nil
 }

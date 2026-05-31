@@ -1,5 +1,27 @@
-import { EventsOn } from '../../wailsjs/runtime'
-import { desktopRpc } from '../../services/desktop'
+import {
+  browserInstanceStatus,
+  desktopRuntimeListen,
+  identityReportProfile,
+  synchronizerActivateProfile,
+  synchronizerArrangeProfiles,
+  synchronizerBroadcastNavigate,
+  synchronizerBroadcastRefresh,
+  synchronizerCaptureScreenshot,
+  synchronizerGetOperationLog,
+  synchronizerListGroups,
+  synchronizerListTasks,
+  synchronizerNavigateProfile,
+  synchronizerRefreshProfile,
+  synchronizerSaveTasks,
+  workbenchFingerprintHealthProfile,
+  workbenchFingerprintProfile,
+  workbenchGetUiState,
+  workbenchListDetectionResults,
+  workbenchListDetectorSites,
+  workbenchRunDetectorSite,
+  workbenchSaveDetectionResult,
+  workbenchSaveUiState,
+} from '../../services/desktop'
 import type { BrowserProfile } from '../browser/types'
 import type {
   BrowserInstanceLifecycleEvent,
@@ -20,9 +42,6 @@ import type {
   WorkbenchUiState,
 } from './types'
 
-// Sidecar RPC stays routed through services/desktop.ts, which owns Tauri invoke.
-const backendCall = <T>(name: string, ...args: unknown[]): Promise<T> => desktopRpc<T>(name, args)
-
 type Unsubscribe = () => void
 
 const INSTANCE_EVENT_NAMES: BrowserInstanceLifecycleEventName[] = [
@@ -35,11 +54,7 @@ const INSTANCE_EVENT_NAMES: BrowserInstanceLifecycleEventName[] = [
 function noop() {}
 
 function onRuntimeEvent<T>(eventName: string, callback: (payload: T) => void): Unsubscribe {
-  try {
-    return EventsOn(eventName, (payload: T) => callback(payload))
-  } catch {
-    return noop
-  }
+  return desktopRuntimeListen(eventName, callback)
 }
 
 function combineUnsubscribes(offs: Unsubscribe[]): Unsubscribe {
@@ -376,46 +391,46 @@ export function onBrowserInstanceLifecycle(
 }
 
 export function listSyncGroups(): Promise<SyncGroup[]> {
-  return backendCall<SyncGroup[]>('SynchronizerListGroups')
+  return synchronizerListGroups() as Promise<SyncGroup[]>
 }
 
 export function broadcastNavigate(groupId: string, url: string): Promise<void> {
-  return backendCall('SynchronizerBroadcastNavigate', groupId, url)
+  return synchronizerBroadcastNavigate(groupId, url)
 }
 
 export function broadcastRefresh(groupId: string): Promise<void> {
-  return backendCall('SynchronizerBroadcastRefresh', groupId)
+  return synchronizerBroadcastRefresh(groupId)
 }
 
 export function navigateProfile(profileId: string, url: string): Promise<void> {
-  return backendCall('SynchronizerNavigateProfile', profileId, url)
+  return synchronizerNavigateProfile(profileId, url)
 }
 
 export function refreshProfile(profileId: string): Promise<void> {
-  return backendCall('SynchronizerRefreshProfile', profileId)
+  return synchronizerRefreshProfile(profileId)
 }
 
 export function captureProfileScreenshot(profileId: string): Promise<string> {
-  return backendCall<string>('SynchronizerCaptureScreenshot', profileId)
+  return synchronizerCaptureScreenshot(profileId)
 }
 
 export function activateProfileWindow(profileId: string): Promise<void> {
-  return backendCall('SynchronizerActivateProfile', profileId)
+  return synchronizerActivateProfile(profileId)
 }
 
 export function getBrowserInstanceStatus(profileId: string): Promise<BrowserProfile | null> {
-  return backendCall<BrowserProfile | null>('BrowserInstanceStatus', profileId)
+  return browserInstanceStatus(profileId) as Promise<BrowserProfile | null>
 }
 
 export async function checkWorkbenchFingerprintHealthProfile(profileId: string): Promise<WorkbenchFingerprintHealthProfile> {
   try {
     return normalizeFingerprintHealthProfile(
       profileId,
-      await backendCall<unknown>('WorkbenchFingerprintHealthProfile', profileId),
+      await workbenchFingerprintHealthProfile(profileId),
     )
   } catch (error) {
     if (!isMissingBackendFunction(error)) throw error
-    const fingerprint = await backendCall<WorkbenchFingerprintSnapshot>('WorkbenchFingerprintProfile', profileId)
+    const fingerprint = await workbenchFingerprintProfile(profileId) as WorkbenchFingerprintSnapshot
     return buildHealthFromSnapshot(profileId, fingerprint)
   }
 }
@@ -423,24 +438,24 @@ export async function checkWorkbenchFingerprintHealthProfile(profileId: string):
 export async function checkWorkbenchIdentityReport(profileId: string): Promise<WorkbenchIdentityStrengthReport> {
   return normalizeIdentityReport(
     profileId,
-    await backendCall<unknown>('IdentityReportProfile', profileId),
+    await identityReportProfile(profileId),
   )
 }
 
 export function arrangeProfileWindows(profileIds: string[], layout: 'grid' | 'main-left'): Promise<SyncWindowPlacement[]> {
-  return backendCall<SyncWindowPlacement[]>('SynchronizerArrangeProfiles', profileIds, layout)
+  return synchronizerArrangeProfiles(profileIds, layout) as Promise<SyncWindowPlacement[]>
 }
 
 export function getSyncOperationLog(limit?: number): Promise<SyncOperation[]> {
-  return backendCall<SyncOperation[]>('SynchronizerGetOperationLog', limit ?? 50)
+  return synchronizerGetOperationLog(limit ?? 50) as Promise<SyncOperation[]>
 }
 
 export function listWorkbenchTasks(limit?: number): Promise<WorkbenchTask[]> {
-  return backendCall<WorkbenchTask[]>('SynchronizerListTasks', limit ?? 200)
+  return synchronizerListTasks(limit ?? 200) as Promise<WorkbenchTask[]>
 }
 
 export function saveWorkbenchTasks(tasks: WorkbenchTask[]): Promise<void> {
-  return backendCall('SynchronizerSaveTasks', tasks)
+  return synchronizerSaveTasks(tasks)
 }
 
 export async function listWorkbenchDetectionResults(
@@ -448,24 +463,24 @@ export async function listWorkbenchDetectionResults(
   kind: WorkbenchDetectionKind | '' = '',
   limit = 50,
 ): Promise<WorkbenchDetectionResult[]> {
-  const results = await backendCall<unknown[]>('WorkbenchListDetectionResults', profileId, kind, limit)
+  const results = await workbenchListDetectionResults(profileId, kind, limit)
   return Array.isArray(results) ? results.map(normalizeDetectionResult) : []
 }
 
 export function saveWorkbenchDetectionResult(result: WorkbenchDetectionResult): Promise<void> {
-  return backendCall('WorkbenchSaveDetectionResult', result)
+  return workbenchSaveDetectionResult(result)
 }
 
 export async function getWorkbenchUiState(): Promise<WorkbenchUiState> {
-  return normalizeUiState(await backendCall<unknown>('WorkbenchGetUiState'))
+  return normalizeUiState(await workbenchGetUiState())
 }
 
 export function saveWorkbenchUiState(state: WorkbenchUiState): Promise<void> {
-  return backendCall('WorkbenchSaveUiState', state)
+  return workbenchSaveUiState(state)
 }
 
 export async function listWorkbenchDetectorSites(): Promise<WorkbenchDetectorSite[]> {
-  const results = await backendCall<unknown[]>('WorkbenchListDetectorSites')
+  const results = await workbenchListDetectorSites()
   return Array.isArray(results)
     ? results.map((item) => {
       const source = readRecord(item)
@@ -484,5 +499,5 @@ export async function listWorkbenchDetectorSites(): Promise<WorkbenchDetectorSit
 }
 
 export async function runWorkbenchDetectorSite(profileId: string, detectorId: string): Promise<WorkbenchDetectionResult> {
-  return normalizeDetectionResult(await backendCall<unknown>('WorkbenchRunDetectorSite', profileId, detectorId))
+  return normalizeDetectionResult(await workbenchRunDetectorSite(profileId, detectorId))
 }

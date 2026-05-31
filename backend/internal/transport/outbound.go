@@ -39,3 +39,18 @@ func HeaderOrderTemplate(names []string) HeaderOrder {
 	}
 	return HeaderOrder{Names: names}
 }
+
+func Metadata(config OutboundConfig, family RuntimeFamily) map[string]any {
+	// Metadata is for reports and explainability contracts only. Do not write it
+	// into Xray or sing-box runtime configs because both tools may reject unknown
+	// outbound fields.
+	return map[string]any{
+		"runtimeFamily":      string(family),
+		"tlsProfile":         config.TLS.JA3,
+		"alpn":               append([]string{}, config.TLS.ALPN...),
+		"cipherSuites":       append([]string{}, config.TLS.CipherSuites...),
+		"http2FrameOrder":    append([]string{}, config.HTTP2.FrameOrder...),
+		"pseudoHeaderOrder":  append([]string{}, config.HTTP2.PseudoHeaderOrder...),
+		"requestHeaderOrder": append([]string{}, config.Headers.Names...),
+	}
+}

@@ -18,3 +18,14 @@ func TestOutboundConfig(t *testing.T) {
 		t.Fatal("default header order missing")
 	}
 }
+
+func TestRuntimeProfileMetadata(t *testing.T) {
+	profile := RuntimeProfile(RuntimeFamilyCamoufox)
+	metadata := Metadata(profile, RuntimeFamilyCamoufox)
+	if metadata["runtimeFamily"] != "camoufox" {
+		t.Fatalf("metadata = %+v", metadata)
+	}
+	if len(profile.TLS.ALPN) == 0 || len(profile.HTTP2.PseudoHeaderOrder) == 0 || len(profile.Headers.Names) == 0 {
+		t.Fatalf("profile incomplete: %+v", profile)
+	}
+}

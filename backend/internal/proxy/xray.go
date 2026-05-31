@@ -13,6 +13,7 @@ import (
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/fsutil"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/transport"
 	goruntime "runtime"
 	"strconv"
 	"strings"
@@ -600,6 +601,8 @@ func (m *XrayManager) buildRuntimeConfig(key string, outbound map[string]interfa
 		return "", err
 	}
 	cfgPath := filepath.Join(baseDir, "xray-config.json")
+	transportProfile := transport.RuntimeProfile(transport.RuntimeFamilyChrome)
+	outbound["streamSettings"] = mergeXrayStreamSettings(outbound["streamSettings"], transportProfile)
 	cfg := map[string]interface{}{
 		"log": map[string]interface{}{
 			"loglevel": "info",
@@ -651,6 +654,24 @@ func (m *XrayManager) buildRuntimeConfig(key string, outbound map[string]interfa
 		return "", err
 	}
 	return cfgPath, nil
+}
+
+func mergeXrayStreamSettings(existing interface{}, profile transport.OutboundConfig) map[string]interface{} {
+	settings := map[string]interface{}{}
+	if source, ok := existing.(map[string]interface{}); ok {
+		for key, value := range source {
+			settings[key] = value
+		}
+	}
+	if len(profile.TLS.ALPN) > 0 && strings.EqualFold(fmt.Sprint(settings["security"]), "tls") {
+		tlsSettings, _ := settings["tlsSettings"].(map[string]interface{})
+		if tlsSettings == nil {
+			tlsSettings = map[string]interface{}{}
+		}
+		tlsSettings["alpn"] = append([]string{}, profile.TLS.ALPN...)
+		settings["tlsSettings"] = tlsSettings
+	}
+	return settings
 }
 
 func (m *XrayManager) resolveWorkdir(key string) string {

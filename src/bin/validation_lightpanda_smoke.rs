@@ -99,7 +99,9 @@ fn parse_args(args: Vec<String>) -> Result<SmokeConfig> {
             "--output-dir" => output_dir = PathBuf::from(value),
             "--profile-id" => profile_id = Some(value.clone()),
             "--wsl-distro" => wsl_distro = value.clone(),
-            "--wsl-cdp-port" => wsl_cdp_port = value.parse::<u16>().context("parse WSL CDP port")?,
+            "--wsl-cdp-port" => {
+                wsl_cdp_port = value.parse::<u16>().context("parse WSL CDP port")?
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -170,7 +172,11 @@ async fn run_smoke(config: SmokeConfig) -> Result<SmokeReport> {
             session_session_storage: None,
         };
 
-        attempts.push(summarize_attempt(attempt, runner.name(), runner.execute(task).await));
+        attempts.push(summarize_attempt(
+            attempt,
+            runner.name(),
+            runner.execute(task).await,
+        ));
     }
 
     let status = overall_status(&attempts);
@@ -217,7 +223,14 @@ fn prepare_wsl_lightpanda(config: &SmokeConfig) -> Result<()> {
             config.wsl_cdp_port
         );
         Command::new("wsl.exe")
-            .args(["-d", &config.wsl_distro, "--", "bash", "-lc", &start_command])
+            .args([
+                "-d",
+                &config.wsl_distro,
+                "--",
+                "bash",
+                "-lc",
+                &start_command,
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -235,12 +248,18 @@ fn prepare_wsl_lightpanda(config: &SmokeConfig) -> Result<()> {
         .get("webSocketDebuggerUrl")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| anyhow!("WSL Lightpanda /json/version did not expose webSocketDebuggerUrl"))?;
+        .ok_or_else(|| {
+            anyhow!("WSL Lightpanda /json/version did not expose webSocketDebuggerUrl")
+        })?;
     env::set_var("LIGHTPANDA_TEST_WS_ENDPOINT", endpoint);
     env::set_var("LIGHTPANDA_BIN", "wsl-lightpanda-cdp");
     env::set_var("NO_PROXY", "*");
     env::set_var("no_proxy", "*");
-    eprintln!("[validation-smoke] WSL Lightpanda {} at {}", version.trim(), endpoint);
+    eprintln!(
+        "[validation-smoke] WSL Lightpanda {} at {}",
+        version.trim(),
+        endpoint
+    );
     Ok(())
 }
 
@@ -260,16 +279,16 @@ fn run_wsl(distro: &str, command: &str) -> Result<String> {
 
 fn fetch_json(url: &str) -> Result<Value> {
     let (host, port, path) = parse_local_http_url(url)?;
-    let mut stream = TcpStream::connect((host.as_str(), port)).context("connect local HTTP endpoint")?;
+    let mut stream =
+        TcpStream::connect((host.as_str(), port)).context("connect local HTTP endpoint")?;
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .context("set read timeout")?;
     stream
         .set_write_timeout(Some(Duration::from_secs(5)))
         .context("set write timeout")?;
-    let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n"
-    );
+    let request =
+        format!("GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n");
     stream
         .write_all(request.as_bytes())
         .context("write HTTP request")?;
@@ -302,11 +321,7 @@ fn parse_local_http_url(url: &str) -> Result<(String, u16, String)> {
     ))
 }
 
-fn summarize_attempt(
-    attempt: usize,
-    runner: &str,
-    result: RunnerExecutionResult,
-) -> SmokeAttempt {
+fn summarize_attempt(attempt: usize, runner: &str, result: RunnerExecutionResult) -> SmokeAttempt {
     let signals = result
         .result_json
         .as_ref()

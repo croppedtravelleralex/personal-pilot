@@ -642,17 +642,14 @@ impl CdpClient {
         let value = self
             .evaluate_json(session_id, validation_probe_expression())
             .await?;
-        value
-            .as_array()
-            .cloned()
-            .ok_or_else(|| {
-                RunnerFailure::new(
-                    "cdp_protocol_error",
-                    "failed to decode validation probe signals",
-                    Some("action"),
-                    None,
-                )
-            })
+        value.as_array().cloned().ok_or_else(|| {
+            RunnerFailure::new(
+                "cdp_protocol_error",
+                "failed to decode validation probe signals",
+                Some("action"),
+                None,
+            )
+        })
     }
 
     async fn send_command(
@@ -1206,15 +1203,8 @@ fn extract_action(task: &RunnerTask) -> String {
     }
 
     match task.kind.as_str() {
-        "open_page"
-        | "fetch"
-        | "get_html"
-        | "get_title"
-        | "get_final_url"
-        | "extract_text"
-        | "validation_probe" => {
-            task.kind.clone()
-        }
+        "open_page" | "fetch" | "get_html" | "get_title" | "get_final_url" | "extract_text"
+        | "validation_probe" => task.kind.clone(),
         _ => "open_page".to_string(),
     }
 }

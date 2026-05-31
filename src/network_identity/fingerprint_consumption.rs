@@ -25,7 +25,10 @@ const LIGHTPANDA_SUPPORTED_FIELDS: [(&str, &str); 26] = [
         "browser_major_version",
         "LIGHTPANDA_FP_BROWSER_MAJOR_VERSION",
     ),
-    ("browser_minor_version", "LIGHTPANDA_FP_BROWSER_MINOR_VERSION"),
+    (
+        "browser_minor_version",
+        "LIGHTPANDA_FP_BROWSER_MINOR_VERSION",
+    ),
     ("ua_platform", "LIGHTPANDA_FP_UA_PLATFORM"),
     ("ua_mobile", "LIGHTPANDA_FP_UA_MOBILE"),
     ("ua_architecture", "LIGHTPANDA_FP_UA_ARCHITECTURE"),

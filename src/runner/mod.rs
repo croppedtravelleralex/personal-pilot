@@ -1,6 +1,7 @@
 pub mod camoufox;
 pub mod engine;
 pub mod fake;
+pub mod headed_external;
 pub mod lightpanda;
 pub mod types;
 
@@ -20,6 +21,7 @@ pub use types::{
 pub enum RunnerKind {
     Fake,
     Camoufox,
+    HeadedExternal,
     Lightpanda,
 }
 
@@ -32,6 +34,7 @@ impl RunnerKind {
             .as_str()
         {
             "camoufox" => RunnerKind::Camoufox,
+            "headed" | "headed_external" => RunnerKind::HeadedExternal,
             "lightpanda" => RunnerKind::Lightpanda,
             _ => RunnerKind::Fake,
         }

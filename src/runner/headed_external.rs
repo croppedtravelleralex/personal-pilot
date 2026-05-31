@@ -20,10 +20,10 @@ use crate::{
     },
 };
 
-const CAMOUFOX_RUNNER_MODE: &str = "camoufox_minimal_cdp_v1";
-const ENABLED_ENV: &str = "PERSONA_PILOT_CAMOUFOX_ENABLED";
-const CONFIG_ENV: &str = "PERSONA_PILOT_CAMOUFOX_CONFIG";
-const TEST_WS_ENV: &str = "PERSONA_PILOT_CAMOUFOX_TEST_WS";
+const HEADED_EXTERNAL_RUNNER_MODE: &str = "headed_external_minimal_cdp_v1";
+const ENABLED_ENV: &str = "PERSONA_PILOT_HEADED_EXTERNAL_ENABLED";
+const CONFIG_ENV: &str = "PERSONA_PILOT_HEADED_EXTERNAL_CONFIG";
+const TEST_WS_ENV: &str = "PERSONA_PILOT_HEADED_EXTERNAL_TEST_WS";
 const HTML_PREVIEW_LIMIT: usize = 4000;
 const TEXT_PREVIEW_LIMIT: usize = 4000;
 const STDOUT_PREVIEW_LIMIT: usize = 4000;
@@ -32,10 +32,10 @@ const STDERR_PREVIEW_LIMIT: usize = 2000;
 type CdpSocket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
 #[derive(Default)]
-pub struct CamoufoxRunner;
+pub struct HeadedExternalRunner;
 
 #[derive(Debug, Clone, Deserialize)]
-struct CamoufoxConfig {
+struct HeadedExternalConfig {
     #[serde(default, alias = "binary", alias = "executable")]
     binary_path: String,
     #[serde(default, alias = "profile", alias = "profile_path")]
@@ -44,6 +44,14 @@ struct CamoufoxConfig {
     extra_args: Vec<String>,
     #[serde(default)]
     proxy_server: Option<String>,
+    #[serde(default)]
+    remote_debugging_arg_template: Option<String>,
+    #[serde(default)]
+    profile_arg_name: Option<String>,
+    #[serde(default)]
+    startup_url: Option<String>,
+    #[serde(default)]
+    proxy_arg_template: Option<String>,
 }
 
 #[derive(Debug)]
@@ -103,7 +111,7 @@ struct BrowserVersionResponse {
     web_socket_debugger_url: String,
 }
 
-struct SpawnedCamoufox {
+struct SpawnedHeadedExternal {
     child: Child,
     pid: u32,
     stdout_handle: JoinHandle<String>,
@@ -169,7 +177,7 @@ impl CdpClient {
         let (socket, _) = connect_async(ws_endpoint).await.map_err(|err| {
             RunnerFailure::new(
                 "cdp_connect_failed",
-                format!("camoufox CDP websocket connect failed: {err}"),
+                format!("headed_external CDP websocket connect failed: {err}"),
                 Some("launch"),
                 Some(err.to_string()),
             )
@@ -192,7 +200,7 @@ impl CdpClient {
             .ok_or_else(|| {
                 RunnerFailure::new(
                     "cdp_protocol_error",
-                    "camoufox did not return targetId for Target.createTarget",
+                    "headed_external did not return targetId for Target.createTarget",
                     Some("launch"),
                     None,
                 )
@@ -214,7 +222,7 @@ impl CdpClient {
             .ok_or_else(|| {
                 RunnerFailure::new(
                     "cdp_protocol_error",
-                    "camoufox did not return sessionId for Target.attachToTarget",
+                    "headed_external did not return sessionId for Target.attachToTarget",
                     Some("launch"),
                     None,
                 )
@@ -239,7 +247,7 @@ impl CdpClient {
         {
             return Err(RunnerFailure::new(
                 "browser_navigation_failed",
-                format!("camoufox navigation failed: {error_text}"),
+                format!("headed_external navigation failed: {error_text}"),
                 Some("navigate"),
                 Some(error_text.to_string()),
             ));
@@ -265,7 +273,7 @@ impl CdpClient {
         {
             return Err(RunnerFailure::new(
                 "cdp_evaluate_failed",
-                format!("camoufox evaluation failed: {description}"),
+                format!("headed_external evaluation failed: {description}"),
                 Some("action"),
                 Some(description.to_string()),
             ));
@@ -276,7 +284,7 @@ impl CdpClient {
             .ok_or_else(|| {
                 RunnerFailure::new(
                     "cdp_protocol_error",
-                    "camoufox evaluation did not return JSON value",
+                    "headed_external evaluation did not return JSON value",
                     Some("action"),
                     None,
                 )
@@ -294,7 +302,7 @@ impl CdpClient {
         .map_err(|err| {
             RunnerFailure::new(
                 "cdp_protocol_error",
-                format!("failed to decode camoufox readiness snapshot: {err}"),
+                format!("failed to decode headed_external readiness snapshot: {err}"),
                 Some("action"),
                 Some(err.to_string()),
             )
@@ -306,7 +314,7 @@ impl CdpClient {
             |err| {
                 RunnerFailure::new(
                     "cdp_protocol_error",
-                    format!("failed to decode camoufox html snapshot: {err}"),
+                    format!("failed to decode headed_external html snapshot: {err}"),
                     Some("output_wait"),
                     Some(err.to_string()),
                 )
@@ -319,7 +327,7 @@ impl CdpClient {
             |err| {
                 RunnerFailure::new(
                     "cdp_protocol_error",
-                    format!("failed to decode camoufox text snapshot: {err}"),
+                    format!("failed to decode headed_external text snapshot: {err}"),
                     Some("output_wait"),
                     Some(err.to_string()),
                 )
@@ -338,7 +346,7 @@ impl CdpClient {
             .ok_or_else(|| {
                 RunnerFailure::new(
                     "cdp_protocol_error",
-                    "failed to decode camoufox validation probe signals",
+                    "failed to decode headed_external validation probe signals",
                     Some("action"),
                     None,
                 )
@@ -363,7 +371,7 @@ impl CdpClient {
             .map_err(|err| {
                 RunnerFailure::new(
                     "cdp_send_failed",
-                    format!("failed to send camoufox CDP command {method}: {err}"),
+                    format!("failed to send headed_external CDP command {method}: {err}"),
                     Some("action"),
                     Some(err.to_string()),
                 )
@@ -406,7 +414,7 @@ impl CdpClient {
             let next = self.socket.next().await.ok_or_else(|| {
                 RunnerFailure::new(
                     "runner_connection_closed",
-                    "camoufox websocket stream ended unexpectedly",
+                    "headed_external websocket stream ended unexpectedly",
                     Some("action"),
                     Some("websocket stream ended".to_string()),
                 )
@@ -414,7 +422,7 @@ impl CdpClient {
             let message = next.map_err(|err| {
                 RunnerFailure::new(
                     "runner_connection_closed",
-                    format!("camoufox websocket read failed: {err}"),
+                    format!("headed_external websocket read failed: {err}"),
                     Some("action"),
                     Some(err.to_string()),
                 )
@@ -424,7 +432,7 @@ impl CdpClient {
                     return serde_json::from_str::<Value>(&text).map_err(|err| {
                         RunnerFailure::new(
                             "cdp_protocol_error",
-                            format!("failed to decode camoufox CDP text message: {err}"),
+                            format!("failed to decode headed_external CDP text message: {err}"),
                             Some("action"),
                             Some(err.to_string()),
                         )
@@ -434,7 +442,7 @@ impl CdpClient {
                     return serde_json::from_slice::<Value>(&bytes).map_err(|err| {
                         RunnerFailure::new(
                             "cdp_protocol_error",
-                            format!("failed to decode camoufox CDP binary message: {err}"),
+                            format!("failed to decode headed_external CDP binary message: {err}"),
                             Some("action"),
                             Some(err.to_string()),
                         )
@@ -444,7 +452,7 @@ impl CdpClient {
                 Message::Close(frame) => {
                     return Err(RunnerFailure::new(
                         "runner_connection_closed",
-                        format!("camoufox websocket closed: {frame:?}"),
+                        format!("headed_external websocket closed: {frame:?}"),
                         Some("action"),
                         Some("websocket closed".to_string()),
                     ));
@@ -473,25 +481,77 @@ fn config_path() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn load_config(path: &str) -> Result<CamoufoxConfig, RunnerFailure> {
+fn load_config(path: &str) -> Result<HeadedExternalConfig, RunnerFailure> {
     let raw = fs::read_to_string(path).map_err(|err| {
         RunnerFailure::new(
             "runner_config_read_failed",
-            format!("failed to read camoufox config {path}: {err}"),
+            format!("failed to read headed_external config {path}: {err}"),
             Some("configuration"),
             Some(err.to_string()),
         )
     })?;
-    let mut config: CamoufoxConfig = serde_json::from_str(&raw).map_err(|err| {
+    let mut config: HeadedExternalConfig = serde_json::from_str(&raw).map_err(|err| {
         RunnerFailure::new(
             "runner_config_invalid",
-            format!("failed to parse camoufox config {path}: {err}"),
+            format!("failed to parse headed_external config {path}: {err}"),
             Some("configuration"),
             Some(err.to_string()),
         )
     })?;
     config.binary_path = config.binary_path.trim().to_string();
+    config.remote_debugging_arg_template = normalize_optional_config_string(
+        config.remote_debugging_arg_template,
+        "--remote-debugging-port={port}",
+    );
+    config.profile_arg_name =
+        normalize_optional_config_string(config.profile_arg_name, "--user-data-dir");
+    config.startup_url = normalize_optional_config_string(config.startup_url, "about:blank");
+    config.proxy_arg_template = normalize_optional_config_string(
+        config.proxy_arg_template,
+        "--proxy-server={proxy_server}",
+    );
     Ok(config)
+}
+
+fn normalize_optional_config_string(value: Option<String>, default_value: &str) -> Option<String> {
+    Some(
+        value
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .unwrap_or_else(|| default_value.to_string()),
+    )
+}
+
+fn arg_from_template(template: Option<&str>, token: &str, value: &str) -> Option<String> {
+    template
+        .map(str::trim)
+        .filter(|template| !template.is_empty())
+        .map(|template| template.replace(token, value))
+        .filter(|arg| !arg.trim().is_empty())
+}
+
+fn append_profile_args(cmd: &mut Command, config: &HeadedExternalConfig) -> io::Result<()> {
+    let Some(profile_dir) = config
+        .profile_dir
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+
+    fs::create_dir_all(profile_dir)?;
+    let profile_arg = config
+        .profile_arg_name
+        .as_deref()
+        .unwrap_or("--user-data-dir")
+        .trim();
+    if profile_arg.contains("{profile_dir}") {
+        cmd.arg(profile_arg.replace("{profile_dir}", profile_dir));
+    } else if !profile_arg.is_empty() {
+        cmd.arg(profile_arg).arg(profile_dir);
+    }
+    Ok(())
 }
 
 fn requested_action(task: &RunnerTask) -> String {
@@ -570,59 +630,73 @@ fn text_expression() -> &'static str {
 fn validation_probe_expression() -> &'static str {
     r#"(async function(){
   function elapsed(start){ return Math.max(0, Math.round(performance.now() - start)); }
-  function signal(id, category, status, label, summary, detail, durationMs){ return { id, category, layer: 'observed', status, label, summary, detail, durationMs }; }
+  function signal(id, category, status, label, summary, detail, durationMs, failureReason){ return {
+    id,
+    category,
+    layer: 'observed',
+    status,
+    label,
+    summary,
+    detail,
+    durationMs,
+    collectorScope: 'profile_browser',
+    runtimeAdapter: 'headed_external',
+    targetProfileBrowser: true,
+    evidenceBoundary: 'headed_external profile-browser CDP Runtime.evaluate observation; not desktop WebView proof, remote proxy/TLS proof, or full 450 coverage',
+    failureReason: failureReason || (status === 'succeeded' ? '' : summary)
+  }; }
   const signals = [];
-  const runtimeDetail = 'scope=camoufox-profile-browser; collector=cdp-runtime-evaluate';
+  const runtimeDetail = 'scope=headed_external-profile-browser; collector=cdp-runtime-evaluate';
   const navStarted = performance.now();
-  signals.push(signal('camoufox-profile-browser-navigator', 'detector', navigator.userAgent ? 'succeeded' : 'warning', 'Camoufox navigator runtime probe', 'Camoufox navigator sampled.', `${runtimeDetail}; userAgent=${navigator.userAgent}; platform=${navigator.platform}; webdriver=${navigator.webdriver}; languages=${Array.from(navigator.languages || []).join(',')}`, elapsed(navStarted)));
+  signals.push(signal('headed_external-profile-browser-navigator', 'detector', navigator.userAgent ? 'succeeded' : 'warning', 'HeadedExternal navigator runtime probe', 'HeadedExternal navigator sampled.', `${runtimeDetail}; userAgent=${navigator.userAgent}; platform=${navigator.platform}; webdriver=${navigator.webdriver}; languages=${Array.from(navigator.languages || []).join(',')}`, elapsed(navStarted)));
   try {
     const started = performance.now();
     const canvas = document.createElement('canvas'); canvas.width = 120; canvas.height = 40; const ctx = canvas.getContext('2d'); ctx.fillText('PersonaPilot', 4, 20); const data = canvas.toDataURL('image/png');
-    signals.push(signal('camoufox-profile-browser-canvas', 'canvas', data.length > 100 ? 'succeeded' : 'warning', 'Camoufox canvas runtime probe', 'Camoufox canvas sampled.', `${runtimeDetail}; dataUrlLength=${data.length}; size=${canvas.width}x${canvas.height}`, elapsed(started)));
-  } catch (error) { signals.push(signal('camoufox-profile-browser-canvas', 'canvas', 'failed', 'Camoufox canvas runtime probe', 'Camoufox canvas probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
+    signals.push(signal('headed_external-profile-browser-canvas', 'canvas', data.length > 100 ? 'succeeded' : 'warning', 'HeadedExternal canvas runtime probe', 'HeadedExternal canvas sampled.', `${runtimeDetail}; dataUrlLength=${data.length}; size=${canvas.width}x${canvas.height}`, elapsed(started)));
+  } catch (error) { signals.push(signal('headed_external-profile-browser-canvas', 'canvas', 'failed', 'HeadedExternal canvas runtime probe', 'HeadedExternal canvas probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0, error && error.message ? error.message : String(error))); }
   try {
     const started = performance.now();
     const dtf = Intl.DateTimeFormat().resolvedOptions();
-    signals.push(signal('camoufox-profile-browser-timezone', 'timezone', dtf.timeZone ? 'succeeded' : 'warning', 'Camoufox timezone runtime probe', 'Camoufox timezone sampled.', `${runtimeDetail}; timezone=${dtf.timeZone}; locale=${dtf.locale}`, elapsed(started)));
-  } catch (error) { signals.push(signal('camoufox-profile-browser-timezone', 'timezone', 'failed', 'Camoufox timezone runtime probe', 'Camoufox timezone probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
+    signals.push(signal('headed_external-profile-browser-timezone', 'timezone', dtf.timeZone ? 'succeeded' : 'warning', 'HeadedExternal timezone runtime probe', 'HeadedExternal timezone sampled.', `${runtimeDetail}; timezone=${dtf.timeZone}; locale=${dtf.locale}`, elapsed(started)));
+  } catch (error) { signals.push(signal('headed_external-profile-browser-timezone', 'timezone', 'failed', 'HeadedExternal timezone runtime probe', 'HeadedExternal timezone probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0, error && error.message ? error.message : String(error))); }
   try {
     const started = performance.now();
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (!gl) {
-      signals.push(signal('camoufox-profile-browser-webgl', 'webgl', 'warning', 'Camoufox WebGL runtime probe', 'Camoufox runtime does not expose WebGL.', runtimeDetail, elapsed(started)));
+      signals.push(signal('headed_external-profile-browser-webgl', 'webgl', 'warning', 'HeadedExternal WebGL runtime probe', 'HeadedExternal runtime does not expose WebGL.', runtimeDetail, elapsed(started)));
     } else {
       const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
       const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
       const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
-      signals.push(signal('camoufox-profile-browser-webgl', 'webgl', vendor || renderer ? 'succeeded' : 'warning', 'Camoufox WebGL runtime probe', 'Camoufox WebGL surface sampled.', `${runtimeDetail}; vendor=${vendor}; renderer=${renderer}; extensions=${(gl.getSupportedExtensions() || []).length}`, elapsed(started)));
+      signals.push(signal('headed_external-profile-browser-webgl', 'webgl', vendor || renderer ? 'succeeded' : 'warning', 'HeadedExternal WebGL runtime probe', 'HeadedExternal WebGL surface sampled.', `${runtimeDetail}; vendor=${vendor}; renderer=${renderer}; extensions=${(gl.getSupportedExtensions() || []).length}`, elapsed(started)));
     }
-  } catch (error) { signals.push(signal('camoufox-profile-browser-webgl', 'webgl', 'failed', 'Camoufox WebGL runtime probe', 'Camoufox WebGL probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
+  } catch (error) { signals.push(signal('headed_external-profile-browser-webgl', 'webgl', 'failed', 'HeadedExternal WebGL runtime probe', 'HeadedExternal WebGL probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0, error && error.message ? error.message : String(error))); }
   try {
     const started = performance.now();
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) {
-      signals.push(signal('camoufox-profile-browser-audio', 'audio', 'warning', 'Camoufox AudioContext runtime probe', 'Camoufox runtime does not expose AudioContext.', runtimeDetail, elapsed(started)));
+      signals.push(signal('headed_external-profile-browser-audio', 'audio', 'warning', 'HeadedExternal AudioContext runtime probe', 'HeadedExternal runtime does not expose AudioContext.', runtimeDetail, elapsed(started)));
     } else {
       const context = new AudioContextCtor();
-      signals.push(signal('camoufox-profile-browser-audio', 'audio', context.sampleRate > 0 ? 'succeeded' : 'warning', 'Camoufox AudioContext runtime probe', 'Camoufox AudioContext sampled.', `${runtimeDetail}; sampleRate=${context.sampleRate}; state=${context.state}`, elapsed(started)));
+      signals.push(signal('headed_external-profile-browser-audio', 'audio', context.sampleRate > 0 ? 'succeeded' : 'warning', 'HeadedExternal AudioContext runtime probe', 'HeadedExternal AudioContext sampled.', `${runtimeDetail}; sampleRate=${context.sampleRate}; state=${context.state}`, elapsed(started)));
       if (context.close) await context.close().catch(() => undefined);
     }
-  } catch (error) { signals.push(signal('camoufox-profile-browser-audio', 'audio', 'failed', 'Camoufox AudioContext runtime probe', 'Camoufox audio probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
+  } catch (error) { signals.push(signal('headed_external-profile-browser-audio', 'audio', 'failed', 'HeadedExternal AudioContext runtime probe', 'HeadedExternal audio probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0, error && error.message ? error.message : String(error))); }
   try {
     const started = performance.now();
     const fonts = document.fonts && document.fonts.check ? ['Arial', 'Segoe UI', 'Times New Roman'].filter((font) => document.fonts.check(`12px "${font}"`)) : [];
-    signals.push(signal('camoufox-profile-browser-fonts', 'fingerprint', document.fonts ? 'succeeded' : 'warning', 'Camoufox font runtime probe', 'Camoufox font surface sampled.', `${runtimeDetail}; documentFonts=${!!document.fonts}; matched=${fonts.join(',')}`, elapsed(started)));
-  } catch (error) { signals.push(signal('camoufox-profile-browser-fonts', 'fingerprint', 'failed', 'Camoufox font runtime probe', 'Camoufox font probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
+    signals.push(signal('headed_external-profile-browser-fonts', 'fingerprint', document.fonts ? 'succeeded' : 'warning', 'HeadedExternal font runtime probe', 'HeadedExternal font surface sampled.', `${runtimeDetail}; documentFonts=${!!document.fonts}; matched=${fonts.join(',')}`, elapsed(started)));
+  } catch (error) { signals.push(signal('headed_external-profile-browser-fonts', 'fingerprint', 'failed', 'HeadedExternal font runtime probe', 'HeadedExternal font probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0, error && error.message ? error.message : String(error))); }
   try {
     const started = performance.now();
     const devices = navigator.mediaDevices && navigator.mediaDevices.enumerateDevices ? await navigator.mediaDevices.enumerateDevices().catch(() => []) : [];
-    signals.push(signal('camoufox-profile-browser-media-devices', 'fingerprint', navigator.mediaDevices ? 'succeeded' : 'warning', 'Camoufox media devices runtime probe', 'Camoufox media devices surface sampled.', `${runtimeDetail}; mediaDevices=${!!navigator.mediaDevices}; count=${devices.length}; kinds=${devices.map((d) => d.kind).join(',')}`, elapsed(started)));
-  } catch (error) { signals.push(signal('camoufox-profile-browser-media-devices', 'fingerprint', 'failed', 'Camoufox media devices runtime probe', 'Camoufox media devices probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
+    signals.push(signal('headed_external-profile-browser-media-devices', 'fingerprint', navigator.mediaDevices ? 'succeeded' : 'warning', 'HeadedExternal media devices runtime probe', 'HeadedExternal media devices surface sampled.', `${runtimeDetail}; mediaDevices=${!!navigator.mediaDevices}; count=${devices.length}; kinds=${devices.map((d) => d.kind).join(',')}`, elapsed(started)));
+  } catch (error) { signals.push(signal('headed_external-profile-browser-media-devices', 'fingerprint', 'failed', 'HeadedExternal media devices runtime probe', 'HeadedExternal media devices probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0, error && error.message ? error.message : String(error))); }
   try {
     const started = performance.now();
     if (!window.RTCPeerConnection) {
-      signals.push(signal('camoufox-profile-browser-webrtc', 'webrtc', 'warning', 'Camoufox WebRTC runtime probe', 'Camoufox runtime does not expose RTCPeerConnection.', runtimeDetail, elapsed(started)));
+      signals.push(signal('headed_external-profile-browser-webrtc', 'webrtc', 'warning', 'HeadedExternal WebRTC runtime probe', 'HeadedExternal runtime does not expose RTCPeerConnection.', runtimeDetail, elapsed(started)));
     } else {
       const pc = new RTCPeerConnection({ iceServers: [] });
       const candidates = [];
@@ -632,15 +706,15 @@ fn validation_probe_expression() -> &'static str {
       await pc.setLocalDescription(offer);
       await new Promise((resolve) => setTimeout(resolve, 800));
       pc.close();
-      signals.push(signal('camoufox-profile-browser-webrtc', 'webrtc', candidates.length > 0 ? 'succeeded' : 'warning', 'Camoufox WebRTC runtime probe', candidates.length > 0 ? `Camoufox gathered ${candidates.length} ICE candidate(s).` : 'Camoufox WebRTC API is present, but no ICE candidates were gathered.', `${runtimeDetail}; candidates=${candidates.join(' | ')}`, elapsed(started)));
+      signals.push(signal('headed_external-profile-browser-webrtc', 'webrtc', candidates.length > 0 ? 'succeeded' : 'warning', 'HeadedExternal WebRTC runtime probe', candidates.length > 0 ? `HeadedExternal gathered ${candidates.length} ICE candidate(s).` : 'HeadedExternal WebRTC API is present, but no ICE candidates were gathered.', `${runtimeDetail}; candidates=${candidates.join(' | ')}`, elapsed(started), candidates.length > 0 ? '' : 'no ICE candidates gathered'));
     }
-  } catch (error) { signals.push(signal('camoufox-profile-browser-webrtc', 'webrtc', 'failed', 'Camoufox WebRTC runtime probe', 'Camoufox WebRTC probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
+  } catch (error) { signals.push(signal('headed_external-profile-browser-webrtc', 'webrtc', 'failed', 'HeadedExternal WebRTC runtime probe', 'HeadedExternal WebRTC probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0, error && error.message ? error.message : String(error))); }
   const storageStarted = performance.now();
   let localStorageAvailable = false;
   let sessionStorageAvailable = false;
-  try { localStorage.setItem('persona-pilot-camoufox-local', '1'); localStorageAvailable = localStorage.getItem('persona-pilot-camoufox-local') === '1'; localStorage.removeItem('persona-pilot-camoufox-local'); } catch (_) {}
-  try { sessionStorage.setItem('persona-pilot-camoufox-session', '1'); sessionStorageAvailable = sessionStorage.getItem('persona-pilot-camoufox-session') === '1'; sessionStorage.removeItem('persona-pilot-camoufox-session'); } catch (_) {}
-  signals.push(signal('camoufox-profile-browser-storage', 'leak', navigator.cookieEnabled || localStorageAvailable || sessionStorageAvailable ? 'succeeded' : 'warning', 'Camoufox storage scope runtime probe', 'Camoufox storage surface sampled.', `${runtimeDetail}; cookieEnabled=${navigator.cookieEnabled}; localStorage=${localStorageAvailable}; sessionStorage=${sessionStorageAvailable}`, elapsed(storageStarted)));
+  try { localStorage.setItem('persona-pilot-headed_external-local', '1'); localStorageAvailable = localStorage.getItem('persona-pilot-headed_external-local') === '1'; localStorage.removeItem('persona-pilot-headed_external-local'); } catch (_) {}
+  try { sessionStorage.setItem('persona-pilot-headed_external-session', '1'); sessionStorageAvailable = sessionStorage.getItem('persona-pilot-headed_external-session') === '1'; sessionStorage.removeItem('persona-pilot-headed_external-session'); } catch (_) {}
+  signals.push(signal('headed_external-profile-browser-storage', 'leak', navigator.cookieEnabled || localStorageAvailable || sessionStorageAvailable ? 'succeeded' : 'warning', 'HeadedExternal storage scope runtime probe', 'HeadedExternal storage surface sampled.', `${runtimeDetail}; cookieEnabled=${navigator.cookieEnabled}; localStorage=${localStorageAvailable}; sessionStorage=${sessionStorageAvailable}`, elapsed(storageStarted)));
   return signals;
 })()"#
 }
@@ -699,7 +773,7 @@ async fn perform_browser_action(
         if Instant::now() >= deadline {
             return Err(RunnerFailure::new(
                 "timeout",
-                "camoufox action timed out while waiting for readable page",
+                "headed_external action timed out while waiting for readable page",
                 Some("output_wait"),
                 None,
             ));
@@ -708,27 +782,32 @@ async fn perform_browser_action(
     }
 }
 
-fn spawn_camoufox(
-    config: &CamoufoxConfig,
+fn spawn_headed_external(
+    config: &HeadedExternalConfig,
     port: u16,
     timeout_seconds: u64,
-) -> Result<SpawnedCamoufox, io::Error> {
+) -> Result<SpawnedHeadedExternal, io::Error> {
     let mut cmd = Command::new(&config.binary_path);
-    cmd.arg(format!("--remote-debugging-port={port}"));
-    if let Some(profile_dir) = config
-        .profile_dir
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        fs::create_dir_all(profile_dir)?;
-        cmd.arg("--profile").arg(profile_dir);
+    if let Some(remote_debugging_arg) = arg_from_template(
+        config.remote_debugging_arg_template.as_deref(),
+        "{port}",
+        &port.to_string(),
+    ) {
+        cmd.arg(remote_debugging_arg);
     }
+    append_profile_args(&mut cmd, config)?;
     if let Some(proxy_server) = config
         .proxy_server
         .as_ref()
         .filter(|value| !value.trim().is_empty())
     {
-        cmd.arg(format!("--proxy-server={proxy_server}"));
+        if let Some(proxy_arg) = arg_from_template(
+            config.proxy_arg_template.as_deref(),
+            "{proxy_server}",
+            proxy_server,
+        ) {
+            cmd.arg(proxy_arg);
+        }
     }
     for arg in &config.extra_args {
         let trimmed = arg.trim();
@@ -736,7 +815,13 @@ fn spawn_camoufox(
             cmd.arg(trimmed);
         }
     }
-    cmd.arg("about:blank");
+    if let Some(startup_url) = config
+        .startup_url
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        cmd.arg(startup_url);
+    }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
@@ -747,12 +832,15 @@ fn spawn_camoufox(
         let _ = timeout_seconds;
     }
     let mut child = cmd.spawn()?;
-    let pid = child
-        .id()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "camoufox child did not expose pid"))?;
+    let pid = child.id().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            "headed_external child did not expose pid",
+        )
+    })?;
     let stdout_handle = tokio::spawn(read_stream_to_string(child.stdout.take()));
     let stderr_handle = tokio::spawn(read_stream_to_string(child.stderr.take()));
-    Ok(SpawnedCamoufox {
+    Ok(SpawnedHeadedExternal {
         child,
         pid,
         stdout_handle,
@@ -767,7 +855,7 @@ async fn wait_for_ws_endpoint(child: &mut Child, port: u16) -> Result<String, Ru
         .map_err(|err| {
             RunnerFailure::new(
                 "spawn_failed",
-                format!("failed to build camoufox readiness client: {err}"),
+                format!("failed to build headed_external readiness client: {err}"),
                 Some("launch"),
                 Some(err.to_string()),
             )
@@ -777,7 +865,7 @@ async fn wait_for_ws_endpoint(child: &mut Child, port: u16) -> Result<String, Ru
         if let Some(status) = child.try_wait().map_err(|err| {
             RunnerFailure::new(
                 "process_wait_failed",
-                format!("failed to inspect camoufox process: {err}"),
+                format!("failed to inspect headed_external process: {err}"),
                 Some("launch"),
                 Some(err.to_string()),
             )
@@ -785,7 +873,7 @@ async fn wait_for_ws_endpoint(child: &mut Child, port: u16) -> Result<String, Ru
             return Err(RunnerFailure::new(
                 "runner_process_exit",
                 format!(
-                    "camoufox exited before CDP endpoint became ready (exit_code={:?})",
+                    "headed_external exited before CDP endpoint became ready (exit_code={:?})",
                     status.code()
                 ),
                 Some("launch"),
@@ -800,7 +888,7 @@ async fn wait_for_ws_endpoint(child: &mut Child, port: u16) -> Result<String, Ru
                     .map_err(|err| {
                         RunnerFailure::new(
                             "cdp_protocol_error",
-                            format!("failed to parse camoufox /json/version: {err}"),
+                            format!("failed to parse headed_external /json/version: {err}"),
                             Some("launch"),
                             Some(err.to_string()),
                         )
@@ -815,11 +903,13 @@ async fn wait_for_ws_endpoint(child: &mut Child, port: u16) -> Result<String, Ru
     }
 }
 
-async fn shutdown_spawned_process(spawned: &mut SpawnedCamoufox) -> Result<Option<i32>, String> {
+async fn shutdown_spawned_process(
+    spawned: &mut SpawnedHeadedExternal,
+) -> Result<Option<i32>, String> {
     if let Some(status) = spawned
         .child
         .try_wait()
-        .map_err(|err| format!("failed to inspect camoufox before cleanup: {err}"))?
+        .map_err(|err| format!("failed to inspect headed_external before cleanup: {err}"))?
     {
         return Ok(status.code());
     }
@@ -827,12 +917,12 @@ async fn shutdown_spawned_process(spawned: &mut SpawnedCamoufox) -> Result<Optio
         .child
         .kill()
         .await
-        .map_err(|err| format!("failed to terminate camoufox process: {err}"))?;
+        .map_err(|err| format!("failed to terminate headed_external process: {err}"))?;
     timeout(Duration::from_secs(2), spawned.child.wait())
         .await
-        .map_err(|_| "camoufox child did not exit after kill".to_string())?
+        .map_err(|_| "headed_external child did not exit after kill".to_string())?
         .map(|status| status.code())
-        .map_err(|err| format!("failed to wait for camoufox child: {err}"))
+        .map_err(|err| format!("failed to wait for headed_external child: {err}"))
 }
 
 async fn read_stream_to_string<R>(reader: Option<R>) -> String
@@ -989,8 +1079,11 @@ fn build_result(
     };
 
     let mut payload = Map::new();
-    payload.insert("runner".to_string(), json!("camoufox"));
-    payload.insert("runner_mode".to_string(), json!(CAMOUFOX_RUNNER_MODE));
+    payload.insert("runner".to_string(), json!("headed_external"));
+    payload.insert(
+        "runner_mode".to_string(),
+        json!(HEADED_EXTERNAL_RUNNER_MODE),
+    );
     payload.insert("is_fake".to_string(), json!(false));
     payload.insert("real_browser_execution".to_string(), json!(ok));
     payload.insert(
@@ -1051,15 +1144,15 @@ fn build_result(
         summary_artifacts: vec![crate::runner::types::RunnerSummaryArtifact {
             category: crate::runner::types::SummaryArtifactCategory::Execution,
             key: format!("{}.execution", task.kind),
-            source: "runner.camoufox".to_string(),
+            source: "runner.headed_external".to_string(),
             severity: if is_error {
                 crate::runner::types::SummaryArtifactSeverity::Error
             } else {
                 crate::runner::types::SummaryArtifactSeverity::Info
             },
-            title: format!("{} camoufox runner summary", task.kind),
+            title: format!("{} headed_external runner summary", task.kind),
             summary: format!(
-                "camoufox minimal CDP runner action={action} status={status} message={message}"
+                "headed_external minimal CDP runner action={action} status={status} message={message}"
             ),
         }],
         session_cookies: None,
@@ -1099,9 +1192,9 @@ fn configuration_failure(
 }
 
 #[async_trait]
-impl TaskRunner for CamoufoxRunner {
+impl TaskRunner for HeadedExternalRunner {
     fn name(&self) -> &'static str {
-        "camoufox"
+        "headed_external"
     }
 
     fn capabilities(&self) -> RunnerCapabilities {
@@ -1113,14 +1206,14 @@ impl TaskRunner for CamoufoxRunner {
     }
 
     async fn cancel_running(&self, task_id: &str) -> RunnerCancelResult {
-        RunnerCancelResult { accepted: false, message: format!("camoufox minimal runner does not keep a persistent task registry; task_id={task_id}") }
+        RunnerCancelResult { accepted: false, message: format!("headed_external minimal runner does not keep a persistent task registry; task_id={task_id}") }
     }
 
     async fn execute(&self, task: RunnerTask) -> RunnerExecutionResult {
         let requested_action = requested_action(&task);
         let action = match normalize_action(&requested_action) {
             Some(action) => action,
-            None => return configuration_failure(&task, &requested_action, "invalid_action", "camoufox runner supports open_page/fetch/get_html/get_title/get_final_url/extract_text/validation_probe", config_path().as_deref()),
+            None => return configuration_failure(&task, &requested_action, "invalid_action", "headed_external runner supports open_page/fetch/get_html/get_title/get_final_url/extract_text/validation_probe", config_path().as_deref()),
         };
         let url = match extract_url(&task.payload) {
             Some(url) => url,
@@ -1129,7 +1222,7 @@ impl TaskRunner for CamoufoxRunner {
                     &task,
                     &requested_action,
                     "invalid_input",
-                    "camoufox runner requires a non-empty url in task payload",
+                    "headed_external runner requires a non-empty url in task payload",
                     config_path().as_deref(),
                 )
             }
@@ -1139,20 +1232,20 @@ impl TaskRunner for CamoufoxRunner {
                 &task,
                 &requested_action,
                 "invalid_input",
-                "camoufox runner only accepts http:// or https:// urls",
+                "headed_external runner only accepts http:// or https:// urls",
                 config_path().as_deref(),
             );
         }
         let config_path = config_path();
         if !env_enabled() {
-            return configuration_failure(&task, &requested_action, "runner_disabled", format!("camoufox runner is disabled; set {ENABLED_ENV}=true after configuring {CONFIG_ENV}"), config_path.as_deref());
+            return configuration_failure(&task, &requested_action, "runner_disabled", format!("headed_external runner is disabled; set {ENABLED_ENV}=true after configuring {CONFIG_ENV}"), config_path.as_deref());
         }
         let Some(config_path_value) = config_path.as_deref() else {
             return configuration_failure(
                 &task,
                 &requested_action,
                 "runner_config_missing",
-                format!("camoufox runner requires non-empty {CONFIG_ENV} before execution"),
+                format!("headed_external runner requires non-empty {CONFIG_ENV} before execution"),
                 None,
             );
         };
@@ -1201,7 +1294,7 @@ impl TaskRunner for CamoufoxRunner {
                     None,
                     None,
                     Some(&browser_result),
-                    format!("camoufox test websocket completed {action} successfully"),
+                    format!("headed_external test websocket completed {action} successfully"),
                 ),
                 Ok(Err(failure)) => build_result(
                     RunnerOutcomeStatus::Failed,
@@ -1240,10 +1333,10 @@ impl TaskRunner for CamoufoxRunner {
                     None,
                     None,
                     Some(format!(
-                        "camoufox test websocket endpoint did not finish within {timeout_seconds}s"
+                        "headed_external test websocket endpoint did not finish within {timeout_seconds}s"
                     )),
                     None,
-                    format!("camoufox test websocket timed out after {timeout_seconds}s"),
+                    format!("headed_external test websocket timed out after {timeout_seconds}s"),
                 ),
             };
         }
@@ -1253,7 +1346,7 @@ impl TaskRunner for CamoufoxRunner {
                 &task,
                 &requested_action,
                 "runner_config_invalid",
-                "camoufox config requires binary_path before spawning a browser",
+                "headed_external config requires binary_path before spawning a browser",
                 Some(config_path_value),
             );
         }
@@ -1262,7 +1355,7 @@ impl TaskRunner for CamoufoxRunner {
                 &task,
                 &requested_action,
                 "binary_not_found",
-                format!("camoufox binary not found: {}", config.binary_path),
+                format!("headed_external binary not found: {}", config.binary_path),
                 Some(config_path_value),
             );
         }
@@ -1274,12 +1367,13 @@ impl TaskRunner for CamoufoxRunner {
                     &task,
                     &requested_action,
                     "port_allocation_failed",
-                    format!("failed to allocate camoufox CDP port: {err}"),
+                    format!("failed to allocate headed_external CDP port: {err}"),
                     Some(config_path_value),
                 )
             }
         };
-        let (mut spawned, binary_path) = match spawn_camoufox(&config, port, timeout_seconds) {
+        let (mut spawned, binary_path) = match spawn_headed_external(&config, port, timeout_seconds)
+        {
             Ok(spawned) => (spawned, config.binary_path.clone()),
             Err(err) => {
                 return build_result(
@@ -1300,7 +1394,7 @@ impl TaskRunner for CamoufoxRunner {
                     None,
                     Some(err.to_string()),
                     None,
-                    format!("failed to spawn camoufox binary: {err}"),
+                    format!("failed to spawn headed_external binary: {err}"),
                 )
             }
         };
@@ -1340,7 +1434,7 @@ impl TaskRunner for CamoufoxRunner {
                 stdout_preview,
                 stderr_preview,
                 Some(&browser_result),
-                format!("camoufox launched and completed {action} successfully"),
+                format!("headed_external launched and completed {action} successfully"),
             ),
             Ok(Err(failure)) => build_result(
                 RunnerOutcomeStatus::Failed,
@@ -1380,7 +1474,7 @@ impl TaskRunner for CamoufoxRunner {
                 stdout_preview,
                 stderr_preview,
                 None,
-                format!("camoufox timed out after {timeout_seconds}s"),
+                format!("headed_external timed out after {timeout_seconds}s"),
             ),
         }
     }
@@ -1393,7 +1487,7 @@ mod tests {
 
     fn task() -> RunnerTask {
         RunnerTask {
-            task_id: "task-camoufox".to_string(),
+            task_id: "task-headed_external".to_string(),
             attempt: 1,
             kind: "open_page".to_string(),
             payload: json!({"url": "https://example.com"}),
@@ -1414,13 +1508,16 @@ mod tests {
     async fn execute_returns_disabled_configuration_failure_without_launching_browser() {
         std::env::remove_var(ENABLED_ENV);
         std::env::remove_var(CONFIG_ENV);
-        let result = CamoufoxRunner.execute(task()).await;
+        let result = HeadedExternalRunner.execute(task()).await;
         let json = result.result_json.expect("result json");
         assert!(matches!(result.status, RunnerOutcomeStatus::Failed));
-        assert_eq!(json.get("runner").and_then(Value::as_str), Some("camoufox"));
+        assert_eq!(
+            json.get("runner").and_then(Value::as_str),
+            Some("headed_external")
+        );
         assert_eq!(
             json.get("runner_mode").and_then(Value::as_str),
-            Some(CAMOUFOX_RUNNER_MODE)
+            Some(HEADED_EXTERNAL_RUNNER_MODE)
         );
         assert_eq!(
             json.get("error_kind").and_then(Value::as_str),
@@ -1445,24 +1542,63 @@ mod tests {
 
     #[test]
     fn load_config_accepts_binary_path() {
-        let path =
-            std::env::temp_dir().join(format!("camoufox-config-{}.json", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "headed_external-config-{}.json",
+            std::process::id()
+        ));
         fs::write(
             &path,
-            json!({"binary_path":"C:/Tools/camoufox/camoufox.exe","extra_args":["--headless"]})
-                .to_string(),
+            json!({
+                "binary_path":"C:/Tools/Chrome/chrome.exe",
+                "extra_args":["--disable-first-run-ui"],
+                "remote_debugging_arg_template":"--remote-debugging-port={port}",
+                "profile_arg_name":"--user-data-dir",
+                "startup_url":"about:blank"
+            })
+            .to_string(),
         )
         .expect("write config");
         let loaded = load_config(path.to_str().expect("path")).expect("load config");
-        assert_eq!(loaded.binary_path, "C:/Tools/camoufox/camoufox.exe");
-        assert_eq!(loaded.extra_args, vec!["--headless"]);
+        assert_eq!(loaded.binary_path, "C:/Tools/Chrome/chrome.exe");
+        assert_eq!(loaded.extra_args, vec!["--disable-first-run-ui"]);
+        assert_eq!(
+            loaded.remote_debugging_arg_template.as_deref(),
+            Some("--remote-debugging-port={port}")
+        );
+        assert_eq!(loaded.profile_arg_name.as_deref(), Some("--user-data-dir"));
+        assert_eq!(loaded.startup_url.as_deref(), Some("about:blank"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn load_config_defaults_to_chromium_style_args() {
+        let path = std::env::temp_dir().join(format!(
+            "headed_external-default-config-{}.json",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            json!({"binary_path":"C:/Tools/Chrome/chrome.exe"}).to_string(),
+        )
+        .expect("write config");
+        let loaded = load_config(path.to_str().expect("path")).expect("load config");
+        assert_eq!(
+            loaded.remote_debugging_arg_template.as_deref(),
+            Some("--remote-debugging-port={port}")
+        );
+        assert_eq!(loaded.profile_arg_name.as_deref(), Some("--user-data-dir"));
+        assert_eq!(loaded.startup_url.as_deref(), Some("about:blank"));
+        assert_eq!(
+            loaded.proxy_arg_template.as_deref(),
+            Some("--proxy-server={proxy_server}")
+        );
         let _ = fs::remove_file(path);
     }
 
     #[test]
     fn load_config_allows_empty_binary_for_test_websocket_mode() {
         let path = std::env::temp_dir().join(format!(
-            "camoufox-test-ws-config-{}.json",
+            "headed_external-test-ws-config-{}.json",
             std::process::id()
         ));
         fs::write(&path, json!({"binary_path":""}).to_string()).expect("write config");

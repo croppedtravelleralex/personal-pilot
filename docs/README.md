@@ -13,6 +13,7 @@
 7. `docs/05-ai-maintenance-playbook.md`：AI 接手、更新和验收规则。
 8. `docs/24-external-distribution-readiness.md`：外部分发前限制、人工 smoke 和发布说明边界。
 9. `docs/25-overall-remaining-work-register.md`：`40% / 60%` 后的剩余工作全集和执行状态。
+10. `docs/40-m4-m20-execution-board.md`：M4-M20 执行板、harness 规则、验收边界和分批 commit 纪律。
 
 ## 当前报告口径
 

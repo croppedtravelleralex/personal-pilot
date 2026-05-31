@@ -404,12 +404,20 @@ async fn change_proxy_ip_execution(
 
     let proxy_id_value = match change_proxy_ip_payload_string(payload, &["proxy_id", "proxyId"]) {
         Some(id) => id,
-        None => return change_proxy_ip_error_result(
-            None, None, None, None, None, None, None,
-            "missing_proxy_id",
-            "change_proxy_ip requires proxy_id in payload",
-            false,
-        ),
+        None => {
+            return change_proxy_ip_error_result(
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                "missing_proxy_id",
+                "change_proxy_ip requires proxy_id in payload",
+                false,
+            )
+        }
     };
 
     let mode = change_proxy_ip_payload_string(payload, &["mode", "rotation_mode", "rotationMode"])
@@ -437,8 +445,13 @@ async fn change_proxy_ip_execution(
         Ok(Some(row)) => row,
         Ok(None) => {
             return change_proxy_ip_error_result(
-                Some(proxy_id_value.to_string()), Some(&mode), requested_provider, requested_region,
-                session_key, sticky_ttl_seconds, Some(&residency_status),
+                Some(proxy_id_value.to_string()),
+                Some(&mode),
+                requested_provider,
+                requested_region,
+                session_key,
+                sticky_ttl_seconds,
+                Some(&residency_status),
                 "proxy_not_found",
                 &format!("proxy not found: {proxy_id_value}"),
                 true,
@@ -446,8 +459,13 @@ async fn change_proxy_ip_execution(
         }
         Err(err) => {
             return change_proxy_ip_error_result(
-                Some(proxy_id_value.to_string()), Some(&mode), requested_provider, requested_region,
-                session_key, sticky_ttl_seconds, Some(&residency_status),
+                Some(proxy_id_value.to_string()),
+                Some(&mode),
+                requested_provider,
+                requested_region,
+                session_key,
+                sticky_ttl_seconds,
+                Some(&residency_status),
                 "db_error",
                 &format!("database error looking up proxy: {err}"),
                 true,
@@ -460,7 +478,9 @@ async fn change_proxy_ip_execution(
     let _proxy_status: String = proxy_row.get("status");
     let proxy_source_label: Option<String> = proxy_row.get("source_label");
 
-    let effective_provider = requested_provider.clone().or_else(|| proxy_provider.clone());
+    let effective_provider = requested_provider
+        .clone()
+        .or_else(|| proxy_provider.clone());
     let effective_region = requested_region.clone().or_else(|| proxy_region.clone());
 
     let provider_config_row = if let Some(source_label) = proxy_source_label.as_deref() {
@@ -556,9 +576,12 @@ async fn change_proxy_ip_execution(
     let cooldown_until = provider_write
         .cooldown_seconds
         .or(provider_write.retry_after_seconds)
-        .map(|seconds| (now_ts.parse::<i64>().unwrap_or_else(|err| {
-            panic!("now_ts_string returned unparseable value {now_ts}: {err}");
-        }) + seconds).to_string());
+        .map(|seconds| {
+            (now_ts.parse::<i64>().unwrap_or_else(|err| {
+                panic!("now_ts_string returned unparseable value {now_ts}: {err}");
+            }) + seconds)
+                .to_string()
+        });
 
     let message = format!(
         "change_proxy_ip task: {} provider_write_status={}",
@@ -647,8 +670,7 @@ async fn change_proxy_ip_execution(
             },
             "payload": payload.clone(),
         })),
-        error_message: (provider_write.phase != "success")
-            .then_some(message.clone()),
+        error_message: (provider_write.phase != "success").then_some(message.clone()),
         summary_artifacts,
         session_cookies: None,
         session_local_storage: None,
@@ -670,7 +692,11 @@ fn change_proxy_ip_error_result(
 ) -> RunnerExecutionResult {
     let mode = mode.unwrap_or("provider_aware_rotate");
     let residency_status = residency_status.unwrap_or("unknown");
-    let status = if retryable { "retryable_error" } else { "failed" };
+    let status = if retryable {
+        "retryable_error"
+    } else {
+        "failed"
+    };
     RunnerExecutionResult {
         status: RunnerOutcomeStatus::Failed,
         result_json: Some(json!({
@@ -740,7 +766,9 @@ fn change_proxy_ip_error_result(
             source: "provider_rotation".to_string(),
             severity: crate::runner::types::SummaryArtifactSeverity::Error,
             title: "change_proxy_ip execution summary".to_string(),
-            summary: format!("kind=change_proxy_ip status=failed error_kind={error_kind} message={message}"),
+            summary: format!(
+                "kind=change_proxy_ip status=failed error_kind={error_kind} message={message}"
+            ),
         }],
         session_cookies: None,
         session_local_storage: None,
