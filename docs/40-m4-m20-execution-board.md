@@ -124,3 +124,13 @@ Status: started 2026-06-01.
 3. Keep comparison blocked until desktop WebView and profile-browser reports both exist within the configured window and all required categories are comparable.
 4. Verify with `pnpm typecheck`, `profile_browser_comparison_gate`, M4 gate, and diff hygiene.
 5. Continue next by actually collecting desktop WebView evidence from the running app, refreshing profile-browser evidence in the same window, and then moving to typed facade shrink or SessionBundle operator loop.
+
+## Sixth Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Close the local M4.6 SessionBundle operator loop by exposing export, preflight, dry-run, and confirmed local restore in the existing Settings page.
+2. Keep confirmed restore behind an explicit local confirmation and show restore plan, missing references, conflicts, `writePerformed`, and restored binding count.
+3. Extend M4 gate with `session_bundle_operator_contract` source checks for UI, desktop service wrapper, TS types, and Rust implementation/test markers.
+4. Verify with `pnpm typecheck`, M4 gate, and diff hygiene.
+5. Continue next with actual desktop/profile same-run evidence, typed facade shrink, runtime adapter operator loop, and M5 performance work.

@@ -6,8 +6,18 @@ import type { AppSettings } from './types'
 import { defaultSettings } from './types'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { useBackupStore } from '../../store/backupStore'
-import { readProviderProductionReadiness } from '../../services/desktop'
-import type { DesktopProviderProductionReadiness } from '../../types/desktop'
+import {
+  exportSessionBundle,
+  preflightSessionBundleImport,
+  readProviderProductionReadiness,
+  restoreSessionBundle,
+} from '../../services/desktop'
+import type {
+  DesktopProviderProductionReadiness,
+  DesktopSessionBundleExport,
+  DesktopSessionBundleImportPreflight,
+  DesktopSessionBundleRestoreResult,
+} from '../../types/desktop'
 
 interface BackupExportProgress {
   phase: string
@@ -40,6 +50,16 @@ export function SettingsPage() {
   const [providerReadiness, setProviderReadiness] = useState<DesktopProviderProductionReadiness | null>(null)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState('')
+  const [sessionBundleProfileId, setSessionBundleProfileId] = useState('')
+  const [sessionBundleBundlePath, setSessionBundleBundlePath] = useState('')
+  const [sessionBundleTargetProfileId, setSessionBundleTargetProfileId] = useState('')
+  const [sessionBundleIncludeSensitive, setSessionBundleIncludeSensitive] = useState(false)
+  const [sessionBundleAllowOverwrite, setSessionBundleAllowOverwrite] = useState(false)
+  const [sessionBundleAction, setSessionBundleAction] = useState<'none' | 'export' | 'preflight' | 'dry-run' | 'restore'>('none')
+  const [sessionBundleExportResult, setSessionBundleExportResult] = useState<DesktopSessionBundleExport | null>(null)
+  const [sessionBundlePreflight, setSessionBundlePreflight] = useState<DesktopSessionBundleImportPreflight | null>(null)
+  const [sessionBundleRestoreResult, setSessionBundleRestoreResult] = useState<DesktopSessionBundleRestoreResult | null>(null)
+  const [sessionBundleError, setSessionBundleError] = useState('')
   const exportLogsRef = useRef<HTMLDivElement | null>(null)
   const setImportState = useBackupStore((s) => s.setImportState)
   const clearImportState = useBackupStore((s) => s.clearImportState)
@@ -186,6 +206,96 @@ export function SettingsPage() {
     }
   }
 
+  const errorMessage = (error: any, fallback: string) => {
+    if (error?.message) return error.message
+    const value = String(error || '').trim()
+    return value || fallback
+  }
+
+  const handleSessionBundleExport = async () => {
+    const profileId = sessionBundleProfileId.trim()
+    if (!profileId) {
+      toast.warning('请输入 Profile ID')
+      return
+    }
+    setSessionBundleAction('export')
+    setSessionBundleError('')
+    try {
+      const result = await exportSessionBundle({
+        profileId,
+        includeSensitivePayloads: sessionBundleIncludeSensitive,
+      })
+      setSessionBundleExportResult(result)
+      setSessionBundleBundlePath(result.exportPath)
+      setSessionBundlePreflight(null)
+      setSessionBundleRestoreResult(null)
+      toast.success('SessionBundle 已导出')
+    } catch (error: any) {
+      const message = errorMessage(error, 'SessionBundle 导出失败')
+      setSessionBundleError(message)
+      toast.error(message)
+    } finally {
+      setSessionBundleAction('none')
+    }
+  }
+
+  const buildSessionBundleImportRequest = () => ({
+    bundlePath: sessionBundleBundlePath.trim(),
+    targetProfileId: sessionBundleTargetProfileId.trim() || null,
+    allowProfileOverwrite: sessionBundleAllowOverwrite,
+  })
+
+  const handleSessionBundlePreflight = async () => {
+    const request = buildSessionBundleImportRequest()
+    if (!request.bundlePath) {
+      toast.warning('请输入 Bundle path')
+      return
+    }
+    setSessionBundleAction('preflight')
+    setSessionBundleError('')
+    try {
+      const result = await preflightSessionBundleImport(request)
+      setSessionBundlePreflight(result)
+      setSessionBundleRestoreResult(null)
+      toast.success(result.restoreSupported ? 'Preflight 通过' : 'Preflight 已阻塞')
+    } catch (error: any) {
+      const message = errorMessage(error, 'SessionBundle preflight 失败')
+      setSessionBundleError(message)
+      toast.error(message)
+    } finally {
+      setSessionBundleAction('none')
+    }
+  }
+
+  const handleSessionBundleRestore = async (dryRun: boolean) => {
+    const request = buildSessionBundleImportRequest()
+    if (!request.bundlePath) {
+      toast.warning('请输入 Bundle path')
+      return
+    }
+    if (!dryRun && !confirm('确认执行本机 SessionBundle 恢复写入？')) {
+      return
+    }
+    setSessionBundleAction(dryRun ? 'dry-run' : 'restore')
+    setSessionBundleError('')
+    try {
+      const result = await restoreSessionBundle({ ...request, dryRun })
+      setSessionBundleRestoreResult(result)
+      setSessionBundlePreflight(result.preflight)
+      if (result.status === 'blocked') {
+        toast.warning(result.summary || 'SessionBundle restore 已被 preflight 阻塞')
+      } else {
+        toast.success(dryRun ? 'Dry-run 已完成' : '本机恢复已完成')
+      }
+    } catch (error: any) {
+      const message = errorMessage(error, dryRun ? 'SessionBundle dry-run 失败' : 'SessionBundle 恢复失败')
+      setSessionBundleError(message)
+      toast.error(message)
+    } finally {
+      setSessionBundleAction('none')
+    }
+  }
+
   const handleChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }))
     setHasChanges(true)
@@ -321,9 +431,9 @@ export function SettingsPage() {
   const importRunning = actionLoading === 'import-reset' || actionLoading === 'import-merge'
   const providerRows = providerReadiness?.items ?? []
   const providerTotal = providerRows.length || 0
-  const providerStatusClass = (status?: string) => {
+  const statusClass = (status?: string) => {
     const value = (status || '').toLowerCase()
-    if (value.includes('accepted') || value.includes('passed') || value === 'ready' || value === 'available' || value === 'present') {
+    if (value.includes('accepted') || value.includes('passed') || value.includes('restored') || value === 'ready' || value === 'available' || value === 'present' || value === 'succeeded') {
       return 'text-[var(--color-success)]'
     }
     if (value.includes('blocked') || value.includes('missing') || value.includes('not_') || value.includes('required')) {
@@ -334,6 +444,9 @@ export function SettingsPage() {
     }
     return 'text-[var(--color-text-secondary)]'
   }
+  const sessionBundleBusy = sessionBundleAction !== 'none'
+  const sessionBundlePathReady = Boolean(sessionBundleBundlePath.trim())
+  const sessionBundlePreflightBlocksRestore = Boolean(sessionBundlePreflight && !sessionBundlePreflight.restoreSupported)
 
   if (loading) {
     return (
@@ -531,24 +644,24 @@ export function SettingsPage() {
                     {item.latestReportPath || 'no report'}
                   </div>
                 </div>
-                <div className={`text-xs font-medium ${providerStatusClass(item.status)}`}>{item.status}</div>
+                <div className={`text-xs font-medium ${statusClass(item.status)}`}>{item.status}</div>
               </div>
               <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                 <div>
                   <div className="text-[var(--color-text-muted)]">credentials</div>
-                  <div className={providerStatusClass(item.credentialStatus)}>{item.credentialStatus}</div>
+                  <div className={statusClass(item.credentialStatus)}>{item.credentialStatus}</div>
                 </div>
                 <div>
                   <div className="text-[var(--color-text-muted)]">dry-run</div>
-                  <div className={providerStatusClass(item.dryRunStatus)}>{item.dryRunStatus}</div>
+                  <div className={statusClass(item.dryRunStatus)}>{item.dryRunStatus}</div>
                 </div>
                 <div>
                   <div className="text-[var(--color-text-muted)]">taxonomy</div>
-                  <div className={providerStatusClass(item.failureTaxonomyStatus)}>{item.failureTaxonomyStatus}</div>
+                  <div className={statusClass(item.failureTaxonomyStatus)}>{item.failureTaxonomyStatus}</div>
                 </div>
                 <div>
                   <div className="text-[var(--color-text-muted)]">real smoke</div>
-                  <div className={providerStatusClass(item.realProviderSmokeStatus)}>{item.realProviderSmokeStatus}</div>
+                  <div className={statusClass(item.realProviderSmokeStatus)}>{item.realProviderSmokeStatus}</div>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-1">
@@ -569,6 +682,217 @@ export function SettingsPage() {
               )}
             </div>
           ))}
+        </div>
+      </Card>
+
+      <Card
+        title="SessionBundle 本机验收"
+        subtitle={sessionBundleRestoreResult
+          ? `${sessionBundleRestoreResult.status} · write=${sessionBundleRestoreResult.writePerformed}`
+          : sessionBundlePreflight
+            ? `${sessionBundlePreflight.status} · bindings ${sessionBundlePreflight.sessionBindingCount}`
+            : 'export / preflight / dry-run / restore'}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <FormItem label="Profile ID">
+              <Input
+                value={sessionBundleProfileId}
+                onChange={e => setSessionBundleProfileId(e.target.value)}
+                placeholder="persona-profile-id"
+              />
+            </FormItem>
+            <FormItem label="Target Profile ID">
+              <Input
+                value={sessionBundleTargetProfileId}
+                onChange={e => setSessionBundleTargetProfileId(e.target.value)}
+                placeholder="留空使用 bundle profile"
+              />
+            </FormItem>
+            <FormItem label="Bundle path">
+              <Input
+                value={sessionBundleBundlePath}
+                onChange={e => setSessionBundleBundlePath(e.target.value)}
+                placeholder="data/exports/session-bundles/..."
+              />
+            </FormItem>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+              <Switch checked={sessionBundleIncludeSensitive} onChange={setSessionBundleIncludeSensitive} />
+              包含敏感 payload
+            </label>
+            <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+              <Switch checked={sessionBundleAllowOverwrite} onChange={setSessionBundleAllowOverwrite} />
+              允许覆盖目标 profile
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSessionBundleExport}
+              loading={sessionBundleAction === 'export'}
+              disabled={sessionBundleBusy && sessionBundleAction !== 'export'}
+            >
+              <Download className="w-4 h-4" />
+              导出
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSessionBundlePreflight}
+              loading={sessionBundleAction === 'preflight'}
+              disabled={!sessionBundlePathReady || (sessionBundleBusy && sessionBundleAction !== 'preflight')}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Preflight
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleSessionBundleRestore(true)}
+              loading={sessionBundleAction === 'dry-run'}
+              disabled={!sessionBundlePathReady || (sessionBundleBusy && sessionBundleAction !== 'dry-run')}
+            >
+              <Upload className="w-4 h-4" />
+              Dry-run
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => handleSessionBundleRestore(false)}
+              loading={sessionBundleAction === 'restore'}
+              disabled={!sessionBundlePathReady || sessionBundlePreflightBlocksRestore || (sessionBundleBusy && sessionBundleAction !== 'restore')}
+            >
+              <Upload className="w-4 h-4" />
+              确认本机恢复
+            </Button>
+          </div>
+
+          {sessionBundleError && (
+            <div className="rounded-md border border-[var(--color-error)]/40 bg-[var(--color-error)]/5 px-3 py-2 text-xs text-[var(--color-error)] break-words">
+              {sessionBundleError}
+            </div>
+          )}
+
+          {sessionBundleExportResult && (
+            <div className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-3 py-3 text-xs space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium text-[var(--color-text-primary)]">{sessionBundleExportResult.bundleId}</span>
+                <span className="text-[var(--color-text-muted)]">{sessionBundleExportResult.exportedAt}</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div>
+                  <div className="text-[var(--color-text-muted)]">profile</div>
+                  <div className="text-[var(--color-text-secondary)] break-all">{sessionBundleExportResult.profileId}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">bindings</div>
+                  <div className="text-[var(--color-text-secondary)]">{sessionBundleExportResult.sessionBindingCount}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">payload</div>
+                  <div className={sessionBundleExportResult.includeSensitivePayloads ? 'text-[var(--color-warning)]' : 'text-[var(--color-text-secondary)]'}>
+                    {sessionBundleExportResult.includeSensitivePayloads ? 'included' : 'redacted'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">schema</div>
+                  <div className="text-[var(--color-text-secondary)]">{sessionBundleExportResult.schemaVersion}</div>
+                </div>
+              </div>
+              <div className="text-[var(--color-text-muted)] break-all">{sessionBundleExportResult.exportPath}</div>
+              <div className="text-[var(--color-text-secondary)]">{sessionBundleExportResult.summary}</div>
+            </div>
+          )}
+
+          {sessionBundlePreflight && (
+            <div className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-3 py-3 text-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className={`font-medium ${statusClass(sessionBundlePreflight.status)}`}>{sessionBundlePreflight.status}</span>
+                <span className="text-[var(--color-text-muted)]">
+                  restoreSupported={String(sessionBundlePreflight.restoreSupported)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div>
+                  <div className="text-[var(--color-text-muted)]">source</div>
+                  <div className="text-[var(--color-text-secondary)] break-all">{sessionBundlePreflight.profileId}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">target</div>
+                  <div className="text-[var(--color-text-secondary)] break-all">{sessionBundlePreflight.targetProfileId}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">missing refs</div>
+                  <div className={sessionBundlePreflight.missingReferenceCount > 0 ? 'text-[var(--color-warning)]' : 'text-[var(--color-text-secondary)]'}>
+                    {sessionBundlePreflight.missingReferenceCount}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">conflicts</div>
+                  <div className={sessionBundlePreflight.conflictCount > 0 ? 'text-[var(--color-warning)]' : 'text-[var(--color-text-secondary)]'}>
+                    {sessionBundlePreflight.conflictCount}
+                  </div>
+                </div>
+              </div>
+              <div className="text-[var(--color-text-secondary)]">{sessionBundlePreflight.summary}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {sessionBundlePreflight.restorePlan.map(step => (
+                  <div key={step.id} className="rounded border border-[var(--color-border-muted)] bg-[var(--color-bg-primary)] px-2 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[var(--color-text-secondary)]">{step.label}</span>
+                      <span className={statusClass(step.status)}>{step.status}</span>
+                    </div>
+                    <div className="mt-1 text-[var(--color-text-muted)] break-words">{step.detail}</div>
+                  </div>
+                ))}
+              </div>
+              {(sessionBundlePreflight.errors.length > 0 || sessionBundlePreflight.warnings.length > 0) && (
+                <div className="space-y-1">
+                  {sessionBundlePreflight.errors.map(item => (
+                    <div key={item} className="text-[var(--color-error)] break-words">{item}</div>
+                  ))}
+                  {sessionBundlePreflight.warnings.map(item => (
+                    <div key={item} className="text-[var(--color-warning)] break-words">{item}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {sessionBundleRestoreResult && (
+            <div className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-3 py-3 text-xs space-y-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div>
+                  <div className="text-[var(--color-text-muted)]">status</div>
+                  <div className={statusClass(sessionBundleRestoreResult.status)}>{sessionBundleRestoreResult.status}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">dry-run</div>
+                  <div className="text-[var(--color-text-secondary)]">{String(sessionBundleRestoreResult.dryRun)}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">write</div>
+                  <div className={sessionBundleRestoreResult.writePerformed ? 'text-[var(--color-warning)]' : 'text-[var(--color-text-secondary)]'}>
+                    {String(sessionBundleRestoreResult.writePerformed)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">restored bindings</div>
+                  <div className="text-[var(--color-text-secondary)]">{sessionBundleRestoreResult.restoredSessionBindingCount}</div>
+                </div>
+              </div>
+              <div className="text-[var(--color-text-secondary)]">{sessionBundleRestoreResult.summary}</div>
+            </div>
+          )}
+
+          <div className="rounded-md border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+            跨机器 portability 仍需要第二 Win11 环境 report；本卡只记录本机 export / preflight / dry-run / confirmed restore operator loop。
+          </div>
         </div>
       </Card>
 

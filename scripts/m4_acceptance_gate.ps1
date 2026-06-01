@@ -257,6 +257,76 @@ function Test-ProviderDryRunContract {
   return New-LocalGateResult "provider_dry_run_contract" "passed" "passed" "M4.4 provider dry-run/failure taxonomy report contract is present; real smoke remains externally blocked" @()
 }
 
+function Test-SessionBundleOperatorContract {
+  $settingsPath = Join-Path $projectRoot "src\modules\settings\SettingsPage.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $desktopTypesPath = Join-Path $projectRoot "src\types\desktop.ts"
+  $rustDesktopPath = Join-Path $projectRoot "src\desktop\mod.rs"
+  $failures = @()
+
+  foreach ($path in @($settingsPath, $desktopServicePath, $desktopTypesPath, $rustDesktopPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $settingsText = if (Test-Path $settingsPath) { Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $desktopTypesText = if (Test-Path $desktopTypesPath) { Get-Content -LiteralPath $desktopTypesPath -Raw -Encoding UTF8 } else { "" }
+  $rustDesktopText = if (Test-Path $rustDesktopPath) { Get-Content -LiteralPath $rustDesktopPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "SessionBundle",
+      "exportSessionBundle",
+      "preflightSessionBundleImport",
+      "restoreSessionBundle",
+      "Dry-run",
+      "handleSessionBundleRestore",
+      "writePerformed",
+      "portability",
+      "allowProfileOverwrite",
+      "confirm("
+    )) {
+    if ($settingsText -notmatch [regex]::Escape($token)) {
+      $failures += "Settings SessionBundle operator UI missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("export_session_bundle", "preflight_session_bundle_import", "restore_session_bundle")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing SessionBundle command wrapper: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "DesktopSessionBundleExport",
+      "DesktopSessionBundleImportPreflight",
+      "DesktopSessionBundleRestoreResult",
+      "restoreSupported",
+      "writePerformed"
+    )) {
+    if ($desktopTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop types missing SessionBundle type marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "export_desktop_session_bundle",
+      "preflight_desktop_session_bundle_import",
+      "restore_desktop_session_bundle",
+      "session_bundle_import_preflight_and_restore_write_confirmed_copy"
+    )) {
+    if ($rustDesktopText -notmatch [regex]::Escape($token)) {
+      $failures += "Rust desktop SessionBundle implementation/test marker missing: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "session_bundle_operator_contract" "missing_coverage" "failed" "M4.6 SessionBundle operator source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "session_bundle_operator_contract" "passed" "passed" "M4.6 SessionBundle export/preflight/dry-run/confirmed local restore operator loop is wired in UI/API; cross-machine proof remains externally blocked" @()
+}
+
 $liveTruthExitCode = $null
 $providerPreflightExitCode = $null
 Invoke-LiveTruthGuard
@@ -432,6 +502,7 @@ foreach ($spec in $gateSpecs) {
 
 $gates += Test-AutomationPrimitiveContract
 $gates += Test-ProviderDryRunContract
+$gates += Test-SessionBundleOperatorContract
 
 $failedGates = @($gates | Where-Object { $_.classification -eq "failed" })
 $expectedBlockedGates = @($gates | Where-Object { $_.classification -eq "expected_blocked" })
@@ -446,7 +517,7 @@ $status = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v3"
+  schemaVersion = "m4_acceptance_gate_v4"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
@@ -464,7 +535,8 @@ $report = [ordered]@{
     "Live truth drift, missing critical reports, unreadable reports, and passed reports with remaining blockers fail this gate.",
     "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set and refreshes provider acceptance preflight unless -SkipProviderPreflightRefresh is set; external gates are aggregated from latest reports.",
     "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
-    "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes."
+    "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
+    "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists."
   )
 }
 
