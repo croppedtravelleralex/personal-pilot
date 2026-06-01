@@ -14,6 +14,10 @@ import type {
   DesktopCompileTemplateRunRequest,
   DesktopCompileTemplateRunResult,
   DesktopCreateProfileInput,
+  DesktopCoreSyncGroup,
+  DesktopCoreSyncOperation,
+  DesktopCoreSyncWindowPlacement,
+  DesktopCoreWorkbenchTask,
   DesktopDirectoryTarget,
   DesktopImportExportSkeleton,
   DesktopJsonValue,
@@ -565,8 +569,8 @@ export const pruneEventLog = (before: string): Promise<number> =>
 export const exportEventLog = (query: DesktopEventLogQueryInput): Promise<string> =>
   desktopRpc<string>("EventLogExport", [query]);
 
-export const synchronizerListGroups = (): Promise<unknown[]> =>
-  desktopRpc<unknown[]>("SynchronizerListGroups");
+export const synchronizerListGroups = (): Promise<DesktopCoreSyncGroup[]> =>
+  desktopRpc<DesktopCoreSyncGroup[]>("SynchronizerListGroups");
 
 export const synchronizerBroadcastNavigate = (groupId: string, url: string): Promise<void> =>
   desktopRpc<void>("SynchronizerBroadcastNavigate", [groupId, url]);
@@ -601,16 +605,16 @@ export const identityReportProfile = (profileId: string): Promise<unknown> =>
 export const synchronizerArrangeProfiles = (
   profileIds: string[],
   layout: "grid" | "main-left",
-): Promise<unknown[]> =>
-  desktopRpc<unknown[]>("SynchronizerArrangeProfiles", [profileIds, layout]);
+): Promise<DesktopCoreSyncWindowPlacement[]> =>
+  desktopRpc<DesktopCoreSyncWindowPlacement[]>("SynchronizerArrangeProfiles", [profileIds, layout]);
 
-export const synchronizerGetOperationLog = (limit = 50): Promise<unknown[]> =>
-  desktopRpc<unknown[]>("SynchronizerGetOperationLog", [limit]);
+export const synchronizerGetOperationLog = (limit = 50): Promise<DesktopCoreSyncOperation[]> =>
+  desktopRpc<DesktopCoreSyncOperation[]>("SynchronizerGetOperationLog", [limit]);
 
-export const synchronizerListTasks = (limit = 200): Promise<unknown[]> =>
-  desktopRpc<unknown[]>("SynchronizerListTasks", [limit]);
+export const synchronizerListTasks = (limit = 200): Promise<DesktopCoreWorkbenchTask[]> =>
+  desktopRpc<DesktopCoreWorkbenchTask[]>("SynchronizerListTasks", [limit]);
 
-export const synchronizerSaveTasks = (tasks: unknown[]): Promise<void> =>
+export const synchronizerSaveTasks = (tasks: DesktopCoreWorkbenchTask[]): Promise<void> =>
   desktopRpc<void>("SynchronizerSaveTasks", [tasks]);
 
 export const workbenchListDetectionResults = (

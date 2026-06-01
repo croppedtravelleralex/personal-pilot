@@ -592,6 +592,68 @@ export type DesktopJsonValue =
   | DesktopJsonValue[]
   | { [key: string]: DesktopJsonValue };
 
+export interface DesktopCoreSyncWindow {
+  profileId: string;
+  profileName: string;
+  url: string;
+  title: string;
+  debugPort: number;
+  pid: number;
+  status: "running" | "loading" | string;
+  groupId: string;
+}
+
+export interface DesktopCoreSyncGroup {
+  id: string;
+  name: string;
+  windows: DesktopCoreSyncWindow[];
+}
+
+export interface DesktopCoreSyncOperation {
+  id: string;
+  type: string;
+  groupId: string;
+  payload?: Record<string, unknown>;
+  timestamp: string;
+  status: string;
+  error?: string;
+}
+
+export interface DesktopCoreSyncWindowPlacement {
+  profileId: string;
+  profileName: string;
+  pid: number;
+  found: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  error?: string;
+}
+
+export type DesktopCoreWorkbenchTaskType =
+  | "start"
+  | "stop"
+  | "navigate"
+  | "refresh"
+  | "activate"
+  | "fingerprint-health"
+  | "screenshot";
+
+export type DesktopCoreWorkbenchTaskStatus = "pending" | "running" | "success" | "error";
+
+export interface DesktopCoreWorkbenchTask {
+  id: string;
+  type: DesktopCoreWorkbenchTaskType | string;
+  profileId: string;
+  profileName: string;
+  detail: string;
+  status: DesktopCoreWorkbenchTaskStatus | string;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+}
+
 export type DesktopProfileStatus = "active" | "draft" | "disabled" | string;
 
 export type DesktopProfileRuntimeStatus =

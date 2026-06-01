@@ -391,7 +391,7 @@ export function onBrowserInstanceLifecycle(
 }
 
 export function listSyncGroups(): Promise<SyncGroup[]> {
-  return synchronizerListGroups() as Promise<SyncGroup[]>
+  return synchronizerListGroups()
 }
 
 export function broadcastNavigate(groupId: string, url: string): Promise<void> {
@@ -443,15 +443,15 @@ export async function checkWorkbenchIdentityReport(profileId: string): Promise<W
 }
 
 export function arrangeProfileWindows(profileIds: string[], layout: 'grid' | 'main-left'): Promise<SyncWindowPlacement[]> {
-  return synchronizerArrangeProfiles(profileIds, layout) as Promise<SyncWindowPlacement[]>
+  return synchronizerArrangeProfiles(profileIds, layout)
 }
 
 export function getSyncOperationLog(limit?: number): Promise<SyncOperation[]> {
-  return synchronizerGetOperationLog(limit ?? 50) as Promise<SyncOperation[]>
+  return synchronizerGetOperationLog(limit ?? 50)
 }
 
 export function listWorkbenchTasks(limit?: number): Promise<WorkbenchTask[]> {
-  return synchronizerListTasks(limit ?? 200) as Promise<WorkbenchTask[]>
+  return synchronizerListTasks(limit ?? 200)
 }
 
 export function saveWorkbenchTasks(tasks: WorkbenchTask[]): Promise<void> {

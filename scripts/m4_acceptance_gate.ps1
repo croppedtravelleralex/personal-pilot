@@ -327,6 +327,64 @@ function Test-SessionBundleOperatorContract {
   return New-LocalGateResult "session_bundle_operator_contract" "passed" "passed" "M4.6 SessionBundle export/preflight/dry-run/confirmed local restore operator loop is wired in UI/API; cross-machine proof remains externally blocked" @()
 }
 
+function Test-TypedFacadeShrinkContract {
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $desktopTypesPath = Join-Path $projectRoot "src\types\desktop.ts"
+  $syncApiPath = Join-Path $projectRoot "src\modules\synchronizer\api.ts"
+  $failures = @()
+
+  foreach ($path in @($desktopServicePath, $desktopTypesPath, $syncApiPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $desktopTypesText = if (Test-Path $desktopTypesPath) { Get-Content -LiteralPath $desktopTypesPath -Raw -Encoding UTF8 } else { "" }
+  $syncApiText = if (Test-Path $syncApiPath) { Get-Content -LiteralPath $syncApiPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "DesktopCoreSyncGroup",
+      "DesktopCoreSyncOperation",
+      "DesktopCoreSyncWindowPlacement",
+      "DesktopCoreWorkbenchTask"
+    )) {
+    if ($desktopTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop shared type missing: $token"
+    }
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service wrapper does not use shared type: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "synchronizerListGroups = (): Promise<unknown[]>",
+      "synchronizerArrangeProfiles = (`r`n  profileIds: string[],`r`n  layout: `"grid`" | `"main-left`",`r`n): Promise<unknown[]>",
+      "synchronizerGetOperationLog = (limit = 50): Promise<unknown[]>",
+      "synchronizerListTasks = (limit = 200): Promise<unknown[]>"
+    )) {
+    if ($desktopServiceText -match [regex]::Escape($token)) {
+      $failures += "desktop service still exposes unknown typed synchronizer facade: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "synchronizerListGroups() as Promise<SyncGroup[]>",
+      "synchronizerArrangeProfiles(profileIds, layout) as Promise<SyncWindowPlacement[]>",
+      "synchronizerGetOperationLog(limit ?? 50) as Promise<SyncOperation[]>",
+      "synchronizerListTasks(limit ?? 200) as Promise<WorkbenchTask[]>"
+    )) {
+    if ($syncApiText -match [regex]::Escape($token)) {
+      $failures += "synchronizer API still casts high-traffic facade result: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "typed_facade_shrink_contract" "missing_coverage" "failed" "M4.8 typed facade shrink source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 high-traffic synchronizer bridge results use shared DTO types instead of unknown[] casts; Wails bridge remains transitional" @()
+}
+
 $liveTruthExitCode = $null
 $providerPreflightExitCode = $null
 Invoke-LiveTruthGuard
@@ -503,6 +561,7 @@ foreach ($spec in $gateSpecs) {
 $gates += Test-AutomationPrimitiveContract
 $gates += Test-ProviderDryRunContract
 $gates += Test-SessionBundleOperatorContract
+$gates += Test-TypedFacadeShrinkContract
 
 $failedGates = @($gates | Where-Object { $_.classification -eq "failed" })
 $expectedBlockedGates = @($gates | Where-Object { $_.classification -eq "expected_blocked" })
@@ -536,7 +595,8 @@ $report = [ordered]@{
     "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set and refreshes provider acceptance preflight unless -SkipProviderPreflightRefresh is set; external gates are aggregated from latest reports.",
     "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
-    "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists."
+    "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
+    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic bridge DTOs without removing the transitional Wails/core bridge."
   )
 }
 

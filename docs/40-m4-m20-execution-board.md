@@ -134,3 +134,13 @@ Status: started 2026-06-01.
 3. Extend M4 gate with `session_bundle_operator_contract` source checks for UI, desktop service wrapper, TS types, and Rust implementation/test markers.
 4. Verify with `pnpm typecheck`, M4 gate, and diff hygiene.
 5. Continue next with actual desktop/profile same-run evidence, typed facade shrink, runtime adapter operator loop, and M5 performance work.
+
+## Seventh Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Start M4.8 typed facade shrink by moving high-traffic synchronizer/workbench core bridge DTOs into `src/types/desktop.ts`.
+2. Update `src/services/desktop.ts` so synchronizer list/arrange/log/tasks wrappers return shared DTOs instead of `unknown[]`.
+3. Remove matching `as Promise<...>` casts from `src/modules/synchronizer/api.ts` while preserving the transitional Wails/core bridge boundary.
+4. Extend M4 gate with `typed_facade_shrink_contract` source checks.
+5. Continue next with remaining browser facade shrink and actual desktop/profile same-run evidence.
