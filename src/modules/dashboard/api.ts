@@ -1,7 +1,8 @@
 import type { DashboardStats } from './types'
-import { collectValidationReport, listEvidenceReports } from '../../services/desktop'
+import { collectValidationReport, listEvidenceReports, readReleaseSmokeContract } from '../../services/desktop'
 import type {
   DesktopEvidenceReportHistory,
+  DesktopReleaseSmokeContract,
   DesktopValidationBrowserSignal,
   DesktopValidationReport,
 } from '../../types/desktop'
@@ -61,6 +62,15 @@ export async function fetchEvidenceReportHistory(): Promise<DesktopEvidenceRepor
       reports: [],
       summary: 'Evidence report history unavailable',
     }
+  }
+}
+
+export async function fetchReleaseSmokeContract(): Promise<DesktopReleaseSmokeContract | null> {
+  try {
+    return await readReleaseSmokeContract()
+  } catch (e) {
+    console.error('fetchReleaseSmokeContract error:', e)
+    return null
   }
 }
 

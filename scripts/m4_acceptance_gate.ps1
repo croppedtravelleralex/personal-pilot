@@ -385,6 +385,72 @@ function Test-TypedFacadeShrinkContract {
   return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 high-traffic synchronizer bridge results use shared DTO types instead of unknown[] casts; Wails bridge remains transitional" @()
 }
 
+function Test-RuntimeAdapterOperatorContract {
+  $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $desktopTypesPath = Join-Path $projectRoot "src\types\desktop.ts"
+  $failures = @()
+
+  foreach ($path in @($dashboardPath, $dashboardApiPath, $desktopServicePath, $desktopTypesPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $dashboardText = if (Test-Path $dashboardPath) { Get-Content -LiteralPath $dashboardPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardApiText = if (Test-Path $dashboardApiPath) { Get-Content -LiteralPath $dashboardApiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $desktopTypesText = if (Test-Path $desktopTypesPath) { Get-Content -LiteralPath $desktopTypesPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "Runtime Adapter",
+      "fetchReleaseSmokeContract",
+      "DesktopRuntimeAdapterContractItem",
+      "DesktopReleaseSmokeContract",
+      "runtimeAdapterEvidenceScore",
+      "rankedRuntimeAdapters",
+      "adapter.blockers.slice(0, 2)",
+      "profileRuntimeEvidence",
+      "fingerprintRuntimeDepth",
+      "releaseContract"
+    )) {
+    if ($dashboardText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard runtime adapter operator UI missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchReleaseSmokeContract", "readReleaseSmokeContract", "DesktopReleaseSmokeContract")) {
+    if ($dashboardApiText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard API missing runtime adapter contract marker: $token"
+    }
+  }
+
+  foreach ($token in @("readReleaseSmokeContract", "read_release_smoke_contract")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing release smoke contract wrapper: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "DesktopRuntimeAdapterContractItem",
+      "DesktopReleaseSmokeContract",
+      "adapterContracts",
+      "profileRuntimeEvidence",
+      "fingerprintRuntimeDepth",
+      "blockers"
+    )) {
+    if ($desktopTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop shared type missing runtime adapter marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "runtime_adapter_operator_contract" "missing_coverage" "failed" "M4.7 runtime adapter operator source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "runtime_adapter_operator_contract" "passed" "passed" "M4.7 runtime adapter evidence is visible and ranked in Dashboard; full headed realism remains externally blocked" @()
+}
+
 $liveTruthExitCode = $null
 $providerPreflightExitCode = $null
 Invoke-LiveTruthGuard
@@ -562,6 +628,7 @@ $gates += Test-AutomationPrimitiveContract
 $gates += Test-ProviderDryRunContract
 $gates += Test-SessionBundleOperatorContract
 $gates += Test-TypedFacadeShrinkContract
+$gates += Test-RuntimeAdapterOperatorContract
 
 $failedGates = @($gates | Where-Object { $_.classification -eq "failed" })
 $expectedBlockedGates = @($gates | Where-Object { $_.classification -eq "expected_blocked" })
@@ -576,7 +643,7 @@ $status = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v4"
+  schemaVersion = "m4_acceptance_gate_v5"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
@@ -596,7 +663,8 @@ $report = [ordered]@{
     "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
-    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic bridge DTOs without removing the transitional Wails/core bridge."
+    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic bridge DTOs without removing the transitional Wails/core bridge.",
+    "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports."
   )
 }
 

@@ -144,3 +144,13 @@ Status: started 2026-06-01.
 3. Remove matching `as Promise<...>` casts from `src/modules/synchronizer/api.ts` while preserving the transitional Wails/core bridge boundary.
 4. Extend M4 gate with `typed_facade_shrink_contract` source checks.
 5. Continue next with remaining browser facade shrink and actual desktop/profile same-run evidence.
+
+## Eighth Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Close the local M4.7 runtime adapter operator visibility gap by reading the release smoke contract in Dashboard.
+2. Rank runtime adapters by evidence strength and show adapter id, runner kind, status, profile evidence, fingerprint depth, and top blockers.
+3. Extend M4 gate with `runtime_adapter_operator_contract` source checks for Dashboard UI, Dashboard API, desktop service wrapper, and shared TS types.
+4. Keep full headed realism, B1-B5, remote proxy/TLS, provider, cross-machine portability, AdsPower refresh, and full `450` observed/replay coverage externally blocked until matching reports exist.
+5. Continue next with actual desktop/profile same-run evidence, remaining browser facade shrink, and M5 release performance mitigation.

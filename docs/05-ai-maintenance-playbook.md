@@ -47,4 +47,5 @@
 - 文档-only 改动也要检查 canonical 入口是否存在且互相指向有效文件。
 - 涉及 M4 provider readiness 时，`scripts/m4_acceptance_gate.ps1` 会刷新 provider preflight；`provider_dry_run_contract` passed 只代表本地 dry-run/failure taxonomy 报告完整，真实 provider smoke 仍必须单独保留 blocked/accepted 证据。
 - 涉及 M4 SessionBundle operator loop 时，`session_bundle_operator_contract` passed 只代表 Settings UI、desktop wrapper、TS 类型和 Rust 本机 export/preflight/dry-run/confirmed restore chain 已接通；跨机器 portability 仍必须保留 blocked，直到第二环境 report 存在。
+- 涉及 M4 runtime adapter operator loop 时，`runtime_adapter_operator_contract` passed 只代表 Dashboard 已读取 release smoke contract，并按证据强度展示 adapter、runner、profile/fingerprint evidence 和 blocker；完整 headed realism、B1-B5、远程代理/TLS、provider、portability 和 AdsPower refresh 仍按各自 report 判定。
 - 涉及 profile-browser comparison 时，先用 Dashboard 的 `采集 WebView` 在真实桌面 WebView 中生成 desktop report，再在同一时间窗口刷新 profile-browser report；`profile_browser_comparison_gate` v3 只有双边同窗且 category 可比才允许 passed。

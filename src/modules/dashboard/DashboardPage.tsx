@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react'
 import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings, Activity, AlertTriangle, CheckCircle2, Clock, ScanSearch } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button, Card, toast } from '../../shared/components'
-import { collectDesktopWebViewEvidence, fetchDashboardStats, fetchEvidenceReportHistory, reloadConfig } from './api'
+import { collectDesktopWebViewEvidence, fetchDashboardStats, fetchEvidenceReportHistory, fetchReleaseSmokeContract, reloadConfig } from './api'
 import type { DashboardStats } from './types'
-import type { DesktopEvidenceReportHistory, DesktopEvidenceReportSummary, DesktopValidationBrowserSignal } from '../../types/desktop'
+import type {
+  DesktopEvidenceReportHistory,
+  DesktopEvidenceReportSummary,
+  DesktopReleaseSmokeContract,
+  DesktopRuntimeAdapterContractItem,
+  DesktopValidationBrowserSignal,
+} from '../../types/desktop'
 
 interface StatCardProps {
   title: string
@@ -97,6 +103,29 @@ function latestReportsByKind(history: DesktopEvidenceReportHistory): Record<stri
 
 function reportFileName(reportPath: string): string {
   return reportPath.split(/[\\/]/).pop() || reportPath
+}
+
+function runtimeAdapterEvidenceScore(adapter: DesktopRuntimeAdapterContractItem): number {
+  const value = [
+    adapter.status,
+    adapter.profileRuntimeEvidence,
+    adapter.fingerprintRuntimeDepth,
+    adapter.processLifecycleStatus,
+    adapter.cdpAttachStatus,
+  ].join(' ').toLowerCase()
+  if (value.includes('real_binary_validation_probe') || value.includes('profile_browser_validation_probe_observed')) return 500
+  if (value.includes('real_binary_task') || value.includes('minimal_real_binary_task_passed')) return 400
+  if (value.includes('source_test') || value.includes('source_contract')) return 300
+  if (value.includes('warning_stub')) return 100
+  if (value.includes('blocked')) return 0
+  return 200
+}
+
+function rankedRuntimeAdapters(contract: DesktopReleaseSmokeContract | null): DesktopRuntimeAdapterContractItem[] {
+  return [...(contract?.adapterContracts ?? [])].sort((left, right) => (
+    runtimeAdapterEvidenceScore(right) - runtimeAdapterEvidenceScore(left)
+    || left.adapterId.localeCompare(right.adapterId)
+  ))
 }
 
 function desktopWebViewSignal(
@@ -343,6 +372,7 @@ export function DashboardPage() {
     reports: [],
     summary: '',
   })
+  const [releaseContract, setReleaseContract] = useState<DesktopReleaseSmokeContract | null>(null)
 
   useEffect(() => {
     void load()
@@ -352,12 +382,14 @@ export function DashboardPage() {
     setLoading(true)
     try {
       await reloadConfig()
-      const [nextStats, nextEvidenceHistory] = await Promise.all([
+      const [nextStats, nextEvidenceHistory, nextReleaseContract] = await Promise.all([
         fetchDashboardStats(),
         fetchEvidenceReportHistory(),
+        fetchReleaseSmokeContract(),
       ])
       setStats(nextStats)
       setEvidenceHistory(nextEvidenceHistory)
+      setReleaseContract(nextReleaseContract)
     } finally {
       setLoading(false)
     }
@@ -378,6 +410,7 @@ export function DashboardPage() {
 
   const v = (n: number) => (loading ? '-' : n.toString())
   const evidenceByKind = latestReportsByKind(evidenceHistory)
+  const runtimeAdapters = rankedRuntimeAdapters(releaseContract)
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -486,6 +519,47 @@ export function DashboardPage() {
           {EVIDENCE_KINDS.map((item) => (
             <EvidenceRow key={item.kind} label={item.label} report={evidenceByKind[item.kind]} />
           ))}
+        </div>
+      </Card>
+
+      <Card
+        title="Runtime Adapter"
+        subtitle={releaseContract
+          ? `${releaseContract.measurementStatus} · ${runtimeAdapters.length} adapters`
+          : 'release contract unavailable'}
+      >
+        <div className="divide-y divide-[var(--color-border-muted)]">
+          {runtimeAdapters.length === 0 && (
+            <div className="py-3 text-sm text-[var(--color-text-muted)]">no runtime adapter contract</div>
+          )}
+          {runtimeAdapters.map(adapter => {
+            const tone = statusTone(adapter.status)
+            const blockers = adapter.blockers.slice(0, 2)
+            return (
+              <div key={adapter.adapterId} className="grid grid-cols-[minmax(112px,160px)_minmax(160px,1fr)] gap-3 py-3 lg:grid-cols-[minmax(128px,180px)_minmax(180px,1fr)_minmax(200px,2fr)]">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-[var(--color-text-primary)]">{adapter.adapterId}</div>
+                  <div className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">{adapter.runnerKind}</div>
+                </div>
+                <div className="min-w-0">
+                  <span className={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${tone.className}`}>
+                    <span className="shrink-0">{tone.icon}</span>
+                    <span className="truncate">{adapter.status}</span>
+                  </span>
+                  <div className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">
+                    score={runtimeAdapterEvidenceScore(adapter)}
+                  </div>
+                </div>
+                <div className="col-span-2 min-w-0 text-xs text-[var(--color-text-muted)] lg:col-span-1">
+                  <div className="truncate">{adapter.profileRuntimeEvidence}</div>
+                  <div className="mt-1 truncate text-[var(--color-text-secondary)]">{adapter.fingerprintRuntimeDepth}</div>
+                  {blockers.map(blocker => (
+                    <div key={blocker} className="mt-1 truncate text-[var(--color-warning)]">{blocker}</div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </Card>
     </div>
