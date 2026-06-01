@@ -87,7 +87,11 @@ if ($RunRustTests) {
 if ($RunReleasePerformanceSmoke) {
   try {
     & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "release_performance_smoke.ps1")
-    $optionalResults += [ordered]@{ id = "release_performance_smoke"; status = "passed"; command = "powershell -ExecutionPolicy Bypass -File scripts/release_performance_smoke.ps1" }
+    if ($LASTEXITCODE -eq 0) {
+      $optionalResults += [ordered]@{ id = "release_performance_smoke"; status = "passed"; command = "powershell -ExecutionPolicy Bypass -File scripts/release_performance_smoke.ps1"; exitCode = $LASTEXITCODE }
+    } else {
+      $optionalResults += [ordered]@{ id = "release_performance_smoke"; status = "failed"; command = "powershell -ExecutionPolicy Bypass -File scripts/release_performance_smoke.ps1"; exitCode = $LASTEXITCODE; error = "release_performance_smoke exited non-zero" }
+    }
   } catch {
     $optionalResults += [ordered]@{ id = "release_performance_smoke"; status = "failed"; command = "powershell -ExecutionPolicy Bypass -File scripts/release_performance_smoke.ps1"; error = $_.Exception.Message }
   }

@@ -1,6 +1,6 @@
 # 外部分发准备说明
 
-Updated: 2026-05-23 (Asia/Shanghai)
+Updated: 2026-06-01 (Asia/Shanghai)
 
 ## 结论
 
@@ -19,7 +19,7 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 
 1. Provider closure：CAPTCHA / SMS / Email 已有 readiness surface 和 blockers，但真实 provider smoke、manager wiring、CDP detect/fill 和 operator 闭环未完成。
 2. Profile portability：`SessionBundle` export/import/preflight/dry-run/confirmed local restore 已落地，但跨机器 portability smoke 未完成。
-3. Runtime measurement：P14 已有 release artifact 实测入口和 report；当前 `personal-pilot-tauri.exe` smoke 为 warning，`10274ms` cold start、`672MB` idle RSS、`22` processes 均超过默认预算，外部分发前应先做性能 mitigation 或明确记录例外。
+3. Runtime measurement：M5 已有 release health v2 report 和 gate；当前 `personal-pilot-tauri.exe` clean smoke 仍为 warning / `budgetStatus=over_budget`，`941ms` cold start passed，但 `467MB` idle RSS 和 `9` processes 超过默认预算。外部分发前应先做性能 mitigation 或明确记录例外，不能把 `passed_with_budget_overrun` 写成 performance green。
 4. Validation evidence：P5 Lightpanda/CDP smoke 可重复生成 profile runtime evidence report，但 WebRTC/audio warning、canvas failure 等 failure reason 必须保留。
 5. Fingerprint depth：当前是 `80` declared controls / `26` runtime-projected fields / `450` taxonomy seed，不是全量 observed fingerprint coverage。
 6. Behavior depth：当前是 `13` shipped primitives / `8` page archetypes / `450` taxonomy seed，不是完整 replay taxonomy。
@@ -33,7 +33,7 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 2. 首屏 Dashboard、Profiles、Proxies、Automation、Synchronizer、Logs、Settings、Validation 页面可打开。
 3. Settings 的 CAPTCHA / SMS / Email readiness 能展示 blockers，不把未配置 provider 显示为 ready。
 4. Validation Board 能读取最近 report history，并能导出 profile evidence package。
-5. Overview runtime posture 能显示 release measurement pending，而不是把 dev-mode 指标当成 release 实测。
+5. Overview/Dashboard runtime posture 能显示 release health/budget warning，而不是把 dev-mode 指标或 `passed_with_budget_overrun` 当成 release performance green。
 6. Logs 页面分页或增量加载正常，大量日志不会一次性全量渲染。
 7. Profile / SessionBundle 的 export/import preflight/dry-run/confirmed local restore 在测试 profile 上可控执行，不误写真实生产 profile。
 
@@ -45,7 +45,7 @@ PersonaPilot 当前具备 Win11 本地安装包生成能力，可以进入受控
 - 已有 validation evidence、profile/session bundle、provider readiness、automation audit 和 runtime posture 的本地可视化能力。
 - 当前还不是完整 AdsPower 级 antidetect/browser-kernel platform。
 - 当前不托管 Chromium / Firefox fork，外部浏览器能力只能通过 adapter contract 逐步接入。
-- Provider、profile portability、release performance mitigation 和 `450` taxonomy seed 到 observed/replay runtime 的转化都属于下一阶段验收项。
+- Provider、profile portability、release performance mitigation 和 `450` taxonomy seed 到 observed/replay runtime 的转化都属于下一阶段验收项；M5 health gate 只是本机 release budget report contract，不是性能达标证明。
 
 ## P20 外部条件 smoke gate
 

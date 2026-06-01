@@ -3,6 +3,7 @@ param(
   [int]$ReadyWaitSeconds = 8,
   [int]$ReadyPollMilliseconds = 250,
   [int]$IdleSampleSeconds = 5,
+  [string]$DriftReason = "",
   [switch]$CleanExistingInstances,
   [string]$OutputDir = "data/reports/release-smoke"
 )
@@ -65,7 +66,7 @@ function Measure-Tree([int]$RootPid) {
         Group-Object -Property ProcessName |
         Sort-Object -Property Name |
         ForEach-Object {
-          [ordered]@{
+          [pscustomobject][ordered]@{
             name = $_.Name
             count = $_.Count
             rssMb = [int][Math]::Round((($_.Group | Measure-Object -Property WorkingSet64 -Sum).Sum) / 1MB)
@@ -128,6 +129,104 @@ function Wait-ReleaseReady([int]$RootPid, [int]$TimeoutSeconds, [int]$PollMillis
   }
 }
 
+function Get-DriftTarget([int]$Target) {
+  return [int][Math]::Ceiling(($Target * 110) / 100.0)
+}
+
+function New-BudgetResult([string]$Id, [string]$Label, [string]$Unit, [int]$Target, [object]$Measured, [string]$MitigationHint, [string]$DriftReason) {
+  $driftTarget = Get-DriftTarget $Target
+  $measuredValue = if ($null -eq $Measured) { $null } else { [int]$Measured }
+  $status = "not_measured"
+  $excess = $null
+  $excessPercent = $null
+  $metricDriftReason = $null
+
+  if ($null -ne $measuredValue) {
+    $excess = [int]($measuredValue - $Target)
+    $excessPercent = [Math]::Round((($measuredValue - $Target) * 100.0) / $Target, 1)
+    if ($measuredValue -le $Target) {
+      $status = "passed"
+    } elseif ($measuredValue -le $driftTarget) {
+      $status = "within_10_percent_drift"
+      $metricDriftReason = if ([string]::IsNullOrWhiteSpace($DriftReason)) { $null } else { $DriftReason }
+    } else {
+      $status = "over_budget"
+    }
+  }
+
+  return [pscustomobject][ordered]@{
+    id = $Id
+    label = $Label
+    unit = $Unit
+    target = $Target
+    driftTarget = $driftTarget
+    measured = $measuredValue
+    status = $status
+    excess = $excess
+    excessPercent = $excessPercent
+    driftReason = $metricDriftReason
+    mitigationHint = $MitigationHint
+  }
+}
+
+function Get-BudgetStatus([array]$BudgetResults, [string]$SmokeStatus, [string]$DriftReason) {
+  if ($SmokeStatus -eq "failed") { return "failed_smoke" }
+  if (@($BudgetResults | Where-Object { $_.status -eq "over_budget" }).Count -gt 0) {
+    return "over_budget"
+  }
+  if (@($BudgetResults | Where-Object { $_.status -eq "within_10_percent_drift" }).Count -gt 0) {
+    if ([string]::IsNullOrWhiteSpace($DriftReason)) {
+      return "within_10_percent_drift_requires_reason"
+    }
+    return "within_10_percent_drift_recorded"
+  }
+  if (@($BudgetResults | Where-Object { $_.status -eq "not_measured" }).Count -gt 0) {
+    return "unmeasured"
+  }
+  return "within_budget"
+}
+
+function Get-PrimaryBottleneck([array]$BudgetResults) {
+  $misses = @(
+    $BudgetResults |
+      Where-Object { $null -ne $_.measured -and $_.measured -gt $_.target } |
+      Sort-Object -Property excessPercent -Descending
+  )
+  if ($misses.Count -eq 0) { return "none" }
+  return $misses[0].id
+}
+
+function Get-ReleaseMitigationHints([array]$BudgetResults, [object]$Idle) {
+  $hints = @()
+  foreach ($result in $BudgetResults) {
+    if ($result.status -eq "passed" -or $result.status -eq "not_measured") { continue }
+    $hints += $result.mitigationHint
+  }
+
+  if ($null -ne $Idle) {
+    $webview = @($Idle.processBreakdown | Where-Object { $_.name -like "*WebView*" -or $_.name -like "*msedge*" })
+    if ($webview.Count -gt 0) {
+      $webviewCount = ($webview | Measure-Object -Property count -Sum).Sum
+      $webviewRss = ($webview | Measure-Object -Property rssMb -Sum).Sum
+      $hints += "WebView2 contributes $webviewCount processes and ${webviewRss}MB RSS; keep this visible as a platform cost and avoid eager report/history loading on first paint."
+    }
+
+    $sidecars = @($Idle.processBreakdown | Where-Object {
+      $_.name -in @("personal-pilot-core", "xray", "sing-box", "lightpanda")
+    })
+    if ($sidecars.Count -gt 0) {
+      $sidecarSummary = (($sidecars | ForEach-Object { "$($_.name)x$($_.count)" }) -join ",")
+      $hints += "Sidecar processes detected: $sidecarSummary; use -CleanExistingInstances for smoke and inspect duplicate sidecars before raising performance targets."
+    }
+  }
+
+  if ($hints.Count -eq 0) {
+    $hints += "All measured release health budgets are within target; keep release smoke in the gate before claiming performance green."
+  }
+
+  return @($hints | Select-Object -Unique)
+}
+
 $projectRoot = Resolve-ProjectRoot
 $exe = Resolve-ReleaseExe $projectRoot $ExePath
 $absoluteOutputDir = Join-Path $projectRoot $OutputDir
@@ -172,19 +271,84 @@ finally {
 $coldStartTargetMs = 2000
 $idleRssTargetMb = 220
 $processCountTarget = 4
+
+$budgetResults = @(
+  New-BudgetResult `
+    -Id "cold_start" `
+    -Label "Cold start" `
+    -Unit "ms" `
+    -Target $coldStartTargetMs `
+    -Measured $readyMs `
+    -MitigationHint "Delay heavy startup reads until after first paint, especially report history, logs, and large profile/proxy lists." `
+    -DriftReason $DriftReason
+  New-BudgetResult `
+    -Id "idle_rss" `
+    -Label "Idle RSS" `
+    -Unit "MB" `
+    -Target $idleRssTargetMb `
+    -Measured $(if ($null -ne $idle) { $idle.rssMb } else { $null }) `
+    -MitigationHint "Break down WebView2 and sidecar RSS, then lazy-load non-critical dashboard evidence and long logs." `
+    -DriftReason $DriftReason
+  New-BudgetResult `
+    -Id "process_count" `
+    -Label "Process count" `
+    -Unit "processes" `
+    -Target $processCountTarget `
+    -Measured $(if ($null -ne $idle) { $idle.processCount } else { $null }) `
+    -MitigationHint "Check for duplicate sidecars and stale release instances; record explicit sidecar exceptions instead of treating process overrun as green." `
+    -DriftReason $DriftReason
+)
+
 if ($status -eq "passed") {
   $misses = @()
-  if ($readyMs -gt $coldStartTargetMs) { $misses += "cold_start_target_exceeded" }
-  if ($idle.rssMb -gt $idleRssTargetMb) { $misses += "idle_rss_target_exceeded" }
-  if ($idle.processCount -gt $processCountTarget) { $misses += "process_count_target_exceeded" }
+  foreach ($result in $budgetResults) {
+    if ($null -ne $result.measured -and $result.measured -gt $result.target) {
+      $misses += "$($result.id)_target_exceeded"
+    }
+  }
   if ($misses.Count -gt 0) {
     $status = "warning"
     $failureReason = ($misses -join ",")
   }
 }
 
+$budgetStatus = Get-BudgetStatus $budgetResults $status $DriftReason
+$primaryBottleneck = Get-PrimaryBottleneck $budgetResults
+$exceededMetricIds = @($budgetResults | Where-Object { $null -ne $_.measured -and $_.measured -gt $_.target } | ForEach-Object { $_.id })
+$withinDriftMetricIds = @($budgetResults | Where-Object { $_.status -eq "within_10_percent_drift" } | ForEach-Object { $_.id })
+$hardOverBudgetMetricIds = @($budgetResults | Where-Object { $_.status -eq "over_budget" } | ForEach-Object { $_.id })
+$mitigationHints = Get-ReleaseMitigationHints $budgetResults $idle
+$effectiveDriftReason = if ([string]::IsNullOrWhiteSpace($DriftReason)) {
+  if ($withinDriftMetricIds.Count -gt 0) { "missing_operator_reason" } else { "not_applicable_no_metrics_within_drift" }
+} else {
+  $DriftReason
+}
+$healthStatus = if ($status -eq "failed") {
+  "failed_smoke"
+} elseif ($budgetStatus -eq "within_budget") {
+  "healthy"
+} elseif ($budgetStatus -eq "within_10_percent_drift_recorded") {
+  "drift_tolerated_with_reason"
+} elseif ($budgetStatus -eq "within_10_percent_drift_requires_reason") {
+  "drift_reason_required"
+} else {
+  "budget_overrun"
+}
+$healthNextAction = if ($status -eq "failed") {
+  "Fix release launch/readiness failure, then rerun this smoke."
+} elseif ($budgetStatus -eq "within_budget") {
+  "Keep this report as the current release health baseline and rerun after meaningful startup changes."
+} elseif ($budgetStatus -eq "within_10_percent_drift_recorded") {
+  "Record the drift reason, rerun once, and only tolerate this as short-term variance."
+} elseif ($budgetStatus -eq "within_10_percent_drift_requires_reason") {
+  "Rerun with -DriftReason before accepting any 10 percent release budget drift."
+} else {
+  "Use processBreakdown and mitigationHints to reduce cold start, RSS, or process count before claiming release performance green."
+}
+$healthSummaryText = "Release health $healthStatus; budget=$budgetStatus; primaryBottleneck=$primaryBottleneck; exceeded=$($exceededMetricIds -join ',')."
+
 $report = [ordered]@{
-  schemaVersion = "release_performance_smoke_v1"
+  schemaVersion = "release_performance_smoke_v2"
   generatedAt = (Get-Date).ToString("o")
   startedAt = $startedAt.ToString("o")
   projectRoot = $projectRoot
@@ -192,19 +356,35 @@ $report = [ordered]@{
   status = $status
   failureReason = $failureReason
   readyReason = $readyReason
+  budgetStatus = $budgetStatus
   coldStartTargetMs = $coldStartTargetMs
   measuredColdStartMs = $readyMs
   idleRssTargetMb = $idleRssTargetMb
   measuredIdleRssMb = if ($null -ne $idle) { $idle.rssMb } else { $null }
   processCountTarget = $processCountTarget
   measuredProcessCount = if ($null -ne $idle) { $idle.processCount } else { $null }
+  budgetResults = $budgetResults
+  healthSummary = [ordered]@{
+    status = $healthStatus
+    budgetStatus = $budgetStatus
+    primaryBottleneck = $primaryBottleneck
+    exceededMetricIds = $exceededMetricIds
+    withinDriftMetricIds = $withinDriftMetricIds
+    hardOverBudgetMetricIds = $hardOverBudgetMetricIds
+    driftReason = $effectiveDriftReason
+    driftRule = "Each hard budget allows at most 10 percent temporary drift only when the reason is recorded; safety and live-truth fields allow no drift."
+    nextAction = $healthNextAction
+    summary = $healthSummaryText
+  }
+  mitigationHints = $mitigationHints
   pids = if ($null -ne $idle) { $idle.pids } else { @() }
   processBreakdown = if ($null -ne $idle) { $idle.processBreakdown } else { @() }
   cleanExistingInstances = [bool]$CleanExistingInstances
   notes = @(
     "Measures a release executable, not Vite/dev mode.",
     "Ready time is a local operator smoke approximation based on main window, WebView/child process detection, or timeout survival.",
-    "Use this as evidence input for release smoke, not as a full UX startup profiler."
+    "Use this as evidence input for release smoke, not as a full UX startup profiler.",
+    "budgetStatus and healthSummary classify local release health; warning still means performance green is not allowed."
   )
 }
 

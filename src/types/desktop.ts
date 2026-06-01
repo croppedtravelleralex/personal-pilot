@@ -538,11 +538,31 @@ export interface DesktopReleaseSmokeContract {
   measuredIdleRssMb: number | null;
   processCountTarget: number;
   measuredProcessCount: number | null;
+  budgetStatus: string;
+  releaseHealthStatus: string;
+  releaseHealthSummary: string;
+  releaseHealthNextAction: string;
+  budgetResults: DesktopReleaseBudgetResult[];
+  mitigationHints: string[];
   measurementStatus: string;
   measurementNotes: string[];
   adapterContracts: DesktopRuntimeAdapterContractItem[];
   warnings: string[];
   summary: string;
+}
+
+export interface DesktopReleaseBudgetResult {
+  id: string;
+  label: string;
+  unit: string;
+  target: number;
+  driftTarget: number;
+  measured: number | null;
+  status: string;
+  excess: number | null;
+  excessPercent: number | null;
+  driftReason: string | null;
+  mitigationHint: string;
 }
 
 export interface DesktopBehaviorAuditCoverageItem {

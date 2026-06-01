@@ -12,6 +12,7 @@ PersonaPilot 是一个面向 Windows 11 的本地桌面 operator console，用�
 - 当前主线入口只保留根目录 `personal-pilot-tauri.exe`；release build 的 target 产物只作为临时构建输出，完成后必须同步到根目录并清理。除该 root exe 外，不允许保留其他用户可打开 GUI exe 或旁路 UI。
 - Validation Board 已进入桌面导航，并严格区分 `declared / applied / observed` evidence。
 - P13 已新增外部分发前检查入口：`docs/24-external-distribution-readiness.md`。
+- M5 release health gate 已新增：`scripts/m5_release_health_gate.ps1` 可验收 release performance v2 报告；当前仍是 over budget warning，不能写成 performance green。
 
 维护真相源在 `docs/`。接手、汇报、规划时先读 `/docs/README.md`、`/docs/root-entrypoint-map.md` 和 `/docs/02-current-state.md`，不要把根 README 当成唯一事实来源。
 
@@ -134,5 +135,6 @@ UI 代码不得直接调用 Tauri。
 
 1. 按 `docs/24-external-distribution-readiness.md` 执行外部分发前人工 operator smoke。
 2. 运行 `scripts/release_performance_smoke.ps1`、`scripts/external_distribution_smoke.ps1`、`scripts/session_bundle_portability_smoke.ps1` 和 `scripts/taxonomy_audit.ps1` 生成 evidence report。
-3. 验证 `SessionBundle` 跨机器 profile portability。
-4. 补齐 CAPTCHA/SMS/Email production manager wiring、provider acceptance 和 CDP detect/fill。
+3. 运行 `scripts/m5_release_health_gate.ps1` 检查 release health/budget/mitigation schema，并继续压低 cold start/RSS/process count。
+4. 验证 `SessionBundle` 跨机器 profile portability。
+5. 补齐 CAPTCHA/SMS/Email production manager wiring、provider acceptance 和 CDP detect/fill。

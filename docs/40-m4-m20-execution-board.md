@@ -175,3 +175,13 @@ Status: started 2026-06-01.
 3. Add `m4TotalGate` to the report with local contract status, passed gate ids, failed gate ids, expected blocker ids, external blocker count, and next action.
 4. Update Dashboard evidence history so the new status still renders as expected external blockers, not as a failed gate.
 5. Continue to M5 performance/health only after the v8 gate reports `failed=0`.
+
+## Eleventh Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Start M5 by upgrading `scripts/release_performance_smoke.ps1` to v2 with `budgetStatus`, per-metric `budgetResults`, 10% drift targets, drift reason enforcement, `healthSummary`, `mitigationHints`, and process breakdown hints.
+2. Add `scripts/m5_release_health_gate.ps1` so M5 validates the latest v2 release health report instead of relying on a raw smoke file.
+3. Update desktop release contract and Dashboard evidence history to surface M5 Health, release health status, budget results, and mitigation hints.
+4. Keep `passed_with_budget_overrun` as a valid M5 report-contract result while explicitly forbidding performance green until cold start/RSS/process budgets pass.
+5. Continue next with actual metric mitigation, M6 same-run desktop/profile evidence, M13 report diff/risk trends, or M10 headed repeatability without claiming provider, proxy/TLS, cross-machine, AdsPower, or full `450` coverage.

@@ -543,11 +543,33 @@ pub struct DesktopReleaseSmokeContract {
     pub measured_idle_rss_mb: Option<i64>,
     pub process_count_target: i64,
     pub measured_process_count: Option<i64>,
+    pub budget_status: String,
+    pub release_health_status: String,
+    pub release_health_summary: String,
+    pub release_health_next_action: String,
+    pub budget_results: Vec<DesktopReleaseBudgetResult>,
+    pub mitigation_hints: Vec<String>,
     pub measurement_status: String,
     pub measurement_notes: Vec<String>,
     pub adapter_contracts: Vec<DesktopRuntimeAdapterContractItem>,
     pub warnings: Vec<String>,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopReleaseBudgetResult {
+    pub id: String,
+    pub label: String,
+    pub unit: String,
+    pub target: i64,
+    pub drift_target: i64,
+    pub measured: Option<i64>,
+    pub status: String,
+    pub excess: Option<i64>,
+    pub excess_percent: Option<f64>,
+    pub drift_reason: Option<String>,
+    pub mitigation_hint: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3004,6 +3026,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
     match dir_name {
         "m4-acceptance" => Some("m4_acceptance"),
         "release-smoke" => Some("release_performance"),
+        "m5-release-health" => Some("m5_release_health"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "taxonomy-audit" => Some("taxonomy_audit"),
@@ -3163,8 +3186,31 @@ fn evidence_report_summary_from_json(
                 "M4 acceptance {display_status}: passed={passed} expectedBlocked={expected_blocked} failed={failed}"
             )
         }
+        "m5_release_health" => {
+            let budget_status = value
+                .get("budgetStatus")
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            let failed = value
+                .get("summary")
+                .and_then(|summary| summary.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let budget_count = value
+                .get("summary")
+                .and_then(|summary| summary.get("budgetResultCount"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            format!(
+                "M5 release health {status}: budget={budget_status} checksFailed={failed} budgetResults={budget_count}"
+            )
+        }
         "release_performance" => format!(
-            "release performance {status}: cold_start={}ms rss={}MB processes={}",
+            "release performance {status}: budget={} cold_start={}ms rss={}MB processes={}",
+            value
+                .get("budgetStatus")
+                .and_then(Value::as_str)
+                .unwrap_or("legacy"),
             value
                 .get("measuredColdStartMs")
                 .and_then(Value::as_i64)
@@ -3397,6 +3443,9 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         | ("m4_acceptance", "passed_with_expected_external_blockers") => {
             "expected_external_blockers"
         }
+        ("m5_release_health", "passed_with_budget_overrun")
+        | ("m5_release_health", "passed_with_recorded_drift") => "partial",
+        ("m5_release_health", "passed") => "observed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
             "profile_browser_observed"
         }
@@ -3438,6 +3487,15 @@ fn evidence_next_action(
             "Fix live truth drift, missing reports, unreadable reports, or blocker misclassification, then rerun scripts/m4_acceptance_gate.ps1."
                 .to_string(),
         ),
+        ("m5_release_health", "passed_with_budget_overrun")
+        | ("m5_release_health", "passed_with_recorded_drift") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| Some("Use scripts/release_performance_smoke.ps1 mitigation hints before claiming release performance green.".to_string())),
+        ("m5_release_health", "failed") => Some(
+            "Fix the M5 release health schema/report checks, then rerun scripts/m5_release_health_gate.ps1."
+                .to_string(),
+        ),
         ("remote_proxy_tls", "blocked_remote_proxy_required") => Some(
             "Set PERSONA_PILOT_REMOTE_PROXY_URL or pass -ProxyUrl, then rerun scripts/remote_proxy_tls_probe.ps1."
                 .to_string(),
@@ -3467,6 +3525,17 @@ fn evidence_next_action(
             Some(format!(
                 "Complete B1-B5 evidence before refreshing score: remoteProxyTls={remote}, sessionPortability={session}, providerClosure={provider}."
             ))
+        }
+        ("release_performance", item) if item.contains("warning") || item.contains("failed") => {
+            value
+                .get("healthSummary")
+                .and_then(|summary| value_text(summary, "nextAction"))
+                .or_else(|| {
+                    Some(
+                        "Use scripts/release_performance_smoke.ps1 budgetResults/processBreakdown before claiming release performance green."
+                            .to_string(),
+                    )
+                })
         }
         ("provider_acceptance", item) if item.contains("blocked") => Some(
             "Configure real provider credentials and rerun scripts/provider_acceptance_preflight.ps1."
@@ -3498,6 +3567,7 @@ pub fn list_desktop_evidence_reports(
     for dir_name in [
         "m4-acceptance",
         "release-smoke",
+        "m5-release-health",
         "provider-acceptance",
         "session-portability",
         "taxonomy-audit",
@@ -3668,18 +3738,119 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
     }
 }
 
+fn release_budget_result(
+    id: &str,
+    label: &str,
+    unit: &str,
+    target: i64,
+    measured: Option<i64>,
+    mitigation_hint: &str,
+) -> DesktopReleaseBudgetResult {
+    let drift_target = (target * 110 + 99) / 100;
+    let status = match measured {
+        None => "not_measured",
+        Some(value) if value <= target => "passed",
+        Some(value) if value <= drift_target => "within_10_percent_drift",
+        Some(_) => "over_budget",
+    }
+    .to_string();
+    let excess = measured.map(|value| value - target);
+    let excess_percent = measured
+        .map(|value| (((value - target) as f64 * 100.0 / target as f64) * 10.0).round() / 10.0);
+
+    DesktopReleaseBudgetResult {
+        id: id.to_string(),
+        label: label.to_string(),
+        unit: unit.to_string(),
+        target,
+        drift_target,
+        measured,
+        status,
+        excess,
+        excess_percent,
+        drift_reason: None,
+        mitigation_hint: mitigation_hint.to_string(),
+    }
+}
+
+fn release_budget_results_from_report(
+    report: Option<&Value>,
+    measured_cold_start_ms: Option<i64>,
+    measured_idle_rss_mb: Option<i64>,
+    measured_process_count: Option<i64>,
+) -> Vec<DesktopReleaseBudgetResult> {
+    let parsed = report
+        .and_then(|report| report.get("budgetResults"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    Some(DesktopReleaseBudgetResult {
+                        id: value_text(item, "id")?,
+                        label: value_text(item, "label")
+                            .unwrap_or_else(|| "Release budget".to_string()),
+                        unit: value_text(item, "unit").unwrap_or_default(),
+                        target: item
+                            .get("target")
+                            .and_then(Value::as_i64)
+                            .unwrap_or_default(),
+                        drift_target: item
+                            .get("driftTarget")
+                            .and_then(Value::as_i64)
+                            .unwrap_or_default(),
+                        measured: item.get("measured").and_then(Value::as_i64),
+                        status: value_text(item, "status")
+                            .unwrap_or_else(|| "not_measured".to_string()),
+                        excess: item.get("excess").and_then(Value::as_i64),
+                        excess_percent: item.get("excessPercent").and_then(Value::as_f64),
+                        drift_reason: value_text(item, "driftReason"),
+                        mitigation_hint: value_text(item, "mitigationHint").unwrap_or_default(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if !parsed.is_empty() {
+        return parsed;
+    }
+
+    vec![
+        release_budget_result(
+            "cold_start",
+            "Cold start",
+            "ms",
+            2000,
+            measured_cold_start_ms,
+            "Delay heavy startup reads until after first paint.",
+        ),
+        release_budget_result(
+            "idle_rss",
+            "Idle RSS",
+            "MB",
+            220,
+            measured_idle_rss_mb,
+            "Break down WebView2 and sidecar RSS before claiming performance green.",
+        ),
+        release_budget_result(
+            "process_count",
+            "Process count",
+            "processes",
+            4,
+            measured_process_count,
+            "Check duplicate sidecars and stale release instances.",
+        ),
+    ]
+}
+
 pub fn read_desktop_release_smoke_contract(
     database_url: Option<&str>,
 ) -> DesktopReleaseSmokeContract {
     let generated_at = now_ts_string();
     let settings = read_desktop_settings(database_url);
-    let release_artifact_path = PathBuf::from(&settings.project_root)
-        .join("src-tauri")
-        .join("target")
-        .join("release")
-        .join("bundle")
-        .join("nsis")
-        .join("PersonaPilot_0.1.0_x64-setup.exe");
+    let release_artifact_path =
+        PathBuf::from(&settings.project_root).join("personal-pilot-tauri.exe");
     let release_artifact_present = release_artifact_path.exists();
     let database_url = database_url
         .map(ToOwned::to_owned)
@@ -3701,6 +3872,72 @@ pub fn read_desktop_release_smoke_contract(
         .as_ref()
         .and_then(|report| report.get("status"))
         .and_then(Value::as_str);
+    let budget_results = release_budget_results_from_report(
+        latest_release_report.as_ref(),
+        measured_cold_start_ms,
+        measured_idle_rss_mb,
+        measured_process_count,
+    );
+    let budget_status = latest_release_report
+        .as_ref()
+        .and_then(|report| value_text(report, "budgetStatus"))
+        .unwrap_or_else(|| match latest_release_status {
+            Some("failed") => "failed_smoke".to_string(),
+            Some("warning") => {
+                if budget_results
+                    .iter()
+                    .any(|result| result.status == "over_budget")
+                {
+                    "over_budget".to_string()
+                } else if budget_results.iter().any(|result| {
+                    result.status == "within_10_percent_drift" && result.drift_reason.is_none()
+                }) {
+                    "within_10_percent_drift_requires_reason".to_string()
+                } else {
+                    "within_10_percent_drift_recorded".to_string()
+                }
+            }
+            Some("passed") => "within_budget".to_string(),
+            _ => "pending_operator_measurement".to_string(),
+        });
+    let release_health_status = latest_release_report
+        .as_ref()
+        .and_then(|report| report.get("healthSummary"))
+        .and_then(|summary| value_text(summary, "status"))
+        .unwrap_or_else(|| match budget_status.as_str() {
+            "failed_smoke" => "failed_smoke".to_string(),
+            "within_budget" => "healthy".to_string(),
+            "within_10_percent_drift_recorded" => "drift_tolerated_with_reason".to_string(),
+            "within_10_percent_drift_requires_reason" => "drift_reason_required".to_string(),
+            "pending_operator_measurement" => "pending_operator_measurement".to_string(),
+            _ => "budget_overrun".to_string(),
+        });
+    let release_health_summary = latest_release_report
+        .as_ref()
+        .and_then(|report| report.get("healthSummary"))
+        .and_then(|summary| value_text(summary, "summary"))
+        .unwrap_or_else(|| {
+            format!("Release health {release_health_status}; budget={budget_status}.")
+        });
+    let release_health_next_action = latest_release_report
+        .as_ref()
+        .and_then(|report| report.get("healthSummary"))
+        .and_then(|summary| value_text(summary, "nextAction"))
+        .unwrap_or_else(|| {
+            "Run scripts/release_performance_smoke.ps1 against personal-pilot-tauri.exe and keep warning status until budgets pass.".to_string()
+        });
+    let mitigation_hints = latest_release_report
+        .as_ref()
+        .map(|report| value_string_array(report, "mitigationHints"))
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| {
+            budget_results
+                .iter()
+                .filter(|result| result.status != "passed")
+                .filter(|result| !result.mitigation_hint.is_empty())
+                .map(|result| result.mitigation_hint.clone())
+                .collect()
+        });
     let latest_camoufox_binary_report = latest_report_value(&database_url, "camoufox-binary-task");
     let camoufox_binary_passed = latest_camoufox_binary_report
         .as_ref()
@@ -3774,12 +4011,14 @@ pub fn read_desktop_release_smoke_contract(
     let mut measurement_notes = vec![
         "release artifact exists check is automated; cold start, idle RSS, and process count must come from release smoke reports".to_string(),
         "performance assessment must use release artifacts, not dev-mode metrics".to_string(),
+        "budgetStatus uses hard targets plus a 10 percent drift window; warning is still not performance green".to_string(),
         "headed_external must remain an adapter contract and must not turn this repository into a Chromium/Firefox fork host".to_string(),
     ];
     if let Some(report) = latest_release_report.as_ref() {
         if let Some(reason) = value_text(report, "failureReason") {
             measurement_notes.push(format!("latest release smoke failureReason: {reason}"));
         }
+        measurement_notes.push(release_health_summary.clone());
     }
     let adapter_contracts = vec![
         DesktopRuntimeAdapterContractItem {
@@ -3948,7 +4187,7 @@ pub fn read_desktop_release_smoke_contract(
     let mut warnings = Vec::new();
     if !release_artifact_present {
         warnings
-            .push("release installer artifact is missing; run pnpm desktop:release".to_string());
+            .push("release executable artifact is missing; run pnpm desktop:release".to_string());
     }
     warnings.push(
         "performance targets are contractual baselines; cold start/RSS/process counts still require measured operator smoke"
@@ -3980,6 +4219,12 @@ pub fn read_desktop_release_smoke_contract(
         measured_idle_rss_mb,
         process_count_target: 4,
         measured_process_count,
+        budget_status,
+        release_health_status,
+        release_health_summary,
+        release_health_next_action,
+        budget_results,
+        mitigation_hints,
         measurement_status,
         measurement_notes,
         adapter_contracts,
@@ -9858,30 +10103,58 @@ mod tests {
         let temp_root =
             std::env::temp_dir().join(format!("persona_pilot_evidence_history_{}", Uuid::new_v4()));
         let reports_dir = temp_root.join("reports").join("release-smoke");
+        let m5_reports_dir = temp_root.join("reports").join("m5-release-health");
         fs::create_dir_all(&reports_dir).expect("create reports dir");
+        fs::create_dir_all(&m5_reports_dir).expect("create m5 reports dir");
         let report_path = reports_dir.join("release-performance-smoke-test.json");
         fs::write(
             &report_path,
             serde_json::json!({
-                "schemaVersion": "release_performance_smoke_v1",
+                "schemaVersion": "release_performance_smoke_v2",
                 "generatedAt": "2026-05-23T00:00:00Z",
                 "status": "warning",
+                "budgetStatus": "over_budget",
                 "failureReason": "idle_rss_target_exceeded",
                 "measuredColdStartMs": 9301,
                 "measuredIdleRssMb": 411,
-                "measuredProcessCount": 14
+                "measuredProcessCount": 14,
+                "healthSummary": {
+                    "status": "budget_overrun",
+                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                }
             })
             .to_string(),
         )
         .expect("write report");
+        fs::write(
+            m5_reports_dir.join("m5-release-health-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m5_release_health_gate_v1",
+                "generatedAt": "2026-06-01T00:01:00Z",
+                "status": "passed_with_budget_overrun",
+                "budgetStatus": "over_budget",
+                "summary": {
+                    "failed": 0,
+                    "budgetResultCount": 3,
+                    "healthStatus": "budget_overrun",
+                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m5 report");
 
         let db_url = format!(
             "sqlite://{}",
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 1);
-        let report = &history.reports[0];
+        assert_eq!(history.report_count, 2);
+        let report = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "release_performance")
+            .expect("release performance report");
         assert_eq!(report.kind, "release_performance");
         assert_eq!(report.status, "warning");
         assert_eq!(
@@ -9889,6 +10162,25 @@ mod tests {
             Some("idle_rss_target_exceeded")
         );
         assert!(report.summary.contains("411MB"));
+        assert!(report.summary.contains("budget=over_budget"));
+        assert!(report
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("mitigationHints"));
+        let m5 = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m5_release_health")
+            .expect("m5 release health report");
+        assert_eq!(m5.status, "passed_with_budget_overrun");
+        assert_eq!(m5.evidence_level, "partial");
+        assert!(m5.summary.contains("budget=over_budget"));
+        assert!(m5
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("mitigationHints"));
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -10162,13 +10454,64 @@ mod tests {
         fs::write(
             reports_dir.join("release-performance-smoke-test.json"),
             serde_json::json!({
-                "schemaVersion": "release_performance_smoke_v1",
+                "schemaVersion": "release_performance_smoke_v2",
                 "generatedAt": "2026-05-23T00:00:00Z",
                 "status": "warning",
+                "budgetStatus": "over_budget",
                 "failureReason": "cold_start_target_exceeded,idle_rss_target_exceeded,process_count_target_exceeded",
                 "measuredColdStartMs": 9301,
                 "measuredIdleRssMb": 411,
-                "measuredProcessCount": 14
+                "measuredProcessCount": 14,
+                "budgetResults": [
+                    {
+                        "id": "cold_start",
+                        "label": "Cold start",
+                        "unit": "ms",
+                        "target": 2000,
+                        "driftTarget": 2200,
+                        "measured": 9301,
+                        "status": "over_budget",
+                        "excess": 7301,
+                        "excessPercent": 365.1,
+                        "driftReason": null,
+                        "mitigationHint": "Delay heavy startup reads."
+                    },
+                    {
+                        "id": "idle_rss",
+                        "label": "Idle RSS",
+                        "unit": "MB",
+                        "target": 220,
+                        "driftTarget": 242,
+                        "measured": 411,
+                        "status": "over_budget",
+                        "excess": 191,
+                        "excessPercent": 86.8,
+                        "driftReason": null,
+                        "mitigationHint": "Break down WebView2 RSS."
+                    },
+                    {
+                        "id": "process_count",
+                        "label": "Process count",
+                        "unit": "processes",
+                        "target": 4,
+                        "driftTarget": 5,
+                        "measured": 14,
+                        "status": "over_budget",
+                        "excess": 10,
+                        "excessPercent": 250.0,
+                        "driftReason": null,
+                        "mitigationHint": "Check duplicate sidecars."
+                    }
+                ],
+                "healthSummary": {
+                    "status": "budget_overrun",
+                    "summary": "Release health budget_overrun; budget=over_budget.",
+                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                },
+                "mitigationHints": [
+                    "Delay heavy startup reads.",
+                    "Break down WebView2 RSS."
+                ]
             })
             .to_string(),
         )
@@ -10184,6 +10527,20 @@ mod tests {
         assert_eq!(contract.measured_idle_rss_mb, Some(411));
         assert_eq!(contract.process_count_target, 4);
         assert_eq!(contract.measured_process_count, Some(14));
+        assert_eq!(contract.budget_status, "over_budget");
+        assert_eq!(contract.release_health_status, "budget_overrun");
+        assert_eq!(contract.budget_results.len(), 3);
+        assert!(contract
+            .budget_results
+            .iter()
+            .any(|item| item.id == "cold_start" && item.drift_target == 2200));
+        assert!(contract
+            .release_health_next_action
+            .contains("mitigationHints"));
+        assert!(contract
+            .mitigation_hints
+            .iter()
+            .any(|item| item.contains("WebView2")));
         assert_eq!(contract.measurement_status, "measured_warning");
         assert!(contract
             .measurement_notes

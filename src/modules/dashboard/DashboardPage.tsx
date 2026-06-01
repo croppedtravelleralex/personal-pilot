@@ -7,6 +7,7 @@ import type { DashboardStats } from './types'
 import type {
   DesktopEvidenceReportHistory,
   DesktopEvidenceReportSummary,
+  DesktopReleaseBudgetResult,
   DesktopReleaseSmokeContract,
   DesktopRuntimeAdapterContractItem,
   DesktopValidationBrowserSignal,
@@ -42,6 +43,7 @@ const QUICK_LINKS = [
 
 const EVIDENCE_KINDS = [
   { kind: 'm4_acceptance', label: 'M4 Gate' },
+  { kind: 'm5_release_health', label: 'M5 Health' },
   { kind: 'release_performance', label: 'Release 性能' },
   { kind: 'runtime_adapter', label: 'Runtime Adapter' },
   { kind: 'profile_browser_comparison', label: 'Browser 对比' },
@@ -62,6 +64,11 @@ function statusTone(status: string) {
   if (
     normalized.includes('expected_blocked') ||
     normalized.includes('passed_with_expected_external_blockers') ||
+    normalized.includes('passed_with_budget_overrun') ||
+    normalized.includes('passed_with_recorded_drift') ||
+    normalized.includes('budget_overrun') ||
+    normalized.includes('over_budget') ||
+    normalized.includes('drift') ||
     normalized.includes('partial') ||
     normalized.includes('warning') ||
     normalized.includes('pending') ||
@@ -80,7 +87,7 @@ function statusTone(status: string) {
       className: 'border-[var(--color-error)]/30 bg-[var(--color-error)]/10 text-[var(--color-error)]',
     }
   }
-  if (normalized.includes('passed') || normalized === 'ready' || normalized.includes('observed')) {
+  if (normalized.includes('passed') || normalized === 'ready' || normalized.includes('observed') || normalized.includes('healthy') || normalized === 'within_budget') {
     return {
       icon: <CheckCircle2 className="h-4 w-4" />,
       className: 'border-[var(--color-success)]/30 bg-[var(--color-success)]/10 text-[var(--color-success)]',
@@ -127,6 +134,12 @@ function rankedRuntimeAdapters(contract: DesktopReleaseSmokeContract | null): De
     runtimeAdapterEvidenceScore(right) - runtimeAdapterEvidenceScore(left)
     || left.adapterId.localeCompare(right.adapterId)
   ))
+}
+
+function releaseBudgetMeasurement(metric: DesktopReleaseBudgetResult): string {
+  const unit = metric.unit ? ` ${metric.unit}` : ''
+  const measured = metric.measured === null ? 'pending' : `${metric.measured}${unit}`
+  return `${measured} / ${metric.target}${unit} · drift ${metric.driftTarget}${unit}`
 }
 
 function desktopWebViewSignal(
@@ -526,9 +539,46 @@ export function DashboardPage() {
       <Card
         title="Runtime Adapter"
         subtitle={releaseContract
-          ? `${releaseContract.measurementStatus} · ${runtimeAdapters.length} adapters`
+          ? `${releaseContract.measurementStatus} · ${releaseContract.budgetStatus} · ${runtimeAdapters.length} adapters`
           : 'release contract unavailable'}
       >
+        {releaseContract && (
+          <div className="border-b border-[var(--color-border-muted)] pb-3">
+            <div className="flex flex-wrap items-start gap-2">
+              <span className={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${statusTone(releaseContract.releaseHealthStatus).className}`}>
+                <span className="shrink-0">{statusTone(releaseContract.releaseHealthStatus).icon}</span>
+                <span className="truncate">{releaseContract.releaseHealthStatus}</span>
+              </span>
+              <div className="min-w-[180px] flex-1 text-xs text-[var(--color-text-muted)]">
+                {releaseContract.releaseHealthSummary}
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              {releaseContract.budgetResults.map(metric => {
+                const tone = statusTone(metric.status)
+                return (
+                  <div key={metric.id} className="min-w-0 rounded-md border border-[var(--color-border-muted)] px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-xs font-medium text-[var(--color-text-primary)]">{metric.label}</span>
+                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] ${tone.className}`}>
+                        {tone.icon}
+                        <span>{metric.status}</span>
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">
+                      {releaseBudgetMeasurement(metric)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {releaseContract.mitigationHints[0] && (
+              <div className="mt-2 truncate text-xs text-[var(--color-warning)]">
+                {releaseContract.mitigationHints[0]}
+              </div>
+            )}
+          </div>
+        )}
         <div className="divide-y divide-[var(--color-border-muted)]">
           {runtimeAdapters.length === 0 && (
             <div className="py-3 text-sm text-[var(--color-text-muted)]">no runtime adapter contract</div>
