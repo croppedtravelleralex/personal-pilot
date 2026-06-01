@@ -3131,6 +3131,10 @@ fn evidence_report_summary_from_json(
         .and_then(Value::as_str)
         .unwrap_or("unknown")
         .to_string();
+    let display_status = value
+        .get("operatorStatus")
+        .and_then(Value::as_str)
+        .unwrap_or(status.as_str());
     let failure_reason = value
         .get("failureReason")
         .and_then(Value::as_str)
@@ -3156,7 +3160,7 @@ fn evidence_report_summary_from_json(
                 .and_then(Value::as_i64)
                 .unwrap_or_default();
             format!(
-                "M4 acceptance {status}: passed={passed} expectedBlocked={expected_blocked} failed={failed}"
+                "M4 acceptance {display_status}: passed={passed} expectedBlocked={expected_blocked} failed={failed}"
             )
         }
         "release_performance" => format!(
@@ -3389,7 +3393,10 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
             "remote_proxy_egress_partial"
         }
         ("remote_proxy_tls", "blocked_remote_proxy_required") => "blocked_missing_remote_proxy",
-        ("m4_acceptance", "expected_blocked") => "expected_external_blockers",
+        ("m4_acceptance", "expected_blocked")
+        | ("m4_acceptance", "passed_with_expected_external_blockers") => {
+            "expected_external_blockers"
+        }
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
             "profile_browser_observed"
         }
@@ -3422,7 +3429,8 @@ fn evidence_next_action(
     failure_reason: Option<&str>,
 ) -> Option<String> {
     let action = match (kind, status) {
-        ("m4_acceptance", "expected_blocked") => Some(
+        ("m4_acceptance", "expected_blocked")
+        | ("m4_acceptance", "passed_with_expected_external_blockers") => Some(
             "Use this as the M4 local aggregation gate; close external blockers with provider, remote proxy, profile-browser comparison, and cross-machine reports."
                 .to_string(),
         ),
@@ -9896,9 +9904,11 @@ mod tests {
         fs::write(
             reports_dir.join("m4-acceptance-gate-test.json"),
             serde_json::json!({
-                "schemaVersion": "m4_acceptance_gate_v1",
+                "schemaVersion": "m4_acceptance_gate_v8",
                 "generatedAt": "2026-05-31T00:00:00Z",
-                "status": "expected_blocked",
+                "status": "passed_with_expected_external_blockers",
+                "gateClassificationStatus": "expected_blocked",
+                "operatorStatus": "passed_with_expected_external_blockers",
                 "summary": {
                     "passed": 1,
                     "expectedBlocked": 4,
@@ -9920,8 +9930,11 @@ mod tests {
         assert_eq!(history.report_count, 1);
         let report = &history.reports[0];
         assert_eq!(report.kind, "m4_acceptance");
-        assert_eq!(report.status, "expected_blocked");
+        assert_eq!(report.status, "passed_with_expected_external_blockers");
         assert_eq!(report.evidence_level, "expected_external_blockers");
+        assert!(report
+            .summary
+            .contains("passed_with_expected_external_blockers"));
         assert!(report.summary.contains("passed=1"));
         assert!(report.summary.contains("expectedBlocked=4"));
         assert!(report.summary.contains("failed=0"));

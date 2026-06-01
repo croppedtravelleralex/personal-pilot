@@ -165,3 +165,13 @@ Status: started 2026-06-01.
 3. Extend default interceptor sensitive fields beyond password/token/secret to include API keys, authorization, credentials, cookies, client secrets, private keys, and related aliases.
 4. Extend M4 gate with `safety_logging_contract` source/test checks and keep it local evidence only.
 5. Keep provider credentials, historical report scrubbing, external log audit, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full `450` observed/replay coverage blocked until their own reports exist.
+
+## Tenth Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Close M4.10 by making the M4 acceptance report operator-friendly: `status` / `operatorStatus` becomes `passed_with_expected_external_blockers` when local gates pass and only expected external blockers remain.
+2. Preserve `gateClassificationStatus=expected_blocked` so old live-truth semantics and blocker classification remain machine-readable.
+3. Add `m4TotalGate` to the report with local contract status, passed gate ids, failed gate ids, expected blocker ids, external blocker count, and next action.
+4. Update Dashboard evidence history so the new status still renders as expected external blockers, not as a failed gate.
+5. Continue to M5 performance/health only after the v8 gate reports `failed=0`.

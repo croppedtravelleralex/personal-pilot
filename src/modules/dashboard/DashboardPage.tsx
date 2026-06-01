@@ -61,6 +61,7 @@ function statusTone(status: string) {
   const normalized = status.toLowerCase()
   if (
     normalized.includes('expected_blocked') ||
+    normalized.includes('passed_with_expected_external_blockers') ||
     normalized.includes('partial') ||
     normalized.includes('warning') ||
     normalized.includes('pending') ||
