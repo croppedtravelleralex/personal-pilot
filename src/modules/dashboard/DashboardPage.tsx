@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings, Activity, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
+import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings, Activity, AlertTriangle, CheckCircle2, Clock, ScanSearch } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { Card } from '../../shared/components'
-import { fetchDashboardStats, fetchEvidenceReportHistory, reloadConfig } from './api'
+import { Button, Card, toast } from '../../shared/components'
+import { collectDesktopWebViewEvidence, fetchDashboardStats, fetchEvidenceReportHistory, reloadConfig } from './api'
 import type { DashboardStats } from './types'
-import type { DesktopEvidenceReportHistory, DesktopEvidenceReportSummary } from '../../types/desktop'
+import type { DesktopEvidenceReportHistory, DesktopEvidenceReportSummary, DesktopValidationBrowserSignal } from '../../types/desktop'
 
 interface StatCardProps {
   title: string
@@ -99,6 +99,203 @@ function reportFileName(reportPath: string): string {
   return reportPath.split(/[\\/]/).pop() || reportPath
 }
 
+function desktopWebViewSignal(
+  id: string,
+  category: string,
+  status: string,
+  label: string,
+  summary: string,
+  detail: string,
+  durationMs: number,
+): DesktopValidationBrowserSignal {
+  return {
+    id,
+    category,
+    layer: 'observed',
+    status,
+    label,
+    summary,
+    detail: `scope=desktop-webview; target-profile-browser=false; ${detail}`,
+    collectorScope: 'desktop-webview',
+    runtimeAdapter: 'desktop_webview',
+    targetProfileBrowser: false,
+    failureReason: status === 'failed' ? summary : null,
+    durationMs,
+  }
+}
+
+function collectDesktopWebViewSignals(): DesktopValidationBrowserSignal[] {
+  const started = performance.now()
+  const elapsed = () => Math.max(0, Math.round(performance.now() - started))
+  const signals: DesktopValidationBrowserSignal[] = []
+
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown'
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-fingerprint-surface',
+      'fingerprint',
+      navigator.userAgent ? 'succeeded' : 'warning',
+      'Desktop WebView fingerprint surface',
+      'Desktop WebView navigator, timezone, and screen surfaces were sampled.',
+      `userAgent=${navigator.userAgent}; platform=${navigator.platform}; language=${navigator.language}; timezone=${timezone}; screen=${window.screen.width}x${window.screen.height}; hardwareConcurrency=${navigator.hardwareConcurrency || 0}`,
+      elapsed(),
+    ))
+  } catch (error: any) {
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-fingerprint-surface',
+      'fingerprint',
+      'failed',
+      'Desktop WebView fingerprint surface',
+      error?.message || 'Desktop WebView fingerprint probe failed.',
+      `error=${error?.message || String(error)}`,
+      elapsed(),
+    ))
+  }
+
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = 180
+    canvas.height = 48
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      signals.push(desktopWebViewSignal(
+        'desktop-webview-canvas-render',
+        'canvas',
+        'warning',
+        'Desktop WebView canvas render',
+        'Desktop WebView could not create a 2D canvas context.',
+        'canvasContext=false',
+        elapsed(),
+      ))
+    } else {
+      ctx.fillStyle = '#f2f5f9'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.fillStyle = '#273142'
+      ctx.font = '16px sans-serif'
+      ctx.fillText('PersonaPilot WebView probe', 8, 28)
+      const dataUrlLength = canvas.toDataURL('image/png').length
+      signals.push(desktopWebViewSignal(
+        'desktop-webview-canvas-render',
+        'canvas',
+        dataUrlLength > 100 ? 'succeeded' : 'warning',
+        'Desktop WebView canvas render',
+        'Desktop WebView canvas was rendered and sampled.',
+        `dataUrlLength=${dataUrlLength}; size=${canvas.width}x${canvas.height}`,
+        elapsed(),
+      ))
+    }
+  } catch (error: any) {
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-canvas-render',
+      'canvas',
+      'failed',
+      'Desktop WebView canvas render',
+      error?.message || 'Desktop WebView canvas probe failed.',
+      `error=${error?.message || String(error)}`,
+      elapsed(),
+    ))
+  }
+
+  try {
+    const AudioCtor = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtor) {
+      signals.push(desktopWebViewSignal(
+        'desktop-webview-audio-context',
+        'audio',
+        'warning',
+        'Desktop WebView audio context',
+        'Desktop WebView does not expose AudioContext.',
+        'audioContext=false',
+        elapsed(),
+      ))
+    } else {
+      const context = new AudioCtor()
+      const sampleRate = context.sampleRate || 0
+      void context.close?.()
+      signals.push(desktopWebViewSignal(
+        'desktop-webview-audio-context',
+        'audio',
+        sampleRate > 0 ? 'succeeded' : 'warning',
+        'Desktop WebView audio context',
+        'Desktop WebView AudioContext was sampled.',
+        `sampleRate=${sampleRate}; state=${context.state || 'unknown'}`,
+        elapsed(),
+      ))
+    }
+  } catch (error: any) {
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-audio-context',
+      'audio',
+      'failed',
+      'Desktop WebView audio context',
+      error?.message || 'Desktop WebView audio probe failed.',
+      `error=${error?.message || String(error)}`,
+      elapsed(),
+    ))
+  }
+
+  try {
+    const hasWebRtc = typeof RTCPeerConnection !== 'undefined'
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-webrtc-api',
+      'webrtc',
+      hasWebRtc ? 'warning' : 'warning',
+      'Desktop WebView WebRTC API',
+      hasWebRtc
+        ? 'Desktop WebView exposes RTCPeerConnection; profile-browser leak proof remains separate.'
+        : 'Desktop WebView does not expose RTCPeerConnection.',
+      `rtcpPeerConnection=${hasWebRtc}`,
+      elapsed(),
+    ))
+  } catch (error: any) {
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-webrtc-api',
+      'webrtc',
+      'failed',
+      'Desktop WebView WebRTC API',
+      error?.message || 'Desktop WebView WebRTC probe failed.',
+      `error=${error?.message || String(error)}`,
+      elapsed(),
+    ))
+  }
+
+  try {
+    const localStorageAvailable = (() => {
+      const key = '__persona_pilot_webview_probe__'
+      window.localStorage.setItem(key, '1')
+      window.localStorage.removeItem(key)
+      return true
+    })()
+    const sessionStorageAvailable = (() => {
+      const key = '__persona_pilot_webview_probe__'
+      window.sessionStorage.setItem(key, '1')
+      window.sessionStorage.removeItem(key)
+      return true
+    })()
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-storage-scope',
+      'leak',
+      localStorageAvailable || sessionStorageAvailable || navigator.cookieEnabled ? 'succeeded' : 'warning',
+      'Desktop WebView storage scope',
+      'Desktop WebView storage and cookie surfaces were sampled.',
+      `cookieEnabled=${navigator.cookieEnabled}; localStorage=${localStorageAvailable}; sessionStorage=${sessionStorageAvailable}`,
+      elapsed(),
+    ))
+  } catch (error: any) {
+    signals.push(desktopWebViewSignal(
+      'desktop-webview-storage-scope',
+      'leak',
+      'failed',
+      'Desktop WebView storage scope',
+      error?.message || 'Desktop WebView storage probe failed.',
+      `error=${error?.message || String(error)}`,
+      elapsed(),
+    ))
+  }
+
+  return signals
+}
+
 function EvidenceRow({ label, report }: { label: string; report?: DesktopEvidenceReportSummary }) {
   const status = report?.status ?? 'not_run'
   const tone = statusTone(status)
@@ -139,6 +336,7 @@ export function DashboardPage() {
     appVersion: 'unknown',
   })
   const [loading, setLoading] = useState(true)
+  const [collectingEvidence, setCollectingEvidence] = useState(false)
   const [evidenceHistory, setEvidenceHistory] = useState<DesktopEvidenceReportHistory>({
     generatedAt: '',
     reportCount: 0,
@@ -162,6 +360,19 @@ export function DashboardPage() {
       setEvidenceHistory(nextEvidenceHistory)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCollectDesktopWebViewEvidence = async () => {
+    setCollectingEvidence(true)
+    try {
+      const report = await collectDesktopWebViewEvidence(collectDesktopWebViewSignals())
+      toast.success(`WebView evidence saved: ${report.signals.length} signals`)
+      await load()
+    } catch (error: any) {
+      toast.error(error?.message || 'WebView evidence collection failed')
+    } finally {
+      setCollectingEvidence(false)
     }
   }
 
@@ -256,7 +467,20 @@ export function DashboardPage() {
       <Card
         title="验收证据"
         subtitle={loading ? 'loading reports' : `${evidenceHistory.reportCount} local reports`}
-        actions={<Activity className="h-4 w-4 text-[var(--color-text-muted)]" />}
+        actions={(
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCollectDesktopWebViewEvidence}
+              loading={collectingEvidence}
+            >
+              <ScanSearch className="h-4 w-4" />
+              采集 WebView
+            </Button>
+            <Activity className="h-4 w-4 text-[var(--color-text-muted)]" />
+          </div>
+        )}
       >
         <div className="divide-y divide-[var(--color-border-muted)]">
           {EVIDENCE_KINDS.map((item) => (

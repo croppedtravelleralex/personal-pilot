@@ -1,5 +1,6 @@
 param(
-  [string]$OutputDir = "data/reports/profile-browser-comparison"
+  [string]$OutputDir = "data/reports/profile-browser-comparison",
+  [int]$MaxPairAgeMinutes = 120
 )
 
 $ErrorActionPreference = "Stop"
@@ -151,7 +152,18 @@ $categoryComparison = foreach ($category in $categories) {
   }
 }
 $comparableCount = @($categoryComparison | Where-Object { $_.status -eq "comparable" }).Count
-$status = if ($comparableCount -eq $categories.Count) {
+$desktopProfileDeltaMinutes = $null
+$sameRunStatus = if ($latestDesktop.Count -gt 0 -and $latestProfile.Count -gt 0) {
+  $desktopProfileDeltaMinutes = [Math]::Round([Math]::Abs(($latestDesktop[0].sortKey - $latestProfile[0].sortKey).TotalMinutes), 2)
+  if ($desktopProfileDeltaMinutes -le $MaxPairAgeMinutes) { "within_window" } else { "stale_pair" }
+} elseif ($latestDesktop.Count -eq 0 -and $latestProfile.Count -eq 0) {
+  "missing_both"
+} elseif ($latestDesktop.Count -eq 0) {
+  "missing_desktop_webview"
+} else {
+  "missing_profile_browser"
+}
+$status = if ($comparableCount -eq $categories.Count -and $sameRunStatus -eq "within_window") {
   "passed"
 } elseif ($latest -eq $null) {
   "blocked_missing_validation_report"
@@ -159,6 +171,8 @@ $status = if ($comparableCount -eq $categories.Count) {
   "blocked_missing_desktop_webview_report"
 } elseif ($profileSignals.Count -eq 0) {
   "blocked_missing_profile_browser_report"
+} elseif ($comparableCount -eq $categories.Count -and $sameRunStatus -eq "stale_pair") {
+  "blocked_stale_comparison_pair"
 } else {
   "partial_comparison_only"
 }
@@ -170,18 +184,23 @@ $failureReason = if ($status -eq "passed") {
   "no desktop WebView validation report found in data/validation-reports, data/reports/validation, data/reports/profile-browser-environment, data/reports/validation-smoke, data/reports/headed-external-smoke, or data/reports/camoufox-binary-task"
 } elseif ($profileSignals.Count -eq 0) {
   "no profile browser validation report found in data/validation-reports, data/reports/validation, data/reports/profile-browser-environment, data/reports/validation-smoke, data/reports/headed-external-smoke, or data/reports/camoufox-binary-task"
+} elseif ($sameRunStatus -eq "stale_pair") {
+  "desktop WebView and profile browser evidence are both present but not within the same-run window: delta=$desktopProfileDeltaMinutes minutes, max=$MaxPairAgeMinutes minutes"
 } else {
   "desktop WebView and profile browser evidence are not both present for every category"
 }
 
 $report = [ordered]@{
-  schemaVersion = "profile_browser_comparison_gate_v2"
+  schemaVersion = "profile_browser_comparison_gate_v3"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
   latestValidationReportPath = if ($latest) { $latest.path } else { $null }
   latestDesktopValidationReportPath = if ($latestDesktop.Count -gt 0) { $latestDesktop[0].path } else { $null }
   latestProfileValidationReportPath = if ($latestProfile.Count -gt 0) { $latestProfile[0].path } else { $null }
+  maxPairAgeMinutes = $MaxPairAgeMinutes
+  desktopProfileDeltaMinutes = $desktopProfileDeltaMinutes
+  sameRunStatus = $sameRunStatus
   scannedReportCount = $reports.Count
   desktopSignalCount = $desktopSignals.Count
   profileBrowserSignalCount = $profileSignals.Count
@@ -191,6 +210,7 @@ $report = [ordered]@{
   notes = @(
     "This gate compares existing reports only; it does not launch a desktop WebView or profile browser.",
     "It independently selects the latest desktop WebView report and latest profile browser report from standard evidence directories.",
+    "Passed status requires both sides to include comparable categories and to be within the same-run time window.",
     "Headed external and Camoufox task reports count only when they contain real profile-browser validation signals.",
     "Desktop WebView evidence must not be treated as profile-browser proof."
   )

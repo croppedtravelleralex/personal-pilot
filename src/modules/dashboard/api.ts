@@ -1,6 +1,10 @@
 import type { DashboardStats } from './types'
-import { listEvidenceReports } from '../../services/desktop'
-import type { DesktopEvidenceReportHistory } from '../../types/desktop'
+import { collectValidationReport, listEvidenceReports } from '../../services/desktop'
+import type {
+  DesktopEvidenceReportHistory,
+  DesktopValidationBrowserSignal,
+  DesktopValidationReport,
+} from '../../types/desktop'
 
 const getBindings = async () => {
   try {
@@ -58,6 +62,12 @@ export async function fetchEvidenceReportHistory(): Promise<DesktopEvidenceRepor
       summary: 'Evidence report history unavailable',
     }
   }
+}
+
+export async function collectDesktopWebViewEvidence(
+  browserSignals: DesktopValidationBrowserSignal[],
+): Promise<DesktopValidationReport> {
+  return collectValidationReport(browserSignals)
 }
 
 export async function reloadConfig(): Promise<void> {

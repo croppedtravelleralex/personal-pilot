@@ -114,3 +114,13 @@ Status: started 2026-06-01.
 3. Extend M4 gate with `provider_dry_run_contract` local report validation while keeping real provider acceptance as `expected_blocked`.
 4. Verify with provider preflight, M4 gate, Rust provider readiness test, `pnpm typecheck`, `cargo fmt --check`, and diff hygiene.
 5. Continue next with same-run desktop/profile comparison, typed facade shrink, SessionBundle operator evidence loop, and M5 performance work.
+
+## Fifth Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Add a Dashboard operator action that samples desktop WebView fingerprint/canvas/audio/WebRTC/storage signals in the actual app WebView and writes them through `collect_validation_report`.
+2. Upgrade `profile_browser_comparison_gate` to v3 with same-run pairing fields: `sameRunStatus`, `maxPairAgeMinutes`, and `desktopProfileDeltaMinutes`.
+3. Keep comparison blocked until desktop WebView and profile-browser reports both exist within the configured window and all required categories are comparable.
+4. Verify with `pnpm typecheck`, `profile_browser_comparison_gate`, M4 gate, and diff hygiene.
+5. Continue next by actually collecting desktop WebView evidence from the running app, refreshing profile-browser evidence in the same window, and then moving to typed facade shrink or SessionBundle operator loop.

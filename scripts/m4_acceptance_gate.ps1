@@ -415,7 +415,7 @@ foreach ($spec in $gateSpecs) {
           $classification = "passed"
           $reason = "profile/browser comparison passed"
         }
-      } elseif ($status -in @("blocked_missing_validation_report", "blocked_missing_desktop_webview_report", "blocked_missing_profile_browser_report", "partial_comparison_only")) {
+      } elseif ($status -in @("blocked_missing_validation_report", "blocked_missing_desktop_webview_report", "blocked_missing_profile_browser_report", "blocked_stale_comparison_pair", "partial_comparison_only")) {
         $classification = "expected_blocked"
         $reason = "profile/browser comparison evidence is incomplete"
         $expectedBlockers += $status
