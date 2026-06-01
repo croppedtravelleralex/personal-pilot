@@ -474,6 +474,80 @@ function Test-RuntimeAdapterOperatorContract {
   return New-LocalGateResult "runtime_adapter_operator_contract" "passed" "passed" "M4.7 runtime adapter evidence is visible and ranked in Dashboard; full headed realism remains externally blocked" @()
 }
 
+function Test-SafetyLoggingContract {
+  $redactionPath = Join-Path $projectRoot "backend\internal\logger\redaction.go"
+  $redactionTestPath = Join-Path $projectRoot "backend\internal\logger\redaction_test.go"
+  $loggerPath = Join-Path $projectRoot "backend\internal\logger\logger.go"
+  $formatterPath = Join-Path $projectRoot "backend\internal\logger\formatter.go"
+  $configPath = Join-Path $projectRoot "backend\internal\config\config.go"
+  $failures = @()
+
+  foreach ($path in @($redactionPath, $redactionTestPath, $loggerPath, $formatterPath, $configPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $redactionText = if (Test-Path $redactionPath) { Get-Content -LiteralPath $redactionPath -Raw -Encoding UTF8 } else { "" }
+  $redactionTestText = if (Test-Path $redactionTestPath) { Get-Content -LiteralPath $redactionTestPath -Raw -Encoding UTF8 } else { "" }
+  $loggerText = if (Test-Path $loggerPath) { Get-Content -LiteralPath $loggerPath -Raw -Encoding UTF8 } else { "" }
+  $formatterText = if (Test-Path $formatterPath) { Get-Content -LiteralPath $formatterPath -Raw -Encoding UTF8 } else { "" }
+  $configText = if (Test-Path $configPath) { Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "DefaultSensitiveFieldNames",
+      "IsSensitiveLogField",
+      "RedactText",
+      "RedactValueForKey",
+      "RedactLogEntry",
+      "password",
+      "token",
+      "api_key",
+      "authorization",
+      "credential",
+      "secret",
+      "cookie"
+    )) {
+    if ($redactionText -notmatch [regex]::Escape($token)) {
+      $failures += "logger redaction source missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("RedactText(msg)", "RedactValueForKey(field.Key, field.Value)", "RedactLogEntry(entry)")) {
+    if ($loggerText -notmatch [regex]::Escape($token)) {
+      $failures += "logger write path missing redaction marker: $token"
+    }
+  }
+
+  if (@([regex]::Matches($formatterText, [regex]::Escape("RedactLogEntry(entry)"))).Count -lt 2) {
+    $failures += "text/json formatters do not both redact log entries"
+  }
+
+  foreach ($token in @(
+      "TestM4SafetyLoggingContract_RedactsCredentialFields",
+      "TestM4SafetyLoggingContract_FormattersDoNotEmitSecrets",
+      "plain-password",
+      "plain-api-key",
+      "plain-bearer-token",
+      "plain-json-token"
+    )) {
+    if ($redactionTestText -notmatch [regex]::Escape($token)) {
+      $failures += "logger redaction test missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("api_key", "authorization", "credential", "client_secret", "cookie")) {
+    if ($configText -notmatch [regex]::Escape($token)) {
+      $failures += "default logger sensitive field config missing marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "safety_logging_contract" "missing_coverage" "failed" "M4.9 safety/logging source-test contract is incomplete" $failures
+  }
+  return New-LocalGateResult "safety_logging_contract" "passed" "passed" "M4.9 logger redaction source/test contract is present; this is local safety evidence, not real credential smoke" @()
+}
+
 $liveTruthExitCode = $null
 $providerPreflightExitCode = $null
 Invoke-LiveTruthGuard
@@ -652,6 +726,7 @@ $gates += Test-ProviderDryRunContract
 $gates += Test-SessionBundleOperatorContract
 $gates += Test-TypedFacadeShrinkContract
 $gates += Test-RuntimeAdapterOperatorContract
+$gates += Test-SafetyLoggingContract
 
 $failedGates = @($gates | Where-Object { $_.classification -eq "failed" })
 $expectedBlockedGates = @($gates | Where-Object { $_.classification -eq "expected_blocked" })
@@ -666,7 +741,7 @@ $status = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v6"
+  schemaVersion = "m4_acceptance_gate_v7"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
@@ -687,7 +762,8 @@ $report = [ordered]@{
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
     "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer DTOs and browser Wails bindings without removing the transitional bridge.",
-    "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports."
+    "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
+    "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence."
   )
 }
 

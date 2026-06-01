@@ -155,3 +155,13 @@ Status: started 2026-06-01.
 3. Extend M4 gate with `runtime_adapter_operator_contract` source checks for Dashboard UI, Dashboard API, desktop service wrapper, and shared TS types.
 4. Keep full headed realism, B1-B5, remote proxy/TLS, provider, cross-machine portability, AdsPower refresh, and full `450` observed/replay coverage externally blocked until matching reports exist.
 5. Continue next with actual desktop/profile same-run evidence, remaining browser facade shrink, and M5 release performance mitigation.
+
+## Ninth Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Close the local M4.9 safety/logging contract by adding default logger redaction for sensitive field keys and common inline secret forms.
+2. Apply redaction before logger writers receive entries and before Text/JSON formatters serialize entries, so direct `LogEntry` paths do not bypass the safety boundary.
+3. Extend default interceptor sensitive fields beyond password/token/secret to include API keys, authorization, credentials, cookies, client secrets, private keys, and related aliases.
+4. Extend M4 gate with `safety_logging_contract` source/test checks and keep it local evidence only.
+5. Keep provider credentials, historical report scrubbing, external log audit, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full `450` observed/replay coverage blocked until their own reports exist.

@@ -421,10 +421,17 @@ func DefaultConfig() *Config {
 				TimeInterval: "daily",
 			},
 			Interceptor: InterceptorConfig{
-				Enabled:         true,
-				LogParameters:   true,
-				LogResults:      true,
-				SensitiveFields: []string{"password", "token", "secret"},
+				Enabled:       true,
+				LogParameters: true,
+				LogResults:    true,
+				SensitiveFields: []string{
+					"password", "passwd", "pwd",
+					"token", "access_token", "refresh_token", "id_token",
+					"api_key", "apikey", "authorization",
+					"credential", "credentials",
+					"secret", "client_secret", "private_key",
+					"cookie", "cookies", "set_cookie", "set-cookie",
+				},
 			},
 		},
 		Webhook: WebhookConfig{

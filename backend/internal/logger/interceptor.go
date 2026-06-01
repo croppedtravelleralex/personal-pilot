@@ -39,8 +39,11 @@ type CallContext struct {
 // NewMethodInterceptor 创建新的方法拦截器
 func NewMethodInterceptor(logger *Logger, config InterceptorConfig) *MethodInterceptor {
 	sensitiveFields := make(map[string]bool)
+	if len(config.SensitiveFields) == 0 {
+		config.SensitiveFields = DefaultSensitiveFieldNames()
+	}
 	for _, field := range config.SensitiveFields {
-		sensitiveFields[strings.ToLower(field)] = true
+		sensitiveFields[normalizeSensitiveKey(field)] = true
 	}
 
 	return &MethodInterceptor{
@@ -331,7 +334,7 @@ func (m *MethodInterceptor) maskMap(v reflect.Value) interface{} {
 		val := iter.Value().Interface()
 
 		if m.isSensitiveField(key) {
-			result[key] = "***"
+			result[key] = SensitiveLogValue
 		} else {
 			result[key] = m.maskValue(val)
 		}
@@ -355,7 +358,7 @@ func (m *MethodInterceptor) maskStruct(v reflect.Value) interface{} {
 		fieldValue := v.Field(i).Interface()
 
 		if m.isSensitiveField(fieldName) {
-			result[fieldName] = "***"
+			result[fieldName] = SensitiveLogValue
 		} else {
 			result[fieldName] = m.maskValue(fieldValue)
 		}
@@ -367,7 +370,7 @@ func (m *MethodInterceptor) maskStruct(v reflect.Value) interface{} {
 // maskSensitiveValue 对单个值进行脱敏（用于返回值）
 func (m *MethodInterceptor) maskSensitiveValue(fieldName string, value interface{}) interface{} {
 	if m.isSensitiveField(fieldName) {
-		return "***"
+		return SensitiveLogValue
 	}
 	return m.maskValue(value)
 }
@@ -376,21 +379,21 @@ func (m *MethodInterceptor) maskSensitiveValue(fieldName string, value interface
 func (m *MethodInterceptor) isSensitiveField(fieldName string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.sensitiveFields[strings.ToLower(fieldName)]
+	return m.sensitiveFields[normalizeSensitiveKey(fieldName)]
 }
 
 // AddSensitiveField 添加敏感字段
 func (m *MethodInterceptor) AddSensitiveField(fieldName string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sensitiveFields[strings.ToLower(fieldName)] = true
+	m.sensitiveFields[normalizeSensitiveKey(fieldName)] = true
 }
 
 // RemoveSensitiveField 移除敏感字段
 func (m *MethodInterceptor) RemoveSensitiveField(fieldName string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.sensitiveFields, strings.ToLower(fieldName))
+	delete(m.sensitiveFields, normalizeSensitiveKey(fieldName))
 }
 
 // getCaller 获取调用位置
