@@ -233,6 +233,36 @@ var migrations = []migration{
 			`ALTER TABLE browser_cores ADD COLUMN kind TEXT NOT NULL DEFAULT 'chromium'`,
 		},
 	},
+	{
+		version: 13,
+		desc:    "scheduler tasks persist runtime state",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS scheduler_tasks (
+				id               TEXT PRIMARY KEY,
+				name             TEXT    NOT NULL,
+				trigger_type     TEXT    NOT NULL DEFAULT 'interval',
+				trigger_cron     TEXT    NOT NULL DEFAULT '',
+				trigger_interval TEXT    NOT NULL DEFAULT '',
+				trigger_event    TEXT    NOT NULL DEFAULT '',
+				actions          TEXT    NOT NULL DEFAULT '[]',
+				max_retries      INTEGER NOT NULL DEFAULT 3,
+				retry_delay      TEXT    NOT NULL DEFAULT '10s',
+				depends_on       TEXT    NOT NULL DEFAULT '[]',
+				profile_id       TEXT    NOT NULL DEFAULT '',
+				enabled          INTEGER NOT NULL DEFAULT 1,
+				created_at       TEXT    NOT NULL,
+				updated_at       TEXT    NOT NULL,
+				status           TEXT    NOT NULL DEFAULT 'idle',
+				last_run_at      TEXT    NOT NULL DEFAULT '',
+				last_error       TEXT    NOT NULL DEFAULT '',
+				retry_count      INTEGER NOT NULL DEFAULT 0
+			)`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'idle'`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN last_run_at TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`,
+		},
+	},
 }
 
 // NewDB 创建新的数据库连接
@@ -309,6 +339,9 @@ func (db *DB) Migrate() error {
 	if err := db.ensureBrowserCoreKindColumn(); err != nil {
 		return err
 	}
+	if err := db.ensureSchedulerTaskRuntimeColumns(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -358,6 +391,62 @@ func (db *DB) ensureBrowserCoreKindColumn() error {
 		12, "browser cores add kind",
 	); err != nil {
 		return fmt.Errorf("记录 browser_cores.kind 修复版本失败: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) ensureSchedulerTaskRuntimeColumns() error {
+	if _, err := db.conn.Exec(`CREATE TABLE IF NOT EXISTS scheduler_tasks (
+		id               TEXT PRIMARY KEY,
+		name             TEXT    NOT NULL,
+		trigger_type     TEXT    NOT NULL DEFAULT 'interval',
+		trigger_cron     TEXT    NOT NULL DEFAULT '',
+		trigger_interval TEXT    NOT NULL DEFAULT '',
+		trigger_event    TEXT    NOT NULL DEFAULT '',
+		actions          TEXT    NOT NULL DEFAULT '[]',
+		max_retries      INTEGER NOT NULL DEFAULT 3,
+		retry_delay      TEXT    NOT NULL DEFAULT '10s',
+		depends_on       TEXT    NOT NULL DEFAULT '[]',
+		profile_id       TEXT    NOT NULL DEFAULT '',
+		enabled          INTEGER NOT NULL DEFAULT 1,
+		created_at       TEXT    NOT NULL,
+		updated_at       TEXT    NOT NULL,
+		status           TEXT    NOT NULL DEFAULT 'idle',
+		last_run_at      TEXT    NOT NULL DEFAULT '',
+		last_error       TEXT    NOT NULL DEFAULT '',
+		retry_count      INTEGER NOT NULL DEFAULT 0
+	)`); err != nil {
+		return fmt.Errorf("确保 scheduler_tasks 表存在失败: %w", err)
+	}
+
+	columns := []struct {
+		name string
+		stmt string
+	}{
+		{"status", `ALTER TABLE scheduler_tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'idle'`},
+		{"last_run_at", `ALTER TABLE scheduler_tasks ADD COLUMN last_run_at TEXT NOT NULL DEFAULT ''`},
+		{"last_error", `ALTER TABLE scheduler_tasks ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`},
+		{"retry_count", `ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`},
+	}
+
+	for _, column := range columns {
+		hasColumn, err := db.tableHasColumn("scheduler_tasks", column.name)
+		if err != nil {
+			return fmt.Errorf("检查 scheduler_tasks.%s 失败: %w", column.name, err)
+		}
+		if hasColumn {
+			continue
+		}
+		if _, err := db.conn.Exec(column.stmt); err != nil && !isColumnExistsError(err) {
+			return fmt.Errorf("修复 scheduler_tasks.%s 失败: %w", column.name, err)
+		}
+	}
+
+	if _, err := db.conn.Exec(
+		`INSERT OR IGNORE INTO schema_migrations (version, desc) VALUES (?, ?)`,
+		13, "scheduler tasks persist runtime state",
+	); err != nil {
+		return fmt.Errorf("记录 scheduler_tasks runtime state 修复版本失败: %w", err)
 	}
 	return nil
 }

@@ -117,6 +117,13 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
   event: '事件驱动',
 }
 
+function formatTaskTime(value?: string): string {
+  if (!value) return '未运行'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
 // ─── AutomationPage ───────────────────────────────────────────────────────────
 
 const DEFAULT_LAUNCH_BASE_URL = 'http://127.0.0.1:19876'
@@ -595,12 +602,18 @@ function TasksTab({ tasks, loading, onAddTask, onDeleteTask, onRunNow, onRefresh
                             {TRIGGER_LABELS[task.trigger.type as TriggerType]}
                             {task.trigger.interval && ` · 每${task.trigger.interval}`}
                             {task.trigger.event && ` · ${task.trigger.event}`}
+                            {` · ${task.actions.length} steps`}
                           </span>
                           {task.profileId && (
                             <span className="text-xs text-[var(--color-text-muted)]">
                               · {task.profileId.slice(0, 8)}...
                             </span>
                           )}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--color-text-muted)]">
+                          <span>上次运行: {formatTaskTime(task.lastRunAt)}</span>
+                          {task.retryCount > 0 && <span>重试: {task.retryCount}/{task.maxRetries}</span>}
+                          {task.lastError && <span className="max-w-[360px] truncate text-[var(--color-error)]">错误: {task.lastError}</span>}
                         </div>
                       </div>
                     </div>
@@ -704,9 +717,14 @@ export function AutomationPage() {
     }
   }
 
-  const handleRunNow = (id: string) => {
-    SchedulerRunTaskNow(id)
-    toast.success('任务已触发执行')
+  const handleRunNow = async (id: string) => {
+    try {
+      await SchedulerRunTaskNow(id)
+      toast.success('任务已触发执行')
+      await refreshTasks()
+    } catch (e: any) {
+      toast.error(e?.message || '任务触发失败')
+    }
   }
 
   // ─── Rules handlers ─────────────────────────────────────────────────────────

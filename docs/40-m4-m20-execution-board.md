@@ -1,6 +1,6 @@
 # M4-M20 Execution Board
 
-Updated: 2026-05-31 (Asia/Shanghai)
+Updated: 2026-06-01 (Asia/Shanghai)
 
 ## Live Truth Boundary
 
@@ -84,3 +84,13 @@ M4 is the first practical utility milestone after the current contract-heavy sta
 3. Wire M4 report visibility through existing evidence report history where feasible.
 4. Run `live_truth_guard`, M4 harness, targeted Go/Rust tests, and `pnpm typecheck`.
 5. Commit only the files touched by this batch after reviewing dirty worktree origin.
+
+## Second Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Close M4.2 local workflow task center by making scheduler task runtime state durable.
+2. Show task run status, last run, failure reason, retry count, and step count in the existing Automation page.
+3. Preserve the boundary that this is local scheduler/operator-loop evidence only.
+4. Verify with scheduler/database Go tests and `pnpm typecheck`.
+5. Continue next with same-run desktop/profile comparison, provider dry-run/operator closure, and typed facade shrink.

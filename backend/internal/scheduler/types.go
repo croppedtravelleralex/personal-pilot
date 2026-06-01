@@ -67,6 +67,9 @@ type TaskDef struct {
 func (t *TaskDef) Status() TaskStatus {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.status == "" {
+		return StatusIdle
+	}
 	return t.status
 }
 
@@ -82,6 +85,38 @@ func (t *TaskDef) LastRunAt() time.Time {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.lastRunAt
+}
+
+// LastError returns the last execution error.
+func (t *TaskDef) LastError() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.lastError
+}
+
+// RetryCount returns the current retry attempt count.
+func (t *TaskDef) RetryCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.retryCount
+}
+
+// SetRuntimeState restores persisted runtime state.
+func (t *TaskDef) SetRuntimeState(status TaskStatus, lastRunAt time.Time, lastError string, retryCount int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.status = status
+	t.lastRunAt = lastRunAt
+	t.lastError = lastError
+	t.retryCount = retryCount
+}
+
+// ClearLastError marks the latest execution as clean.
+func (t *TaskDef) ClearLastError() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.lastError = ""
+	t.retryCount = 0
 }
 
 // TaskStore provides persistence for task definitions.

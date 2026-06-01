@@ -22,7 +22,7 @@ func (s *SQLiteTaskStore) List() ([]*TaskDef, error) {
 	rows, err := s.db.Query(
 		`SELECT id, name, trigger_type, trigger_cron, trigger_interval, trigger_event,
 		        actions, max_retries, retry_delay, depends_on, profile_id, enabled,
-		        created_at, updated_at
+		        created_at, updated_at, status, last_run_at, last_error, retry_count
 		 FROM scheduler_tasks ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -49,7 +49,7 @@ func (s *SQLiteTaskStore) Get(id string) (*TaskDef, error) {
 	row := s.db.QueryRow(
 		`SELECT id, name, trigger_type, trigger_cron, trigger_interval, trigger_event,
 		        actions, max_retries, retry_delay, depends_on, profile_id, enabled,
-		        created_at, updated_at
+		        created_at, updated_at, status, last_run_at, last_error, retry_count
 		 FROM scheduler_tasks WHERE id = ?`, id,
 	)
 	task, err := scanTask(row)
@@ -77,25 +77,36 @@ func (s *SQLiteTaskStore) Save(task *TaskDef) error {
 	if task.Enabled {
 		enabledInt = 1
 	}
+	status := string(task.Status())
+	if status == "" {
+		status = string(StatusIdle)
+	}
+	lastRunAt := ""
+	if value := task.LastRunAt(); !value.IsZero() {
+		lastRunAt = value.Format(time.RFC3339)
+	}
 
 	_, err = s.db.Exec(
 		`INSERT INTO scheduler_tasks
 		 (id, name, trigger_type, trigger_cron, trigger_interval, trigger_event,
 		  actions, max_retries, retry_delay, depends_on, profile_id, enabled,
-		  created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		  created_at, updated_at, status, last_run_at, last_error, retry_count)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		  name=excluded.name, trigger_type=excluded.trigger_type,
 		  trigger_cron=excluded.trigger_cron, trigger_interval=excluded.trigger_interval,
 		  trigger_event=excluded.trigger_event, actions=excluded.actions,
 		  max_retries=excluded.max_retries, retry_delay=excluded.retry_delay,
 		  depends_on=excluded.depends_on, profile_id=excluded.profile_id,
-		  enabled=excluded.enabled, updated_at=excluded.updated_at`,
+		  enabled=excluded.enabled, updated_at=excluded.updated_at,
+		  status=excluded.status, last_run_at=excluded.last_run_at,
+		  last_error=excluded.last_error, retry_count=excluded.retry_count`,
 		task.ID, task.Name, task.Trigger.Type, task.Trigger.Cron,
 		task.Trigger.Interval, task.Trigger.Event,
 		string(actionsJSON), task.MaxRetries, task.RetryDelay,
 		string(dependsOnJSON), task.ProfileID, enabledInt,
 		task.CreatedAt.Format(time.RFC3339), task.UpdatedAt.Format(time.RFC3339),
+		status, lastRunAt, task.LastError(), task.RetryCount(),
 	)
 	if err != nil {
 		return fmt.Errorf("save task %s: %w", task.ID, err)
@@ -123,12 +134,14 @@ func scanTask(s taskScanner) (*TaskDef, error) {
 		retryDelay, profileID                                             string
 		enabledInt                                                        int
 		createdAtStr, updatedAtStr                                        string
+		status, lastRunAtStr, lastError                                   string
+		retryCount                                                        int
 	)
 
 	if err := s.Scan(
 		&id, &name, &triggerType, &triggerCron, &triggerInterval, &triggerEvent,
 		&actionsJSON, &maxRetries, &retryDelay, &dependsOnJSON, &profileID, &enabledInt,
-		&createdAtStr, &updatedAtStr,
+		&createdAtStr, &updatedAtStr, &status, &lastRunAtStr, &lastError, &retryCount,
 	); err != nil {
 		return nil, fmt.Errorf("scan task: %w", err)
 	}
@@ -151,8 +164,12 @@ func scanTask(s taskScanner) (*TaskDef, error) {
 
 	createdAt, _ := time.Parse(time.RFC3339, createdAtStr)
 	updatedAt, _ := time.Parse(time.RFC3339, updatedAtStr)
+	lastRunAt, _ := time.Parse(time.RFC3339, lastRunAtStr)
+	if status == "" {
+		status = string(StatusIdle)
+	}
 
-	return &TaskDef{
+	task := &TaskDef{
 		ID:   id,
 		Name: name,
 		Trigger: TaskTrigger{
@@ -169,5 +186,7 @@ func scanTask(s taskScanner) (*TaskDef, error) {
 		Enabled:    enabledInt != 0,
 		CreatedAt:  createdAt,
 		UpdatedAt:  updatedAt,
-	}, nil
+	}
+	task.SetRuntimeState(TaskStatus(status), lastRunAt, lastError, retryCount)
+	return task, nil
 }

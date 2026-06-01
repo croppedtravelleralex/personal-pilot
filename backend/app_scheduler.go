@@ -184,5 +184,7 @@ func taskToInfo(t *scheduler.TaskDef) SchedulerTaskInfo {
 		CreatedAt:  t.CreatedAt.Format(time.RFC3339),
 		Status:     string(t.Status()),
 		LastRunAt:  lastRunAt,
+		LastError:  t.LastError(),
+		RetryCount: t.RetryCount(),
 	}
 }
