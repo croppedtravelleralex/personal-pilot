@@ -463,6 +463,12 @@ pub struct DesktopProviderReadinessItem {
     pub cdp_fill_status: String,
     pub cdp_automation_status: String,
     pub operator_ui_status: String,
+    pub dry_run_status: String,
+    pub dry_run_available: bool,
+    pub dry_run_contract: Vec<String>,
+    pub dry_run_next_action: String,
+    pub failure_taxonomy_status: String,
+    pub failure_taxonomy: Vec<String>,
     pub real_provider_smoke_status: String,
     pub acceptance_status: String,
     pub closure_gates: Vec<String>,
@@ -2622,6 +2628,10 @@ fn value_string_array(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn value_bool(value: &Value, key: &str) -> Option<bool> {
+    value.get(key).and_then(Value::as_bool)
+}
+
 fn latest_provider_acceptance_report_item(domain: &str) -> Option<(Value, String)> {
     let reports_dir = data_root_from_database_url(&default_database_url())
         .join("reports")
@@ -2668,6 +2678,8 @@ fn provider_readiness_item(
     real_provider_smoke_status: &str,
     closure_gates: &[&str],
     acceptance_checklist: &[&str],
+    dry_run_contract: &[&str],
+    failure_taxonomy: &[&str],
 ) -> DesktopProviderReadinessItem {
     let present_credential_names = env_present_names(credential_env_keys);
     let credential_present = !present_credential_names.is_empty();
@@ -2687,6 +2699,21 @@ fn provider_readiness_item(
     let operator_ui_status = latest_report_item
         .and_then(|item| value_text(item, "operatorUiStatus"))
         .unwrap_or_else(|| operator_ui_status.to_string());
+    let dry_run_status = latest_report_item
+        .and_then(|item| value_text(item, "dryRunStatus"))
+        .unwrap_or_else(|| "contract_available".to_string());
+    let dry_run_available = latest_report_item
+        .and_then(|item| value_bool(item, "dryRunAvailable"))
+        .unwrap_or(true);
+    let report_dry_run_contract = latest_report_item
+        .map(|item| value_string_array(item, "dryRunContract"))
+        .unwrap_or_default();
+    let report_failure_taxonomy = latest_report_item
+        .map(|item| value_string_array(item, "failureTaxonomy"))
+        .unwrap_or_default();
+    let failure_taxonomy_status = latest_report_item
+        .and_then(|item| value_text(item, "failureTaxonomyStatus"))
+        .unwrap_or_else(|| "present".to_string());
     let real_provider_smoke_status = latest_report_item
         .and_then(|item| value_text(item, "realProviderSmokeStatus"))
         .unwrap_or_else(|| real_provider_smoke_status.to_string());
@@ -2761,6 +2788,25 @@ fn provider_readiness_item(
     } else {
         blockers[0].clone()
     };
+    let dry_run_next_action = latest_report_item
+        .and_then(|item| value_text(item, "dryRunNextAction"))
+        .unwrap_or_else(|| next_action.clone());
+    let dry_run_contract = if report_dry_run_contract.is_empty() {
+        dry_run_contract
+            .iter()
+            .map(|item| item.to_string())
+            .collect()
+    } else {
+        report_dry_run_contract
+    };
+    let failure_taxonomy = if report_failure_taxonomy.is_empty() {
+        failure_taxonomy
+            .iter()
+            .map(|item| item.to_string())
+            .collect()
+    } else {
+        report_failure_taxonomy
+    };
     let present_credential_names = if present_credential_names.is_empty() {
         report_credential_names
     } else {
@@ -2781,6 +2827,12 @@ fn provider_readiness_item(
         cdp_fill_status,
         cdp_automation_status,
         operator_ui_status,
+        dry_run_status,
+        dry_run_available,
+        dry_run_contract,
+        dry_run_next_action,
+        failure_taxonomy_status,
+        failure_taxonomy,
         real_provider_smoke_status,
         acceptance_status,
         closure_gates: closure_gates.iter().map(|item| item.to_string()).collect(),
@@ -2826,6 +2878,21 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
                 "fill provider token/result through browser automation",
                 "run a real provider acceptance smoke and preserve failure evidence",
             ],
+            &[
+                "credential_env_check",
+                "challenge_detection_contract",
+                "solver_request_shape_check",
+                "token_fill_contract",
+                "failure_reason_preservation",
+            ],
+            &[
+                "credential_missing",
+                "challenge_detection_not_passed",
+                "solver_manager_not_wired",
+                "solver_unavailable",
+                "token_fill_not_wired",
+                "real_smoke_required",
+            ],
         ),
         provider_readiness_item(
             "sms",
@@ -2853,6 +2920,21 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
                 "detect phone/code fields and fill through CDP automation",
                 "handle cancel/finish/failure states with operator-visible evidence",
             ],
+            &[
+                "credential_env_check",
+                "number_purchase_contract",
+                "phone_and_code_field_detection_contract",
+                "code_wait_timeout_contract",
+                "cancel_finish_state_contract",
+            ],
+            &[
+                "credential_missing",
+                "number_purchase_not_wired",
+                "phone_field_detection_not_passed",
+                "code_wait_timeout",
+                "cancel_finish_not_wired",
+                "real_smoke_required",
+            ],
         ),
         provider_readiness_item(
             "email",
@@ -2878,6 +2960,21 @@ pub fn read_desktop_provider_production_readiness() -> DesktopProviderProduction
                 "wait for code through EmailService/inbox API",
                 "fill email code through CDP automation",
                 "run a real registration-flow smoke and preserve provider/session evidence",
+            ],
+            &[
+                "credential_or_endpoint_check",
+                "inbox_create_contract",
+                "email_session_identity_contract",
+                "wait_code_timeout_contract",
+                "cdp_fill_contract",
+            ],
+            &[
+                "credential_missing",
+                "inbox_create_not_wired",
+                "wait_code_timeout",
+                "session_persistence_not_proven",
+                "cdp_fill_not_wired",
+                "registration_smoke_required",
             ],
         ),
     ];
@@ -9676,6 +9773,15 @@ mod tests {
             .items
             .iter()
             .all(|item| item.configured_provider_count == 0));
+        assert!(readiness.items.iter().all(|item| item.dry_run_available));
+        assert!(readiness
+            .items
+            .iter()
+            .all(|item| item.failure_taxonomy_status == "present"));
+        assert!(readiness
+            .items
+            .iter()
+            .all(|item| !item.failure_taxonomy.is_empty()));
 
         env::set_var("CAPSOLVER_API_KEY", "test-key");
         let with_captcha_credential = read_desktop_provider_production_readiness();
@@ -9690,6 +9796,11 @@ mod tests {
             .blockers
             .iter()
             .any(|blocker| blocker.contains("production manager wiring")));
+        assert_eq!(captcha.dry_run_status, "contract_available");
+        assert!(captcha
+            .failure_taxonomy
+            .iter()
+            .any(|item| item == "token_fill_not_wired"));
         assert_eq!(with_captcha_credential.ready_count, 0);
         env::remove_var("CAPSOLVER_API_KEY");
     }

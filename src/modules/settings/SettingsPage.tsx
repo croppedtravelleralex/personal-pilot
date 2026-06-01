@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Save, RotateCcw, Upload, Download } from 'lucide-react'
+import { Save, RotateCcw, Upload, Download, RefreshCw } from 'lucide-react'
 import { Card, Button, FormItem, Input, Select, Switch, ThemeSwitcher, toast, Modal, Progress } from '../../shared/components'
 import { fetchSettings, saveSettings, resetSettings, initializeSystemData, exportSystemConfig, importSystemConfig } from './api'
 import type { AppSettings } from './types'
 import { defaultSettings } from './types'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { useBackupStore } from '../../store/backupStore'
+import { readProviderProductionReadiness } from '../../services/desktop'
+import type { DesktopProviderProductionReadiness } from '../../types/desktop'
 
 interface BackupExportProgress {
   phase: string
@@ -35,12 +37,16 @@ export function SettingsPage() {
   const [exportProgress, setExportProgress] = useState<BackupExportProgress | null>(null)
   const [importProgress, setImportProgress] = useState<BackupExportProgress | null>(null)
   const [exportLogs, setExportLogs] = useState<BackupExportLogItem[]>([])
+  const [providerReadiness, setProviderReadiness] = useState<DesktopProviderProductionReadiness | null>(null)
+  const [providerLoading, setProviderLoading] = useState(false)
+  const [providerError, setProviderError] = useState('')
   const exportLogsRef = useRef<HTMLDivElement | null>(null)
   const setImportState = useBackupStore((s) => s.setImportState)
   const clearImportState = useBackupStore((s) => s.clearImportState)
 
   useEffect(() => {
     loadSettings()
+    loadProviderReadiness()
   }, [])
 
   useEffect(() => {
@@ -164,6 +170,19 @@ export function SettingsPage() {
       setSettings(data)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadProviderReadiness = async () => {
+    setProviderLoading(true)
+    setProviderError('')
+    try {
+      const data = await readProviderProductionReadiness()
+      setProviderReadiness(data)
+    } catch (error: any) {
+      setProviderError(error?.message || 'Provider readiness 读取失败')
+    } finally {
+      setProviderLoading(false)
     }
   }
 
@@ -300,6 +319,21 @@ export function SettingsPage() {
   }
 
   const importRunning = actionLoading === 'import-reset' || actionLoading === 'import-merge'
+  const providerRows = providerReadiness?.items ?? []
+  const providerTotal = providerRows.length || 0
+  const providerStatusClass = (status?: string) => {
+    const value = (status || '').toLowerCase()
+    if (value.includes('accepted') || value.includes('passed') || value === 'ready' || value === 'available' || value === 'present') {
+      return 'text-[var(--color-success)]'
+    }
+    if (value.includes('blocked') || value.includes('missing') || value.includes('not_') || value.includes('required')) {
+      return 'text-[var(--color-warning)]'
+    }
+    if (value.includes('failed') || value.includes('error')) {
+      return 'text-[var(--color-error)]'
+    }
+    return 'text-[var(--color-text-secondary)]'
+  }
 
   if (loading) {
     return (
@@ -456,6 +490,85 @@ export function SettingsPage() {
               ]}
             />
           </FormItem>
+        </div>
+      </Card>
+
+      <Card
+        title="Provider dry-run 验收"
+        subtitle={providerReadiness
+          ? `${providerReadiness.status} · ready ${providerReadiness.readyCount}/${providerTotal}`
+          : 'CAPTCHA / SMS / Email'}
+      >
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-[var(--color-text-muted)]">
+              {providerReadiness?.summary || '等待读取 readiness'}
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={loadProviderReadiness}
+              loading={providerLoading}
+            >
+              <RefreshCw className="w-4 h-4" />
+              刷新
+            </Button>
+          </div>
+          {providerError && (
+            <div className="rounded-md border border-[var(--color-error)]/40 bg-[var(--color-error)]/5 px-3 py-2 text-xs text-[var(--color-error)]">
+              {providerError}
+            </div>
+          )}
+          {providerLoading && providerRows.length === 0 && (
+            <div className="text-xs text-[var(--color-text-muted)]">读取中...</div>
+          )}
+          {providerRows.map(item => (
+            <div key={item.domain} className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-[var(--color-text-primary)] uppercase">{item.domain}</div>
+                  <div className="mt-1 text-xs text-[var(--color-text-muted)] break-all">
+                    {item.latestReportPath || 'no report'}
+                  </div>
+                </div>
+                <div className={`text-xs font-medium ${providerStatusClass(item.status)}`}>{item.status}</div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <div className="text-[var(--color-text-muted)]">credentials</div>
+                  <div className={providerStatusClass(item.credentialStatus)}>{item.credentialStatus}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">dry-run</div>
+                  <div className={providerStatusClass(item.dryRunStatus)}>{item.dryRunStatus}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">taxonomy</div>
+                  <div className={providerStatusClass(item.failureTaxonomyStatus)}>{item.failureTaxonomyStatus}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--color-text-muted)]">real smoke</div>
+                  <div className={providerStatusClass(item.realProviderSmokeStatus)}>{item.realProviderSmokeStatus}</div>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1">
+                {item.failureTaxonomy.slice(0, 5).map(code => (
+                  <span key={code} className="rounded border border-[var(--color-border-muted)] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">
+                    {code}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-3 text-xs leading-5 text-[var(--color-text-secondary)] break-words">
+                <span className="text-[var(--color-text-muted)]">next </span>
+                {item.dryRunNextAction || item.nextAction}
+              </div>
+              {item.failureReason && (
+                <div className="mt-1 text-xs leading-5 text-[var(--color-warning)] break-words">
+                  {item.failureReason}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </Card>
 

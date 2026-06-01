@@ -104,3 +104,13 @@ Status: started 2026-06-01.
 3. Verify with mock CDP runner tests; this is not a target-site production claim.
 4. Preserve external blockers for provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full `450` observed/replay coverage.
 5. Continue next with provider dry-run/operator closure, same-run desktop/profile comparison, and typed facade shrink.
+
+## Fourth Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Close M4.4 local provider dry-run/operator visibility by upgrading `provider_acceptance_preflight` to v3.
+2. Expose CAPTCHA/SMS/Email dry-run contract, next action, failure taxonomy, latest report path, and real smoke blocker through desktop readiness API and Settings.
+3. Extend M4 gate with `provider_dry_run_contract` local report validation while keeping real provider acceptance as `expected_blocked`.
+4. Verify with provider preflight, M4 gate, Rust provider readiness test, `pnpm typecheck`, `cargo fmt --check`, and diff hygiene.
+5. Continue next with same-run desktop/profile comparison, typed facade shrink, SessionBundle operator evidence loop, and M5 performance work.

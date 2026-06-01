@@ -1,6 +1,7 @@
 param(
   [string]$OutputDir = "data/reports/m4-acceptance",
-  [switch]$SkipLiveTruthRefresh
+  [switch]$SkipLiveTruthRefresh,
+  [switch]$SkipProviderPreflightRefresh
 )
 
 $ErrorActionPreference = "Stop"
@@ -116,6 +117,60 @@ function Get-ProviderBlockedItemIds([object]$Items) {
   })
 }
 
+function Get-ProviderDryRunContractFailures([object]$Report) {
+  $failures = @()
+  if ($null -eq $Report) {
+    return @("provider dry-run report is missing")
+  }
+
+  $items = @((Get-Field $Report "items"))
+  if ($items.Count -eq 0) {
+    $failures += "provider report has no items"
+  }
+
+  $topDryRunStatus = [string](Get-Field $Report "dryRunStatus")
+  $topTaxonomyStatus = [string](Get-Field $Report "failureTaxonomyStatus")
+  if ([string]::IsNullOrWhiteSpace($topDryRunStatus)) {
+    $failures += "provider report missing top-level dryRunStatus"
+  }
+  if ([string]::IsNullOrWhiteSpace($topTaxonomyStatus)) {
+    $failures += "provider report missing top-level failureTaxonomyStatus"
+  }
+
+  foreach ($item in $items) {
+    $domain = [string](Get-Field $item "domain")
+    if ([string]::IsNullOrWhiteSpace($domain)) { $domain = "provider_item" }
+
+    $dryRunStatus = [string](Get-Field $item "dryRunStatus")
+    $dryRunAvailable = (Get-Field $item "dryRunAvailable") -eq $true
+    $dryRunContract = @((Get-Field $item "dryRunContract") | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $dryRunNextAction = [string](Get-Field $item "dryRunNextAction")
+    $failureTaxonomyStatus = [string](Get-Field $item "failureTaxonomyStatus")
+    $failureTaxonomy = @((Get-Field $item "failureTaxonomy") | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+
+    if ([string]::IsNullOrWhiteSpace($dryRunStatus)) {
+      $failures += "$domain missing dryRunStatus"
+    }
+    if (-not $dryRunAvailable) {
+      $failures += "$domain dryRunAvailable is not true"
+    }
+    if ($dryRunContract.Count -eq 0) {
+      $failures += "$domain missing dryRunContract"
+    }
+    if ([string]::IsNullOrWhiteSpace($dryRunNextAction)) {
+      $failures += "$domain missing dryRunNextAction"
+    }
+    if ([string]::IsNullOrWhiteSpace($failureTaxonomyStatus)) {
+      $failures += "$domain missing failureTaxonomyStatus"
+    }
+    if ($failureTaxonomy.Count -eq 0) {
+      $failures += "$domain missing failureTaxonomy"
+    }
+  }
+
+  return $failures
+}
+
 function Invoke-LiveTruthGuard {
   if ($SkipLiveTruthRefresh) { return }
 
@@ -124,6 +179,16 @@ function Invoke-LiveTruthGuard {
 
   & powershell -NoProfile -ExecutionPolicy Bypass -File $script | Out-Host
   $script:liveTruthExitCode = $LASTEXITCODE
+}
+
+function Invoke-ProviderAcceptancePreflight {
+  if ($SkipProviderPreflightRefresh) { return }
+
+  $script = Join-Path $PSScriptRoot "provider_acceptance_preflight.ps1"
+  if (-not (Test-Path $script)) { return }
+
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $script | Out-Host
+  $script:providerPreflightExitCode = $LASTEXITCODE
 }
 
 function New-LocalGateResult(
@@ -179,8 +244,23 @@ function Test-AutomationPrimitiveContract {
   return New-LocalGateResult "automation_primitives_contract" "passed" "passed" "M4.3 typed primitive source/test contract is present; run go test for behavioral proof" @()
 }
 
+function Test-ProviderDryRunContract {
+  $item = Get-LatestReport "provider-acceptance" "provider-acceptance-preflight-*.json"
+  $report = if ($null -ne $item) { Get-Field $item "value" } else { $null }
+  $failures = Get-ProviderDryRunContractFailures $report
+  if ($providerPreflightExitCode -ne $null -and $providerPreflightExitCode -notin @(0, 2)) {
+    $failures += "provider_acceptance_preflight script exited $providerPreflightExitCode"
+  }
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "provider_dry_run_contract" "missing_coverage" "failed" "M4.4 provider dry-run/failure taxonomy contract is incomplete" $failures
+  }
+  return New-LocalGateResult "provider_dry_run_contract" "passed" "passed" "M4.4 provider dry-run/failure taxonomy report contract is present; real smoke remains externally blocked" @()
+}
+
 $liveTruthExitCode = $null
+$providerPreflightExitCode = $null
 Invoke-LiveTruthGuard
+Invoke-ProviderAcceptancePreflight
 
 $gateSpecs = @(
   [ordered]@{ id = "live_truth_guard"; dir = "governance"; pattern = "live-truth-guard-*.json" },
@@ -268,19 +348,30 @@ foreach ($spec in $gateSpecs) {
       $providerItems = @((Get-Field $report "items"))
       $blockedItems = Get-ProviderBlockedItemIds $providerItems
       $acceptedCount = [int](Get-Field $report "acceptedCount")
+      $dryRunFailures = Get-ProviderDryRunContractFailures $report
+      if ($providerPreflightExitCode -ne $null -and $providerPreflightExitCode -notin @(0, 2)) {
+        $dryRunFailures += "provider_acceptance_preflight script exited $providerPreflightExitCode"
+      }
       if ($status -eq "accepted") {
-        if ($providerItems.Count -eq 0 -or $acceptedCount -ne $providerItems.Count -or $blockedItems.Count -gt 0) {
+        if ($providerItems.Count -eq 0 -or $acceptedCount -ne $providerItems.Count -or $blockedItems.Count -gt 0 -or $dryRunFailures.Count -gt 0) {
           $classification = "failed"
           $reason = "provider report is marked accepted while item blockers remain"
           $failures += "blocked or missing provider acceptance misreported as accepted: $($blockedItems -join ', ') acceptedCount=$acceptedCount itemCount=$($providerItems.Count)"
+          $failures += $dryRunFailures
         } else {
           $classification = "passed"
           $reason = "provider acceptance preflight accepted"
         }
       } elseif ($status -in @("blocked_missing_credentials", "credential_ready_but_runtime_closure_required")) {
-        $classification = "expected_blocked"
-        $reason = "provider acceptance requires credentials and real smoke evidence"
-        $expectedBlockers += if ($blockedItems.Count -gt 0) { $blockedItems } else { $status }
+        if ($dryRunFailures.Count -gt 0) {
+          $classification = "failed"
+          $reason = "provider dry-run/failure taxonomy fields are missing"
+          $failures += $dryRunFailures
+        } else {
+          $classification = "expected_blocked"
+          $reason = "provider acceptance requires credentials and real smoke evidence"
+          $expectedBlockers += if ($blockedItems.Count -gt 0) { $blockedItems } else { $status }
+        }
       } else {
         $classification = "failed"
         $reason = "unexpected provider acceptance status"
@@ -340,6 +431,7 @@ foreach ($spec in $gateSpecs) {
 }
 
 $gates += Test-AutomationPrimitiveContract
+$gates += Test-ProviderDryRunContract
 
 $failedGates = @($gates | Where-Object { $_.classification -eq "failed" })
 $expectedBlockedGates = @($gates | Where-Object { $_.classification -eq "expected_blocked" })
@@ -354,7 +446,7 @@ $status = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v2"
+  schemaVersion = "m4_acceptance_gate_v3"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
@@ -370,8 +462,9 @@ $report = [ordered]@{
   notes = @(
     "External blockers are allowed only as expected_blocked.",
     "Live truth drift, missing critical reports, unreadable reports, and passed reports with remaining blockers fail this gate.",
-    "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set; external gates are aggregated from latest reports.",
-    "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test."
+    "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set and refreshes provider acceptance preflight unless -SkipProviderPreflightRefresh is set; external gates are aggregated from latest reports.",
+    "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
+    "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes."
   )
 }
 

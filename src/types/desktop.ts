@@ -487,6 +487,12 @@ export interface DesktopProviderReadinessItem {
   cdpFillStatus: string;
   cdpAutomationStatus: string;
   operatorUiStatus: string;
+  dryRunStatus: string;
+  dryRunAvailable: boolean;
+  dryRunContract: string[];
+  dryRunNextAction: string;
+  failureTaxonomyStatus: string;
+  failureTaxonomy: string[];
   realProviderSmokeStatus: string;
   acceptanceStatus: string;
   closureGates: string[];

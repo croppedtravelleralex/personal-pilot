@@ -45,3 +45,4 @@
 - 文档没有把 Overall 目标当成 Mainline 已交付。
 - 涉及代码改动时，按项目规则跑 type check、release build、Win11/Tauri enforcement。
 - 文档-only 改动也要检查 canonical 入口是否存在且互相指向有效文件。
+- 涉及 M4 provider readiness 时，`scripts/m4_acceptance_gate.ps1` 会刷新 provider preflight；`provider_dry_run_contract` passed 只代表本地 dry-run/failure taxonomy 报告完整，真实 provider smoke 仍必须单独保留 blocked/accepted 证据。
