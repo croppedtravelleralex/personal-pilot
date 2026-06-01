@@ -397,7 +397,15 @@ fn normalize_browser_validation_signal(
 ) -> DesktopValidationSignal {
     let valid_category = matches!(
         signal.category.as_str(),
-        "detector" | "leak" | "dns" | "webrtc" | "canvas" | "audio" | "worker" | "transport"
+        "detector"
+            | "fingerprint"
+            | "leak"
+            | "dns"
+            | "webrtc"
+            | "canvas"
+            | "audio"
+            | "worker"
+            | "transport"
     );
     if !valid_category {
         signal.category = "detector".to_string();
@@ -593,6 +601,7 @@ async fn build_validation_report(
             "transport".to_string(),
             "webrtc".to_string(),
             "leak".to_string(),
+            "fingerprint".to_string(),
             "canvas".to_string(),
             "audio".to_string(),
         ],
@@ -2297,6 +2306,33 @@ mod tests {
         assert_eq!(webview_signal.runtime_adapter, "desktop_webview");
         assert!(!webview_signal.target_profile_browser);
         assert!(webview_signal.failure_reason.is_none());
+    }
+
+    #[test]
+    fn browser_validation_signal_preserves_fingerprint_category() {
+        let signal = DesktopValidationSignal {
+            id: "desktop-webview-fingerprint-surface".to_string(),
+            category: "fingerprint".to_string(),
+            layer: "declared".to_string(),
+            status: "succeeded".to_string(),
+            label: "Desktop WebView fingerprint surface".to_string(),
+            summary: "Desktop WebView navigator surface was sampled.".to_string(),
+            detail: Some("scope=desktop-webview; target-profile-browser=false".to_string()),
+            collector_scope: String::new(),
+            runtime_adapter: String::new(),
+            target_profile_browser: false,
+            failure_reason: None,
+            duration_ms: Some(1),
+        };
+
+        let normalized = normalize_browser_validation_signal(signal);
+
+        assert_eq!(normalized.category, "fingerprint");
+        assert_eq!(normalized.status, "succeeded");
+        assert_eq!(normalized.layer, "observed");
+        assert_eq!(normalized.collector_scope, "desktop-webview");
+        assert_eq!(normalized.runtime_adapter, "desktop_webview");
+        assert!(!normalized.target_profile_browser);
     }
 
     #[test]
