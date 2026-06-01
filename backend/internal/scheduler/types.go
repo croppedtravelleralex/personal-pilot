@@ -35,7 +35,7 @@ type TaskTrigger struct {
 
 // TaskAction defines a single step in a task.
 type TaskAction struct {
-	Type    string `json:"type"`    // "cdp", "navigate", "click", "wait", "extract"
+	Type    string `json:"type"`    // "cdp", "navigate", "click", "wait", "select", "dialog", "download", "upload", "iframe", "tab", "extract"
 	Target  string `json:"target"`  // CSS selector, URL, or CDP method
 	Value   string `json:"value"`   // additional parameter
 	Timeout int    `json:"timeout"` // milliseconds, 0 = default 30s

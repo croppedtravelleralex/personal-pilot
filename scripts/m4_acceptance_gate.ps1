@@ -126,6 +126,59 @@ function Invoke-LiveTruthGuard {
   $script:liveTruthExitCode = $LASTEXITCODE
 }
 
+function New-LocalGateResult(
+  [string]$Id,
+  [string]$Status,
+  [string]$Classification,
+  [string]$Reason,
+  [string[]]$Failures
+) {
+  return [ordered]@{
+    id = $Id
+    status = $Status
+    classification = $Classification
+    reportPath = $null
+    generatedAt = (Get-Date).ToString("o")
+    schemaVersion = "local_source_contract_v1"
+    reason = $Reason
+    failures = @($Failures)
+    expectedBlockers = @()
+  }
+}
+
+function Test-AutomationPrimitiveContract {
+  $runnerPath = Join-Path $projectRoot "backend\internal\scheduler\cdp_runner.go"
+  $testPath = Join-Path $projectRoot "backend\internal\scheduler\cdp_runner_test.go"
+  $failures = @()
+
+  if (-not (Test-Path $runnerPath)) {
+    $failures += "missing cdp_runner.go"
+  }
+  if (-not (Test-Path $testPath)) {
+    $failures += "missing cdp_runner_test.go"
+  }
+
+  $runnerText = if (Test-Path $runnerPath) { Get-Content -LiteralPath $runnerPath -Raw -Encoding UTF8 } else { "" }
+  $testText = if (Test-Path $testPath) { Get-Content -LiteralPath $testPath -Raw -Encoding UTF8 } else { "" }
+  $requiredActions = @("select", "dialog", "download", "upload", "iframe", "tab")
+  foreach ($action in $requiredActions) {
+    if ($runnerText -notmatch ("case `"{0}`"" -f [regex]::Escape($action))) {
+      $failures += "missing typed runner action: $action"
+    }
+    if ($testText -notmatch [regex]::Escape($action)) {
+      $failures += "missing typed runner test coverage marker: $action"
+    }
+  }
+  if ($testText -notmatch "TestCDPTaskRunner_TypedM4PrimitiveActions") {
+    $failures += "missing typed primitive test function"
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "automation_primitives_contract" "missing_coverage" "failed" "M4.3 typed primitive source/test contract is incomplete" $failures
+  }
+  return New-LocalGateResult "automation_primitives_contract" "passed" "passed" "M4.3 typed primitive source/test contract is present; run go test for behavioral proof" @()
+}
+
 $liveTruthExitCode = $null
 Invoke-LiveTruthGuard
 
@@ -286,6 +339,8 @@ foreach ($spec in $gateSpecs) {
   $gates += New-GateResult $spec.id $status $item $classification $reason $failures $expectedBlockers
 }
 
+$gates += Test-AutomationPrimitiveContract
+
 $failedGates = @($gates | Where-Object { $_.classification -eq "failed" })
 $expectedBlockedGates = @($gates | Where-Object { $_.classification -eq "expected_blocked" })
 $passedGates = @($gates | Where-Object { $_.classification -eq "passed" })
@@ -299,7 +354,7 @@ $status = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v1"
+  schemaVersion = "m4_acceptance_gate_v2"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
@@ -315,7 +370,8 @@ $report = [ordered]@{
   notes = @(
     "External blockers are allowed only as expected_blocked.",
     "Live truth drift, missing critical reports, unreadable reports, and passed reports with remaining blockers fail this gate.",
-    "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set; other gates are aggregated from latest reports."
+    "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set; external gates are aggregated from latest reports.",
+    "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test."
   )
 }
 

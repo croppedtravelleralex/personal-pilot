@@ -94,3 +94,13 @@ Status: started 2026-06-01.
 3. Preserve the boundary that this is local scheduler/operator-loop evidence only.
 4. Verify with scheduler/database Go tests and `pnpm typecheck`.
 5. Continue next with same-run desktop/profile comparison, provider dry-run/operator closure, and typed facade shrink.
+
+## Third Implementation Batch
+
+Status: started 2026-06-01.
+
+1. Close the local M4.3 primitive gap by adding typed scheduler actions for `select`, `dialog`, `download`, `upload`, `iframe`, and `tab`.
+2. Keep raw `cdp` available for escape hatches, but make common operator actions first-class runner behavior.
+3. Verify with mock CDP runner tests; this is not a target-site production claim.
+4. Preserve external blockers for provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full `450` observed/replay coverage.
+5. Continue next with provider dry-run/operator closure, same-run desktop/profile comparison, and typed facade shrink.

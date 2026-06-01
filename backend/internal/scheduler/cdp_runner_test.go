@@ -475,6 +475,97 @@ func TestCDPTaskRunner_CDPActionDispatchesDialogDownloadAndUploadPrimitives(t *t
 	}
 }
 
+func TestCDPTaskRunner_TypedM4PrimitiveActions(t *testing.T) {
+	type receivedCommand struct {
+		method string
+		params map[string]interface{}
+	}
+
+	received := make(chan receivedCommand, 16)
+	server, _ := mockCDPServer(t, func(method string, params interface{}) (interface{}, error) {
+		decoded := map[string]interface{}{}
+		if raw, ok := params.(json.RawMessage); ok && len(raw) > 0 {
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				return nil, fmt.Errorf("decode params: %w", err)
+			}
+		}
+		received <- receivedCommand{method: method, params: decoded}
+
+		switch method {
+		case "Runtime.evaluate":
+			return map[string]interface{}{
+				"result": map[string]interface{}{
+					"type":  "object",
+					"value": map[string]interface{}{"ok": true},
+				},
+			}, nil
+		case "DOM.getDocument":
+			return map[string]interface{}{"root": map[string]interface{}{"nodeId": 1}}, nil
+		case "DOM.querySelector":
+			return map[string]interface{}{"nodeId": 7}, nil
+		case "DOM.setFileInputFiles", "Page.handleJavaScriptDialog", "Page.setDownloadBehavior",
+			"Target.createTarget", "Target.activateTarget", "Target.closeTarget", "Target.getTargets":
+			return map[string]interface{}{"ok": true}, nil
+		default:
+			return nil, fmt.Errorf("unexpected method: %s", method)
+		}
+	})
+	defer server.Close()
+
+	uploadPath := filepath.Join(t.TempDir(), "upload.txt")
+	if err := os.WriteFile(uploadPath, []byte("upload fixture"), 0644); err != nil {
+		t.Fatalf("write upload fixture: %v", err)
+	}
+	downloadPath := t.TempDir()
+
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+	runner := NewCDPTaskRunner(func(id string) (int, error) { return port, nil })
+	task := &TaskDef{
+		ID:        "typed-m4-primitives",
+		ProfileID: "p1",
+		Actions: []TaskAction{
+			{Type: "select", Target: "#country", Value: `{"value":"US"}`},
+			{Type: "dialog", Target: "dismiss", Value: `{"promptText":"stop"}`},
+			{Type: "download", Target: downloadPath, Value: `{"eventsEnabled":true}`},
+			{Type: "upload", Target: "input[type=file]", Value: fmt.Sprintf(`{"files":[%q]}`, uploadPath)},
+			{Type: "iframe", Target: "#frame", Value: `{"action":"click","selector":"#submit"}`},
+			{Type: "tab", Target: "new", Value: `{"url":"https://example.com/new"}`},
+			{Type: "tab", Target: "activate", Value: `{"targetId":"tab-1"}`},
+			{Type: "tab", Target: "close", Value: `{"targetId":"tab-1"}`},
+			{Type: "tab", Target: "list"},
+		},
+	}
+
+	if err := runner.Run(task); err != nil {
+		t.Fatalf("typed M4 primitives failed: %v", err)
+	}
+
+	wantMethods := []string{
+		"Runtime.evaluate",
+		"Page.handleJavaScriptDialog",
+		"Page.setDownloadBehavior",
+		"DOM.getDocument",
+		"DOM.querySelector",
+		"DOM.setFileInputFiles",
+		"Runtime.evaluate",
+		"Target.createTarget",
+		"Target.activateTarget",
+		"Target.closeTarget",
+		"Target.getTargets",
+	}
+	for i, want := range wantMethods {
+		select {
+		case got := <-received:
+			if got.method != want {
+				t.Fatalf("command %d method = %q, want %q", i, got.method, want)
+			}
+			assertTypedPrimitiveParams(t, want, got.params, downloadPath, uploadPath)
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for command %d %s", i, want)
+		}
+	}
+}
+
 func TestCDPTaskRunner_WaitActionSleep(t *testing.T) {
 	// Wait with no selector should just sleep (no CDP connection needed)
 	runner := NewCDPTaskRunner(func(id string) (int, error) { return 51999, nil })
@@ -531,5 +622,52 @@ func TestCDPTaskRunner_MultipleActions(t *testing.T) {
 	}
 	if actionCount != 3 {
 		t.Fatalf("期望 3 个 CDP 命令，收到 %d", actionCount)
+	}
+}
+
+func assertTypedPrimitiveParams(t *testing.T, method string, params map[string]interface{}, downloadPath, uploadPath string) {
+	t.Helper()
+
+	switch method {
+	case "Runtime.evaluate":
+		expression, ok := params["expression"].(string)
+		if !ok || expression == "" {
+			t.Fatalf("Runtime.evaluate params = %#v", params)
+		}
+	case "Page.handleJavaScriptDialog":
+		if params["accept"] != false || params["promptText"] != "stop" {
+			t.Fatalf("dialog params = %#v", params)
+		}
+	case "Page.setDownloadBehavior":
+		if params["behavior"] != "allow" || params["downloadPath"] != downloadPath || params["eventsEnabled"] != true {
+			t.Fatalf("download params = %#v", params)
+		}
+	case "DOM.getDocument":
+		if params["depth"] != float64(1) {
+			t.Fatalf("get document params = %#v", params)
+		}
+	case "DOM.querySelector":
+		if params["nodeId"] != float64(1) || params["selector"] != "input[type=file]" {
+			t.Fatalf("query selector params = %#v", params)
+		}
+	case "DOM.setFileInputFiles":
+		files, ok := params["files"].([]interface{})
+		if !ok || len(files) != 1 || files[0] != uploadPath || params["nodeId"] != float64(7) {
+			t.Fatalf("upload params = %#v", params)
+		}
+	case "Target.createTarget":
+		if params["url"] != "https://example.com/new" {
+			t.Fatalf("create target params = %#v", params)
+		}
+	case "Target.activateTarget", "Target.closeTarget":
+		if params["targetId"] != "tab-1" {
+			t.Fatalf("%s params = %#v", method, params)
+		}
+	case "Target.getTargets":
+		if len(params) != 0 {
+			t.Fatalf("get targets params = %#v", params)
+		}
+	default:
+		t.Fatalf("unexpected method %q", method)
 	}
 }
