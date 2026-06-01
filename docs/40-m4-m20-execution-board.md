@@ -142,8 +142,9 @@ Status: started 2026-06-01.
 1. Start M4.8 typed facade shrink by moving high-traffic synchronizer/workbench core bridge DTOs into `src/types/desktop.ts`.
 2. Update `src/services/desktop.ts` so synchronizer list/arrange/log/tasks wrappers return shared DTOs instead of `unknown[]`.
 3. Remove matching `as Promise<...>` casts from `src/modules/synchronizer/api.ts` while preserving the transitional Wails/core bridge boundary.
-4. Extend M4 gate with `typed_facade_shrink_contract` source checks.
-5. Continue next with remaining browser facade shrink and actual desktop/profile same-run evidence.
+4. Add a typed `BrowserNativeBindings` / `getWindowGoApp()` boundary in `src/modules/browser/api.ts`, replacing browser Wails binding `any` access without changing runtime behavior.
+5. Extend M4 gate with `typed_facade_shrink_contract` source checks for both synchronizer DTOs and browser Wails bindings.
+6. Continue next with browser payload schema normalize, actual desktop/profile same-run evidence, and remaining workbench/core bridge shrink.
 
 ## Eighth Implementation Batch
 

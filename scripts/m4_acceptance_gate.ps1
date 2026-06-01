@@ -331,9 +331,10 @@ function Test-TypedFacadeShrinkContract {
   $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
   $desktopTypesPath = Join-Path $projectRoot "src\types\desktop.ts"
   $syncApiPath = Join-Path $projectRoot "src\modules\synchronizer\api.ts"
+  $browserApiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
   $failures = @()
 
-  foreach ($path in @($desktopServicePath, $desktopTypesPath, $syncApiPath)) {
+  foreach ($path in @($desktopServicePath, $desktopTypesPath, $syncApiPath, $browserApiPath)) {
     if (-not (Test-Path $path)) {
       $failures += "missing source file: $path"
     }
@@ -342,6 +343,7 @@ function Test-TypedFacadeShrinkContract {
   $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
   $desktopTypesText = if (Test-Path $desktopTypesPath) { Get-Content -LiteralPath $desktopTypesPath -Raw -Encoding UTF8 } else { "" }
   $syncApiText = if (Test-Path $syncApiPath) { Get-Content -LiteralPath $syncApiPath -Raw -Encoding UTF8 } else { "" }
+  $browserApiText = if (Test-Path $browserApiPath) { Get-Content -LiteralPath $browserApiPath -Raw -Encoding UTF8 } else { "" }
 
   foreach ($token in @(
       "DesktopCoreSyncGroup",
@@ -379,10 +381,31 @@ function Test-TypedFacadeShrinkContract {
     }
   }
 
+  foreach ($token in @(
+      "type BrowserNativeBindings = Partial<{",
+      "BrowserProfileList: () => Promise<BrowserProfile[]>",
+      "BrowserInstanceStart: (profileId: string) => Promise<BrowserProfile>",
+      "BrowserProxyBatchTestSpeed: (proxyIds: string[], concurrency: number) => Promise<ProxyTestResult[]>",
+      "BehaviorRecordingSummaryList: () => Promise<RecordingSummary[]>",
+      "LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>",
+      "function getWindowGoApp(): BrowserNativeBindings | null",
+      "const bindings = await getBindings()"
+    )) {
+    if ($browserApiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API missing typed Wails binding marker: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any = await getBindings()", "const goApp = (window as any).go?.main?.App")) {
+    if ($browserApiText -match [regex]::Escape($token)) {
+      $failures += "browser API still uses dynamic Wails binding marker: $token"
+    }
+  }
+
   if ($failures.Count -gt 0) {
     return New-LocalGateResult "typed_facade_shrink_contract" "missing_coverage" "failed" "M4.8 typed facade shrink source contract is incomplete" $failures
   }
-  return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 high-traffic synchronizer bridge results use shared DTO types instead of unknown[] casts; Wails bridge remains transitional" @()
+  return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 synchronizer DTOs and browser Wails bindings have typed source contracts; Wails bridge remains transitional" @()
 }
 
 function Test-RuntimeAdapterOperatorContract {
@@ -643,7 +666,7 @@ $status = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v5"
+  schemaVersion = "m4_acceptance_gate_v6"
   generatedAt = (Get-Date).ToString("o")
   status = $status
   projectRoot = $projectRoot
@@ -663,7 +686,7 @@ $report = [ordered]@{
     "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
-    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic bridge DTOs without removing the transitional Wails/core bridge.",
+    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer DTOs and browser Wails bindings without removing the transitional bridge.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports."
   )
 }

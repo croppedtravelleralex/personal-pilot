@@ -10,13 +10,130 @@ import type {
 import { DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE } from './types'
 
 type Unsubscribe = () => void
+type ProxyTestResult = { proxyId: string; ok: boolean; latencyMs: number; error: string }
+type ProxyValidationResult = { supported: boolean; errorMsg: string }
+type ProxyNameFixResult = { ok: boolean; fixed: number; total: number; message?: string; error?: string }
+type BrowserProxyImportPayload = Partial<SubscriptionImportResult & ClashImportURLResult> & {
+  allProxies?: BrowserProxy[]
+}
+type RecordingEventPagePayload = {
+  events?: RecordedEvent[]
+  eventTotal?: number
+  eventOffset?: number
+  eventLimit?: number
+  offset?: number
+  limit?: number
+  total?: number
+}
+type BrowserNativeWindow = Window & {
+  go?: {
+    main?: {
+      App?: BrowserNativeBindings
+    }
+  }
+}
+
+type BrowserNativeBindings = Partial<{
+  BrowserProfileList: () => Promise<BrowserProfile[]>
+  BrowserProfileListByTag: (tag: string) => Promise<BrowserProfile[]>
+  BrowserGetAllTags: () => Promise<string[]>
+  BrowserProfileCreate: (input: BrowserProfileInput) => Promise<BrowserProfile>
+  BrowserProfileUpdate: (profileId: string, input: BrowserProfileInput) => Promise<BrowserProfile>
+  BrowserProfileDelete: (profileId: string) => Promise<void>
+  BrowserProfileCopy: (profileId: string, newName: string) => Promise<BrowserProfile>
+  BrowserInstanceStart: (profileId: string) => Promise<BrowserProfile>
+  BrowserInstanceStartByCode: (code: string) => Promise<BrowserProfile>
+  BrowserInstanceStop: (profileId: string) => Promise<BrowserProfile>
+  BrowserInstanceRestart: (profileId: string) => Promise<BrowserProfile>
+  BrowserInstanceOpenUrl: (profileId: string, targetUrl: string) => Promise<boolean>
+  BrowserInstanceGetTabs: (profileId: string) => Promise<BrowserTab[]>
+  GetBrowserSettings: () => Promise<BrowserSettings>
+  SaveBrowserSettings: (settings: BrowserSettings) => Promise<void>
+  BrowserCoreList: () => Promise<BrowserCore[]>
+  BrowserCoreSave: (input: BrowserCoreInput) => Promise<void>
+  BrowserCoreDelete: (coreId: string) => Promise<void>
+  BrowserCoreSetDefault: (coreId: string) => Promise<void>
+  BrowserCoreValidateForKind: (corePath: string, kind: string) => Promise<BrowserCoreValidateResult>
+  BrowserCoreValidate: (corePath: string) => Promise<BrowserCoreValidateResult>
+  BrowserCoreExtendedInfo: () => Promise<BrowserCoreExtended[]>
+  BrowserCoreScan: () => Promise<BrowserCore[]>
+  BrowserCoreDownload: (coreName: string, url: string, proxyConfig: string) => Promise<void>
+  BrowserProxyList: () => Promise<BrowserProxy[]>
+  BrowserProxyListGroups: () => Promise<string[]>
+  BrowserProxyListByGroup: (groupName: string) => Promise<BrowserProxy[]>
+  BrowserProxyImportSubscriptionByURL: (targetURL: string, groupName: string) => Promise<BrowserProxyImportPayload>
+  BrowserProxyFixNames: () => Promise<ProxyNameFixResult>
+  BrowserProxyFetchClashByURL: (targetURL: string) => Promise<ClashImportURLResult>
+  SaveBrowserProxies: (proxies: BrowserProxy[]) => Promise<void>
+  ValidateProxyConfig: (proxyConfig: string, proxyId: string) => Promise<ProxyValidationResult>
+  TestProxyConnectivity: (proxyId: string, proxyConfig: string) => Promise<ProxyTestResult>
+  TestProxyRealConnectivity: (proxyId: string) => Promise<ProxyTestResult>
+  BrowserProxyTestSpeed: (proxyId: string) => Promise<ProxyTestResult>
+  BrowserProxyBatchTestSpeed: (proxyIds: string[], concurrency: number) => Promise<ProxyTestResult[]>
+  BrowserProxyCheckIPHealth: (proxyId: string) => Promise<ProxyIPHealthResult>
+  BrowserProxyBatchCheckIPHealth: (proxyIds: string[], concurrency: number) => Promise<ProxyIPHealthResult[]>
+  OpenUserDataDir: (userDataDir: string) => Promise<void>
+  OpenCorePath: (corePath: string) => Promise<void>
+  BrowserGetCookies: (profileId: string) => Promise<CookieInfo[]>
+  BrowserClearCookies: (profileId: string) => Promise<void>
+  BrowserExportCookies: (profileId: string) => Promise<string>
+  BrowserSnapshotList: (profileId: string) => Promise<SnapshotInfo[]>
+  BrowserSnapshotCreate: (profileId: string, name: string) => Promise<SnapshotInfo>
+  BrowserSnapshotRestore: (profileId: string, snapshotId: string) => Promise<void>
+  BrowserSnapshotDelete: (profileId: string, snapshotId: string) => Promise<void>
+  BookmarkList: () => Promise<BrowserBookmark[]>
+  BookmarkSave: (items: BrowserBookmark[]) => Promise<void>
+  BookmarkReset: () => Promise<void>
+  BrowserProfileSetKeywords: (profileId: string, keywords: string[]) => Promise<BrowserProfile>
+  GetLaunchServerInfo: () => Promise<Partial<LaunchServerInfo>>
+  BrowserProfileGetCode: (profileId: string) => Promise<string>
+  BrowserProfileRegenerateCode: (profileId: string) => Promise<string>
+  BrowserProfileSetCode: (profileId: string, code: string) => Promise<string>
+  BrowserProfileBatchSetTags: (profileIds: string[], tags: string[], replace: boolean) => Promise<void>
+  BrowserProfileBatchRemoveTags: (profileIds: string[], tags: string[]) => Promise<void>
+  BrowserRenameTag: (oldName: string, newName: string) => Promise<void>
+  ListGroups: () => Promise<BrowserGroupWithCount[]>
+  CreateGroup: (input: BrowserGroupInput) => Promise<BrowserGroup>
+  UpdateGroup: (groupId: string, input: BrowserGroupInput) => Promise<BrowserGroup>
+  DeleteGroup: (groupId: string) => Promise<void>
+  MoveInstancesToGroup: (profileIds: string[], groupId: string) => Promise<void>
+  BehaviorStartRecording: (profileId: string) => Promise<void>
+  BehaviorStopRecording: (profileId: string, name: string) => Promise<Recording>
+  BehaviorRecordingList: () => Promise<Recording[]>
+  BehaviorRecordingSummaryList: () => Promise<RecordingSummary[]>
+  BehaviorRecordingMetaList: () => Promise<RecordingSummary[]>
+  BehaviorRecordingStatus: () => Promise<Partial<ActiveRecordingStatus>>
+  ActiveRecordingStatus: () => Promise<Partial<ActiveRecordingStatus>>
+  BehaviorRecordingDelete: (id: string) => Promise<void>
+  BehaviorGetRecording: (id: string) => Promise<Recording | null>
+  BehaviorGetRecordingDetail: (id: string, eventOffset: number, eventLimit: number) => Promise<RecordingDetailPage | null>
+  BehaviorGetRecordingMeta: (id: string) => Promise<RecordingSummary | null>
+  BehaviorGetRecordingEvents: (id: string, eventOffset: number, eventLimit: number) => Promise<RecordingEventPagePayload>
+  BehaviorPlayRecording: (profileId: string, recordingId: string, variation: VariationConfig) => Promise<void>
+  BehaviorStopPlayback: (profileId: string) => Promise<void>
+  BehaviorQuickRecord: (profileId: string) => Promise<Recording>
+  BehaviorPresetList: () => Promise<Array<{ id: string; name: string; description: string }>>
+  CleanupStaleRecordingSessions: () => Promise<void>
+  BehaviorRecordingRename: (id: string, name: string) => Promise<void>
+  BehaviorRecordingExport: (id: string) => Promise<RecordingExportBundle>
+  BehaviorRecordingImport: (payload: string, name: string) => Promise<Recording>
+  BehaviorRecordingCopy: (id: string, name: string) => Promise<Recording>
+  BehaviorPlaybackReview: (profileId: string, decision: string) => Promise<void>
+  BehaviorRecordingTrim: (id: string, startEvent: number, endEvent: number, name: string) => Promise<Recording>
+  LLMPlanOnly: (taskDescription: string) => Promise<Array<Record<string, unknown>>>
+  LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>
+}>
 
 const getBindings = async () => {
   try {
-    return await import('../../wailsjs/go/main/App')
+    return await import('../../wailsjs/go/main/App') as BrowserNativeBindings
   } catch {
     return null
   }
+}
+
+function getWindowGoApp(): BrowserNativeBindings | null {
+  return (window as BrowserNativeWindow).go?.main?.App ?? null
 }
 
 function noop() {}
@@ -76,7 +193,7 @@ let mockProxies: BrowserProxy[] = []
 // ============================================================================
 
 export async function fetchBrowserProfiles(): Promise<BrowserProfile[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileList) {
     return (await bindings.BrowserProfileList()) || []
   }
@@ -84,7 +201,7 @@ export async function fetchBrowserProfiles(): Promise<BrowserProfile[]> {
 }
 
 export async function fetchBrowserProfilesByTag(tag: string): Promise<BrowserProfile[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileListByTag) {
     return (await bindings.BrowserProfileListByTag(tag)) || []
   }
@@ -92,7 +209,7 @@ export async function fetchBrowserProfilesByTag(tag: string): Promise<BrowserPro
 }
 
 export async function fetchAllTags(): Promise<string[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserGetAllTags) {
     return (await bindings.BrowserGetAllTags()) || []
   }
@@ -102,7 +219,7 @@ export async function fetchAllTags(): Promise<string[]> {
 }
 
 export async function createBrowserProfile(input: BrowserProfileInput): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileCreate) {
     return (await bindings.BrowserProfileCreate(input)) || null
   }
@@ -124,7 +241,7 @@ export async function createBrowserProfile(input: BrowserProfileInput): Promise<
 }
 
 export async function updateBrowserProfile(profileId: string, input: BrowserProfileInput): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileUpdate) {
     return (await bindings.BrowserProfileUpdate(profileId, input)) || null
   }
@@ -135,7 +252,7 @@ export async function updateBrowserProfile(profileId: string, input: BrowserProf
 }
 
 export async function deleteBrowserProfile(profileId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileDelete) {
     await bindings.BrowserProfileDelete(profileId)
     return true
@@ -145,7 +262,7 @@ export async function deleteBrowserProfile(profileId: string): Promise<boolean> 
 }
 
 export async function copyBrowserProfile(profileId: string, newName: string): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileCopy) {
     return (await bindings.BrowserProfileCopy(profileId, newName)) || null
   }
@@ -172,7 +289,7 @@ export async function copyBrowserProfile(profileId: string, newName: string): Pr
 // ============================================================================
 
 export async function startBrowserInstance(profileId: string): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserInstanceStart) {
     return (await bindings.BrowserInstanceStart(profileId)) || null
   }
@@ -183,7 +300,7 @@ export async function startBrowserInstance(profileId: string): Promise<BrowserPr
 }
 
 export async function startBrowserInstanceByCode(code: string): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserInstanceStartByCode) {
     return (await bindings.BrowserInstanceStartByCode(code)) || null
   }
@@ -196,7 +313,7 @@ export async function startBrowserInstanceByCode(code: string): Promise<BrowserP
 }
 
 export async function stopBrowserInstance(profileId: string): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserInstanceStop) {
     return (await bindings.BrowserInstanceStop(profileId)) || null
   }
@@ -207,7 +324,7 @@ export async function stopBrowserInstance(profileId: string): Promise<BrowserPro
 }
 
 export async function restartBrowserInstance(profileId: string): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserInstanceRestart) {
     return (await bindings.BrowserInstanceRestart(profileId)) || null
   }
@@ -216,7 +333,7 @@ export async function restartBrowserInstance(profileId: string): Promise<Browser
 }
 
 export async function openBrowserUrl(profileId: string, targetUrl: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserInstanceOpenUrl) {
     return (await bindings.BrowserInstanceOpenUrl(profileId, targetUrl)) === true
   }
@@ -224,7 +341,7 @@ export async function openBrowserUrl(profileId: string, targetUrl: string): Prom
 }
 
 export async function fetchBrowserTabs(profileId: string): Promise<BrowserTab[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserInstanceGetTabs) {
     return (await bindings.BrowserInstanceGetTabs(profileId)) || []
   }
@@ -239,7 +356,7 @@ export async function fetchBrowserTabs(profileId: string): Promise<BrowserTab[]>
 // ============================================================================
 
 export async function fetchBrowserSettings(): Promise<BrowserSettings> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.GetBrowserSettings) {
     return (await bindings.GetBrowserSettings()) || { userDataRoot: 'data', defaultFingerprintArgs: [], defaultLaunchArgs: [], defaultProxy: '', startReadyTimeoutMs: 3000, startStableWindowMs: 1200 }
   }
@@ -247,7 +364,7 @@ export async function fetchBrowserSettings(): Promise<BrowserSettings> {
 }
 
 export async function saveBrowserSettings(settings: BrowserSettings): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.SaveBrowserSettings) {
     await bindings.SaveBrowserSettings(settings)
     return true
@@ -260,7 +377,7 @@ export async function saveBrowserSettings(settings: BrowserSettings): Promise<bo
 // ============================================================================
 
 export async function fetchBrowserCores(): Promise<BrowserCore[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreList) {
     return (await bindings.BrowserCoreList()) || []
   }
@@ -268,7 +385,7 @@ export async function fetchBrowserCores(): Promise<BrowserCore[]> {
 }
 
 export async function saveBrowserCore(input: BrowserCoreInput): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreSave) {
     await bindings.BrowserCoreSave(input)
     return true
@@ -283,7 +400,7 @@ export async function saveBrowserCore(input: BrowserCoreInput): Promise<boolean>
 }
 
 export async function deleteBrowserCore(coreId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreDelete) {
     await bindings.BrowserCoreDelete(coreId)
     return true
@@ -293,7 +410,7 @@ export async function deleteBrowserCore(coreId: string): Promise<boolean> {
 }
 
 export async function setDefaultBrowserCore(coreId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreSetDefault) {
     await bindings.BrowserCoreSetDefault(coreId)
     return true
@@ -303,7 +420,7 @@ export async function setDefaultBrowserCore(coreId: string): Promise<boolean> {
 }
 
 export async function validateBrowserCorePath(corePath: string, kind: BrowserCoreInput['kind'] = 'chromium'): Promise<BrowserCoreValidateResult> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreValidateForKind) {
     return (await bindings.BrowserCoreValidateForKind(corePath, kind || 'chromium')) || { valid: false, message: '验证失败' }
   }
@@ -314,7 +431,7 @@ export async function validateBrowserCorePath(corePath: string, kind: BrowserCor
 }
 
 export async function fetchCoreExtendedInfo(): Promise<BrowserCoreExtended[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreExtendedInfo) {
     return (await bindings.BrowserCoreExtendedInfo()) || []
   }
@@ -322,7 +439,7 @@ export async function fetchCoreExtendedInfo(): Promise<BrowserCoreExtended[]> {
 }
 
 export async function scanBrowserCores(): Promise<BrowserCore[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreScan) {
     return (await bindings.BrowserCoreScan()) || []
   }
@@ -330,7 +447,7 @@ export async function scanBrowserCores(): Promise<BrowserCore[]> {
 }
 
 export async function BrowserCoreDownload(coreName: string, url: string, proxyConfig?: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserCoreDownload) {
     await bindings.BrowserCoreDownload(coreName, url, proxyConfig || '')
     return true
@@ -343,7 +460,7 @@ export async function BrowserCoreDownload(coreName: string, url: string, proxyCo
 // ============================================================================
 
 export async function fetchBrowserProxies(): Promise<BrowserProxy[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyList) {
     return (await bindings.BrowserProxyList()) || []
   }
@@ -351,7 +468,7 @@ export async function fetchBrowserProxies(): Promise<BrowserProxy[]> {
 }
 
 export async function fetchBrowserProxyGroups(): Promise<string[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyListGroups) {
     return (await bindings.BrowserProxyListGroups()) || []
   }
@@ -359,7 +476,7 @@ export async function fetchBrowserProxyGroups(): Promise<string[]> {
 }
 
 export async function fetchBrowserProxiesByGroup(groupName: string): Promise<BrowserProxy[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyListByGroup) {
     return (await bindings.BrowserProxyListByGroup(groupName)) || []
   }
@@ -390,7 +507,7 @@ export interface SubscriptionImportResult {
 }
 
 export async function fetchSubscriptionImportFromURL(targetURL: string, groupName: string): Promise<SubscriptionImportResult> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyImportSubscriptionByURL) {
     const result = await bindings.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
     return {
@@ -403,7 +520,7 @@ export async function fetchSubscriptionImportFromURL(targetURL: string, groupNam
     }
   }
 
-  const goApp = (window as any).go?.main?.App
+  const goApp = getWindowGoApp()
   if (goApp?.BrowserProxyImportSubscriptionByURL) {
     const result = await goApp.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
     return {
@@ -420,12 +537,12 @@ export async function fetchSubscriptionImportFromURL(targetURL: string, groupNam
 }
 
 export async function fixBrowserProxyNames(): Promise<{ ok: boolean; fixed: number; total: number; message?: string; error?: string }> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyFixNames) {
     return (await bindings.BrowserProxyFixNames()) || { ok: false, fixed: 0, total: 0, error: '调用失败' }
   }
 
-  const goApp = (window as any).go?.main?.App
+  const goApp = getWindowGoApp()
   if (goApp?.BrowserProxyFixNames) {
     return (await goApp.BrowserProxyFixNames()) || { ok: false, fixed: 0, total: 0, error: '调用失败' }
   }
@@ -434,7 +551,7 @@ export async function fixBrowserProxyNames(): Promise<{ ok: boolean; fixed: numb
 }
 
 export async function fetchClashImportFromURL(targetURL: string): Promise<ClashImportURLResult> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyFetchClashByURL) {
     return (await bindings.BrowserProxyFetchClashByURL(targetURL)) || {
       url: targetURL,
@@ -444,7 +561,7 @@ export async function fetchClashImportFromURL(targetURL: string): Promise<ClashI
   }
 
   // 兜底：wailsjs 尚未刷新时，直接通过 window.go 调用后端绑定
-  const goApp = (window as any).go?.main?.App
+  const goApp = getWindowGoApp()
   if (goApp?.BrowserProxyFetchClashByURL) {
     return (await goApp.BrowserProxyFetchClashByURL(targetURL)) || {
       url: targetURL,
@@ -457,7 +574,7 @@ export async function fetchClashImportFromURL(targetURL: string): Promise<ClashI
 }
 
 export async function saveBrowserProxies(proxies: BrowserProxy[]): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.SaveBrowserProxies) {
     await bindings.SaveBrowserProxies(proxies)
     return true
@@ -467,7 +584,7 @@ export async function saveBrowserProxies(proxies: BrowserProxy[]): Promise<boole
 }
 
 export async function validateProxyConfig(proxyConfig: string, proxyId: string): Promise<{ supported: boolean; errorMsg: string }> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.ValidateProxyConfig) {
     return (await bindings.ValidateProxyConfig(proxyConfig, proxyId)) || { supported: true, errorMsg: '' }
   }
@@ -475,7 +592,7 @@ export async function validateProxyConfig(proxyConfig: string, proxyId: string):
 }
 
 export async function testProxyConnectivity(proxyId: string, proxyConfig: string): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.TestProxyConnectivity) {
     return (await bindings.TestProxyConnectivity(proxyId, proxyConfig)) || { proxyId, ok: false, latencyMs: 0, error: '调用失败' }
   }
@@ -485,7 +602,7 @@ export async function testProxyConnectivity(proxyId: string, proxyConfig: string
 }
 
 export async function testProxyRealConnectivity(proxyId: string): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.TestProxyRealConnectivity) {
     return (await bindings.TestProxyRealConnectivity(proxyId)) || { proxyId, ok: false, latencyMs: 0, error: '调用失败' }
   }
@@ -495,7 +612,7 @@ export async function testProxyRealConnectivity(proxyId: string): Promise<{ prox
 }
 
 export async function browserProxyTestSpeed(proxyId: string): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyTestSpeed) {
     return (await bindings.BrowserProxyTestSpeed(proxyId)) || { proxyId, ok: false, latencyMs: 0, error: '调用失败' }
   }
@@ -504,7 +621,7 @@ export async function browserProxyTestSpeed(proxyId: string): Promise<{ proxyId:
 }
 
 export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency: number = 20): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyBatchTestSpeed) {
     return (await bindings.BrowserProxyBatchTestSpeed(proxyIds, concurrency)) || []
   }
@@ -514,7 +631,7 @@ export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency
 }
 
 export async function browserProxyCheckIPHealth(proxyId: string): Promise<ProxyIPHealthResult> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyCheckIPHealth) {
     return (await bindings.BrowserProxyCheckIPHealth(proxyId)) || {
       proxyId,
@@ -553,7 +670,7 @@ export async function browserProxyCheckIPHealth(proxyId: string): Promise<ProxyI
 }
 
 export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurrency: number = 10): Promise<ProxyIPHealthResult[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProxyBatchCheckIPHealth) {
     return (await bindings.BrowserProxyBatchCheckIPHealth(proxyIds, concurrency)) || []
   }
@@ -577,7 +694,7 @@ export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurr
 }
 
 export async function openUserDataDir(userDataDir: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.OpenUserDataDir) {
     await bindings.OpenUserDataDir(userDataDir)
     return true
@@ -586,7 +703,7 @@ export async function openUserDataDir(userDataDir: string): Promise<boolean> {
 }
 
 export async function openCorePath(corePath: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.OpenCorePath) {
     await bindings.OpenCorePath(corePath)
     return true
@@ -599,7 +716,7 @@ export async function openCorePath(corePath: string): Promise<boolean> {
 // ============================================================================
 
 export async function fetchBrowserCookies(profileId: string): Promise<CookieInfo[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserGetCookies) {
     return (await bindings.BrowserGetCookies(profileId)) || []
   }
@@ -611,7 +728,7 @@ export async function fetchBrowserCookies(profileId: string): Promise<CookieInfo
 }
 
 export async function clearBrowserCookies(profileId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserClearCookies) {
     await bindings.BrowserClearCookies(profileId)
     return true
@@ -620,7 +737,7 @@ export async function clearBrowserCookies(profileId: string): Promise<boolean> {
 }
 
 export async function exportBrowserCookies(profileId: string): Promise<string> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserExportCookies) {
     return (await bindings.BrowserExportCookies(profileId)) || ''
   }
@@ -632,7 +749,7 @@ export async function exportBrowserCookies(profileId: string): Promise<string> {
 // ============================================================================
 
 export async function listSnapshots(profileId: string): Promise<SnapshotInfo[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserSnapshotList) {
     return (await bindings.BrowserSnapshotList(profileId)) || []
   }
@@ -640,7 +757,7 @@ export async function listSnapshots(profileId: string): Promise<SnapshotInfo[]> 
 }
 
 export async function createSnapshot(profileId: string, name: string): Promise<SnapshotInfo | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserSnapshotCreate) {
     return (await bindings.BrowserSnapshotCreate(profileId, name)) || null
   }
@@ -655,7 +772,7 @@ export async function createSnapshot(profileId: string, name: string): Promise<S
 }
 
 export async function restoreSnapshot(profileId: string, snapshotId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserSnapshotRestore) {
     await bindings.BrowserSnapshotRestore(profileId, snapshotId)
     return true
@@ -664,7 +781,7 @@ export async function restoreSnapshot(profileId: string, snapshotId: string): Pr
 }
 
 export async function deleteSnapshot(profileId: string, snapshotId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserSnapshotDelete) {
     await bindings.BrowserSnapshotDelete(profileId, snapshotId)
     return true
@@ -677,7 +794,7 @@ export async function deleteSnapshot(profileId: string, snapshotId: string): Pro
 // ============================================================================
 
 export async function fetchBookmarks(): Promise<BrowserBookmark[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BookmarkList) {
     return (await bindings.BookmarkList()) || []
   }
@@ -691,7 +808,7 @@ export async function fetchBookmarks(): Promise<BrowserBookmark[]> {
 }
 
 export async function saveBookmarks(items: BrowserBookmark[]): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BookmarkSave) {
     await bindings.BookmarkSave(items)
     return true
@@ -700,7 +817,7 @@ export async function saveBookmarks(items: BrowserBookmark[]): Promise<boolean> 
 }
 
 export async function resetBookmarks(): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BookmarkReset) {
     await bindings.BookmarkReset()
     return true
@@ -713,7 +830,7 @@ export async function resetBookmarks(): Promise<boolean> {
 // ============================================================================
 
 export async function setProfileKeywords(profileId: string, keywords: string[]): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileSetKeywords) {
     return (await bindings.BrowserProfileSetKeywords(profileId, keywords)) || null
   }
@@ -773,12 +890,12 @@ function normalizeLaunchServerInfo(payload: any): LaunchServerInfo {
 }
 
 export async function fetchLaunchServerInfo(): Promise<LaunchServerInfo> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.GetLaunchServerInfo) {
     return normalizeLaunchServerInfo(await bindings.GetLaunchServerInfo())
   }
 
-  const goApp = (window as any).go?.main?.App
+  const goApp = getWindowGoApp()
   if (goApp?.GetLaunchServerInfo) {
     return normalizeLaunchServerInfo(await goApp.GetLaunchServerInfo())
   }
@@ -801,7 +918,7 @@ export async function fetchLaunchServerInfo(): Promise<LaunchServerInfo> {
 }
 
 export async function getBrowserProfileCode(profileId: string): Promise<string> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileGetCode) {
     return (await bindings.BrowserProfileGetCode(profileId)) || ''
   }
@@ -809,7 +926,7 @@ export async function getBrowserProfileCode(profileId: string): Promise<string> 
 }
 
 export async function regenerateBrowserProfileCode(profileId: string): Promise<string> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileRegenerateCode) {
     return (await bindings.BrowserProfileRegenerateCode(profileId)) || ''
   }
@@ -817,7 +934,7 @@ export async function regenerateBrowserProfileCode(profileId: string): Promise<s
 }
 
 export async function setBrowserProfileCode(profileId: string, code: string): Promise<string> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileSetCode) {
     return (await bindings.BrowserProfileSetCode(profileId, code)) || ''
   }
@@ -826,7 +943,7 @@ export async function setBrowserProfileCode(profileId: string, code: string): Pr
 
 
 export async function batchSetProfileTags(profileIds: string[], tags: string[], replace: boolean): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileBatchSetTags) {
     await bindings.BrowserProfileBatchSetTags(profileIds, tags, replace)
     return true
@@ -835,7 +952,7 @@ export async function batchSetProfileTags(profileIds: string[], tags: string[], 
 }
 
 export async function batchRemoveProfileTags(profileIds: string[], tags: string[]): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserProfileBatchRemoveTags) {
     await bindings.BrowserProfileBatchRemoveTags(profileIds, tags)
     return true
@@ -844,7 +961,7 @@ export async function batchRemoveProfileTags(profileIds: string[], tags: string[
 }
 
 export async function renameBrowserTag(oldName: string, newName: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserRenameTag) {
     await bindings.BrowserRenameTag(oldName, newName)
     return true
@@ -857,7 +974,7 @@ export async function renameBrowserTag(oldName: string, newName: string): Promis
 // ============================================================================
 
 export async function fetchGroups(): Promise<BrowserGroupWithCount[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.ListGroups) {
     return (await bindings.ListGroups()) || []
   }
@@ -865,7 +982,7 @@ export async function fetchGroups(): Promise<BrowserGroupWithCount[]> {
 }
 
 export async function createGroup(input: BrowserGroupInput): Promise<BrowserGroup | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.CreateGroup) {
     return (await bindings.CreateGroup(input)) || null
   }
@@ -873,7 +990,7 @@ export async function createGroup(input: BrowserGroupInput): Promise<BrowserGrou
 }
 
 export async function updateGroup(groupId: string, input: BrowserGroupInput): Promise<BrowserGroup | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.UpdateGroup) {
     return (await bindings.UpdateGroup(groupId, input)) || null
   }
@@ -881,7 +998,7 @@ export async function updateGroup(groupId: string, input: BrowserGroupInput): Pr
 }
 
 export async function deleteGroup(groupId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.DeleteGroup) {
     await bindings.DeleteGroup(groupId)
     return true
@@ -890,7 +1007,7 @@ export async function deleteGroup(groupId: string): Promise<boolean> {
 }
 
 export async function moveInstancesToGroup(profileIds: string[], groupId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.MoveInstancesToGroup) {
     await bindings.MoveInstancesToGroup(profileIds, groupId)
     return true
@@ -1009,7 +1126,7 @@ function normalizeNaturalLanguageAction(action: Record<string, unknown>): Natura
 }
 
 export async function startRecording(profileId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (!bindings?.BehaviorStartRecording) {
     throw new Error('Wails bindings are not available')
   }
@@ -1018,7 +1135,7 @@ export async function startRecording(profileId: string): Promise<boolean> {
 }
 
 export async function stopRecording(profileId: string, name: string): Promise<Recording | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (!bindings?.BehaviorStopRecording) {
     throw new Error('Wails bindings are not available')
   }
@@ -1026,7 +1143,7 @@ export async function stopRecording(profileId: string, name: string): Promise<Re
 }
 
 export async function fetchRecordings(): Promise<Recording[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingList) {
     return (await bindings.BehaviorRecordingList()) || []
   }
@@ -1034,7 +1151,7 @@ export async function fetchRecordings(): Promise<Recording[]> {
 }
 
 export async function fetchRecordingSummaries(): Promise<RecordingSummary[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingSummaryList) {
     const list = await bindings.BehaviorRecordingSummaryList()
     return (list || []).map(normalizeRecordingSummary)
@@ -1051,7 +1168,7 @@ export async function fetchRecordingSummaries(): Promise<RecordingSummary[]> {
 }
 
 export async function fetchRecordingStatus(): Promise<ActiveRecordingStatus> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingStatus) {
     return normalizeRecordingStatus(await bindings.BehaviorRecordingStatus())
   }
@@ -1062,7 +1179,7 @@ export async function fetchRecordingStatus(): Promise<ActiveRecordingStatus> {
 }
 
 export async function deleteRecording(id: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingDelete) {
     await bindings.BehaviorRecordingDelete(id)
     return true
@@ -1071,7 +1188,7 @@ export async function deleteRecording(id: string): Promise<boolean> {
 }
 
 export async function getRecording(id: string): Promise<Recording | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorGetRecording) {
     const recording = await bindings.BehaviorGetRecording(id)
     if (!recording) return null
@@ -1086,7 +1203,7 @@ export async function fetchRecordingDetail(
 ): Promise<RecordingDetailPage | null> {
   const eventOffset = Math.max(0, Math.floor(options.eventOffset ?? 0))
   const eventLimit = Math.max(1, Math.floor(options.eventLimit ?? 100))
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
 
   if (bindings?.BehaviorGetRecordingDetail) {
     return normalizeRecordingDetail(await bindings.BehaviorGetRecordingDetail(id, eventOffset, eventLimit), eventOffset, eventLimit)
@@ -1105,7 +1222,7 @@ export async function fetchRecordingDetail(
 }
 
 export async function playRecording(profileId: string, recordingId: string, variation: VariationConfig): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (!bindings?.BehaviorPlayRecording) {
     throw new Error('Wails bindings are not available')
   }
@@ -1114,7 +1231,7 @@ export async function playRecording(profileId: string, recordingId: string, vari
 }
 
 export async function stopPlayback(profileId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorStopPlayback) {
     await bindings.BehaviorStopPlayback(profileId)
     return true
@@ -1123,7 +1240,7 @@ export async function stopPlayback(profileId: string): Promise<boolean> {
 }
 
 export async function quickRecord(profileId: string): Promise<Recording | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorQuickRecord) {
     return (await bindings.BehaviorQuickRecord(profileId)) || null
   }
@@ -1131,7 +1248,7 @@ export async function quickRecord(profileId: string): Promise<Recording | null> 
 }
 
 export async function fetchBehaviorPresets(): Promise<Array<{ id: string; name: string; description: string }>> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorPresetList) {
     return (await bindings.BehaviorPresetList()) || []
   }
@@ -1139,7 +1256,7 @@ export async function fetchBehaviorPresets(): Promise<Array<{ id: string; name: 
 }
 
 export async function cleanupRecordingSessions(): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.CleanupStaleRecordingSessions) {
     await bindings.CleanupStaleRecordingSessions()
     return true
@@ -1148,7 +1265,7 @@ export async function cleanupRecordingSessions(): Promise<boolean> {
 }
 
 export async function renameRecording(id: string, name: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingRename) {
     await bindings.BehaviorRecordingRename(id, name)
     return true
@@ -1157,7 +1274,7 @@ export async function renameRecording(id: string, name: string): Promise<boolean
 }
 
 export async function exportRecording(id: string): Promise<RecordingExportBundle | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingExport) {
     return (await bindings.BehaviorRecordingExport(id)) || null
   }
@@ -1165,7 +1282,7 @@ export async function exportRecording(id: string): Promise<RecordingExportBundle
 }
 
 export async function importRecording(payload: string, name: string): Promise<Recording | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingImport) {
     return (await bindings.BehaviorRecordingImport(payload, name)) || null
   }
@@ -1173,7 +1290,7 @@ export async function importRecording(payload: string, name: string): Promise<Re
 }
 
 export async function copyRecording(id: string, name: string): Promise<Recording | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingCopy) {
     return (await bindings.BehaviorRecordingCopy(id, name)) || null
   }
@@ -1198,7 +1315,7 @@ export function buildPlaybackVariation(
 }
 
 export async function reviewPlayback(profileId: string, decision: string): Promise<void> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorPlaybackReview) {
     await bindings.BehaviorPlaybackReview(profileId, decision)
     return
@@ -1207,7 +1324,7 @@ export async function reviewPlayback(profileId: string, decision: string): Promi
 }
 
 export async function activateBrowserProfile(profileId: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BrowserInstanceOpenUrl) {
     await bindings.BrowserInstanceOpenUrl(profileId, 'about:blank')
     return true
@@ -1216,7 +1333,7 @@ export async function activateBrowserProfile(profileId: string): Promise<boolean
 }
 
 export async function trimRecording(id: string, startEvent: number, endEvent: number, name: string): Promise<Recording | null> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (bindings?.BehaviorRecordingTrim) {
     return (await bindings.BehaviorRecordingTrim(id, startEvent, endEvent, name)) || null
   }
@@ -1240,9 +1357,8 @@ export function onPlaybackEvents(callbacks: {
   }
   return combineUnsubscribes(offs)
 }
-
 export async function planNaturalLanguageTask(taskDescription: string): Promise<NaturalLanguageAction[]> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (!bindings?.LLMPlanOnly) {
     throw new Error('Wails bindings are not available')
   }
@@ -1251,7 +1367,7 @@ export async function planNaturalLanguageTask(taskDescription: string): Promise<
 }
 
 export async function executeNaturalLanguageTask(profileId: string, taskDescription: string): Promise<boolean> {
-  const bindings: any = await getBindings()
+  const bindings = await getBindings()
   if (!bindings?.LLMExecuteTask) {
     throw new Error('Wails bindings are not available')
   }
