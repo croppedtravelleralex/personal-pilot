@@ -500,6 +500,12 @@ pub struct DesktopEvidenceReportSummary {
     pub generated_at: String,
     pub report_path: String,
     pub failure_reason: Option<String>,
+    pub previous_status: Option<String>,
+    pub previous_failure_reason: Option<String>,
+    pub previous_generated_at: Option<String>,
+    pub status_trend: String,
+    pub failure_reason_trend: String,
+    pub trend_summary: String,
     pub next_action: Option<String>,
     pub summary: String,
 }
@@ -3427,8 +3433,93 @@ fn evidence_report_summary_from_json(
         generated_at,
         report_path: path.to_string_lossy().to_string(),
         failure_reason,
+        previous_status: None,
+        previous_failure_reason: None,
+        previous_generated_at: None,
+        status_trend: "new_report_kind".to_string(),
+        failure_reason_trend: "new_report_kind".to_string(),
+        trend_summary: "No previous local report for this evidence kind.".to_string(),
         next_action,
         summary,
+    }
+}
+
+fn normalize_optional_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn evidence_status_trend(current: &str, previous: Option<&str>) -> String {
+    match previous {
+        None => "new_report_kind".to_string(),
+        Some(previous) if previous == current => "status_unchanged".to_string(),
+        Some(previous) => format!("status_changed_from_{previous}_to_{current}"),
+    }
+}
+
+fn evidence_failure_reason_trend(current: Option<&str>, previous: Option<&str>) -> String {
+    let current = normalize_optional_text(current);
+    let previous = normalize_optional_text(previous);
+    match (current.as_deref(), previous.as_deref()) {
+        (None, None) => "no_failure_reason".to_string(),
+        (Some(_), None) => "new_failure_reason".to_string(),
+        (None, Some(_)) => "failure_reason_cleared".to_string(),
+        (Some(current), Some(previous)) if current == previous => {
+            "failure_reason_unchanged".to_string()
+        }
+        (Some(_), Some(_)) => "failure_reason_changed".to_string(),
+    }
+}
+
+fn evidence_trend_summary(report: &DesktopEvidenceReportSummary) -> String {
+    match report.previous_status.as_deref() {
+        None => "No previous local report for this evidence kind.".to_string(),
+        Some(previous_status) => {
+            let previous_at = report
+                .previous_generated_at
+                .as_deref()
+                .unwrap_or("unknown time");
+            format!(
+                "Previous {kind} report at {previous_at}: status {previous_status} -> {current_status}; failureReason trend={failure_trend}.",
+                kind = report.kind,
+                current_status = report.status,
+                failure_trend = report.failure_reason_trend,
+            )
+        }
+    }
+}
+
+fn attach_evidence_report_trends(reports: &mut [DesktopEvidenceReportSummary]) {
+    let mut previous_by_kind: BTreeMap<String, (String, Option<String>, String)> = BTreeMap::new();
+    for index in (0..reports.len()).rev() {
+        let kind = reports[index].kind.clone();
+        if let Some((previous_status, previous_failure_reason, previous_generated_at)) =
+            previous_by_kind.get(&kind).cloned()
+        {
+            reports[index].status_trend =
+                evidence_status_trend(&reports[index].status, Some(&previous_status));
+            reports[index].failure_reason_trend = evidence_failure_reason_trend(
+                reports[index].failure_reason.as_deref(),
+                previous_failure_reason.as_deref(),
+            );
+            reports[index].previous_status = Some(previous_status);
+            reports[index].previous_failure_reason = previous_failure_reason;
+            reports[index].previous_generated_at = Some(previous_generated_at);
+        } else {
+            reports[index].status_trend = evidence_status_trend(&reports[index].status, None);
+            reports[index].failure_reason_trend = "new_report_kind".to_string();
+        }
+        reports[index].trend_summary = evidence_trend_summary(&reports[index]);
+        previous_by_kind.insert(
+            kind,
+            (
+                reports[index].status.clone(),
+                reports[index].failure_reason.clone(),
+                reports[index].generated_at.clone(),
+            ),
+        );
     }
 }
 
@@ -3599,7 +3690,13 @@ pub fn list_desktop_evidence_reports(
         }
     }
 
-    reports.sort_by(|left, right| right.generated_at.cmp(&left.generated_at));
+    reports.sort_by(|left, right| {
+        right
+            .generated_at
+            .cmp(&left.generated_at)
+            .then_with(|| right.report_path.cmp(&left.report_path))
+    });
+    attach_evidence_report_trends(&mut reports);
     let report_count = reports.len();
     Ok(DesktopEvidenceReportHistory {
         generated_at: now_ts_string(),
@@ -10127,6 +10224,25 @@ mod tests {
         )
         .expect("write report");
         fs::write(
+            reports_dir.join("release-performance-smoke-older.json"),
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v2",
+                "generatedAt": "2026-05-22T00:00:00Z",
+                "status": "warning",
+                "budgetStatus": "over_budget",
+                "failureReason": "cold_start_target_exceeded",
+                "measuredColdStartMs": 4400,
+                "measuredIdleRssMb": 390,
+                "measuredProcessCount": 9,
+                "healthSummary": {
+                    "status": "budget_overrun",
+                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write older release report");
+        fs::write(
             m5_reports_dir.join("m5-release-health-gate-test.json"),
             serde_json::json!({
                 "schemaVersion": "m5_release_health_gate_v1",
@@ -10149,7 +10265,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 2);
+        assert_eq!(history.report_count, 3);
         let report = history
             .reports
             .iter()
@@ -10163,6 +10279,14 @@ mod tests {
         );
         assert!(report.summary.contains("411MB"));
         assert!(report.summary.contains("budget=over_budget"));
+        assert_eq!(report.previous_status.as_deref(), Some("warning"));
+        assert_eq!(
+            report.previous_failure_reason.as_deref(),
+            Some("cold_start_target_exceeded")
+        );
+        assert_eq!(report.status_trend, "status_unchanged");
+        assert_eq!(report.failure_reason_trend, "failure_reason_changed");
+        assert!(report.trend_summary.contains("status warning -> warning"));
         assert!(report
             .next_action
             .as_deref()
@@ -10175,12 +10299,76 @@ mod tests {
             .expect("m5 release health report");
         assert_eq!(m5.status, "passed_with_budget_overrun");
         assert_eq!(m5.evidence_level, "partial");
+        assert_eq!(m5.status_trend, "new_report_kind");
         assert!(m5.summary.contains("budget=over_budget"));
         assert!(m5
             .next_action
             .as_deref()
             .unwrap_or_default()
             .contains("mitigationHints"));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn evidence_report_history_uses_report_path_tiebreaker_for_trends() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_evidence_tiebreaker_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("release-smoke");
+        fs::create_dir_all(&reports_dir).expect("create reports dir");
+        fs::write(
+            reports_dir.join("release-performance-smoke-a.json"),
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v2",
+                "generatedAt": "2026-06-02T00:00:00Z",
+                "status": "warning",
+                "budgetStatus": "over_budget",
+                "failureReason": "older_same_timestamp_reason",
+                "measuredColdStartMs": 900,
+                "measuredIdleRssMb": 300,
+                "measuredProcessCount": 7
+            })
+            .to_string(),
+        )
+        .expect("write first report");
+        fs::write(
+            reports_dir.join("release-performance-smoke-z.json"),
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v2",
+                "generatedAt": "2026-06-02T00:00:00Z",
+                "status": "warning",
+                "budgetStatus": "over_budget",
+                "failureReason": "latest_same_timestamp_reason",
+                "measuredColdStartMs": 850,
+                "measuredIdleRssMb": 280,
+                "measuredProcessCount": 6
+            })
+            .to_string(),
+        )
+        .expect("write second report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        assert_eq!(history.report_count, 2);
+        let latest = &history.reports[0];
+        assert!(latest
+            .report_path
+            .ends_with("release-performance-smoke-z.json"));
+        assert_eq!(
+            latest.failure_reason.as_deref(),
+            Some("latest_same_timestamp_reason")
+        );
+        assert_eq!(
+            latest.previous_failure_reason.as_deref(),
+            Some("older_same_timestamp_reason")
+        );
+        assert_eq!(latest.status_trend, "status_unchanged");
+        assert_eq!(latest.failure_reason_trend, "failure_reason_changed");
 
         let _ = fs::remove_dir_all(temp_root);
     }

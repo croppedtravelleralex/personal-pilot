@@ -55,6 +55,12 @@ export interface DesktopEvidenceReportSummary {
   generatedAt: string;
   reportPath: string;
   failureReason: string | null;
+  previousStatus: string | null;
+  previousFailureReason: string | null;
+  previousGeneratedAt: string | null;
+  statusTrend: string;
+  failureReasonTrend: string;
+  trendSummary: string;
   nextAction: string | null;
   summary: string;
 }

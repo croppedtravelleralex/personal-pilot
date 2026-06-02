@@ -1,6 +1,6 @@
 # M4-M20 Execution Board
 
-Updated: 2026-06-01 (Asia/Shanghai)
+Updated: 2026-06-02 (Asia/Shanghai)
 
 ## Live Truth Boundary
 
@@ -185,3 +185,13 @@ Status: started 2026-06-01.
 3. Update desktop release contract and Dashboard evidence history to surface M5 Health, release health status, budget results, and mitigation hints.
 4. Keep `passed_with_budget_overrun` as a valid M5 report-contract result while explicitly forbidding performance green until cold start/RSS/process budgets pass.
 5. Continue next with actual metric mitigation, M6 same-run desktop/profile evidence, M13 report diff/risk trends, or M10 headed repeatability without claiming provider, proxy/TLS, cross-machine, AdsPower, or full `450` coverage.
+
+## Twelfth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Start M13 evidence operations by adding latest-vs-previous trend fields to local evidence report history.
+2. Compute trend only within the same report kind: previous status, previous failure reason, previous generated time, status trend, failure-reason trend, and a short trend summary.
+3. Show trend text in Dashboard evidence rows without changing report status, evidence level, gate classification, or external blocker semantics.
+4. Verify with `cargo test evidence_report_history`, `pnpm typecheck`, and diff hygiene.
+5. Continue next with richer report diff views, M6 same-run desktop/profile evidence, M10 headed repeatability, or M15 browser pool cleanup.
