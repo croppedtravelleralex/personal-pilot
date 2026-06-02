@@ -312,3 +312,13 @@ Status: started 2026-06-02.
 3. Add `scripts/m4_behavior_preset_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Behavior` row for `m4_behavior_preset_facade` reports.
 4. Extend M4 acceptance gate to v13 with `behavior_preset_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=12`, `expectedBlocked=4`, `failed=0`.
 5. Keep this evidence scoped to FingerprintPanel behavior preset source-level facade usage only; it does not prove `tauriWailsBridge` removal, browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+
+## Twenty-Fifth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M4.8 by routing AutomationPage scheduler/rule calls through `src/modules/browser/api.ts` module facade instead of direct Wails `Scheduler*` / `AutomationRule*` imports.
+2. Replace page-level `backend` model constructors with plain typed `SchedulerTaskInput` / `AutomationRuleInput` DTOs while preserving task template creation, delete, run-now, rule creation, toggle, delete, and test-fire behavior.
+3. Add `scripts/m4_automation_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Automation` row for `m4_automation_facade` reports.
+4. Extend M4 acceptance gate to v14 with `automation_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=13`, `expectedBlocked=4`, `failed=0`.
+5. Keep this evidence scoped to AutomationPage scheduler/rule source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/app shell/monitor/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.

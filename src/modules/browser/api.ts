@@ -34,6 +34,73 @@ type BrowserNativeWindow = Window & {
   }
 }
 
+type AutomationActionParams = Record<string, unknown>
+
+export interface SchedulerTaskTrigger {
+  type: string
+  cron?: string
+  interval?: string
+  event?: string
+}
+
+export interface SchedulerTaskAction {
+  type: string
+  target: string
+  value: string
+  timeout: number
+}
+
+export interface SchedulerTaskInfo {
+  id: string
+  name: string
+  trigger: SchedulerTaskTrigger
+  actions: SchedulerTaskAction[]
+  maxRetries: number
+  retryDelay: string
+  dependsOn: string[]
+  profileId: string
+  enabled: boolean
+  createdAt: string
+  status: string
+  lastRunAt: string
+  lastError: string
+  retryCount: number
+}
+
+export interface SchedulerTaskInput {
+  name: string
+  trigger: SchedulerTaskTrigger
+  actions: SchedulerTaskAction[]
+  maxRetries: number
+  retryDelay: string
+  dependsOn: string[]
+  profileId: string
+  enabled: boolean
+}
+
+export interface AutomationRuleInfo {
+  id: string
+  name: string
+  triggerEvent: string
+  condition?: string
+  action: string
+  actionParams?: AutomationActionParams
+  cooldown: string
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AutomationRuleInput {
+  name: string
+  triggerEvent: string
+  condition?: string
+  action: string
+  actionParams?: AutomationActionParams
+  cooldown: string
+  enabled: boolean
+}
+
 type BrowserNativeBindings = Partial<{
   BrowserProfileList: () => Promise<BrowserProfile[]>
   BrowserProfileListByTag: (tag: string) => Promise<BrowserProfile[]>
@@ -121,6 +188,15 @@ type BrowserNativeBindings = Partial<{
   BehaviorRecordingCopy: (id: string, name: string) => Promise<Recording>
   BehaviorPlaybackReview: (profileId: string, decision: string) => Promise<void>
   BehaviorRecordingTrim: (id: string, startEvent: number, endEvent: number, name: string) => Promise<Recording>
+  SchedulerListTasks: () => Promise<SchedulerTaskInfo[]>
+  SchedulerAddTask: (input: SchedulerTaskInput) => Promise<SchedulerTaskInfo>
+  SchedulerRemoveTask: (taskId: string) => Promise<void>
+  SchedulerRunTaskNow: (taskId: string) => Promise<void>
+  AutomationRuleList: () => Promise<AutomationRuleInfo[]>
+  AutomationRuleCreate: (input: AutomationRuleInput) => Promise<AutomationRuleInfo>
+  AutomationRuleDelete: (ruleId: string) => Promise<void>
+  AutomationRuleToggle: (ruleId: string, enabled: boolean) => Promise<void>
+  AutomationRuleTestFire: (ruleId: string) => Promise<void>
   LLMPlanOnly: (taskDescription: string) => Promise<Array<Record<string, unknown>>>
   LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>
 }>
@@ -1318,6 +1394,78 @@ export async function fetchBehaviorPresets(): Promise<Array<{ id: string; name: 
     return (await bindings.BehaviorPresetList()) || []
   }
   return []
+}
+
+export async function fetchSchedulerTasks(): Promise<SchedulerTaskInfo[]> {
+  const bindings = await getBindings()
+  if (bindings?.SchedulerListTasks) {
+    return (await bindings.SchedulerListTasks()) || []
+  }
+  return []
+}
+
+export async function createSchedulerTask(input: SchedulerTaskInput): Promise<SchedulerTaskInfo | null> {
+  const bindings = await getBindings()
+  if (!bindings?.SchedulerAddTask) {
+    throw new Error('Wails bindings are not available')
+  }
+  return (await bindings.SchedulerAddTask(input)) || null
+}
+
+export async function deleteSchedulerTask(taskId: string): Promise<void> {
+  const bindings = await getBindings()
+  if (!bindings?.SchedulerRemoveTask) {
+    throw new Error('Wails bindings are not available')
+  }
+  await bindings.SchedulerRemoveTask(taskId)
+}
+
+export async function runSchedulerTaskNow(taskId: string): Promise<void> {
+  const bindings = await getBindings()
+  if (!bindings?.SchedulerRunTaskNow) {
+    throw new Error('Wails bindings are not available')
+  }
+  await bindings.SchedulerRunTaskNow(taskId)
+}
+
+export async function fetchAutomationRules(): Promise<AutomationRuleInfo[]> {
+  const bindings = await getBindings()
+  if (bindings?.AutomationRuleList) {
+    return (await bindings.AutomationRuleList()) || []
+  }
+  return []
+}
+
+export async function createAutomationRule(input: AutomationRuleInput): Promise<AutomationRuleInfo | null> {
+  const bindings = await getBindings()
+  if (!bindings?.AutomationRuleCreate) {
+    throw new Error('Wails bindings are not available')
+  }
+  return (await bindings.AutomationRuleCreate(input)) || null
+}
+
+export async function deleteAutomationRule(ruleId: string): Promise<void> {
+  const bindings = await getBindings()
+  if (!bindings?.AutomationRuleDelete) {
+    throw new Error('Wails bindings are not available')
+  }
+  await bindings.AutomationRuleDelete(ruleId)
+}
+
+export async function toggleAutomationRule(ruleId: string, enabled: boolean): Promise<void> {
+  const bindings = await getBindings()
+  if (!bindings?.AutomationRuleToggle) {
+    throw new Error('Wails bindings are not available')
+  }
+  await bindings.AutomationRuleToggle(ruleId, enabled)
+}
+
+export async function testFireAutomationRule(ruleId: string): Promise<void> {
+  const bindings = await getBindings()
+  if (!bindings?.AutomationRuleTestFire) {
+    throw new Error('Wails bindings are not available')
+  }
+  await bindings.AutomationRuleTestFire(ruleId)
 }
 
 export async function cleanupRecordingSessions(): Promise<boolean> {

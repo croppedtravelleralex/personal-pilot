@@ -1,19 +1,21 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Bot, Copy, Rocket, Plus, Play, Trash2, Clock, Repeat, Zap, Pause, RefreshCw, AlertCircle } from 'lucide-react'
 import { Button, Card, toast } from '../../../shared/components'
-import { fetchLaunchServerInfo, type LaunchServerInfo } from '../api'
 import {
-  SchedulerListTasks,
-  SchedulerAddTask,
-  SchedulerRemoveTask,
-  SchedulerRunTaskNow,
-  AutomationRuleList,
-  AutomationRuleCreate,
-  AutomationRuleDelete,
-  AutomationRuleToggle,
-  AutomationRuleTestFire,
-} from '../../../wailsjs/go/main/App'
-import { backend } from '../../../wailsjs/go/models'
+  createAutomationRule,
+  createSchedulerTask,
+  deleteAutomationRule,
+  deleteSchedulerTask,
+  fetchAutomationRules,
+  fetchLaunchServerInfo,
+  fetchSchedulerTasks,
+  runSchedulerTaskNow,
+  testFireAutomationRule,
+  toggleAutomationRule,
+  type AutomationRuleInfo,
+  type LaunchServerInfo,
+  type SchedulerTaskInfo,
+} from '../api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,22 +35,7 @@ interface TaskAction {
   timeout: number
 }
 
-interface TaskInfo {
-  id: string
-  name: string
-  trigger: TaskTrigger
-  actions: TaskAction[]
-  maxRetries: number
-  retryDelay: string
-  dependsOn: string[]
-  profileId: string
-  enabled: boolean
-  createdAt: string
-  status: string
-  lastRunAt: string
-  lastError: string
-  retryCount: number
-}
+type TaskInfo = SchedulerTaskInfo
 
 interface TaskTemplate {
   id: string
@@ -251,18 +238,7 @@ function CodeBlock({ text }: { text: string }) {
 
 // ─── Rule Types & Templates ────────────────────────────────────────────────────
 
-interface RuleInfo {
-  id: string
-  name: string
-  triggerEvent: string
-  condition?: string
-  action: string
-  actionParams?: Record<string, any>
-  cooldown: string
-  enabled: boolean
-  createdAt: string
-  updatedAt: string
-}
+type RuleInfo = AutomationRuleInfo
 
 interface RuleTemplate {
   id: string
@@ -665,7 +641,7 @@ export function AutomationPage() {
   const refreshTasks = useCallback(async () => {
     setTasksLoading(true)
     try {
-      const list = await SchedulerListTasks()
+      const list = await fetchSchedulerTasks()
       setTasks(list || [])
     } catch {
       // backend may not be ready
@@ -680,15 +656,15 @@ export function AutomationPage() {
 
   const handleAddTask = async (tpl: TaskTemplate) => {
     try {
-      await SchedulerAddTask(new backend.SchedulerTaskInput({
+      await createSchedulerTask({
         name: tpl.name,
-        trigger: new backend.SchedulerTaskTrigger({
+        trigger: {
           type: tpl.trigger.type,
           cron: tpl.trigger.cron || '',
           interval: tpl.trigger.interval || '',
           event: tpl.trigger.event || '',
-        }),
-        actions: tpl.actions.map(a => new backend.SchedulerTaskAction({
+        },
+        actions: tpl.actions.map(a => ({
           type: a.type,
           target: a.target,
           value: a.value,
@@ -699,7 +675,7 @@ export function AutomationPage() {
         dependsOn: [],
         profileId: '',
         enabled: true,
-      }))
+      })
       toast.success(`任务「${tpl.name}」已创建`)
       await refreshTasks()
     } catch (e: any) {
@@ -709,7 +685,7 @@ export function AutomationPage() {
 
   const handleDeleteTask = async (id: string) => {
     try {
-      await SchedulerRemoveTask(id)
+      await deleteSchedulerTask(id)
       toast.success('任务已删除')
       await refreshTasks()
     } catch (e: any) {
@@ -719,7 +695,7 @@ export function AutomationPage() {
 
   const handleRunNow = async (id: string) => {
     try {
-      await SchedulerRunTaskNow(id)
+      await runSchedulerTaskNow(id)
       toast.success('任务已触发执行')
       await refreshTasks()
     } catch (e: any) {
@@ -732,7 +708,7 @@ export function AutomationPage() {
   const refreshRules = useCallback(async () => {
     setRulesLoading(true)
     try {
-      const list = await AutomationRuleList()
+      const list = await fetchAutomationRules()
       setRules(list || [])
     } catch {
       // backend may not be ready
@@ -747,7 +723,7 @@ export function AutomationPage() {
 
   const handleAddRule = async (tpl: RuleTemplate) => {
     try {
-      await AutomationRuleCreate(new backend.AutomationRuleInput({
+      await createAutomationRule({
         name: tpl.name,
         triggerEvent: tpl.triggerEvent,
         condition: tpl.condition,
@@ -755,7 +731,7 @@ export function AutomationPage() {
         actionParams: tpl.actionParams,
         cooldown: tpl.cooldown,
         enabled: true,
-      }))
+      })
       toast.success(`规则「${tpl.name}」已创建`)
       await refreshRules()
     } catch (e: any) {
@@ -765,7 +741,7 @@ export function AutomationPage() {
 
   const handleDeleteRule = async (id: string) => {
     try {
-      await AutomationRuleDelete(id)
+      await deleteAutomationRule(id)
       toast.success('规则已删除')
       await refreshRules()
     } catch (e: any) {
@@ -775,7 +751,7 @@ export function AutomationPage() {
 
   const handleToggleRule = async (id: string, enabled: boolean) => {
     try {
-      await AutomationRuleToggle(id, enabled)
+      await toggleAutomationRule(id, enabled)
       await refreshRules()
     } catch (e: any) {
       toast.error(e?.message || (enabled ? '启用' : '禁用') + '规则失败')
@@ -784,7 +760,7 @@ export function AutomationPage() {
 
   const handleTestFire = async (id: string) => {
     try {
-      await AutomationRuleTestFire(id)
+      await testFireAutomationRule(id)
       toast.success('测试事件已发送')
     } catch (e: any) {
       toast.error(e?.message || '测试触发失败')

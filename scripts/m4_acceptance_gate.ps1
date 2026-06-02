@@ -680,6 +680,52 @@ function Test-BehaviorPresetFacadeContract {
   return New-LocalGateResult "behavior_preset_facade_contract" "passed" "passed" "M4.8 FingerprintPanel behavior preset loading uses the browser module API facade instead of direct Wails imports" @()
 }
 
+function Test-AutomationFacadeContract {
+  $automationPagePath = Join-Path $projectRoot "src\modules\browser\pages\AutomationPage.tsx"
+  $browserApiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($automationPagePath, $browserApiPath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $automationPageText = if (Test-Path $automationPagePath) { Get-Content -LiteralPath $automationPagePath -Raw -Encoding UTF8 } else { "" }
+  $browserApiText = if (Test-Path $browserApiPath) { Get-Content -LiteralPath $browserApiPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("fetchSchedulerTasks", "createSchedulerTask", "deleteSchedulerTask", "runSchedulerTaskNow", "fetchAutomationRules", "createAutomationRule", "deleteAutomationRule", "toggleAutomationRule", "testFireAutomationRule")) {
+    if ($automationPageText -notmatch [regex]::Escape($token)) {
+      $failures += "AutomationPage does not use browser API automation facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("../../../wailsjs/go/main/App", "../../../wailsjs/go/models", "SchedulerListTasks", "SchedulerAddTask", "SchedulerRemoveTask", "SchedulerRunTaskNow", "AutomationRuleList", "AutomationRuleCreate", "AutomationRuleDelete", "AutomationRuleToggle", "AutomationRuleTestFire", "new backend.")) {
+    if ($automationPageText -match [regex]::Escape($token)) {
+      $failures += "AutomationPage still uses raw scheduler/rule Wails marker: $token"
+    }
+  }
+
+  foreach ($token in @("export interface SchedulerTaskInput", "export interface SchedulerTaskInfo", "export interface AutomationRuleInput", "export interface AutomationRuleInfo", "export async function fetchSchedulerTasks", "export async function createSchedulerTask", "export async function fetchAutomationRules", "export async function createAutomationRule")) {
+    if ($browserApiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API missing automation facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_automation_facade", "M4 Automation")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing automation facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "automation_facade_contract" "missing_coverage" "failed" "M4.8 Automation facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "automation_facade_contract" "passed" "passed" "M4.8 AutomationPage scheduler/rule calls use the browser module API facade instead of direct Wails imports" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -1002,6 +1048,7 @@ $gates += Test-DashboardFacadeContract
 $gates += Test-SettingsLogsFacadeContract
 $gates += Test-ProfileFacadeContract
 $gates += Test-BehaviorPresetFacadeContract
+$gates += Test-AutomationFacadeContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -1026,7 +1073,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v13"
+  schemaVersion = "m4_acceptance_gate_v14"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1070,6 +1117,7 @@ $report = [ordered]@{
     "Settings/logs facade contract is source-level evidence only; it routes Settings backup and Browser logs through typed desktop service wrappers while preserving the transitional compatibility bridge.",
     "Profile facade contract is source-level evidence only; it routes Profile remote author loading through a typed desktop service wrapper while preserving browser preview fallback.",
     "Behavior preset facade contract is source-level evidence only; it routes FingerprintPanel behavior preset loading through the browser module API facade without removing every browser bridge compatibility path.",
+    "Automation facade contract is source-level evidence only; it routes AutomationPage scheduler/rule calls through the browser module API facade without removing every browser/app shell/monitor bridge compatibility path.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."
