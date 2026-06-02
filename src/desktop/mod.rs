@@ -505,6 +505,11 @@ pub struct DesktopEvidenceReportSummary {
     pub previous_generated_at: Option<String>,
     pub status_trend: String,
     pub failure_reason_trend: String,
+    pub risk_level: String,
+    pub risk_score: i32,
+    pub previous_risk_level: Option<String>,
+    pub previous_risk_score: Option<i32>,
+    pub risk_trend: String,
     pub trend_summary: String,
     pub next_action: Option<String>,
     pub summary: String,
@@ -3170,6 +3175,7 @@ fn evidence_report_summary_from_json(
         .filter(|item| !item.is_empty())
         .map(ToOwned::to_owned);
     let evidence_level = evidence_level_from_report(kind, &status, value);
+    let (risk_level, risk_score) = evidence_risk_from_level(&evidence_level, &status);
     let next_action = evidence_next_action(kind, &status, value, failure_reason.as_deref());
     let summary = match kind {
         "m4_acceptance" => {
@@ -3438,6 +3444,11 @@ fn evidence_report_summary_from_json(
         previous_generated_at: None,
         status_trend: "new_report_kind".to_string(),
         failure_reason_trend: "new_report_kind".to_string(),
+        risk_level,
+        risk_score,
+        previous_risk_level: None,
+        previous_risk_score: None,
+        risk_trend: "new_report_kind".to_string(),
         trend_summary: "No previous local report for this evidence kind.".to_string(),
         next_action,
         summary,
@@ -3473,6 +3484,36 @@ fn evidence_failure_reason_trend(current: Option<&str>, previous: Option<&str>) 
     }
 }
 
+fn evidence_risk_from_level(evidence_level: &str, status: &str) -> (String, i32) {
+    let combined = format!("{evidence_level} {status}").to_lowercase();
+    if combined.contains("failed") {
+        ("failed".to_string(), 90)
+    } else if combined.contains("expected_external_blockers") {
+        ("expected_external_blocker".to_string(), 50)
+    } else if combined.contains("blocked") {
+        ("blocked".to_string(), 70)
+    } else if combined.contains("partial")
+        || combined.contains("warning")
+        || combined.contains("over_budget")
+        || combined.contains("drift")
+    {
+        ("partial".to_string(), 40)
+    } else if combined.contains("observed") || combined.contains("passed") {
+        ("observed".to_string(), 10)
+    } else {
+        ("contract_or_not_run".to_string(), 55)
+    }
+}
+
+fn evidence_risk_trend(current_score: i32, previous_score: Option<i32>) -> String {
+    match previous_score {
+        None => "new_report_kind".to_string(),
+        Some(previous_score) if current_score < previous_score => "risk_improved".to_string(),
+        Some(previous_score) if current_score > previous_score => "risk_regressed".to_string(),
+        Some(_) => "risk_unchanged".to_string(),
+    }
+}
+
 fn evidence_trend_summary(report: &DesktopEvidenceReportSummary) -> String {
     match report.previous_status.as_deref() {
         None => "No previous local report for this evidence kind.".to_string(),
@@ -3481,44 +3522,60 @@ fn evidence_trend_summary(report: &DesktopEvidenceReportSummary) -> String {
                 .previous_generated_at
                 .as_deref()
                 .unwrap_or("unknown time");
+            let previous_risk = report.previous_risk_level.as_deref().unwrap_or("unknown");
             format!(
-                "Previous {kind} report at {previous_at}: status {previous_status} -> {current_status}; failureReason trend={failure_trend}.",
+                "Previous {kind} report at {previous_at}: status {previous_status} -> {current_status}; failureReason trend={failure_trend}; risk {previous_risk} -> {current_risk} ({risk_trend}).",
                 kind = report.kind,
                 current_status = report.status,
                 failure_trend = report.failure_reason_trend,
+                current_risk = report.risk_level,
+                risk_trend = report.risk_trend,
             )
         }
     }
 }
 
+struct EvidenceTrendAnchor {
+    status: String,
+    failure_reason: Option<String>,
+    generated_at: String,
+    risk_level: String,
+    risk_score: i32,
+}
+
 fn attach_evidence_report_trends(reports: &mut [DesktopEvidenceReportSummary]) {
-    let mut previous_by_kind: BTreeMap<String, (String, Option<String>, String)> = BTreeMap::new();
+    let mut previous_by_kind: BTreeMap<String, EvidenceTrendAnchor> = BTreeMap::new();
     for index in (0..reports.len()).rev() {
         let kind = reports[index].kind.clone();
-        if let Some((previous_status, previous_failure_reason, previous_generated_at)) =
-            previous_by_kind.get(&kind).cloned()
-        {
+        if let Some(previous) = previous_by_kind.get(&kind) {
             reports[index].status_trend =
-                evidence_status_trend(&reports[index].status, Some(&previous_status));
+                evidence_status_trend(&reports[index].status, Some(&previous.status));
             reports[index].failure_reason_trend = evidence_failure_reason_trend(
                 reports[index].failure_reason.as_deref(),
-                previous_failure_reason.as_deref(),
+                previous.failure_reason.as_deref(),
             );
-            reports[index].previous_status = Some(previous_status);
-            reports[index].previous_failure_reason = previous_failure_reason;
-            reports[index].previous_generated_at = Some(previous_generated_at);
+            reports[index].risk_trend =
+                evidence_risk_trend(reports[index].risk_score, Some(previous.risk_score));
+            reports[index].previous_status = Some(previous.status.clone());
+            reports[index].previous_failure_reason = previous.failure_reason.clone();
+            reports[index].previous_generated_at = Some(previous.generated_at.clone());
+            reports[index].previous_risk_level = Some(previous.risk_level.clone());
+            reports[index].previous_risk_score = Some(previous.risk_score);
         } else {
             reports[index].status_trend = evidence_status_trend(&reports[index].status, None);
             reports[index].failure_reason_trend = "new_report_kind".to_string();
+            reports[index].risk_trend = evidence_risk_trend(reports[index].risk_score, None);
         }
         reports[index].trend_summary = evidence_trend_summary(&reports[index]);
         previous_by_kind.insert(
             kind,
-            (
-                reports[index].status.clone(),
-                reports[index].failure_reason.clone(),
-                reports[index].generated_at.clone(),
-            ),
+            EvidenceTrendAnchor {
+                status: reports[index].status.clone(),
+                failure_reason: reports[index].failure_reason.clone(),
+                generated_at: reports[index].generated_at.clone(),
+                risk_level: reports[index].risk_level.clone(),
+                risk_score: reports[index].risk_score,
+            },
         );
     }
 }
@@ -10286,7 +10343,15 @@ mod tests {
         );
         assert_eq!(report.status_trend, "status_unchanged");
         assert_eq!(report.failure_reason_trend, "failure_reason_changed");
+        assert_eq!(report.risk_level, "partial");
+        assert_eq!(report.risk_score, 40);
+        assert_eq!(report.previous_risk_level.as_deref(), Some("partial"));
+        assert_eq!(report.previous_risk_score, Some(40));
+        assert_eq!(report.risk_trend, "risk_unchanged");
         assert!(report.trend_summary.contains("status warning -> warning"));
+        assert!(report
+            .trend_summary
+            .contains("risk partial -> partial (risk_unchanged)"));
         assert!(report
             .next_action
             .as_deref()
@@ -10300,6 +10365,8 @@ mod tests {
         assert_eq!(m5.status, "passed_with_budget_overrun");
         assert_eq!(m5.evidence_level, "partial");
         assert_eq!(m5.status_trend, "new_report_kind");
+        assert_eq!(m5.risk_level, "partial");
+        assert_eq!(m5.risk_trend, "new_report_kind");
         assert!(m5.summary.contains("budget=over_budget"));
         assert!(m5
             .next_action
@@ -10369,6 +10436,9 @@ mod tests {
         );
         assert_eq!(latest.status_trend, "status_unchanged");
         assert_eq!(latest.failure_reason_trend, "failure_reason_changed");
+        assert_eq!(latest.risk_level, "partial");
+        assert_eq!(latest.previous_risk_level.as_deref(), Some("partial"));
+        assert_eq!(latest.risk_trend, "risk_unchanged");
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -10412,6 +10482,9 @@ mod tests {
         assert_eq!(report.kind, "m4_acceptance");
         assert_eq!(report.status, "passed_with_expected_external_blockers");
         assert_eq!(report.evidence_level, "expected_external_blockers");
+        assert_eq!(report.risk_level, "expected_external_blocker");
+        assert_eq!(report.risk_score, 50);
+        assert_eq!(report.risk_trend, "new_report_kind");
         assert!(report
             .summary
             .contains("passed_with_expected_external_blockers"));
@@ -10508,6 +10581,8 @@ mod tests {
         assert_eq!(report.kind, "remote_proxy_tls");
         assert_eq!(report.status, "blocked_remote_proxy_required");
         assert_eq!(report.evidence_level, "blocked_missing_remote_proxy");
+        assert_eq!(report.risk_level, "blocked");
+        assert_eq!(report.risk_score, 70);
         assert!(report.summary.contains("exitIp=pending"));
         assert!(report
             .summary

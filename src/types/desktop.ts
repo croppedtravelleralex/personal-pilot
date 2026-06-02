@@ -60,6 +60,11 @@ export interface DesktopEvidenceReportSummary {
   previousGeneratedAt: string | null;
   statusTrend: string;
   failureReasonTrend: string;
+  riskLevel: string;
+  riskScore: number;
+  previousRiskLevel: string | null;
+  previousRiskScore: number | null;
+  riskTrend: string;
   trendSummary: string;
   nextAction: string | null;
   summary: string;

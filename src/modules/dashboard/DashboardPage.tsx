@@ -364,7 +364,7 @@ function EvidenceRow({ label, report }: { label: string; report?: DesktopEvidenc
         {report?.failureReason && <div className="mt-1 truncate text-[var(--color-error)]">{report.failureReason}</div>}
         {report?.statusTrend && report.statusTrend !== 'new_report_kind' && (
           <div className="mt-1 truncate text-[var(--color-text-secondary)]" title={report.trendSummary}>
-            {report.statusTrend} · {report.failureReasonTrend}
+            {report.statusTrend} · {report.failureReasonTrend} · {report.riskTrend}
           </div>
         )}
         {report?.nextAction && <div className="mt-1 truncate text-[var(--color-text-secondary)]">{report.nextAction}</div>}

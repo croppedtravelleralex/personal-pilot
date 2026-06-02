@@ -195,3 +195,13 @@ Status: started 2026-06-02.
 3. Show trend text in Dashboard evidence rows without changing report status, evidence level, gate classification, or external blocker semantics.
 4. Verify with `cargo test evidence_report_history`, `pnpm typecheck`, and diff hygiene.
 5. Continue next with richer report diff views, M6 same-run desktop/profile evidence, M10 headed repeatability, or M15 browser pool cleanup.
+
+## Thirteenth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Extend M13 evidence operations from status/failure trend to risk trend.
+2. Derive `riskLevel` and `riskScore` from existing `status` and `evidenceLevel`; keep these fields read-only and report-history scoped.
+3. Attach previous risk level/score and `riskTrend` for same-kind reports, using `reportPath` as a same-timestamp tie-breaker.
+4. Show risk trend in Dashboard evidence rows without changing status colors, gate classification, or external blocker semantics.
+5. Verify with `cargo test evidence_report_history`, `pnpm typecheck`, `live_truth_guard`, M4 gate, and diff hygiene.
