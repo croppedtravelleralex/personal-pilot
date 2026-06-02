@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import { Badge, Button, Card } from '../../../shared/components'
+import { clearAppLogs, getAppLogs } from '../../../services/desktop'
+import type { DesktopJsonValue } from '../../../types/desktop'
 
 interface LogEntry {
   time: string
   level: string
   component: string
   message: string
-  fields?: Record<string, any>
+  fields?: Record<string, DesktopJsonValue>
 }
 
 const LEVELS = ['ALL', 'DEBUG', 'INFO', 'WARN', 'ERROR']
@@ -32,15 +34,13 @@ const levelColor = (level: string) => {
 
 async function fetchLogs(): Promise<LogEntry[]> {
   try {
-    const bindings: any = await import('../../../wailsjs/go/main/App')
-    return (await bindings.GetAppLogs()) || []
+    return (await getAppLogs()) || []
   } catch { return [] }
 }
 
 async function clearLogs() {
   try {
-    const bindings: any = await import('../../../wailsjs/go/main/App')
-    await bindings.ClearAppLogs()
+    await clearAppLogs()
   } catch { /* ignore */ }
 }
 

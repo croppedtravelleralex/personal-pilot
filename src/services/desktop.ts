@@ -5,6 +5,7 @@ import type {
   DesktopBrowserEnvironmentPolicyDraft,
   DesktopBrowserEnvironmentPolicyMutationResult,
   DesktopBrowserEnvironmentPolicySnapshot,
+  DesktopBackupActionResult,
   DesktopBehaviorAuditContract,
   DesktopCamoufoxCapability,
   DesktopCamoufoxCapabilityRequest,
@@ -18,6 +19,7 @@ import type {
   DesktopCoreSyncOperation,
   DesktopCoreSyncWindowPlacement,
   DesktopCoreWorkbenchTask,
+  DesktopDestructivePreflight,
   DesktopDirectoryTarget,
   DesktopImportExportSkeleton,
   DesktopJsonValue,
@@ -39,6 +41,7 @@ import type {
   DesktopLocalAssetWorkspaceSnapshot,
   DesktopLogPage,
   DesktopLogQuery,
+  DesktopMemoryLogEntry,
   DesktopManualGateActionRequest,
   DesktopProfileBatchActionRequest,
   DesktopProfileBatchActionResult,
@@ -537,6 +540,106 @@ export async function desktopOpenBackupPath(): Promise<string | null> {
   return Array.isArray(selected) ? selected[0] ?? null : selected;
 }
 
+function backupDefaultFilename(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const stamp = [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    "-",
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join("");
+  return `personal-pilot-backup-${stamp}.zip`;
+}
+
+function describeDestructivePreflight(preflight: DesktopDestructivePreflight): string {
+  const lines = [
+    preflight.confirmationPrompt || "Confirm this destructive operation before continuing.",
+  ];
+  if (preflight.targetProfileId) lines.push(`Profile: ${preflight.targetProfileId}`);
+  if (preflight.targetUserDataDir) lines.push(`Target: ${preflight.targetUserDataDir}`);
+  if (preflight.writesCookie) lines.push("Cookie assets will be written.");
+  if (preflight.requiresStop) lines.push("Affected running profiles must be stopped first.");
+  if (preflight.destructivePaths?.length) {
+    lines.push("Paths:");
+    lines.push(...preflight.destructivePaths.slice(0, 8).map((path) => `- ${path}`));
+  }
+  if (preflight.warnings?.length) {
+    lines.push("Warnings:");
+    lines.push(
+      ...preflight.warnings
+        .slice(0, 5)
+        .map((item) => `- ${item.message || item.code || "warning"}`),
+    );
+  }
+  return lines.join("\n");
+}
+
+function assertDestructivePreflightCanContinue(preflight: DesktopDestructivePreflight): void {
+  const blockers = preflight.blockers || [];
+  if (blockers.length > 0) {
+    const first = blockers[0];
+    throw new Error(first.message || first.code || "destructive preflight blocked");
+  }
+  if (!preflight.confirmationToken) {
+    throw new Error("destructive preflight did not return a confirmation token");
+  }
+}
+
+export function confirmDestructivePreflight(preflight: DesktopDestructivePreflight): boolean {
+  assertDestructivePreflightCanContinue(preflight);
+  return window.confirm(describeDestructivePreflight(preflight));
+}
+
+export async function exportSystemConfig(): Promise<DesktopBackupActionResult> {
+  const savePath = await desktopSaveBackupPath(backupDefaultFilename());
+  if (!savePath) {
+    return { cancelled: true, message: "export cancelled" };
+  }
+  return desktopRpc<DesktopBackupActionResult>("BackupExportPackageToPath", [savePath], {
+    timeoutMs: 120000,
+  });
+}
+
+export async function importSystemConfig(resetFirst: boolean): Promise<DesktopBackupActionResult> {
+  const zipPath = await desktopOpenBackupPath();
+  if (!zipPath) {
+    return { cancelled: true, message: "import cancelled" };
+  }
+  const preflight = await desktopRpc<DesktopDestructivePreflight>(
+    "BackupImportPackagePreflightFromPath",
+    [zipPath, resetFirst],
+    { timeoutMs: 120000 },
+  );
+  if (!confirmDestructivePreflight(preflight)) {
+    return { cancelled: true, message: "import cancelled" };
+  }
+  return desktopRpc<DesktopBackupActionResult>(
+    "BackupImportPackageFromPathConfirmed",
+    [zipPath, resetFirst, { confirmed: true, confirmationToken: preflight.confirmationToken }],
+    { timeoutMs: 120000 },
+  );
+}
+
+export async function initializeSystemData(): Promise<DesktopBackupActionResult> {
+  const preflight = await desktopRpc<DesktopDestructivePreflight>(
+    "BackupInitializeSystemPreflight",
+    [],
+    { timeoutMs: 120000 },
+  );
+  if (!confirmDestructivePreflight(preflight)) {
+    return { cancelled: true, message: "initialize cancelled" };
+  }
+  return desktopRpc<DesktopBackupActionResult>(
+    "BackupInitializeSystemConfirmed",
+    [{ confirmed: true, confirmationToken: preflight.confirmationToken }],
+    { timeoutMs: 120000 },
+  );
+}
+
 export const readDashboardStats = (): Promise<DesktopDashboardStatsResponse | null> =>
   desktopRpc<DesktopDashboardStatsResponse | null>("GetDashboardStats");
 
@@ -547,6 +650,11 @@ export const reloadDesktopConfig = (): Promise<void> => desktopRpc<void>("Reload
 
 export const generateDesktopCdKeys = (count: number): Promise<string[] | null> =>
   desktopRpc<string[] | null>("GenerateCDKeys", [count]);
+
+export const getAppLogs = (): Promise<DesktopMemoryLogEntry[]> =>
+  desktopRpc<DesktopMemoryLogEntry[]>("GetAppLogs");
+
+export const clearAppLogs = (): Promise<void> => desktopRpc<void>("ClearAppLogs");
 
 export const fetchRemoteAuthorProfileFromDesktop = (
   authorURL: string,

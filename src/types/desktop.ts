@@ -187,6 +187,46 @@ export interface DesktopLogPage {
   items: DesktopLogItem[];
 }
 
+export interface DesktopMemoryLogEntry {
+  time: string;
+  level: string;
+  component: string;
+  message: string;
+  fields?: Record<string, DesktopJsonValue>;
+}
+
+export interface DesktopBackupActionResult {
+  cancelled?: boolean;
+  message?: string;
+  zipPath?: string;
+  resetFirst?: boolean;
+  imported?: number;
+  skipped?: number;
+  conflicts?: number;
+  partial?: boolean;
+  componentTotal?: number;
+  componentSuccess?: number;
+  componentFailed?: number;
+  failedComponents?: Array<{
+    componentId?: string;
+    componentName?: string;
+    error?: string;
+  }>;
+}
+
+export interface DesktopDestructivePreflight {
+  operation?: string;
+  targetProfileId?: string;
+  targetUserDataDir?: string;
+  requiresStop?: boolean;
+  writesCookie?: boolean;
+  destructivePaths?: string[];
+  warnings?: Array<{ code?: string; message?: string }>;
+  blockers?: Array<{ code?: string; message?: string }>;
+  confirmationToken?: string;
+  confirmationPrompt?: string;
+}
+
 export type DesktopDirectoryTarget =
   | "projectRoot"
   | "dataDir"

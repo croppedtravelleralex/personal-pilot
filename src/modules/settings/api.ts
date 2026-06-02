@@ -1,36 +1,17 @@
 // Settings 模块 API
+import {
+  exportSystemConfig as exportSystemConfigFromDesktop,
+  importSystemConfig as importSystemConfigFromDesktop,
+  initializeSystemData as initializeSystemDataFromDesktop,
+} from '../../services/desktop'
+import type { DesktopBackupActionResult } from '../../types/desktop'
 import type { AppSettings } from './types'
 import { defaultSettings } from './types'
 
 // 本地存储 key
 const SETTINGS_KEY = 'app_settings'
 
-const getBindings = async () => {
-  try {
-    return await import('../../wailsjs/go/main/App')
-  } catch {
-    return null
-  }
-}
-
-export interface BackupActionResult {
-  cancelled?: boolean
-  message?: string
-  zipPath?: string
-  resetFirst?: boolean
-  imported?: number
-  skipped?: number
-  conflicts?: number
-  partial?: boolean
-  componentTotal?: number
-  componentSuccess?: number
-  componentFailed?: number
-  failedComponents?: Array<{
-    componentId?: string
-    componentName?: string
-    error?: string
-  }>
-}
+export type BackupActionResult = DesktopBackupActionResult
 
 // 获取设置
 export async function fetchSettings(): Promise<AppSettings> {
@@ -63,25 +44,13 @@ export async function resetSettings(): Promise<AppSettings> {
 }
 
 export async function initializeSystemData(): Promise<BackupActionResult> {
-  const bindings: any = await getBindings()
-  if (!bindings?.BackupInitializeSystem) {
-    return { cancelled: false, message: '当前环境不支持后端初始化接口' }
-  }
-  return (await bindings.BackupInitializeSystem()) || {}
+  return (await initializeSystemDataFromDesktop()) || {}
 }
 
 export async function exportSystemConfig(): Promise<BackupActionResult> {
-  const bindings: any = await getBindings()
-  if (!bindings?.BackupExportPackage) {
-    return { cancelled: false, message: '当前环境不支持后端导出接口' }
-  }
-  return (await bindings.BackupExportPackage()) || {}
+  return (await exportSystemConfigFromDesktop()) || {}
 }
 
 export async function importSystemConfig(resetFirst: boolean): Promise<BackupActionResult> {
-  const bindings: any = await getBindings()
-  if (!bindings?.BackupImportPackage) {
-    return { cancelled: false, message: '当前环境不支持后端加载接口' }
-  }
-  return (await bindings.BackupImportPackage(resetFirst)) || {}
+  return (await importSystemConfigFromDesktop(resetFirst)) || {}
 }

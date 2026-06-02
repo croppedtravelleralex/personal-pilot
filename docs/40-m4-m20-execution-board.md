@@ -282,3 +282,13 @@ Status: started 2026-06-02.
 3. Add `scripts/m4_dashboard_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Dashboard` row for `m4_dashboard_facade` reports.
 4. Extend M4 acceptance gate to v10 with `dashboard_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=9`, `expectedBlocked=4`, `failed=0`.
 5. Keep this evidence scoped to Dashboard API source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/settings/logs facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+
+## Twenty-Second Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M4.8 by routing Settings backup initialize/export/import and Browser logs read/clear through `src/services/desktop.ts` typed wrappers instead of direct dynamic Wails imports.
+2. Preserve destructive backup preflight, native file dialog selection, confirmation prompts, and the Wails-compatible `tauriWailsBridge` proxy while removing raw module-level dynamic imports from `src/modules/settings/api.ts` and `src/modules/browser/pages/BrowserLogsPage.tsx`.
+3. Add `scripts/m4_settings_logs_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Settings/Logs` row for `m4_settings_logs_facade` reports.
+4. Extend M4 acceptance gate to v11 with `settings_logs_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=10`, `expectedBlocked=4`, `failed=0`.
+5. Keep this evidence scoped to Settings backup API and Browser logs source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
