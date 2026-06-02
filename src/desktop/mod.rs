@@ -3145,6 +3145,89 @@ fn headed_external_report_rank(value: &Value) -> i32 {
     }
 }
 
+fn value_i64_unfiltered(value: &Value, key: &str) -> Option<i64> {
+    value.get(key).and_then(Value::as_i64)
+}
+
+fn profile_browser_comparison_category_summary(value: &Value) -> (usize, String) {
+    let Some(items) = value.get("categoryComparison").and_then(Value::as_array) else {
+        return (0, "missing".to_string());
+    };
+    let missing = items
+        .iter()
+        .filter_map(|item| {
+            let category = value_text(item, "category")?;
+            let status = value_text(item, "status").unwrap_or_else(|| "missing".to_string());
+            if status == "comparable" {
+                None
+            } else {
+                Some(format!("{category}={status}"))
+            }
+        })
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        (items.len(), "none".to_string())
+    } else {
+        (items.len(), missing.join(","))
+    }
+}
+
+fn profile_browser_comparison_summary(status: &str, value: &Value) -> String {
+    let same_run_status =
+        value_text(value, "sameRunStatus").unwrap_or_else(|| "missing".to_string());
+    let max_pair_age = value_i64_unfiltered(value, "maxPairAgeMinutes")
+        .map(|item| item.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let delta = value
+        .get("desktopProfileDeltaMinutes")
+        .and_then(Value::as_f64)
+        .map(|item| format!("{item:.2}"))
+        .unwrap_or_else(|| "pending".to_string());
+    let desktop_count = value_i64_unfiltered(value, "desktopSignalCount").unwrap_or_default();
+    let profile_count =
+        value_i64_unfiltered(value, "profileBrowserSignalCount").unwrap_or_default();
+    let comparable_count =
+        value_i64_unfiltered(value, "comparableCategoryCount").unwrap_or_default();
+    let (category_count, missing_categories) = profile_browser_comparison_category_summary(value);
+    format!(
+        "profile browser comparison {status}: sameRun={same_run_status} deltaMinutes={delta}/{max_pair_age} desktopSignals={desktop_count} profileSignals={profile_count} comparable={comparable_count}/{category_count} missingCategories={missing_categories}"
+    )
+}
+
+fn profile_browser_comparison_next_action(
+    status: &str,
+    value: &Value,
+    failure_reason: Option<&str>,
+) -> String {
+    let same_run_status =
+        value_text(value, "sameRunStatus").unwrap_or_else(|| "missing".to_string());
+    let max_pair_age = value_i64_unfiltered(value, "maxPairAgeMinutes").unwrap_or(120);
+    let (_, missing_categories) = profile_browser_comparison_category_summary(value);
+    match status {
+        "blocked_missing_validation_report" => {
+            "Collect Desktop WebView evidence from Dashboard and refresh profile-browser validation evidence, then rerun scripts/profile_browser_comparison_gate.ps1.".to_string()
+        }
+        "blocked_missing_desktop_webview_report" => {
+            "Open the Dashboard in personal-pilot-tauri.exe, click the WebView evidence collection action, then rerun scripts/profile_browser_comparison_gate.ps1.".to_string()
+        }
+        "blocked_missing_profile_browser_report" => {
+            "Run a profile-browser validation probe such as scripts/headed_external_smoke.ps1 -Action validation_probe, then rerun scripts/profile_browser_comparison_gate.ps1.".to_string()
+        }
+        "blocked_stale_comparison_pair" => format!(
+            "Refresh Desktop WebView and profile-browser evidence within {max_pair_age} minutes, then rerun scripts/profile_browser_comparison_gate.ps1."
+        ),
+        "partial_comparison_only" => format!(
+            "Add comparable Desktop WebView and profile-browser categories for {missing_categories}, then rerun scripts/profile_browser_comparison_gate.ps1."
+        ),
+        "passed" => {
+            "Keep both same-run reports attached; rerun the comparison gate after either Desktop WebView or profile-browser evidence changes.".to_string()
+        }
+        _ => failure_reason
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| format!("Resolve sameRunStatus={same_run_status}, then rerun scripts/profile_browser_comparison_gate.ps1.")),
+    }
+}
+
 fn evidence_report_summary_from_json(
     kind: &str,
     path: &Path,
@@ -3427,7 +3510,7 @@ fn evidence_report_summary_from_json(
             )
         }
         "provider_manager" => format!("provider manager {status}"),
-        "profile_browser_comparison" => format!("profile browser comparison {status}"),
+        "profile_browser_comparison" => profile_browser_comparison_summary(&status, value),
         _ => format!("{kind} {status}"),
     };
 
@@ -3697,6 +3780,16 @@ fn evidence_next_action(
             "Run the manual clean-Win11 operator smoke from docs/24-external-distribution-readiness.md."
                 .to_string(),
         ),
+        ("profile_browser_comparison", "blocked_missing_validation_report")
+        | ("profile_browser_comparison", "blocked_missing_desktop_webview_report")
+        | ("profile_browser_comparison", "blocked_missing_profile_browser_report")
+        | ("profile_browser_comparison", "blocked_stale_comparison_pair")
+        | ("profile_browser_comparison", "partial_comparison_only")
+        | ("profile_browser_comparison", "passed") => Some(profile_browser_comparison_next_action(
+            status,
+            value,
+            failure_reason,
+        )),
         _ => None,
     };
 
@@ -10597,6 +10690,94 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("PERSONA_PILOT_REMOTE_PROXY_URL"));
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn evidence_report_history_explains_profile_browser_comparison_reports() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_profile_browser_comparison_history_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("profile-browser-comparison");
+        fs::create_dir_all(&reports_dir).expect("create profile browser comparison reports dir");
+        fs::write(
+            reports_dir.join("profile-browser-comparison-test.json"),
+            serde_json::json!({
+                "schemaVersion": "profile_browser_comparison_gate_v3",
+                "generatedAt": "2026-06-02T00:00:00Z",
+                "status": "blocked_missing_desktop_webview_report",
+                "maxPairAgeMinutes": 120,
+                "desktopProfileDeltaMinutes": null,
+                "sameRunStatus": "missing_desktop_webview",
+                "scannedReportCount": 2,
+                "desktopSignalCount": 0,
+                "profileBrowserSignalCount": 9,
+                "comparableCategoryCount": 0,
+                "categoryComparison": [
+                    {
+                        "category": "webrtc",
+                        "desktopWebViewObserved": 0,
+                        "profileBrowserObserved": 1,
+                        "status": "profile_only"
+                    },
+                    {
+                        "category": "canvas",
+                        "desktopWebViewObserved": 0,
+                        "profileBrowserObserved": 1,
+                        "status": "profile_only"
+                    },
+                    {
+                        "category": "audio",
+                        "desktopWebViewObserved": 0,
+                        "profileBrowserObserved": 1,
+                        "status": "profile_only"
+                    },
+                    {
+                        "category": "leak",
+                        "desktopWebViewObserved": 0,
+                        "profileBrowserObserved": 1,
+                        "status": "profile_only"
+                    },
+                    {
+                        "category": "fingerprint",
+                        "desktopWebViewObserved": 0,
+                        "profileBrowserObserved": 2,
+                        "status": "profile_only"
+                    }
+                ],
+                "failureReason": "no desktop WebView validation report found"
+            })
+            .to_string(),
+        )
+        .expect("write profile browser comparison report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        assert_eq!(history.report_count, 1);
+        let report = &history.reports[0];
+        assert_eq!(report.kind, "profile_browser_comparison");
+        assert_eq!(report.status, "blocked_missing_desktop_webview_report");
+        assert_eq!(report.evidence_level, "blocked");
+        assert!(report.summary.contains("sameRun=missing_desktop_webview"));
+        assert!(report.summary.contains("deltaMinutes=pending/120"));
+        assert!(report.summary.contains("desktopSignals=0"));
+        assert!(report.summary.contains("profileSignals=9"));
+        assert!(report.summary.contains("comparable=0/5"));
+        assert!(report.summary.contains("webrtc=profile_only"));
+        assert!(report.summary.contains("canvas=profile_only"));
+        assert!(report.summary.contains("audio=profile_only"));
+        assert!(report.summary.contains("leak=profile_only"));
+        assert!(report.summary.contains("fingerprint=profile_only"));
+        assert!(report
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("WebView evidence collection"));
 
         let _ = fs::remove_dir_all(temp_root);
     }

@@ -205,3 +205,13 @@ Status: started 2026-06-02.
 3. Attach previous risk level/score and `riskTrend` for same-kind reports, using `reportPath` as a same-timestamp tie-breaker.
 4. Show risk trend in Dashboard evidence rows without changing status colors, gate classification, or external blocker semantics.
 5. Verify with `cargo test evidence_report_history`, `pnpm typecheck`, `live_truth_guard`, M4 gate, and diff hygiene.
+
+## Fourteenth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Improve M6 profile-browser comparison operator readability without claiming same-run evidence is complete.
+2. Parse `profile_browser_comparison` report fields into evidence history summary: same-run status, desktop/profile signal counts, comparable category count, pair delta/max window, and missing category statuses.
+3. Generate status-specific next action for missing desktop WebView report, missing profile-browser report, stale pair, and partial category comparison.
+4. Preserve the comparison report `status`, `failureReason`, `evidenceLevel`, M4 expected external blocker semantics, and Overall `40% / 60% / yellow`.
+5. Verify with `cargo test evidence_report_history`, `pnpm typecheck`, `live_truth_guard`, M4 gate, and diff hygiene.
