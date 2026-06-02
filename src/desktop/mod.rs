@@ -3056,6 +3056,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "m4-dashboard-facade" => Some("m4_dashboard_facade"),
         "m4-settings-logs-facade" => Some("m4_settings_logs_facade"),
         "m4-profile-facade" => Some("m4_profile_facade"),
+        "m4-behavior-preset-facade" => Some("m4_behavior_preset_facade"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "m8-session-handoff" => Some("m8_session_handoff"),
@@ -3292,6 +3293,10 @@ fn evidence_failure_reason_category(
         ("m4_profile_facade", "passed_profile_facade_contract") => "none",
         ("m4_profile_facade", "failed_profile_facade_contract") => {
             "profile_facade_contract_incomplete"
+        }
+        ("m4_behavior_preset_facade", "passed_behavior_preset_facade_contract") => "none",
+        ("m4_behavior_preset_facade", "failed_behavior_preset_facade_contract") => {
+            "behavior_preset_facade_contract_incomplete"
         }
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
@@ -3557,6 +3562,25 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_else(|| "unknown".to_string());
             format!(
                 "M4 profile facade {status}: checksFailed={failed} typedDesktopWrapper={typed_desktop_wrapper} browserFetchFallback={browser_fetch_fallback} dynamicBindingRemoved={dynamic_binding_removed}"
+            )
+        }
+        "m4_behavior_preset_facade" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let component_facade_usage = summary
+                .and_then(|item| value_text(item, "componentFacadeUsage"))
+                .unwrap_or_else(|| "missing".to_string());
+            let direct_wails_import_removed = summary
+                .and_then(|item| value_text(item, "directWailsImportRemoved"))
+                .unwrap_or_else(|| "unknown".to_string());
+            let browser_api_facade = summary
+                .and_then(|item| value_text(item, "browserApiFacade"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!(
+                "M4 behavior preset facade {status}: checksFailed={failed} componentFacadeUsage={component_facade_usage} directWailsImportRemoved={direct_wails_import_removed} browserApiFacade={browser_api_facade}"
             )
         }
         "taxonomy_audit" => format!(
@@ -4113,6 +4137,12 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
             "profile_facade_contract_partial"
         }
         ("m4_profile_facade", "failed_profile_facade_contract") => "profile_facade_contract_failed",
+        ("m4_behavior_preset_facade", "passed_behavior_preset_facade_contract") => {
+            "behavior_preset_facade_contract_partial"
+        }
+        ("m4_behavior_preset_facade", "failed_behavior_preset_facade_contract") => {
+            "behavior_preset_facade_contract_failed"
+        }
         ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
@@ -4261,6 +4291,16 @@ fn evidence_next_action(
                         .to_string(),
                 )
             }),
+        ("m4_behavior_preset_facade", "passed_behavior_preset_facade_contract")
+        | ("m4_behavior_preset_facade", "failed_behavior_preset_facade_contract") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/m4_behavior_preset_facade_gate.ps1, then continue shrinking remaining browser/workbench/core bridge APIs separately."
+                        .to_string(),
+                )
+            }),
         ("m10_headed_repeatability", "blocked_missing_headed_report")
         | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
         | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
@@ -4343,6 +4383,7 @@ pub fn list_desktop_evidence_reports(
         "m4-dashboard-facade",
         "m4-settings-logs-facade",
         "m4-profile-facade",
+        "m4-behavior-preset-facade",
         "m8-session-handoff",
         "release-smoke",
         "m5-release-health",
@@ -11528,6 +11569,18 @@ mod tests {
                 "profile_facade_contract_incomplete",
             ),
             (
+                "m4_behavior_preset_facade",
+                "passed_behavior_preset_facade_contract",
+                None,
+                "none",
+            ),
+            (
+                "m4_behavior_preset_facade",
+                "failed_behavior_preset_facade_contract",
+                None,
+                "behavior_preset_facade_contract_incomplete",
+            ),
+            (
                 "runtime_adapter",
                 "blocked_evidence_required",
                 None,
@@ -11672,6 +11725,8 @@ mod tests {
             .expect("create m4 settings logs facade reports dir");
         fs::create_dir_all(reports_root.join("m4-profile-facade"))
             .expect("create m4 profile facade reports dir");
+        fs::create_dir_all(reports_root.join("m4-behavior-preset-facade"))
+            .expect("create m4 behavior preset facade reports dir");
         fs::create_dir_all(reports_root.join("m8-session-handoff"))
             .expect("create m8 session handoff reports dir");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
@@ -11855,6 +11910,26 @@ mod tests {
         .expect("write m4 profile facade report");
         fs::write(
             reports_root
+                .join("m4-behavior-preset-facade")
+                .join("m4-behavior-preset-facade-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m4_behavior_preset_facade_gate_v1",
+                "generatedAt": "2026-05-30T00:05:49Z",
+                "status": "passed_behavior_preset_facade_contract",
+                "failureReason": "",
+                "summary": {
+                    "failed": 0,
+                    "componentFacadeUsage": "present",
+                    "directWailsImportRemoved": "yes",
+                    "browserApiFacade": "present",
+                    "nextAction": "Continue shrinking remaining browser/workbench/core bridge APIs without claiming tauriWailsBridge removal."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m4 behavior preset facade report");
+        fs::write(
+            reports_root
                 .join("m8-session-handoff")
                 .join("m8-session-handoff-gate-test.json"),
             serde_json::json!({
@@ -11910,7 +11985,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 10);
+        assert_eq!(history.report_count, 11);
 
         let headed = history
             .reports
@@ -12046,6 +12121,33 @@ mod tests {
             .summary
             .contains("browserFetchFallback=preserved"));
         assert!(m4_profile
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("tauriWailsBridge removal"));
+
+        let m4_behavior_preset = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m4_behavior_preset_facade")
+            .expect("m4 behavior preset facade report");
+        assert_eq!(
+            m4_behavior_preset.status,
+            "passed_behavior_preset_facade_contract"
+        );
+        assert_eq!(
+            m4_behavior_preset.evidence_level,
+            "behavior_preset_facade_contract_partial"
+        );
+        assert_eq!(m4_behavior_preset.failure_reason_category, "none");
+        assert_eq!(m4_behavior_preset.risk_level, "partial");
+        assert!(m4_behavior_preset
+            .summary
+            .contains("componentFacadeUsage=present"));
+        assert!(m4_behavior_preset
+            .summary
+            .contains("directWailsImportRemoved=yes"));
+        assert!(m4_behavior_preset
             .next_action
             .as_deref()
             .unwrap_or_default()
