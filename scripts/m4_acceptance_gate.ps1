@@ -408,6 +408,66 @@ function Test-TypedFacadeShrinkContract {
   return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 synchronizer DTOs and browser Wails bindings have typed source contracts; Wails bridge remains transitional" @()
 }
 
+function Test-BrowserPayloadSchemaContract {
+  $apiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $typesPath = Join-Path $projectRoot "src\modules\browser\types.ts"
+  $listPagePath = Join-Path $projectRoot "src\modules\browser\pages\BrowserListPage.tsx"
+  $detailPagePath = Join-Path $projectRoot "src\modules\browser\pages\BrowserDetailPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($apiPath, $typesPath, $listPagePath, $detailPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $apiText = if (Test-Path $apiPath) { Get-Content -LiteralPath $apiPath -Raw -Encoding UTF8 } else { "" }
+  $typesText = if (Test-Path $typesPath) { Get-Content -LiteralPath $typesPath -Raw -Encoding UTF8 } else { "" }
+  $listText = if (Test-Path $listPagePath) { Get-Content -LiteralPath $listPagePath -Raw -Encoding UTF8 } else { "" }
+  $detailText = if (Test-Path $detailPagePath) { Get-Content -LiteralPath $detailPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("BrowserRuntimeEventPayload", "profileId", "error")) {
+    if ($typesText -notmatch [regex]::Escape($token)) {
+      $failures += "browser runtime event payload type missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("normalizeBrowserRuntimeEventPayload", "BrowserRuntimeEventPayload", "profile_id", "lastError")) {
+    if ($apiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser runtime event normalizer missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("normalizeBrowserRuntimeEventPayload")) {
+    if ($listText -notmatch [regex]::Escape($token)) {
+      $failures += "BrowserListPage does not use browser runtime payload normalizer"
+    }
+    if ($detailText -notmatch [regex]::Escape($token)) {
+      $failures += "BrowserDetailPage does not use browser runtime payload normalizer"
+    }
+  }
+
+  foreach ($textAndName in @(
+      [pscustomobject]@{ text = $listText; name = "BrowserListPage" },
+      [pscustomobject]@{ text = $detailText; name = "BrowserDetailPage" }
+    )) {
+    if ($textAndName.text -match [regex]::Escape("payload: any")) {
+      $failures += "$($textAndName.name) still uses payload:any for runtime events"
+    }
+  }
+
+  foreach ($token in @("normalizeLaunchServerInfo(payload: any)", "normalizeRecordingDetail(payload: any")) {
+    if ($apiText -match [regex]::Escape($token)) {
+      $failures += "browser api normalizer still accepts any: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_payload_schema_contract" "missing_coverage" "failed" "M4.8 browser payload schema source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_payload_schema_contract" "passed" "passed" "M4.8 browser runtime event payload is normalized through a shared type; this does not remove every bridge compatibility path" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -725,6 +785,7 @@ $gates += Test-AutomationPrimitiveContract
 $gates += Test-ProviderDryRunContract
 $gates += Test-SessionBundleOperatorContract
 $gates += Test-TypedFacadeShrinkContract
+$gates += Test-BrowserPayloadSchemaContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -749,7 +810,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v8"
+  schemaVersion = "m4_acceptance_gate_v9"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -788,6 +849,7 @@ $report = [ordered]@{
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
     "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer DTOs and browser Wails bindings without removing the transitional bridge.",
+    "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

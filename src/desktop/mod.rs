@@ -3052,6 +3052,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "m4-acceptance" => Some("m4_acceptance"),
         "release-smoke" => Some("release_performance"),
         "m5-release-health" => Some("m5_release_health"),
+        "m4-browser-payload-schema" => Some("m4_browser_payload_schema"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "m8-session-handoff" => Some("m8_session_handoff"),
@@ -3273,6 +3274,10 @@ fn evidence_failure_reason_category(
         ("m8_session_handoff", "failed_handoff_package_contract") => {
             "session_handoff_contract_incomplete"
         }
+        ("m4_browser_payload_schema", "passed_browser_payload_schema_contract") => "none",
+        ("m4_browser_payload_schema", "failed_browser_payload_schema_contract") => {
+            "browser_payload_schema_contract_incomplete"
+        }
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
         ("m10_headed_repeatability", "blocked_missing_headed_report") => {
@@ -3461,6 +3466,25 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_else(|| "missing".to_string());
             format!(
                 "M8 SessionBundle handoff {status}: checksFailed={failed} runbook={runbook_status} localPortability={local_status} desktopContract={desktop_status} operatorSurface={operator_status}"
+            )
+        }
+        "m4_browser_payload_schema" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let normalized_event_payload = summary
+                .and_then(|item| value_text(item, "normalizedEventPayload"))
+                .unwrap_or_else(|| "missing".to_string());
+            let page_usage = summary
+                .and_then(|item| value_text(item, "pageUsage"))
+                .unwrap_or_else(|| "missing".to_string());
+            let any_payload_removed = summary
+                .and_then(|item| value_text(item, "anyPayloadRemoved"))
+                .unwrap_or_else(|| "unknown".to_string());
+            format!(
+                "M4 browser payload schema {status}: checksFailed={failed} normalizedEventPayload={normalized_event_payload} pageUsage={page_usage} anyPayloadRemoved={any_payload_removed}"
             )
         }
         "taxonomy_audit" => format!(
@@ -3995,6 +4019,12 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("m8_session_handoff", "failed_handoff_package_contract") => {
             "session_handoff_contract_failed"
         }
+        ("m4_browser_payload_schema", "passed_browser_payload_schema_contract") => {
+            "browser_payload_schema_contract_partial"
+        }
+        ("m4_browser_payload_schema", "failed_browser_payload_schema_contract") => {
+            "browser_payload_schema_contract_failed"
+        }
         ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
@@ -4101,6 +4131,18 @@ fn evidence_next_action(
                     )
                 })
         }
+        ("m4_browser_payload_schema", "passed_browser_payload_schema_contract")
+        | ("m4_browser_payload_schema", "failed_browser_payload_schema_contract") => {
+            value
+                .get("summary")
+                .and_then(|summary| value_text(summary, "nextAction"))
+                .or_else(|| {
+                    Some(
+                        "Run scripts/m4_browser_payload_schema_gate.ps1, then continue shrinking remaining low-frequency workbench/core bridge payloads separately."
+                            .to_string(),
+                    )
+                })
+        }
         ("m10_headed_repeatability", "blocked_missing_headed_report")
         | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
         | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
@@ -4179,6 +4221,7 @@ pub fn list_desktop_evidence_reports(
 
     for dir_name in [
         "m4-acceptance",
+        "m4-browser-payload-schema",
         "m8-session-handoff",
         "release-smoke",
         "m5-release-health",
@@ -11316,6 +11359,18 @@ mod tests {
                 "cross_machine_session_pending",
             ),
             (
+                "m4_browser_payload_schema",
+                "passed_browser_payload_schema_contract",
+                None,
+                "none",
+            ),
+            (
+                "m4_browser_payload_schema",
+                "failed_browser_payload_schema_contract",
+                None,
+                "browser_payload_schema_contract_incomplete",
+            ),
+            (
                 "runtime_adapter",
                 "blocked_evidence_required",
                 None,
@@ -11452,6 +11507,8 @@ mod tests {
             Uuid::new_v4()
         ));
         let reports_root = temp_root.join("reports");
+        fs::create_dir_all(reports_root.join("m4-browser-payload-schema"))
+            .expect("create m4 browser payload schema reports dir");
         fs::create_dir_all(reports_root.join("m8-session-handoff"))
             .expect("create m8 session handoff reports dir");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
@@ -11555,6 +11612,26 @@ mod tests {
         .expect("write m15 browser pool report");
         fs::write(
             reports_root
+                .join("m4-browser-payload-schema")
+                .join("m4-browser-payload-schema-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m4_browser_payload_schema_gate_v1",
+                "generatedAt": "2026-05-30T00:05:45Z",
+                "status": "passed_browser_payload_schema_contract",
+                "failureReason": "",
+                "summary": {
+                    "failed": 0,
+                    "normalizedEventPayload": "present",
+                    "pageUsage": "present",
+                    "anyPayloadRemoved": "yes",
+                    "nextAction": "Continue shrinking remaining low-frequency workbench/core bridge payloads without claiming tauriWailsBridge removal."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m4 browser payload schema report");
+        fs::write(
+            reports_root
                 .join("m8-session-handoff")
                 .join("m8-session-handoff-gate-test.json"),
             serde_json::json!({
@@ -11610,7 +11687,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 6);
+        assert_eq!(history.report_count, 7);
 
         let headed = history
             .reports
@@ -11662,6 +11739,28 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("second clean Win11"));
+
+        let m4_payload = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m4_browser_payload_schema")
+            .expect("m4 browser payload schema report");
+        assert_eq!(m4_payload.status, "passed_browser_payload_schema_contract");
+        assert_eq!(
+            m4_payload.evidence_level,
+            "browser_payload_schema_contract_partial"
+        );
+        assert_eq!(m4_payload.failure_reason_category, "none");
+        assert_eq!(m4_payload.risk_level, "partial");
+        assert!(m4_payload
+            .summary
+            .contains("normalizedEventPayload=present"));
+        assert!(m4_payload.summary.contains("anyPayloadRemoved=yes"));
+        assert!(m4_payload
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("tauriWailsBridge removal"));
 
         let m15 = history
             .reports

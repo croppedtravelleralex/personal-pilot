@@ -30,6 +30,7 @@ import {
   validateBrowserCorePath,
   // validateProxyConfig,
   fetchRecordingStatus,
+  normalizeBrowserRuntimeEventPayload,
   startRecording,
   stopRecording,
 } from '../api'
@@ -424,13 +425,17 @@ export function BrowserListPage() {
     fetchBrowserProxies().then(setProxies)
     fetchBrowserCores().then(setCores)
 
-    // 监听浏览器实例生命周期事件，自动更新状态
-    const offStarted = EventsOn('browser:instance:started', (payload: any) => {
-      const profileId = typeof payload === 'string' ? payload : payload?.profileId
+    const clearPendingProfile = (payload: unknown) => {
+      const { profileId } = normalizeBrowserRuntimeEventPayload(payload)
       if (profileId) {
         updatePendingIds(setStartingIds, profileId, false)
         updatePendingIds(setStoppingIds, profileId, false)
       }
+    }
+
+    // 监听浏览器实例生命周期事件，自动更新状态
+    const offStarted = EventsOn('browser:instance:started', (payload: unknown) => {
+      clearPendingProfile(payload)
       void loadProfiles({ silent: true, syncRuntimeState: true })
       void syncRecordingProfiles()
     })
@@ -438,21 +443,13 @@ export function BrowserListPage() {
       void loadProfiles({ silent: true, syncRuntimeState: true })
       void syncRecordingProfiles()
     })
-    const offStopped = EventsOn('browser:instance:stopped', (payload: any) => {
-      const profileId = typeof payload === 'string' ? payload : payload?.profileId
-      if (profileId) {
-        updatePendingIds(setStartingIds, profileId, false)
-        updatePendingIds(setStoppingIds, profileId, false)
-      }
+    const offStopped = EventsOn('browser:instance:stopped', (payload: unknown) => {
+      clearPendingProfile(payload)
       void loadProfiles({ silent: true, syncRuntimeState: true })
       void syncRecordingProfiles()
     })
-    const offCrashed = EventsOn('browser:instance:crashed', (payload: any) => {
-      const profileId = typeof payload === 'string' ? payload : payload?.profileId
-      if (profileId) {
-        updatePendingIds(setStartingIds, profileId, false)
-        updatePendingIds(setStoppingIds, profileId, false)
-      }
+    const offCrashed = EventsOn('browser:instance:crashed', (payload: unknown) => {
+      clearPendingProfile(payload)
       void loadProfiles({ silent: true, syncRuntimeState: true })
       void syncRecordingProfiles()
     })

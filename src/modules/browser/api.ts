@@ -6,6 +6,7 @@ import type {
   ProxyIPHealthResult, ActiveRecordingStatus, Recording, RecordingDetailPage, RecordingEventStats,
   RecordingSummary, RecordedEvent, NaturalLanguageAction, NaturalLanguageTaskEvent,
   PlaybackEventPayload, PlaybackProgressPayload, RecordingExportBundle, VariationConfig,
+  BrowserRuntimeEventPayload,
 } from './types'
 import { DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE } from './types'
 
@@ -159,6 +160,68 @@ function combineUnsubscribes(offs: Unsubscribe[]): Unsubscribe {
       }
     })
   }
+}
+
+function readRecord(payload: unknown): Record<string, unknown> {
+  return payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
+}
+
+function readStringField(source: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return undefined
+}
+
+function readNumberField(source: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value)
+  }
+  return undefined
+}
+
+function readBooleanField(source: Record<string, unknown>, keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase()
+      if (normalized === 'true') return true
+      if (normalized === 'false') return false
+    }
+  }
+  return undefined
+}
+
+export function normalizeBrowserRuntimeEventPayload(payload: unknown): BrowserRuntimeEventPayload {
+  if (typeof payload === 'string') {
+    return { profileId: payload.trim() }
+  }
+
+  const source = readRecord(payload)
+  const profileId = readStringField(source, ['profileId', 'profile_id', 'id']) || ''
+  const normalized: BrowserRuntimeEventPayload = { profileId }
+  const profileName = readStringField(source, ['profileName', 'profile_name', 'name'])
+  const runtimeWarning = readStringField(source, ['runtimeWarning', 'runtime_warning', 'warning'])
+  const error = readStringField(source, ['error', 'lastError', 'last_error', 'message'])
+  const debugPort = readNumberField(source, ['debugPort', 'debug_port'])
+  const pid = readNumberField(source, ['pid'])
+  const debugReady = readBooleanField(source, ['debugReady', 'debug_ready'])
+  const running = readBooleanField(source, ['running'])
+  const reused = readBooleanField(source, ['reused'])
+
+  if (profileName) normalized.profileName = profileName
+  if (runtimeWarning) normalized.runtimeWarning = runtimeWarning
+  if (error) normalized.error = error
+  if (debugPort !== undefined) normalized.debugPort = debugPort
+  if (pid !== undefined) normalized.pid = pid
+  if (debugReady !== undefined) normalized.debugReady = debugReady
+  if (running !== undefined) normalized.running = running
+  if (reused !== undefined) normalized.reused = reused
+  return normalized
 }
 
 let mockProfiles: BrowserProfile[] = [
@@ -860,21 +923,22 @@ export interface LaunchServerInfo {
   }
 }
 
-function normalizeLaunchServerInfo(payload: any): LaunchServerInfo {
-  const host = String(payload?.host || '127.0.0.1')
-  const port = Number(payload?.port) || 0
-  const preferredPort = Number(payload?.preferredPort) || 0
+function normalizeLaunchServerInfo(payload: unknown): LaunchServerInfo {
+  const source = readRecord(payload)
+  const host = String(source.host || '127.0.0.1')
+  const port = Number(source.port) || 0
+  const preferredPort = Number(source.preferredPort) || 0
   const fallbackPort = preferredPort > 0 ? preferredPort : 19876
   const effectivePort = port > 0 ? port : fallbackPort
-  const baseUrl = String(payload?.baseUrl || (effectivePort > 0 ? `http://${host}:${effectivePort}` : ''))
-  const cdpUrl = String(payload?.cdpUrl || baseUrl)
-  const activeDebugPort = Number(payload?.activeDebugPort) || 0
-  const apiAuthPayload = payload?.apiAuth || {}
+  const baseUrl = String(source.baseUrl || (effectivePort > 0 ? `http://${host}:${effectivePort}` : ''))
+  const cdpUrl = String(source.cdpUrl || baseUrl)
+  const activeDebugPort = Number(source.activeDebugPort) || 0
+  const apiAuthPayload = readRecord(source.apiAuth)
   const apiAuth = {
-    requested: !!apiAuthPayload?.requested,
-    configured: !!apiAuthPayload?.configured,
-    enabled: !!apiAuthPayload?.enabled,
-    header: String(apiAuthPayload?.header || 'X-Personal-Pilot-Api-Key'),
+    requested: !!apiAuthPayload.requested,
+    configured: !!apiAuthPayload.configured,
+    enabled: !!apiAuthPayload.enabled,
+    header: String(apiAuthPayload.header || 'X-Personal-Pilot-Api-Key'),
   }
 
   return {
@@ -884,7 +948,7 @@ function normalizeLaunchServerInfo(payload: any): LaunchServerInfo {
     baseUrl,
     cdpUrl,
     activeDebugPort,
-    ready: !!payload?.ready && port > 0,
+    ready: !!source.ready && port > 0,
     apiAuth,
   }
 }
@@ -1082,20 +1146,21 @@ function normalizeRecordingStatus(source: Partial<ActiveRecordingStatus> | undef
   }
 }
 
-function normalizeRecordingDetail(payload: any, fallbackOffset: number, fallbackLimit: number): RecordingDetailPage | null {
+function normalizeRecordingDetail(payload: unknown, fallbackOffset: number, fallbackLimit: number): RecordingDetailPage | null {
   if (!payload) return null
 
-  const source = payload.recording || payload.summary || payload
-  const fullEvents = Array.isArray(source.events) ? source.events : []
-  const hasEnvelope = !!(payload.recording || payload.summary || payload.eventTotal !== undefined || payload.eventOffset !== undefined || payload.offset !== undefined || payload.total !== undefined)
-  const hasPagedEvents = hasEnvelope && Array.isArray(payload.events)
-  const eventOffset = Math.max(0, Number(payload.eventOffset ?? payload.offset ?? fallbackOffset) || 0)
-  const eventLimit = Math.max(1, Number(payload.eventLimit ?? payload.limit ?? fallbackLimit) || fallbackLimit)
+  const envelope = readRecord(payload)
+  const source = readRecord(envelope.recording || envelope.summary || payload)
+  const fullEvents = Array.isArray(source.events) ? source.events as RecordedEvent[] : []
+  const hasEnvelope = !!(envelope.recording || envelope.summary || envelope.eventTotal !== undefined || envelope.eventOffset !== undefined || envelope.offset !== undefined || envelope.total !== undefined)
+  const hasPagedEvents = hasEnvelope && Array.isArray(envelope.events)
+  const eventOffset = Math.max(0, Number(envelope.eventOffset ?? envelope.offset ?? fallbackOffset) || 0)
+  const eventLimit = Math.max(1, Number(envelope.eventLimit ?? envelope.limit ?? fallbackLimit) || fallbackLimit)
   const events = hasPagedEvents
-    ? payload.events
+    ? envelope.events as RecordedEvent[]
     : fullEvents.slice(eventOffset, eventOffset + eventLimit)
-  const eventTotal = Number(payload.eventTotal ?? payload.total ?? source.eventCount ?? fullEvents.length ?? events.length) || 0
-  const statsSource = payload.stats as Partial<RecordingEventStats> | undefined
+  const eventTotal = Number(envelope.eventTotal ?? envelope.total ?? source.eventCount ?? fullEvents.length ?? events.length) || 0
+  const statsSource = envelope.stats as Partial<RecordingEventStats> | undefined
   const statsEvents = fullEvents.length > 0 ? fullEvents : events
 
   return {

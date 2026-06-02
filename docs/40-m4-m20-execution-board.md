@@ -262,3 +262,13 @@ Status: started 2026-06-02.
 1. Advance M8 by adding `scripts/m8_session_handoff_gate.ps1`, which refreshes local SessionBundle portability smoke, validates the refresh result, and checks the runbook, Settings operator surface, desktop command/tests, typed TS wrapper/types, and M4 boundary guard.
 2. Surface `m8_session_handoff` in desktop evidence history and Dashboard as `M8 Handoff` with `session_handoff_package_partial` evidence while `passed_handoff_package_ready` remains a cross-machine pending category.
 3. Keep this evidence scoped to handoff package readiness only; it does not prove second-machine portability, provider credentials, remote proxy/TLS, AdsPower refresh, full headed realism, or full `450` observed/replay coverage.
+
+## Twentieth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M4.8 by normalizing browser runtime event payloads behind `BrowserRuntimeEventPayload` and `normalizeBrowserRuntimeEventPayload(payload: unknown)`.
+2. Replace Browser List/Detail runtime lifecycle event handlers that used `payload: any` with shared normalizer calls, and narrow selected browser API normalizer inputs from `any` to `unknown`.
+3. Add `scripts/m4_browser_payload_schema_gate.ps1`, desktop evidence history support, and Dashboard `M4 Payload` row for `m4_browser_payload_schema` reports.
+4. Extend M4 acceptance gate to v9 with `browser_payload_schema_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=8`, `expectedBlocked=4`, `failed=0`.
+5. Keep this evidence scoped to browser module source-level payload schema normalization only; it does not prove `tauriWailsBridge` removal, low-frequency workbench/core bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.

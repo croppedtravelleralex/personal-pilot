@@ -28,6 +28,18 @@ export interface BrowserProfile {
   behaviorProfileId?: string
 }
 
+export interface BrowserRuntimeEventPayload {
+  profileId: string
+  profileName?: string
+  debugPort?: number
+  debugReady?: boolean
+  pid?: number
+  running?: boolean
+  reused?: boolean
+  runtimeWarning?: string
+  error?: string
+}
+
 export interface BrowserProfileInput {
   profileName: string
   userDataDir: string

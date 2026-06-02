@@ -13,6 +13,7 @@ import {
   restartBrowserInstance,
   startBrowserInstance,
   stopBrowserInstance,
+  normalizeBrowserRuntimeEventPayload,
 } from '../api'
 import { CookieManagerCard } from '../components/CookieManagerCard'
 import { SnapshotTab } from '../components/SnapshotTab'
@@ -65,14 +66,14 @@ export function BrowserDetailPage() {
   useEffect(() => {
     if (!id) return
 
-    const handleRuntimeChange = (payload: any) => {
-      const profileId = typeof payload === 'string' ? payload : payload?.profileId
-      if (profileId !== id) return
+    const handleRuntimeChange = (payload: unknown) => {
+      const eventPayload = normalizeBrowserRuntimeEventPayload(payload)
+      if (eventPayload.profileId !== id) return
 
       setPendingAction(null)
       void loadProfile()
 
-      if (typeof payload === 'string' || payload?.error) {
+      if (typeof payload === 'string' || eventPayload.error) {
         setTabs([])
         return
       }
