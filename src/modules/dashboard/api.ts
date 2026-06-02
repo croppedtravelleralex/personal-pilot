@@ -1,5 +1,13 @@
 import type { DashboardStats } from './types'
-import { collectValidationReport, listEvidenceReports, readReleaseSmokeContract } from '../../services/desktop'
+import {
+  collectValidationReport,
+  generateDesktopCdKeys,
+  listEvidenceReports,
+  readDashboardStats,
+  readLicenseStatus,
+  readReleaseSmokeContract,
+  reloadDesktopConfig,
+} from '../../services/desktop'
 import type {
   DesktopEvidenceReportHistory,
   DesktopReleaseSmokeContract,
@@ -7,37 +15,28 @@ import type {
   DesktopValidationReport,
 } from '../../types/desktop'
 
-const getBindings = async () => {
-  try {
-    return await import('../../wailsjs/go/main/App')
-  } catch {
-    return null
-  }
-}
-
 const DEFAULT_UNLIMITED = Number.POSITIVE_INFINITY
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {
-  const bindings: any = await getBindings()
-  if (bindings?.GetDashboardStats) {
-    try {
-      const data = await bindings.GetDashboardStats()
-      const licenseStatus = bindings.GetLicenseStatus ? await bindings.GetLicenseStatus() : null
-      const rawLimit = Number(licenseStatus?.maxLimit ?? 0)
-      const maxProfileLimit = rawLimit > 0 ? rawLimit : DEFAULT_UNLIMITED
+  try {
+    const [data, licenseStatus] = await Promise.all([
+      readDashboardStats(),
+      readLicenseStatus().catch(() => null),
+    ])
+    const rawLimit = Number(licenseStatus?.maxLimit ?? 0)
+    const maxProfileLimit = rawLimit > 0 ? rawLimit : DEFAULT_UNLIMITED
 
-      return {
-        totalInstances: data?.totalInstances ?? 0,
-        runningInstances: data?.runningInstances ?? 0,
-        proxyCount: data?.proxyCount ?? 0,
-        coreCount: data?.coreCount ?? 0,
-        memUsedMB: data?.memUsedMB ?? 0,
-        maxProfileLimit,
-        appVersion: data?.appVersion ?? 'unknown',
-      }
-    } catch (e) {
-      console.error('fetchDashboardStats error:', e)
+    return {
+      totalInstances: data?.totalInstances ?? 0,
+      runningInstances: data?.runningInstances ?? 0,
+      proxyCount: data?.proxyCount ?? 0,
+      coreCount: data?.coreCount ?? 0,
+      memUsedMB: data?.memUsedMB ?? 0,
+      maxProfileLimit,
+      appVersion: data?.appVersion ?? 'unknown',
     }
+  } catch (e) {
+    console.error('fetchDashboardStats error:', e)
   }
 
   return {
@@ -81,25 +80,18 @@ export async function collectDesktopWebViewEvidence(
 }
 
 export async function reloadConfig(): Promise<void> {
-  const bindings: any = await getBindings()
-  if (bindings?.ReloadConfig) {
-    try {
-      await bindings.ReloadConfig()
-    } catch (e) {
-      console.error('reloadConfig error:', e)
-    }
+  try {
+    await reloadDesktopConfig()
+  } catch (e) {
+    console.error('reloadConfig error:', e)
   }
 }
 
 export async function generateCDKeys(count: number): Promise<{ success: boolean, keys: string[], message?: string }> {
-  const bindings: any = await getBindings()
-  if (bindings?.GenerateCDKeys) {
-    try {
-      const keys = await bindings.GenerateCDKeys(count)
-      return { success: true, keys: keys || [] }
-    } catch (e: any) {
-      return { success: false, keys: [], message: e.message || '生成失败' }
-    }
+  try {
+    const keys = await generateDesktopCdKeys(count)
+    return { success: true, keys: keys || [] }
+  } catch (e: any) {
+    return { success: false, keys: [], message: e.message || '生成失败' }
   }
-  return { success: false, keys: [], message: '系统 API 未就绪' }
 }

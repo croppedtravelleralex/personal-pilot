@@ -3053,6 +3053,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "release-smoke" => Some("release_performance"),
         "m5-release-health" => Some("m5_release_health"),
         "m4-browser-payload-schema" => Some("m4_browser_payload_schema"),
+        "m4-dashboard-facade" => Some("m4_dashboard_facade"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "m8-session-handoff" => Some("m8_session_handoff"),
@@ -3278,6 +3279,10 @@ fn evidence_failure_reason_category(
         ("m4_browser_payload_schema", "failed_browser_payload_schema_contract") => {
             "browser_payload_schema_contract_incomplete"
         }
+        ("m4_dashboard_facade", "passed_dashboard_facade_contract") => "none",
+        ("m4_dashboard_facade", "failed_dashboard_facade_contract") => {
+            "dashboard_facade_contract_incomplete"
+        }
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
         ("m10_headed_repeatability", "blocked_missing_headed_report") => {
@@ -3485,6 +3490,25 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_else(|| "unknown".to_string());
             format!(
                 "M4 browser payload schema {status}: checksFailed={failed} normalizedEventPayload={normalized_event_payload} pageUsage={page_usage} anyPayloadRemoved={any_payload_removed}"
+            )
+        }
+        "m4_dashboard_facade" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let typed_desktop_wrappers = summary
+                .and_then(|item| value_text(item, "typedDesktopWrappers"))
+                .unwrap_or_else(|| "missing".to_string());
+            let dynamic_binding_removed = summary
+                .and_then(|item| value_text(item, "dynamicBindingRemoved"))
+                .unwrap_or_else(|| "unknown".to_string());
+            let evidence_rows_preserved = summary
+                .and_then(|item| value_text(item, "evidenceRowsPreserved"))
+                .unwrap_or_else(|| "unknown".to_string());
+            format!(
+                "M4 dashboard facade {status}: checksFailed={failed} typedDesktopWrappers={typed_desktop_wrappers} dynamicBindingRemoved={dynamic_binding_removed} evidenceRowsPreserved={evidence_rows_preserved}"
             )
         }
         "taxonomy_audit" => format!(
@@ -4025,6 +4049,12 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("m4_browser_payload_schema", "failed_browser_payload_schema_contract") => {
             "browser_payload_schema_contract_failed"
         }
+        ("m4_dashboard_facade", "passed_dashboard_facade_contract") => {
+            "dashboard_facade_contract_partial"
+        }
+        ("m4_dashboard_facade", "failed_dashboard_facade_contract") => {
+            "dashboard_facade_contract_failed"
+        }
         ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
@@ -4143,6 +4173,16 @@ fn evidence_next_action(
                     )
                 })
         }
+        ("m4_dashboard_facade", "passed_dashboard_facade_contract")
+        | ("m4_dashboard_facade", "failed_dashboard_facade_contract") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/m4_dashboard_facade_gate.ps1, then continue shrinking remaining profile/settings/logs dynamic Wails bindings separately."
+                        .to_string(),
+                )
+            }),
         ("m10_headed_repeatability", "blocked_missing_headed_report")
         | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
         | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
@@ -4222,6 +4262,7 @@ pub fn list_desktop_evidence_reports(
     for dir_name in [
         "m4-acceptance",
         "m4-browser-payload-schema",
+        "m4-dashboard-facade",
         "m8-session-handoff",
         "release-smoke",
         "m5-release-health",
@@ -11371,6 +11412,18 @@ mod tests {
                 "browser_payload_schema_contract_incomplete",
             ),
             (
+                "m4_dashboard_facade",
+                "passed_dashboard_facade_contract",
+                None,
+                "none",
+            ),
+            (
+                "m4_dashboard_facade",
+                "failed_dashboard_facade_contract",
+                None,
+                "dashboard_facade_contract_incomplete",
+            ),
+            (
                 "runtime_adapter",
                 "blocked_evidence_required",
                 None,
@@ -11509,6 +11562,8 @@ mod tests {
         let reports_root = temp_root.join("reports");
         fs::create_dir_all(reports_root.join("m4-browser-payload-schema"))
             .expect("create m4 browser payload schema reports dir");
+        fs::create_dir_all(reports_root.join("m4-dashboard-facade"))
+            .expect("create m4 dashboard facade reports dir");
         fs::create_dir_all(reports_root.join("m8-session-handoff"))
             .expect("create m8 session handoff reports dir");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
@@ -11632,6 +11687,26 @@ mod tests {
         .expect("write m4 browser payload schema report");
         fs::write(
             reports_root
+                .join("m4-dashboard-facade")
+                .join("m4-dashboard-facade-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m4_dashboard_facade_gate_v1",
+                "generatedAt": "2026-05-30T00:05:46Z",
+                "status": "passed_dashboard_facade_contract",
+                "failureReason": "",
+                "summary": {
+                    "failed": 0,
+                    "typedDesktopWrappers": "present",
+                    "dynamicBindingRemoved": "yes",
+                    "evidenceRowsPreserved": "yes",
+                    "nextAction": "Continue shrinking remaining profile/settings/logs dynamic Wails bindings without claiming tauriWailsBridge removal."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m4 dashboard facade report");
+        fs::write(
+            reports_root
                 .join("m8-session-handoff")
                 .join("m8-session-handoff-gate-test.json"),
             serde_json::json!({
@@ -11687,7 +11762,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 7);
+        assert_eq!(history.report_count, 8);
 
         let headed = history
             .reports
@@ -11757,6 +11832,28 @@ mod tests {
             .contains("normalizedEventPayload=present"));
         assert!(m4_payload.summary.contains("anyPayloadRemoved=yes"));
         assert!(m4_payload
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("tauriWailsBridge removal"));
+
+        let m4_dashboard = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m4_dashboard_facade")
+            .expect("m4 dashboard facade report");
+        assert_eq!(m4_dashboard.status, "passed_dashboard_facade_contract");
+        assert_eq!(
+            m4_dashboard.evidence_level,
+            "dashboard_facade_contract_partial"
+        );
+        assert_eq!(m4_dashboard.failure_reason_category, "none");
+        assert_eq!(m4_dashboard.risk_level, "partial");
+        assert!(m4_dashboard
+            .summary
+            .contains("typedDesktopWrappers=present"));
+        assert!(m4_dashboard.summary.contains("dynamicBindingRemoved=yes"));
+        assert!(m4_dashboard
             .next_action
             .as_deref()
             .unwrap_or_default()

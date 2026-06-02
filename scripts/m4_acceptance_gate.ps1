@@ -468,6 +468,52 @@ function Test-BrowserPayloadSchemaContract {
   return New-LocalGateResult "browser_payload_schema_contract" "passed" "passed" "M4.8 browser runtime event payload is normalized through a shared type; this does not remove every bridge compatibility path" @()
 }
 
+function Test-DashboardFacadeContract {
+  $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $failures = @()
+
+  foreach ($path in @($dashboardApiPath, $dashboardPagePath, $desktopServicePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $dashboardApiText = if (Test-Path $dashboardApiPath) { Get-Content -LiteralPath $dashboardApiPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("readDashboardStats", "readLicenseStatus", "reloadDesktopConfig", "generateDesktopCdKeys")) {
+    if ($dashboardApiText -notmatch [regex]::Escape($token)) {
+      $failures += "dashboard API does not use typed desktop wrapper: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any", "import('../../wailsjs/go/main/App')", "bindings.", "getBindings")) {
+    if ($dashboardApiText -match [regex]::Escape($token)) {
+      $failures += "dashboard API still uses raw Wails/dashboard command marker: $token"
+    }
+  }
+
+  foreach ($token in @("readDashboardStats", "readLicenseStatus", "reloadDesktopConfig", "generateDesktopCdKeys", "DesktopDashboardStatsResponse", "DesktopLicenseStatusResponse")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing dashboard typed facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchDashboardStats", "fetchEvidenceReportHistory", "fetchReleaseSmokeContract", "M4 Payload", "Runtime Adapter")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing expected evidence/stat marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "dashboard_facade_contract" "missing_coverage" "failed" "M4.8 Dashboard facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "dashboard_facade_contract" "passed" "passed" "M4.8 Dashboard API uses typed desktop service wrappers while preserving evidence rows; Wails bridge remains transitional" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -786,6 +832,7 @@ $gates += Test-ProviderDryRunContract
 $gates += Test-SessionBundleOperatorContract
 $gates += Test-TypedFacadeShrinkContract
 $gates += Test-BrowserPayloadSchemaContract
+$gates += Test-DashboardFacadeContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -810,7 +857,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v9"
+  schemaVersion = "m4_acceptance_gate_v10"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -850,6 +897,7 @@ $report = [ordered]@{
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
     "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer DTOs and browser Wails bindings without removing the transitional bridge.",
     "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",
+    "Dashboard facade contract is source-level evidence only; it routes Dashboard stats/license/config/CD key calls through typed desktop service wrappers without removing every bridge compatibility path.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

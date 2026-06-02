@@ -272,3 +272,13 @@ Status: started 2026-06-02.
 3. Add `scripts/m4_browser_payload_schema_gate.ps1`, desktop evidence history support, and Dashboard `M4 Payload` row for `m4_browser_payload_schema` reports.
 4. Extend M4 acceptance gate to v9 with `browser_payload_schema_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=8`, `expectedBlocked=4`, `failed=0`.
 5. Keep this evidence scoped to browser module source-level payload schema normalization only; it does not prove `tauriWailsBridge` removal, low-frequency workbench/core bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+
+## Twenty-First Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M4.8 by routing Dashboard stats/license/config/CD key calls through `src/services/desktop.ts` typed wrappers instead of direct dynamic Wails imports.
+2. Remove `const bindings: any` and `../../wailsjs/go/main/App` import usage from `src/modules/dashboard/api.ts` while preserving stats fallback, evidence history, release smoke contract, WebView evidence collection, reload config, and CD key behavior.
+3. Add `scripts/m4_dashboard_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Dashboard` row for `m4_dashboard_facade` reports.
+4. Extend M4 acceptance gate to v10 with `dashboard_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=9`, `expectedBlocked=4`, `failed=0`.
+5. Keep this evidence scoped to Dashboard API source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/settings/logs facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
