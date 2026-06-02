@@ -500,6 +500,7 @@ pub struct DesktopEvidenceReportSummary {
     pub generated_at: String,
     pub report_path: String,
     pub failure_reason: Option<String>,
+    pub failure_reason_category: String,
     pub previous_status: Option<String>,
     pub previous_failure_reason: Option<String>,
     pub previous_generated_at: Option<String>,
@@ -3228,6 +3229,64 @@ fn profile_browser_comparison_next_action(
     }
 }
 
+fn evidence_failure_reason_category(
+    kind: &str,
+    status: &str,
+    failure_reason: Option<&str>,
+) -> String {
+    match (kind, status) {
+        ("provider_acceptance", item) if item.contains("blocked_missing_credentials") => {
+            "provider_credentials_missing"
+        }
+        ("remote_proxy_tls", "blocked_remote_proxy_required") => "remote_proxy_missing",
+        ("profile_browser_comparison", "blocked_missing_desktop_webview_report") => {
+            "desktop_webview_evidence_missing"
+        }
+        ("profile_browser_comparison", "blocked_missing_profile_browser_report") => {
+            "profile_browser_evidence_missing"
+        }
+        ("profile_browser_comparison", "blocked_stale_comparison_pair") => "same_run_window_stale",
+        ("profile_browser_comparison", "partial_comparison_only") => "comparison_category_gap",
+        ("session_portability", item)
+            if item.contains("local_contract") || item.contains("blocked") =>
+        {
+            "cross_machine_session_pending"
+        }
+        ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
+        ("external_distribution", item) if item.contains("blocked") => {
+            "external_operator_smoke_required"
+        }
+        ("m4_acceptance", "expected_blocked")
+        | ("m4_acceptance", "passed_with_expected_external_blockers") => {
+            "expected_external_blockers"
+        }
+        ("m5_release_health", item)
+            if item.contains("budget_overrun") || item.contains("recorded_drift") =>
+        {
+            "release_budget_overrun"
+        }
+        ("release_performance", item) if item.contains("warning") || item.contains("failed") => {
+            if failure_reason
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("target_exceeded")
+            {
+                "release_budget_overrun"
+            } else {
+                "release_performance_warning"
+            }
+        }
+        (_, item) if item.contains("failed") => "unexpected_failure",
+        (_, item) if item.contains("blocked") => "blocked_external_or_missing_evidence",
+        (_, item) if item.contains("warning") || item.contains("partial") => "warning_or_partial",
+        _ => match failure_reason {
+            Some(reason) if !reason.trim().is_empty() => "uncategorized_failure_reason",
+            _ => "none",
+        },
+    }
+    .to_string()
+}
+
 fn evidence_report_summary_from_json(
     kind: &str,
     path: &Path,
@@ -3257,6 +3316,8 @@ fn evidence_report_summary_from_json(
         .and_then(Value::as_str)
         .filter(|item| !item.is_empty())
         .map(ToOwned::to_owned);
+    let failure_reason_category =
+        evidence_failure_reason_category(kind, &status, failure_reason.as_deref());
     let evidence_level = evidence_level_from_report(kind, &status, value);
     let (risk_level, risk_score) = evidence_risk_from_level(&evidence_level, &status);
     let next_action = evidence_next_action(kind, &status, value, failure_reason.as_deref());
@@ -3522,6 +3583,7 @@ fn evidence_report_summary_from_json(
         generated_at,
         report_path: path.to_string_lossy().to_string(),
         failure_reason,
+        failure_reason_category,
         previous_status: None,
         previous_failure_reason: None,
         previous_generated_at: None,
@@ -10427,6 +10489,7 @@ mod tests {
             report.failure_reason.as_deref(),
             Some("idle_rss_target_exceeded")
         );
+        assert_eq!(report.failure_reason_category, "release_budget_overrun");
         assert!(report.summary.contains("411MB"));
         assert!(report.summary.contains("budget=over_budget"));
         assert_eq!(report.previous_status.as_deref(), Some("warning"));
@@ -10457,6 +10520,7 @@ mod tests {
             .expect("m5 release health report");
         assert_eq!(m5.status, "passed_with_budget_overrun");
         assert_eq!(m5.evidence_level, "partial");
+        assert_eq!(m5.failure_reason_category, "release_budget_overrun");
         assert_eq!(m5.status_trend, "new_report_kind");
         assert_eq!(m5.risk_level, "partial");
         assert_eq!(m5.risk_trend, "new_report_kind");
@@ -10575,6 +10639,7 @@ mod tests {
         assert_eq!(report.kind, "m4_acceptance");
         assert_eq!(report.status, "passed_with_expected_external_blockers");
         assert_eq!(report.evidence_level, "expected_external_blockers");
+        assert_eq!(report.failure_reason_category, "expected_external_blockers");
         assert_eq!(report.risk_level, "expected_external_blocker");
         assert_eq!(report.risk_score, 50);
         assert_eq!(report.risk_trend, "new_report_kind");
@@ -10674,6 +10739,7 @@ mod tests {
         assert_eq!(report.kind, "remote_proxy_tls");
         assert_eq!(report.status, "blocked_remote_proxy_required");
         assert_eq!(report.evidence_level, "blocked_missing_remote_proxy");
+        assert_eq!(report.failure_reason_category, "remote_proxy_missing");
         assert_eq!(report.risk_level, "blocked");
         assert_eq!(report.risk_score, 70);
         assert!(report.summary.contains("exitIp=pending"));
@@ -10763,6 +10829,10 @@ mod tests {
         assert_eq!(report.kind, "profile_browser_comparison");
         assert_eq!(report.status, "blocked_missing_desktop_webview_report");
         assert_eq!(report.evidence_level, "blocked");
+        assert_eq!(
+            report.failure_reason_category,
+            "desktop_webview_evidence_missing"
+        );
         assert!(report.summary.contains("sameRun=missing_desktop_webview"));
         assert!(report.summary.contains("deltaMinutes=pending/120"));
         assert!(report.summary.contains("desktopSignals=0"));
@@ -10780,6 +10850,74 @@ mod tests {
             .contains("WebView evidence collection"));
 
         let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn evidence_report_history_failure_reason_category_covers_known_blockers() {
+        let cases = [
+            (
+                "provider_acceptance",
+                "blocked_missing_credentials",
+                None,
+                "provider_credentials_missing",
+            ),
+            (
+                "profile_browser_comparison",
+                "blocked_missing_profile_browser_report",
+                None,
+                "profile_browser_evidence_missing",
+            ),
+            (
+                "profile_browser_comparison",
+                "blocked_stale_comparison_pair",
+                None,
+                "same_run_window_stale",
+            ),
+            (
+                "profile_browser_comparison",
+                "partial_comparison_only",
+                None,
+                "comparison_category_gap",
+            ),
+            (
+                "session_portability",
+                "local_contract_passed",
+                None,
+                "cross_machine_session_pending",
+            ),
+            (
+                "runtime_adapter",
+                "blocked_evidence_required",
+                None,
+                "runtime_adapter_evidence_required",
+            ),
+            (
+                "external_distribution",
+                "blocked_external_smoke_required",
+                None,
+                "external_operator_smoke_required",
+            ),
+            (
+                "custom_gate",
+                "blocked_missing_report",
+                None,
+                "blocked_external_or_missing_evidence",
+            ),
+            ("custom_gate", "warning", None, "warning_or_partial"),
+            (
+                "custom_gate",
+                "passed",
+                Some("opaque provider message"),
+                "uncategorized_failure_reason",
+            ),
+            ("custom_gate", "passed", None, "none"),
+        ];
+        for (kind, status, failure_reason, expected) in cases {
+            assert_eq!(
+                evidence_failure_reason_category(kind, status, failure_reason),
+                expected
+            );
+        }
     }
 
     #[test]

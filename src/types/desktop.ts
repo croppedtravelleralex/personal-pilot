@@ -55,6 +55,7 @@ export interface DesktopEvidenceReportSummary {
   generatedAt: string;
   reportPath: string;
   failureReason: string | null;
+  failureReasonCategory: string;
   previousStatus: string | null;
   previousFailureReason: string | null;
   previousGeneratedAt: string | null;

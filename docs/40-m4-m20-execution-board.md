@@ -215,3 +215,12 @@ Status: started 2026-06-02.
 3. Generate status-specific next action for missing desktop WebView report, missing profile-browser report, stale pair, and partial category comparison.
 4. Preserve the comparison report `status`, `failureReason`, `evidenceLevel`, M4 expected external blocker semantics, and Overall `40% / 60% / yellow`.
 5. Verify with `cargo test evidence_report_history`, `pnpm typecheck`, `live_truth_guard`, M4 gate, and diff hygiene.
+
+## Fifteenth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Extend M13 evidence operations with `failureReasonCategory`.
+2. Categorize common local report blockers: release budget overrun, provider credentials missing, remote proxy missing, desktop/profile comparison gaps, cross-machine SessionBundle pending, runtime adapter evidence required, external operator smoke required, and expected external blockers.
+3. Surface the category in Dashboard evidence rows while preserving original `failureReason`, `status`, `evidenceLevel`, and gate semantics.
+4. Verify with evidence report history tests, `pnpm typecheck`, live truth guard, M4 gate, and diff hygiene.

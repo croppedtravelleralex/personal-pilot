@@ -362,6 +362,9 @@ function EvidenceRow({ label, report }: { label: string; report?: DesktopEvidenc
           </div>
         )}
         {report?.failureReason && <div className="mt-1 truncate text-[var(--color-error)]">{report.failureReason}</div>}
+        {report?.failureReasonCategory && report.failureReasonCategory !== 'none' && (
+          <div className="mt-1 truncate text-[var(--color-text-secondary)]">{report.failureReasonCategory}</div>
+        )}
         {report?.statusTrend && report.statusTrend !== 'new_report_kind' && (
           <div className="mt-1 truncate text-[var(--color-text-secondary)]" title={report.trendSummary}>
             {report.statusTrend} · {report.failureReasonTrend} · {report.riskTrend}
