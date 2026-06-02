@@ -292,3 +292,13 @@ Status: started 2026-06-02.
 3. Add `scripts/m4_settings_logs_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Settings/Logs` row for `m4_settings_logs_facade` reports.
 4. Extend M4 acceptance gate to v11 with `settings_logs_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=10`, `expectedBlocked=4`, `failed=0`.
 5. Keep this evidence scoped to Settings backup API and Browser logs source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+
+## Twenty-Third Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M4.8 by routing Profile remote author loading through `src/services/desktop.ts` typed wrapper `fetchRemoteAuthorProfileFromDesktop` instead of direct dynamic Wails imports.
+2. Preserve the browser `fetch` fallback for non-desktop previews while removing `const bindings: any`, direct `../../wailsjs/go/main/App` dynamic import, and `(window as any).go?.main?.App` from `src/modules/profile/api.ts`.
+3. Add `scripts/m4_profile_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Profile` row for `m4_profile_facade` reports.
+4. Extend M4 acceptance gate to v12 with `profile_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=11`, `expectedBlocked=4`, `failed=0`.
+5. Keep this evidence scoped to Profile remote author source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.

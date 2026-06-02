@@ -582,6 +582,58 @@ function Test-SettingsLogsFacadeContract {
   return New-LocalGateResult "settings_logs_facade_contract" "passed" "passed" "M4.8 Settings backup and Browser logs use typed desktop service wrappers while preserving the transitional bridge" @()
 }
 
+function Test-ProfileFacadeContract {
+  $profileApiPath = Join-Path $projectRoot "src\modules\profile\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($profileApiPath, $desktopServicePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $profileApiText = if (Test-Path $profileApiPath) { Get-Content -LiteralPath $profileApiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("fetchRemoteAuthorProfileFromDesktop", "Record<string, unknown>", "normalizeChannel(value: unknown)", "errorMessage(error)")) {
+    if ($profileApiText -notmatch [regex]::Escape($token)) {
+      $failures += "profile API does not use typed profile facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any", "import('../../wailsjs/go/main/App')", "getBindings", "(window as any).go?.main?.App", "Record<string, any>", "normalizeChannel(value: any)")) {
+    if ($profileApiText -match [regex]::Escape($token)) {
+      $failures += "profile API still uses raw Wails/any marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchRemoteAuthorPayloadViaBrowser", "fetch(authorURL", "AbortController", "Accept: 'application/json'")) {
+    if ($profileApiText -notmatch [regex]::Escape($token)) {
+      $failures += "profile API browser preview fallback missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchRemoteAuthorProfileFromDesktop", "FetchRemoteAuthorProfile", "Promise<Record<string, unknown>>")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing profile typed facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_profile_facade", "M4 Profile")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing profile facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "profile_facade_contract" "missing_coverage" "failed" "M4.8 Profile facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "profile_facade_contract" "passed" "passed" "M4.8 Profile remote author loading uses the typed desktop service wrapper while preserving browser preview fallback" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -902,6 +954,7 @@ $gates += Test-TypedFacadeShrinkContract
 $gates += Test-BrowserPayloadSchemaContract
 $gates += Test-DashboardFacadeContract
 $gates += Test-SettingsLogsFacadeContract
+$gates += Test-ProfileFacadeContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -926,7 +979,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v11"
+  schemaVersion = "m4_acceptance_gate_v12"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -968,6 +1021,7 @@ $report = [ordered]@{
     "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",
     "Dashboard facade contract is source-level evidence only; it routes Dashboard stats/license/config/CD key calls through typed desktop service wrappers without removing every bridge compatibility path.",
     "Settings/logs facade contract is source-level evidence only; it routes Settings backup and Browser logs through typed desktop service wrappers while preserving the transitional compatibility bridge.",
+    "Profile facade contract is source-level evidence only; it routes Profile remote author loading through a typed desktop service wrapper while preserving browser preview fallback.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

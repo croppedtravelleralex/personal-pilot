@@ -1,4 +1,5 @@
 import profilePageConfig from '../../config/profile.config'
+import { fetchRemoteAuthorProfileFromDesktop } from '../../services/desktop'
 import type { AuthorProfile, IconKey, ProfileChannel, ProfilePageData, ProfileProject } from './types'
 
 const PROFILE_ICON_KEYS: IconKey[] = [
@@ -18,14 +19,6 @@ const CHANNEL_ICON_BY_NAME: Record<string, IconKey> = {
   微信公众号: 'message-square',
   github: 'github',
   邮件: 'mail',
-}
-
-const getBindings = async () => {
-  try {
-    return await import('../../wailsjs/go/main/App')
-  } catch {
-    return null
-  }
 }
 
 export function createDefaultProfilePageData(): ProfilePageData {
@@ -56,32 +49,27 @@ export async function loadProfilePageData(): Promise<ProfilePageData> {
         source: 'remote',
       },
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       ...defaultData,
       meta: {
         source: 'default',
-        message: error?.message || '远程作者配置不可用，已切换为默认资料。',
+        message: errorMessage(error) || '远程作者配置不可用，已切换为默认资料。',
       },
     }
   }
 }
 
-async function fetchRemoteAuthorPayload(authorURL: string, timeoutMs: number): Promise<Record<string, any>> {
-  const bindings: any = await getBindings()
-  if (bindings?.FetchRemoteAuthorProfile) {
-    return (await bindings.FetchRemoteAuthorProfile(authorURL, timeoutMs)) || {}
+async function fetchRemoteAuthorPayload(authorURL: string, timeoutMs: number): Promise<Record<string, unknown>> {
+  try {
+    const payload = await fetchRemoteAuthorProfileFromDesktop(authorURL, timeoutMs)
+    return isRecord(payload) ? payload : {}
+  } catch {
+    return await fetchRemoteAuthorPayloadViaBrowser(authorURL, timeoutMs)
   }
-
-  const goApp = (window as any).go?.main?.App
-  if (goApp?.FetchRemoteAuthorProfile) {
-    return (await goApp.FetchRemoteAuthorProfile(authorURL, timeoutMs)) || {}
-  }
-
-  return await fetchRemoteAuthorPayloadViaBrowser(authorURL, timeoutMs)
 }
 
-async function fetchRemoteAuthorPayloadViaBrowser(authorURL: string, timeoutMs: number): Promise<Record<string, any>> {
+async function fetchRemoteAuthorPayloadViaBrowser(authorURL: string, timeoutMs: number): Promise<Record<string, unknown>> {
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), clampTimeout(timeoutMs))
 
@@ -99,13 +87,13 @@ async function fetchRemoteAuthorPayloadViaBrowser(authorURL: string, timeoutMs: 
     }
 
     const payload = await response.json()
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    if (!isRecord(payload)) {
       throw new Error('远程作者配置格式无效')
     }
 
-    return payload as Record<string, any>
-  } catch (error: any) {
-    if (error?.name === 'AbortError') {
+    return payload
+  } catch (error: unknown) {
+    if (isAbortError(error)) {
       throw new Error('远程作者配置请求超时')
     }
     throw error
@@ -114,7 +102,7 @@ async function fetchRemoteAuthorPayloadViaBrowser(authorURL: string, timeoutMs: 
   }
 }
 
-function normalizeAuthorProfile(payload: Record<string, any>, fallback: AuthorProfile): AuthorProfile {
+function normalizeAuthorProfile(payload: Record<string, unknown>, fallback: AuthorProfile): AuthorProfile {
   const source = extractAuthorPayload(payload)
   const name = normalizeString(source.name, fallback.name)
   const initial = normalizeString(source.initial, name.charAt(0) || fallback.initial).charAt(0) || fallback.initial
@@ -146,8 +134,8 @@ function normalizeChannels(value: unknown, fallback: ProfileChannel[]): ProfileC
   return channels.length > 0 ? channels : cloneChannels(fallback)
 }
 
-function normalizeChannel(value: any): ProfileChannel | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+function normalizeChannel(value: unknown): ProfileChannel | null {
+  if (!isRecord(value)) {
     return null
   }
 
@@ -179,11 +167,32 @@ function normalizeIconKey(value: unknown, name: string): IconKey | undefined {
   return CHANNEL_ICON_BY_NAME[name] || CHANNEL_ICON_BY_NAME[name.toLowerCase()]
 }
 
-function extractAuthorPayload(payload: Record<string, any>): Record<string, any> {
-  if (payload.author && typeof payload.author === 'object' && !Array.isArray(payload.author)) {
+function extractAuthorPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  if (isRecord(payload.author)) {
     return payload.author
   }
   return payload
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'AbortError'
+  }
+  return isRecord(error) && error.name === 'AbortError'
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (isRecord(error) && typeof error.message === 'string') {
+    return error.message
+  }
+  return ''
 }
 
 function normalizeString(value: unknown, fallback = ''): string {
