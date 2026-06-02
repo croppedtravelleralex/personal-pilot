@@ -113,6 +113,21 @@ function reportFileName(reportPath: string): string {
   return reportPath.split(/[\\/]/).pop() || reportPath
 }
 
+function evidenceDiffFieldLabel(field: string): string {
+  switch (field) {
+    case 'status':
+      return 'status'
+    case 'failureReason':
+      return 'reason'
+    case 'failureReasonCategory':
+      return 'category'
+    case 'risk':
+      return 'risk'
+    default:
+      return field
+  }
+}
+
 function runtimeAdapterEvidenceScore(adapter: DesktopRuntimeAdapterContractItem): number {
   const value = [
     adapter.status,
@@ -367,9 +382,21 @@ function EvidenceRow({ label, report }: { label: string; report?: DesktopEvidenc
         )}
         {report?.statusTrend && report.statusTrend !== 'new_report_kind' && (
           <div className="mt-1 truncate text-[var(--color-text-secondary)]" title={report.trendSummary}>
-            {report.statusTrend} · {report.failureReasonTrend} · {report.riskTrend}
+            {report.statusTrend} · {report.failureReasonTrend} · {report.failureReasonCategoryTrend} · {report.riskTrend}
           </div>
         )}
+        {report?.reportDiffItems?.length ? (
+          <div
+            className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-[var(--color-text-secondary)]"
+            title={report.reportDiffSummary}
+          >
+            {report.reportDiffItems.map((item) => (
+              <span key={item.field} className="min-w-0 max-w-full truncate">
+                {evidenceDiffFieldLabel(item.field)}:{item.previous}-&gt;{item.current}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {report?.nextAction && <div className="mt-1 truncate text-[var(--color-text-secondary)]">{report.nextAction}</div>}
       </div>
     </div>

@@ -58,17 +58,28 @@ export interface DesktopEvidenceReportSummary {
   failureReasonCategory: string;
   previousStatus: string | null;
   previousFailureReason: string | null;
+  previousFailureReasonCategory: string | null;
   previousGeneratedAt: string | null;
   statusTrend: string;
   failureReasonTrend: string;
+  failureReasonCategoryTrend: string;
   riskLevel: string;
   riskScore: number;
   previousRiskLevel: string | null;
   previousRiskScore: number | null;
   riskTrend: string;
   trendSummary: string;
+  reportDiffSummary: string;
+  reportDiffItems: DesktopEvidenceReportDiffItem[];
   nextAction: string | null;
   summary: string;
+}
+
+export interface DesktopEvidenceReportDiffItem {
+  field: string;
+  previous: string;
+  current: string;
+  trend: string;
 }
 
 export interface DesktopEvidenceReportHistory {

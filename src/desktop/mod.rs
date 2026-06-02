@@ -492,6 +492,15 @@ pub struct DesktopProviderProductionReadiness {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DesktopEvidenceReportDiffItem {
+    pub field: String,
+    pub previous: String,
+    pub current: String,
+    pub trend: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopEvidenceReportSummary {
     pub report_id: String,
     pub kind: String,
@@ -503,15 +512,19 @@ pub struct DesktopEvidenceReportSummary {
     pub failure_reason_category: String,
     pub previous_status: Option<String>,
     pub previous_failure_reason: Option<String>,
+    pub previous_failure_reason_category: Option<String>,
     pub previous_generated_at: Option<String>,
     pub status_trend: String,
     pub failure_reason_trend: String,
+    pub failure_reason_category_trend: String,
     pub risk_level: String,
     pub risk_score: i32,
     pub previous_risk_level: Option<String>,
     pub previous_risk_score: Option<i32>,
     pub risk_trend: String,
     pub trend_summary: String,
+    pub report_diff_summary: String,
+    pub report_diff_items: Vec<DesktopEvidenceReportDiffItem>,
     pub next_action: Option<String>,
     pub summary: String,
 }
@@ -3586,15 +3599,19 @@ fn evidence_report_summary_from_json(
         failure_reason_category,
         previous_status: None,
         previous_failure_reason: None,
+        previous_failure_reason_category: None,
         previous_generated_at: None,
         status_trend: "new_report_kind".to_string(),
         failure_reason_trend: "new_report_kind".to_string(),
+        failure_reason_category_trend: "new_report_kind".to_string(),
         risk_level,
         risk_score,
         previous_risk_level: None,
         previous_risk_score: None,
         risk_trend: "new_report_kind".to_string(),
         trend_summary: "No previous local report for this evidence kind.".to_string(),
+        report_diff_summary: "No previous local report for this evidence kind.".to_string(),
+        report_diff_items: Vec::new(),
         next_action,
         summary,
     }
@@ -3629,6 +3646,16 @@ fn evidence_failure_reason_trend(current: Option<&str>, previous: Option<&str>) 
     }
 }
 
+fn evidence_failure_reason_category_trend(current: &str, previous: Option<&str>) -> String {
+    match previous {
+        None => "new_report_kind".to_string(),
+        Some(previous) if previous == current => "failure_reason_category_unchanged".to_string(),
+        Some(previous) => {
+            format!("failure_reason_category_changed_from_{previous}_to_{current}")
+        }
+    }
+}
+
 fn evidence_risk_from_level(evidence_level: &str, status: &str) -> (String, i32) {
     let combined = format!("{evidence_level} {status}").to_lowercase();
     if combined.contains("failed") {
@@ -3659,6 +3686,14 @@ fn evidence_risk_trend(current_score: i32, previous_score: Option<i32>) -> Strin
     }
 }
 
+fn optional_diff_text(value: Option<&str>) -> String {
+    normalize_optional_text(value).unwrap_or_else(|| "none".to_string())
+}
+
+fn risk_diff_text(level: &str, score: i32) -> String {
+    format!("{level}:{score}")
+}
+
 fn evidence_trend_summary(report: &DesktopEvidenceReportSummary) -> String {
     match report.previous_status.as_deref() {
         None => "No previous local report for this evidence kind.".to_string(),
@@ -3667,12 +3702,18 @@ fn evidence_trend_summary(report: &DesktopEvidenceReportSummary) -> String {
                 .previous_generated_at
                 .as_deref()
                 .unwrap_or("unknown time");
+            let previous_category = report
+                .previous_failure_reason_category
+                .as_deref()
+                .unwrap_or("none");
             let previous_risk = report.previous_risk_level.as_deref().unwrap_or("unknown");
             format!(
-                "Previous {kind} report at {previous_at}: status {previous_status} -> {current_status}; failureReason trend={failure_trend}; risk {previous_risk} -> {current_risk} ({risk_trend}).",
+                "Previous {kind} report at {previous_at}: status {previous_status} -> {current_status}; failureReason trend={failure_trend}; category {previous_category} -> {current_category} ({category_trend}); risk {previous_risk} -> {current_risk} ({risk_trend}).",
                 kind = report.kind,
                 current_status = report.status,
                 failure_trend = report.failure_reason_trend,
+                current_category = report.failure_reason_category,
+                category_trend = report.failure_reason_category_trend,
                 current_risk = report.risk_level,
                 risk_trend = report.risk_trend,
             )
@@ -3680,9 +3721,70 @@ fn evidence_trend_summary(report: &DesktopEvidenceReportSummary) -> String {
     }
 }
 
+fn evidence_report_diff_summary(report: &DesktopEvidenceReportSummary) -> String {
+    let Some(previous_status) = report.previous_status.as_deref() else {
+        return "No previous local report for this evidence kind.".to_string();
+    };
+    let previous_at = report
+        .previous_generated_at
+        .as_deref()
+        .unwrap_or("unknown time");
+    format!(
+        "Diff vs previous {kind} report at {previous_at}: status={status_trend}; failureReason={failure_trend}; failureReasonCategory={category_trend}; risk={risk_trend}; previousStatus={previous_status}; currentStatus={current_status}.",
+        kind = report.kind,
+        status_trend = report.status_trend,
+        failure_trend = report.failure_reason_trend,
+        category_trend = report.failure_reason_category_trend,
+        risk_trend = report.risk_trend,
+        current_status = report.status,
+    )
+}
+
+fn evidence_report_diff_items(
+    report: &DesktopEvidenceReportSummary,
+) -> Vec<DesktopEvidenceReportDiffItem> {
+    let Some(previous_status) = report.previous_status.as_deref() else {
+        return Vec::new();
+    };
+    let previous_category = report
+        .previous_failure_reason_category
+        .as_deref()
+        .unwrap_or("none");
+    let previous_risk_level = report.previous_risk_level.as_deref().unwrap_or("unknown");
+    let previous_risk_score = report.previous_risk_score.unwrap_or_default();
+
+    vec![
+        DesktopEvidenceReportDiffItem {
+            field: "status".to_string(),
+            previous: previous_status.to_string(),
+            current: report.status.clone(),
+            trend: report.status_trend.clone(),
+        },
+        DesktopEvidenceReportDiffItem {
+            field: "failureReason".to_string(),
+            previous: optional_diff_text(report.previous_failure_reason.as_deref()),
+            current: optional_diff_text(report.failure_reason.as_deref()),
+            trend: report.failure_reason_trend.clone(),
+        },
+        DesktopEvidenceReportDiffItem {
+            field: "failureReasonCategory".to_string(),
+            previous: previous_category.to_string(),
+            current: report.failure_reason_category.clone(),
+            trend: report.failure_reason_category_trend.clone(),
+        },
+        DesktopEvidenceReportDiffItem {
+            field: "risk".to_string(),
+            previous: risk_diff_text(previous_risk_level, previous_risk_score),
+            current: risk_diff_text(&report.risk_level, report.risk_score),
+            trend: report.risk_trend.clone(),
+        },
+    ]
+}
+
 struct EvidenceTrendAnchor {
     status: String,
     failure_reason: Option<String>,
+    failure_reason_category: String,
     generated_at: String,
     risk_level: String,
     risk_score: i32,
@@ -3699,24 +3801,34 @@ fn attach_evidence_report_trends(reports: &mut [DesktopEvidenceReportSummary]) {
                 reports[index].failure_reason.as_deref(),
                 previous.failure_reason.as_deref(),
             );
+            reports[index].failure_reason_category_trend = evidence_failure_reason_category_trend(
+                &reports[index].failure_reason_category,
+                Some(&previous.failure_reason_category),
+            );
             reports[index].risk_trend =
                 evidence_risk_trend(reports[index].risk_score, Some(previous.risk_score));
             reports[index].previous_status = Some(previous.status.clone());
             reports[index].previous_failure_reason = previous.failure_reason.clone();
+            reports[index].previous_failure_reason_category =
+                Some(previous.failure_reason_category.clone());
             reports[index].previous_generated_at = Some(previous.generated_at.clone());
             reports[index].previous_risk_level = Some(previous.risk_level.clone());
             reports[index].previous_risk_score = Some(previous.risk_score);
         } else {
             reports[index].status_trend = evidence_status_trend(&reports[index].status, None);
             reports[index].failure_reason_trend = "new_report_kind".to_string();
+            reports[index].failure_reason_category_trend = "new_report_kind".to_string();
             reports[index].risk_trend = evidence_risk_trend(reports[index].risk_score, None);
         }
         reports[index].trend_summary = evidence_trend_summary(&reports[index]);
+        reports[index].report_diff_summary = evidence_report_diff_summary(&reports[index]);
+        reports[index].report_diff_items = evidence_report_diff_items(&reports[index]);
         previous_by_kind.insert(
             kind,
             EvidenceTrendAnchor {
                 status: reports[index].status.clone(),
                 failure_reason: reports[index].failure_reason.clone(),
+                failure_reason_category: reports[index].failure_reason_category.clone(),
                 generated_at: reports[index].generated_at.clone(),
                 risk_level: reports[index].risk_level.clone(),
                 risk_score: reports[index].risk_score,
@@ -10499,6 +10611,14 @@ mod tests {
         );
         assert_eq!(report.status_trend, "status_unchanged");
         assert_eq!(report.failure_reason_trend, "failure_reason_changed");
+        assert_eq!(
+            report.previous_failure_reason_category.as_deref(),
+            Some("release_budget_overrun")
+        );
+        assert_eq!(
+            report.failure_reason_category_trend,
+            "failure_reason_category_unchanged"
+        );
         assert_eq!(report.risk_level, "partial");
         assert_eq!(report.risk_score, 40);
         assert_eq!(report.previous_risk_level.as_deref(), Some("partial"));
@@ -10508,6 +10628,21 @@ mod tests {
         assert!(report
             .trend_summary
             .contains("risk partial -> partial (risk_unchanged)"));
+        assert!(report
+            .trend_summary
+            .contains("category release_budget_overrun -> release_budget_overrun"));
+        assert!(report
+            .report_diff_summary
+            .contains("failureReasonCategory=failure_reason_category_unchanged"));
+        assert_eq!(report.report_diff_items.len(), 4);
+        let category_diff = report
+            .report_diff_items
+            .iter()
+            .find(|item| item.field == "failureReasonCategory")
+            .expect("category diff item");
+        assert_eq!(category_diff.previous, "release_budget_overrun");
+        assert_eq!(category_diff.current, "release_budget_overrun");
+        assert_eq!(category_diff.trend, "failure_reason_category_unchanged");
         assert!(report
             .next_action
             .as_deref()
@@ -10522,8 +10657,10 @@ mod tests {
         assert_eq!(m5.evidence_level, "partial");
         assert_eq!(m5.failure_reason_category, "release_budget_overrun");
         assert_eq!(m5.status_trend, "new_report_kind");
+        assert_eq!(m5.failure_reason_category_trend, "new_report_kind");
         assert_eq!(m5.risk_level, "partial");
         assert_eq!(m5.risk_trend, "new_report_kind");
+        assert!(m5.report_diff_items.is_empty());
         assert!(m5.summary.contains("budget=over_budget"));
         assert!(m5
             .next_action
@@ -10593,9 +10730,95 @@ mod tests {
         );
         assert_eq!(latest.status_trend, "status_unchanged");
         assert_eq!(latest.failure_reason_trend, "failure_reason_changed");
+        assert_eq!(
+            latest.previous_failure_reason_category.as_deref(),
+            Some("release_performance_warning")
+        );
+        assert_eq!(
+            latest.failure_reason_category_trend,
+            "failure_reason_category_unchanged"
+        );
         assert_eq!(latest.risk_level, "partial");
         assert_eq!(latest.previous_risk_level.as_deref(), Some("partial"));
         assert_eq!(latest.risk_trend, "risk_unchanged");
+        assert!(latest
+            .report_diff_summary
+            .contains("previousStatus=warning; currentStatus=warning"));
+        assert_eq!(latest.report_diff_items.len(), 4);
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn evidence_report_history_diff_items_track_category_changes() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_evidence_diff_items_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("release-smoke");
+        fs::create_dir_all(&reports_dir).expect("create reports dir");
+        fs::write(
+            reports_dir.join("release-performance-smoke-old.json"),
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v2",
+                "generatedAt": "2026-06-02T00:00:00Z",
+                "status": "warning",
+                "budgetStatus": "over_budget",
+                "failureReason": "sidecar_warning_without_budget_keyword",
+                "measuredColdStartMs": 900,
+                "measuredIdleRssMb": 230,
+                "measuredProcessCount": 5
+            })
+            .to_string(),
+        )
+        .expect("write old report");
+        fs::write(
+            reports_dir.join("release-performance-smoke-new.json"),
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v2",
+                "generatedAt": "2026-06-02T00:01:00Z",
+                "status": "warning",
+                "budgetStatus": "over_budget",
+                "failureReason": "idle_rss_target_exceeded",
+                "measuredColdStartMs": 850,
+                "measuredIdleRssMb": 467,
+                "measuredProcessCount": 9
+            })
+            .to_string(),
+        )
+        .expect("write new report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        let latest = &history.reports[0];
+        assert_eq!(latest.kind, "release_performance");
+        assert_eq!(latest.status, "warning");
+        assert_eq!(
+            latest.previous_failure_reason_category.as_deref(),
+            Some("release_performance_warning")
+        );
+        assert_eq!(latest.failure_reason_category, "release_budget_overrun");
+        assert_eq!(
+            latest.failure_reason_category_trend,
+            "failure_reason_category_changed_from_release_performance_warning_to_release_budget_overrun"
+        );
+        let category_diff = latest
+            .report_diff_items
+            .iter()
+            .find(|item| item.field == "failureReasonCategory")
+            .expect("category diff item");
+        assert_eq!(category_diff.previous, "release_performance_warning");
+        assert_eq!(category_diff.current, "release_budget_overrun");
+        assert_eq!(
+            category_diff.trend,
+            "failure_reason_category_changed_from_release_performance_warning_to_release_budget_overrun"
+        );
+        assert!(latest
+            .report_diff_summary
+            .contains("failureReasonCategory=failure_reason_category_changed"));
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -10918,6 +11141,47 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn evidence_report_history_failure_category_does_not_read_full_json_value() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "persona_pilot_evidence_category_boundary_{}",
+            Uuid::new_v4()
+        ));
+        let reports_dir = temp_root.join("reports").join("release-smoke");
+        fs::create_dir_all(&reports_dir).expect("create reports dir");
+        fs::write(
+            reports_dir.join("release-performance-smoke-boundary.json"),
+            serde_json::json!({
+                "schemaVersion": "release_performance_smoke_v2",
+                "generatedAt": "2026-06-02T00:00:00Z",
+                "status": "warning",
+                "budgetStatus": "over_budget",
+                "failureReason": "sidecar warning without budget keyword",
+                "measuredColdStartMs": 900,
+                "measuredIdleRssMb": 467,
+                "measuredProcessCount": 9
+            })
+            .to_string(),
+        )
+        .expect("write report");
+
+        let db_url = format!(
+            "sqlite://{}",
+            temp_root.join("persona.db").to_string_lossy()
+        );
+        let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
+        let report = &history.reports[0];
+        assert_eq!(report.kind, "release_performance");
+        assert_eq!(report.status, "warning");
+        assert_eq!(
+            report.failure_reason_category,
+            "release_performance_warning"
+        );
+        assert!(report.summary.contains("budget=over_budget"));
+
+        let _ = fs::remove_dir_all(temp_root);
     }
 
     #[test]

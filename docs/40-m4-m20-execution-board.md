@@ -224,3 +224,13 @@ Status: started 2026-06-02.
 2. Categorize common local report blockers: release budget overrun, provider credentials missing, remote proxy missing, desktop/profile comparison gaps, cross-machine SessionBundle pending, runtime adapter evidence required, external operator smoke required, and expected external blockers.
 3. Surface the category in Dashboard evidence rows while preserving original `failureReason`, `status`, `evidenceLevel`, and gate semantics.
 4. Verify with evidence report history tests, `pnpm typecheck`, live truth guard, M4 gate, and diff hygiene.
+
+## Sixteenth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Extend M13 evidence operations from category labels to structured report diff.
+2. Add latest-vs-previous diff fields for same-kind reports: status, failureReason, failureReasonCategory, and risk.
+3. Surface compact diff items in Dashboard evidence rows while preserving original report status, evidence level, expected blocker classification, and live-truth boundaries.
+4. Keep `failureReasonCategory` derived only from kind/status/failureReason; do not read full report JSON for category classification.
+5. Verify with evidence report history tests, `pnpm typecheck`, live truth guard, M4 gate, and diff hygiene.
