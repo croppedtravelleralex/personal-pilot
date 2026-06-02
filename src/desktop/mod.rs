@@ -3060,6 +3060,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "taxonomy-coverage" => Some("taxonomy_coverage"),
         "transport-binary-smoke" => Some("transport_binary_smoke"),
         "remote-proxy-tls" => Some("remote_proxy_tls"),
+        "m10-headed-repeatability" => Some("m10_headed_repeatability"),
         "headed-external-smoke" => Some("headed_external_smoke"),
         "camoufox-binary-task" => Some("camoufox_binary_task"),
         "provider-manager" => Some("provider_manager"),
@@ -3266,6 +3267,20 @@ fn evidence_failure_reason_category(
             "cross_machine_session_pending"
         }
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
+        ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
+        ("m10_headed_repeatability", "blocked_missing_headed_report") => {
+            "headed_repeatability_report_missing"
+        }
+        ("m10_headed_repeatability", "blocked_missing_headed_validation_probe") => {
+            "headed_validation_probe_missing"
+        }
+        ("m10_headed_repeatability", "partial_validation_probe_without_repeatability") => {
+            "headed_repeatability_pending"
+        }
+        ("m10_headed_repeatability", "partial_repeatability_or_coherence") => {
+            "headed_repeatability_unstable"
+        }
+        ("m10_headed_repeatability", "failed_repeatability") => "headed_repeatability_failed",
         ("external_distribution", item) if item.contains("blocked") => {
             "external_operator_smoke_required"
         }
@@ -3474,6 +3489,58 @@ fn evidence_report_summary_from_json(
                 .map(|item| item.to_string())
                 .unwrap_or_else(|| "pending".to_string());
             format!("remote proxy TLS {status}: exitIp={exit_ip} ja3Hash={ja3_hash} ja4={ja4} directBaseline={direct_baseline_status} directExitDiff={direct_exit_diff}")
+        }
+        "m10_headed_repeatability" => {
+            let summary = value.get("summary");
+            let repeatability = value.get("repeatability");
+            let requested = summary
+                .and_then(|item| item.get("requestedCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    repeatability
+                        .and_then(|item| item.get("requestedCount"))
+                        .and_then(Value::as_i64)
+                })
+                .unwrap_or_default();
+            let executed = summary
+                .and_then(|item| item.get("executedCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    repeatability
+                        .and_then(|item| item.get("executedCount"))
+                        .and_then(Value::as_i64)
+                })
+                .unwrap_or_default();
+            let passed = summary
+                .and_then(|item| item.get("passedCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    repeatability
+                        .and_then(|item| item.get("passedCount"))
+                        .and_then(Value::as_i64)
+                })
+                .unwrap_or_default();
+            let signal_count = summary
+                .and_then(|item| item.get("signalCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("signalCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let repeatability_status = summary
+                .and_then(|item| value_text(item, "repeatabilityStatus"))
+                .or_else(|| repeatability.and_then(|item| value_text(item, "status")))
+                .unwrap_or_else(|| "missing".to_string());
+            let mut categories = value_string_array(value, "categories");
+            if categories.is_empty() {
+                if let Some(repeatability) = repeatability {
+                    categories = value_string_array(repeatability, "categories");
+                }
+            }
+            let categories = if categories.is_empty() {
+                "pending".to_string()
+            } else {
+                categories.join(",")
+            };
+            format!("M10 headed repeatability {status}: repeatability={repeatability_status} attempts={passed}/{executed}/{requested} signals={signal_count} categories={categories}")
         }
         "headed_external_smoke" => {
             let task = value.get("realBinaryTask");
@@ -3851,6 +3918,18 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("m5_release_health", "passed_with_budget_overrun")
         | ("m5_release_health", "passed_with_recorded_drift") => "partial",
         ("m5_release_health", "passed") => "observed",
+        ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => {
+            "headed_repeatability_partial_coherence_observed"
+        }
+        ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
+        | ("m10_headed_repeatability", "partial_repeatability_or_coherence") => {
+            "headed_repeatability_partial"
+        }
+        ("m10_headed_repeatability", "blocked_missing_headed_report")
+        | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe") => {
+            "blocked_missing_headed_repeatability_evidence"
+        }
+        ("m10_headed_repeatability", "failed_repeatability") => "headed_repeatability_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
             "profile_browser_observed"
         }
@@ -3931,6 +4010,32 @@ fn evidence_next_action(
                 "Complete B1-B5 evidence before refreshing score: remoteProxyTls={remote}, sessionPortability={session}, providerClosure={provider}."
             ))
         }
+        ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => {
+            value
+                .get("summary")
+                .and_then(|summary| value_text(summary, "nextAction"))
+                .or_else(|| {
+                    Some(
+                        "Keep this M10 partial repeatability report attached; continue with long-task stability, remote proxy/TLS, and full 450 observed coverage separately."
+                            .to_string(),
+                    )
+                })
+        }
+        ("m10_headed_repeatability", "blocked_missing_headed_report")
+        | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
+        | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
+        | ("m10_headed_repeatability", "partial_repeatability_or_coherence")
+        | ("m10_headed_repeatability", "failed_repeatability") => {
+            value
+                .get("summary")
+                .and_then(|summary| value_text(summary, "nextAction"))
+                .or_else(|| {
+                    Some(
+                        "Run scripts/headed_external_smoke.ps1 -Action validation_probe -RepeatValidationProbeCount 2, then rerun scripts/m10_headed_repeatability_gate.ps1."
+                            .to_string(),
+                    )
+                })
+        }
         ("release_performance", item) if item.contains("warning") || item.contains("failed") => {
             value
                 .get("healthSummary")
@@ -3991,6 +4096,7 @@ pub fn list_desktop_evidence_reports(
         "taxonomy-coverage",
         "transport-binary-smoke",
         "remote-proxy-tls",
+        "m10-headed-repeatability",
         "headed-external-smoke",
         "camoufox-binary-task",
         "provider-manager",
@@ -11115,6 +11221,42 @@ mod tests {
                 "runtime_adapter_evidence_required",
             ),
             (
+                "m10_headed_repeatability",
+                "passed_repeatability_partial_coherence",
+                None,
+                "none",
+            ),
+            (
+                "m10_headed_repeatability",
+                "blocked_missing_headed_report",
+                None,
+                "headed_repeatability_report_missing",
+            ),
+            (
+                "m10_headed_repeatability",
+                "blocked_missing_headed_validation_probe",
+                None,
+                "headed_validation_probe_missing",
+            ),
+            (
+                "m10_headed_repeatability",
+                "partial_validation_probe_without_repeatability",
+                None,
+                "headed_repeatability_pending",
+            ),
+            (
+                "m10_headed_repeatability",
+                "partial_repeatability_or_coherence",
+                None,
+                "headed_repeatability_unstable",
+            ),
+            (
+                "m10_headed_repeatability",
+                "failed_repeatability",
+                None,
+                "headed_repeatability_failed",
+            ),
+            (
                 "external_distribution",
                 "blocked_external_smoke_required",
                 None,
@@ -11193,6 +11335,8 @@ mod tests {
         let reports_root = temp_root.join("reports");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
             .expect("create headed external reports dir");
+        fs::create_dir_all(reports_root.join("m10-headed-repeatability"))
+            .expect("create m10 headed repeatability reports dir");
         fs::create_dir_all(reports_root.join("camoufox-binary-task"))
             .expect("create camoufox binary reports dir");
         fs::create_dir_all(reports_root.join("taxonomy-coverage"))
@@ -11220,6 +11364,47 @@ mod tests {
             .to_string(),
         )
         .expect("write headed external report");
+        fs::write(
+            reports_root
+                .join("m10-headed-repeatability")
+                .join("m10-headed-repeatability-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m10_headed_repeatability_gate_v1",
+                "generatedAt": "2026-05-30T00:04:00Z",
+                "status": "passed_repeatability_partial_coherence",
+                "failureReason": "",
+                "headedExternalReportPath": "headed-external-smoke-test.json",
+                "headedExternalReportStatus": "passed_real_binary_repeatability",
+                "realBinaryTaskStatus": "passed",
+                "action": "validation_probe",
+                "signalCount": 3,
+                "warningCount": 1,
+                "categories": ["canvas", "detector", "webrtc"],
+                "repeatability": {
+                    "status": "passed_repeatability_partial_coherence",
+                    "requestedCount": 2,
+                    "executedCount": 2,
+                    "passedCount": 2,
+                    "allAttemptsPassed": true,
+                    "stableSignalCount": true,
+                    "stableCategories": true,
+                    "stableSignalStatuses": true,
+                    "signalCount": 3,
+                    "categories": ["canvas", "detector", "webrtc"]
+                },
+                "summary": {
+                    "failed": 0,
+                    "requestedCount": 2,
+                    "executedCount": 2,
+                    "passedCount": 2,
+                    "signalCount": 3,
+                    "repeatabilityStatus": "passed_repeatability_partial_coherence",
+                    "nextAction": "Keep this M10 partial repeatability report attached; continue with long-task stability, remote proxy/TLS, and full 450 observed coverage separately."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m10 repeatability report");
         fs::write(
             reports_root
                 .join("camoufox-binary-task")
@@ -11256,7 +11441,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 3);
+        assert_eq!(history.report_count, 4);
 
         let headed = history
             .reports
@@ -11269,6 +11454,26 @@ mod tests {
         assert!(headed.summary.contains("signals=3"));
         assert!(headed.summary.contains("warnings=1"));
         assert!(headed.summary.contains("canvas,detector,webrtc"));
+
+        let m10 = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m10_headed_repeatability")
+            .expect("m10 headed repeatability report");
+        assert_eq!(m10.status, "passed_repeatability_partial_coherence");
+        assert_eq!(
+            m10.evidence_level,
+            "headed_repeatability_partial_coherence_observed"
+        );
+        assert_eq!(m10.failure_reason_category, "none");
+        assert!(m10.summary.contains("attempts=2/2/2"));
+        assert!(m10.summary.contains("signals=3"));
+        assert!(m10.summary.contains("canvas,detector,webrtc"));
+        assert!(m10
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("long-task stability"));
 
         let camoufox = history
             .reports

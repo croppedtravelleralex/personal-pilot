@@ -234,3 +234,13 @@ Status: started 2026-06-02.
 3. Surface compact diff items in Dashboard evidence rows while preserving original report status, evidence level, expected blocker classification, and live-truth boundaries.
 4. Keep `failureReasonCategory` derived only from kind/status/failureReason; do not read full report JSON for category classification.
 5. Verify with evidence report history tests, `pnpm typecheck`, live truth guard, M4 gate, and diff hygiene.
+
+## Seventeenth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M10 by running headed_external validation probe repeatability with `-RepeatValidationProbeCount 2` against the real local Chromium binary.
+2. Add `scripts/m10_headed_repeatability_gate.ps1` so the latest ranked headed_external repeatability report becomes a machine-readable M10 gate.
+3. Surface `m10_headed_repeatability` in desktop evidence history and Dashboard without changing headed_external, runtime_adapter, B1-B5, or AdsPower semantics.
+4. Keep `passed_repeatability_partial_coherence` scoped to multi-run validation_probe signal/category/status shape stability only.
+5. Continue next with long-task stability, full headed coherence matrix, M6 same-run desktop/profile evidence, remote proxy/TLS, provider credentials, cross-machine SessionBundle, and full `450` observed/replay coverage as separate gates.

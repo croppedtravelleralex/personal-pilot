@@ -47,6 +47,7 @@ const EVIDENCE_KINDS = [
   { kind: 'release_performance', label: 'Release 性能' },
   { kind: 'runtime_adapter', label: 'Runtime Adapter' },
   { kind: 'profile_browser_comparison', label: 'Browser 对比' },
+  { kind: 'm10_headed_repeatability', label: 'M10 Repeatability' },
   { kind: 'remote_proxy_tls', label: '远程代理 TLS' },
   { kind: 'headed_external_smoke', label: 'Headed Browser' },
   { kind: 'camoufox_binary_task', label: 'Camoufox' },
