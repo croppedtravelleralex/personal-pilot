@@ -3054,6 +3054,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "m5-release-health" => Some("m5_release_health"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
+        "m8-session-handoff" => Some("m8_session_handoff"),
         "taxonomy-audit" => Some("taxonomy_audit"),
         "external-distribution" => Some("external_distribution"),
         "runtime-adapter" => Some("runtime_adapter"),
@@ -3267,6 +3268,11 @@ fn evidence_failure_reason_category(
         {
             "cross_machine_session_pending"
         }
+        ("m8_session_handoff", "passed_cross_machine_evidence_attached") => "none",
+        ("m8_session_handoff", "passed_handoff_package_ready") => "cross_machine_session_pending",
+        ("m8_session_handoff", "failed_handoff_package_contract") => {
+            "session_handoff_contract_incomplete"
+        }
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
         ("m10_headed_repeatability", "blocked_missing_headed_report") => {
@@ -3435,6 +3441,28 @@ fn evidence_report_summary_from_json(
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
         ),
+        "m8_session_handoff" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let runbook_status = summary
+                .and_then(|item| value_text(item, "runbookStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            let local_status = summary
+                .and_then(|item| value_text(item, "localPortabilityReportStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            let desktop_status = summary
+                .and_then(|item| value_text(item, "desktopContractStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            let operator_status = summary
+                .and_then(|item| value_text(item, "operatorSurfaceStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!(
+                "M8 SessionBundle handoff {status}: checksFailed={failed} runbook={runbook_status} localPortability={local_status} desktopContract={desktop_status} operatorSurface={operator_status}"
+            )
+        }
         "taxonomy_audit" => format!(
             "taxonomy audit {status}: reports={}",
             value
@@ -3960,6 +3988,13 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("m15_browser_pool", "passed_pool_lifecycle_harness") => {
             "browser_pool_lifecycle_harness_partial"
         }
+        ("m8_session_handoff", "passed_cross_machine_evidence_attached") => {
+            "cross_machine_session_observed"
+        }
+        ("m8_session_handoff", "passed_handoff_package_ready") => "session_handoff_package_partial",
+        ("m8_session_handoff", "failed_handoff_package_contract") => {
+            "session_handoff_contract_failed"
+        }
         ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
@@ -4053,6 +4088,19 @@ fn evidence_next_action(
                     )
                 })
         }
+        ("m8_session_handoff", "passed_cross_machine_evidence_attached")
+        | ("m8_session_handoff", "passed_handoff_package_ready")
+        | ("m8_session_handoff", "failed_handoff_package_contract") => {
+            value
+                .get("summary")
+                .and_then(|summary| value_text(summary, "nextAction"))
+                .or_else(|| {
+                    Some(
+                        "Run scripts/m8_session_handoff_gate.ps1, then attach real second-machine SessionBundle evidence before claiming cross-machine portability."
+                            .to_string(),
+                    )
+                })
+        }
         ("m10_headed_repeatability", "blocked_missing_headed_report")
         | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
         | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
@@ -4131,6 +4179,7 @@ pub fn list_desktop_evidence_reports(
 
     for dir_name in [
         "m4-acceptance",
+        "m8-session-handoff",
         "release-smoke",
         "m5-release-health",
         "provider-acceptance",
@@ -11261,6 +11310,12 @@ mod tests {
                 "cross_machine_session_pending",
             ),
             (
+                "m8_session_handoff",
+                "passed_handoff_package_ready",
+                None,
+                "cross_machine_session_pending",
+            ),
+            (
                 "runtime_adapter",
                 "blocked_evidence_required",
                 None,
@@ -11397,6 +11452,8 @@ mod tests {
             Uuid::new_v4()
         ));
         let reports_root = temp_root.join("reports");
+        fs::create_dir_all(reports_root.join("m8-session-handoff"))
+            .expect("create m8 session handoff reports dir");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
             .expect("create headed external reports dir");
         fs::create_dir_all(reports_root.join("m10-headed-repeatability"))
@@ -11498,6 +11555,27 @@ mod tests {
         .expect("write m15 browser pool report");
         fs::write(
             reports_root
+                .join("m8-session-handoff")
+                .join("m8-session-handoff-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m8_session_handoff_gate_v1",
+                "generatedAt": "2026-05-30T00:05:30Z",
+                "status": "passed_handoff_package_ready",
+                "failureReason": "",
+                "summary": {
+                    "failed": 0,
+                    "runbookStatus": "present",
+                    "localPortabilityReportStatus": "local_contract_passed",
+                    "desktopContractStatus": "present",
+                    "operatorSurfaceStatus": "present",
+                    "nextAction": "Use the handoff manifest on a second clean Win11 target, then rerun scripts/session_bundle_portability_smoke.ps1 -CrossMachine with passed target statuses."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m8 session handoff report");
+        fs::write(
+            reports_root
                 .join("camoufox-binary-task")
                 .join("camoufox-binary-task-smoke-test.json"),
             serde_json::json!({
@@ -11532,7 +11610,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 5);
+        assert_eq!(history.report_count, 6);
 
         let headed = history
             .reports
@@ -11565,6 +11643,25 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("long-task stability"));
+
+        let m8 = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m8_session_handoff")
+            .expect("m8 session handoff report");
+        assert_eq!(m8.status, "passed_handoff_package_ready");
+        assert_eq!(m8.evidence_level, "session_handoff_package_partial");
+        assert_eq!(m8.failure_reason_category, "cross_machine_session_pending");
+        assert_eq!(m8.risk_level, "partial");
+        assert!(m8
+            .summary
+            .contains("localPortability=local_contract_passed"));
+        assert!(m8.summary.contains("operatorSurface=present"));
+        assert!(m8
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("second clean Win11"));
 
         let m15 = history
             .reports

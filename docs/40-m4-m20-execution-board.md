@@ -47,7 +47,7 @@ M4 is the first practical utility milestone after the current contract-heavy sta
 | M5 | Release performance and health | Fresh release smoke, detailed health report, startup/RSS/process mitigation notes |
 | M6 | Observed fingerprint comparison | Same-run desktop WebView vs profile-browser comparison and repeatability sampling |
 | M7 | Provider production closure | Real credential-backed CAPTCHA/SMS/Email smoke, CDP detect/fill, failure handling |
-| M8 | Cross-machine SessionBundle | Second Win11 target preflight, dry-run, confirmed restore, restart continuity |
+| M8 | Cross-machine SessionBundle | Handoff package gate plus second Win11 target preflight, dry-run, confirmed restore, restart continuity |
 | M9 | Remote proxy/TLS reality | Remote proxy egress/TLS report, direct baseline, DNS/WebRTC leak relation |
 | M10 | Runtime realism | Headed repeatability/coherence matrix, long-task stability, Camoufox task metrics |
 | M11 | Workflow marketplace | Versioned built-in templates and import/export for auth/register/form/provider flows |
@@ -254,3 +254,11 @@ Status: started 2026-06-02.
 3. Surface `m15_browser_pool` in desktop evidence history and Dashboard as `M15 Pool` without changing runtime adapter, headed external, M4, M5, provider, SessionBundle, or AdsPower semantics.
 4. Keep this evidence scoped to in-memory lifecycle behavior only; it does not prove real browser process prewarm, CDP readiness, RSS/process budgets, proxy/TLS behavior, provider closure, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
 5. Continue next with real browser process pool integration, process/RSS cleanup proof, timeout/cancel cleanup, M10 long-task stability, M6 same-run evidence, and M8 second-machine SessionBundle proof as separate gates.
+
+## Nineteenth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M8 by adding `scripts/m8_session_handoff_gate.ps1`, which refreshes local SessionBundle portability smoke, validates the refresh result, and checks the runbook, Settings operator surface, desktop command/tests, typed TS wrapper/types, and M4 boundary guard.
+2. Surface `m8_session_handoff` in desktop evidence history and Dashboard as `M8 Handoff` with `session_handoff_package_partial` evidence while `passed_handoff_package_ready` remains a cross-machine pending category.
+3. Keep this evidence scoped to handoff package readiness only; it does not prove second-machine portability, provider credentials, remote proxy/TLS, AdsPower refresh, full headed realism, or full `450` observed/replay coverage.

@@ -54,6 +54,7 @@ const EVIDENCE_KINDS = [
   { kind: 'camoufox_binary_task', label: 'Camoufox' },
   { kind: 'provider_acceptance', label: 'Provider' },
   { kind: 'session_portability', label: 'SessionBundle' },
+  { kind: 'm8_session_handoff', label: 'M8 Handoff' },
   { kind: 'taxonomy_coverage', label: 'Taxonomy 覆盖' },
   { kind: 'taxonomy_audit', label: 'Taxonomy Audit' },
   { kind: 'external_distribution', label: '外部分发' },
@@ -63,6 +64,12 @@ const UNLIMITED = Number.POSITIVE_INFINITY
 
 function statusTone(status: string) {
   const normalized = status.toLowerCase()
+  if (normalized.includes('failed')) {
+    return {
+      icon: <AlertTriangle className="h-4 w-4" />,
+      className: 'border-[var(--color-error)]/30 bg-[var(--color-error)]/10 text-[var(--color-error)]',
+    }
+  }
   if (
     normalized.includes('expected_blocked') ||
     normalized.includes('passed_with_expected_external_blockers') ||
@@ -76,6 +83,7 @@ function statusTone(status: string) {
     normalized.includes('pending') ||
     normalized.includes('materialized_contract') ||
     normalized.includes('contract') ||
+    normalized.includes('handoff_package_ready') ||
     normalized === 'not_run'
   ) {
     return {
