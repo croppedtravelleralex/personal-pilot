@@ -3061,6 +3061,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "transport-binary-smoke" => Some("transport_binary_smoke"),
         "remote-proxy-tls" => Some("remote_proxy_tls"),
         "m10-headed-repeatability" => Some("m10_headed_repeatability"),
+        "m15-browser-pool" => Some("m15_browser_pool"),
         "headed-external-smoke" => Some("headed_external_smoke"),
         "camoufox-binary-task" => Some("camoufox_binary_task"),
         "provider-manager" => Some("provider_manager"),
@@ -3281,6 +3282,11 @@ fn evidence_failure_reason_category(
             "headed_repeatability_unstable"
         }
         ("m10_headed_repeatability", "failed_repeatability") => "headed_repeatability_failed",
+        ("m15_browser_pool", "passed_pool_lifecycle_harness") => "none",
+        ("m15_browser_pool", "failed_pool_tests") => "browser_pool_tests_failed",
+        ("m15_browser_pool", "failed_pool_source_contract") => {
+            "browser_pool_source_contract_incomplete"
+        }
         ("external_distribution", item) if item.contains("blocked") => {
             "external_operator_smoke_required"
         }
@@ -3541,6 +3547,27 @@ fn evidence_report_summary_from_json(
                 categories.join(",")
             };
             format!("M10 headed repeatability {status}: repeatability={repeatability_status} attempts={passed}/{executed}/{requested} signals={signal_count} categories={categories}")
+        }
+        "m15_browser_pool" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let go_test_status = value
+                .get("goTest")
+                .and_then(|item| value_text(item, "status"))
+                .unwrap_or_else(|| "missing".to_string());
+            let cleanup_status = summary
+                .and_then(|item| value_text(item, "cleanupProofStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            let budget_status = summary
+                .and_then(|item| value_text(item, "resourceBudgetStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            let prewarm_budget_status = summary
+                .and_then(|item| value_text(item, "prewarmBudgetStepStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!("M15 browser pool {status}: checksFailed={failed} goTests={go_test_status} cleanupProof={cleanup_status} resourceBudget={budget_status} prewarmBudgetStep={prewarm_budget_status}")
         }
         "headed_external_smoke" => {
             let task = value.get("realBinaryTask");
@@ -3930,6 +3957,11 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
             "blocked_missing_headed_repeatability_evidence"
         }
         ("m10_headed_repeatability", "failed_repeatability") => "headed_repeatability_failed",
+        ("m15_browser_pool", "passed_pool_lifecycle_harness") => {
+            "browser_pool_lifecycle_harness_partial"
+        }
+        ("m15_browser_pool", "failed_pool_tests")
+        | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
             "profile_browser_observed"
         }
@@ -4036,6 +4068,19 @@ fn evidence_next_action(
                     )
                 })
         }
+        ("m15_browser_pool", "passed_pool_lifecycle_harness")
+        | ("m15_browser_pool", "failed_pool_tests")
+        | ("m15_browser_pool", "failed_pool_source_contract") => {
+            value
+                .get("summary")
+                .and_then(|summary| value_text(summary, "nextAction"))
+                .or_else(|| {
+                    Some(
+                        "Run scripts/m15_browser_pool_gate.ps1 and keep real process prewarm/RSS cleanup proof as a separate M15 requirement."
+                            .to_string(),
+                    )
+                })
+        }
         ("release_performance", item) if item.contains("warning") || item.contains("failed") => {
             value
                 .get("healthSummary")
@@ -4097,6 +4142,7 @@ pub fn list_desktop_evidence_reports(
         "transport-binary-smoke",
         "remote-proxy-tls",
         "m10-headed-repeatability",
+        "m15-browser-pool",
         "headed-external-smoke",
         "camoufox-binary-task",
         "provider-manager",
@@ -11257,6 +11303,24 @@ mod tests {
                 "headed_repeatability_failed",
             ),
             (
+                "m15_browser_pool",
+                "passed_pool_lifecycle_harness",
+                None,
+                "none",
+            ),
+            (
+                "m15_browser_pool",
+                "failed_pool_tests",
+                None,
+                "browser_pool_tests_failed",
+            ),
+            (
+                "m15_browser_pool",
+                "failed_pool_source_contract",
+                None,
+                "browser_pool_source_contract_incomplete",
+            ),
+            (
                 "external_distribution",
                 "blocked_external_smoke_required",
                 None,
@@ -11337,6 +11401,8 @@ mod tests {
             .expect("create headed external reports dir");
         fs::create_dir_all(reports_root.join("m10-headed-repeatability"))
             .expect("create m10 headed repeatability reports dir");
+        fs::create_dir_all(reports_root.join("m15-browser-pool"))
+            .expect("create m15 browser pool reports dir");
         fs::create_dir_all(reports_root.join("camoufox-binary-task"))
             .expect("create camoufox binary reports dir");
         fs::create_dir_all(reports_root.join("taxonomy-coverage"))
@@ -11407,6 +11473,31 @@ mod tests {
         .expect("write m10 repeatability report");
         fs::write(
             reports_root
+                .join("m15-browser-pool")
+                .join("m15-browser-pool-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m15_browser_pool_gate_v1",
+                "generatedAt": "2026-05-30T00:05:00Z",
+                "status": "passed_pool_lifecycle_harness",
+                "failureReason": "",
+                "goTest": {
+                    "command": "go test ./backend/internal/pool -count=1",
+                    "exitCode": 0,
+                    "status": "passed"
+                },
+                "summary": {
+                    "failed": 0,
+                    "cleanupProofStatus": "present",
+                    "resourceBudgetStatus": "present",
+                    "prewarmBudgetStepStatus": "present",
+                    "nextAction": "Connect this lifecycle harness to real browser process prewarm/acquire/release and collect process/RSS cleanup proof before claiming M15 complete."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m15 browser pool report");
+        fs::write(
+            reports_root
                 .join("camoufox-binary-task")
                 .join("camoufox-binary-task-smoke-test.json"),
             serde_json::json!({
@@ -11441,7 +11532,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 4);
+        assert_eq!(history.report_count, 5);
 
         let headed = history
             .reports
@@ -11474,6 +11565,24 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("long-task stability"));
+
+        let m15 = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m15_browser_pool")
+            .expect("m15 browser pool report");
+        assert_eq!(m15.status, "passed_pool_lifecycle_harness");
+        assert_eq!(m15.evidence_level, "browser_pool_lifecycle_harness_partial");
+        assert_eq!(m15.failure_reason_category, "none");
+        assert_eq!(m15.risk_level, "partial");
+        assert!(m15.summary.contains("goTests=passed"));
+        assert!(m15.summary.contains("cleanupProof=present"));
+        assert!(m15.summary.contains("resourceBudget=present"));
+        assert!(m15
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("real browser process prewarm"));
 
         let camoufox = history
             .reports

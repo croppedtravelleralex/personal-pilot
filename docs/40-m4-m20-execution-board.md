@@ -244,3 +244,13 @@ Status: started 2026-06-02.
 3. Surface `m10_headed_repeatability` in desktop evidence history and Dashboard without changing headed_external, runtime_adapter, B1-B5, or AdsPower semantics.
 4. Keep `passed_repeatability_partial_coherence` scoped to multi-run validation_probe signal/category/status shape stability only.
 5. Continue next with long-task stability, full headed coherence matrix, M6 same-run desktop/profile evidence, remote proxy/TLS, provider credentials, cross-machine SessionBundle, and full `450` observed/replay coverage as separate gates.
+
+## Eighteenth Implementation Batch
+
+Status: started 2026-06-02.
+
+1. Advance M15 by turning the existing pool prewarm contract into a local lifecycle harness with usage accounting, budget status, release cleanup proof, expired lease cleanup, stale idle reclaim, and failed slot reclaim.
+2. Add `scripts/m15_browser_pool_gate.ps1` so the local harness emits `data/reports/m15-browser-pool/*` with `passed_pool_lifecycle_harness` only when Go tests and source contract checks pass.
+3. Surface `m15_browser_pool` in desktop evidence history and Dashboard as `M15 Pool` without changing runtime adapter, headed external, M4, M5, provider, SessionBundle, or AdsPower semantics.
+4. Keep this evidence scoped to in-memory lifecycle behavior only; it does not prove real browser process prewarm, CDP readiness, RSS/process budgets, proxy/TLS behavior, provider closure, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Continue next with real browser process pool integration, process/RSS cleanup proof, timeout/cancel cleanup, M10 long-task stability, M6 same-run evidence, and M8 second-machine SessionBundle proof as separate gates.
