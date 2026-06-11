@@ -118,6 +118,8 @@ export class DesktopServiceError extends Error {
 type DesktopInvoke = <T = unknown>(command: string, args?: InvokeArgs) => Promise<T>;
 type InvokeArgs = Record<string, unknown>;
 type Unlisten = () => void;
+export type DesktopRpcArg = unknown;
+export type DesktopRpcArgs = Array<DesktopRpcArg>;
 
 interface DesktopEnvironmentInfo {
   buildType: string;
@@ -381,7 +383,7 @@ function pascalToSnake(name: string): string {
     .toLowerCase();
 }
 
-function buildRpcArgs(command: string, args: unknown[]): InvokeArgs {
+function buildRpcArgs(command: string, args: DesktopRpcArgs): InvokeArgs {
   const names = commandArgNames[command];
   if (names) {
     return Object.fromEntries(names.map((name, index) => [name, args[index]]));
@@ -416,7 +418,7 @@ export function desktopCoreStart(): Promise<DesktopCoreStartStatus> {
 
 export async function desktopRpc<T = unknown>(
   name: string,
-  args: unknown[] = [],
+  args: DesktopRpcArgs = [],
   _options?: { timeoutMs?: number },
 ): Promise<T> {
   await desktopCoreStart();

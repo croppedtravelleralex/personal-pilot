@@ -428,6 +428,66 @@ function Test-TypedFacadeShrinkContract {
   return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 synchronizer/workbench/report DTOs and browser Wails bindings have typed source contracts; Wails bridge remains transitional" @()
 }
 
+function Test-BridgeCompatTypeContract {
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $bridgePath = Join-Path $projectRoot "src\services\tauriWailsBridge.ts"
+  $failures = @()
+
+  foreach ($path in @($desktopServicePath, $bridgePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $bridgeText = if (Test-Path $bridgePath) { Get-Content -LiteralPath $bridgePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "export type DesktopRpcArg = unknown",
+      "export type DesktopRpcArgs = Array<DesktopRpcArg>",
+      "function buildRpcArgs(command: string, args: DesktopRpcArgs): InvokeArgs",
+      "args: DesktopRpcArgs = []"
+    )) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop RPC argument boundary missing marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "import type { DesktopRpcArgs } from './desktop'",
+      "type BridgeEventData = Array<unknown>",
+      "type BridgeRpcResult = unknown",
+      "type BridgeRpcMethod = (...args: DesktopRpcArgs) => Promise<BridgeRpcResult>",
+      "type BridgeAppProxy = Record<string, BridgeRpcMethod>",
+      "function createAppProxy(): BridgeAppProxy",
+      "return (...args: DesktopRpcArgs) => desktopRpc(property, args)"
+    )) {
+    if ($bridgeText -notmatch [regex]::Escape($token)) {
+      $failures += "tauriWailsBridge typed compat marker missing: $token"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "desktop service"; text = $desktopServiceText },
+      @{ name = "tauriWailsBridge"; text = $bridgeText }
+    )) {
+    foreach ($patternAndReason in @(
+        @{ pattern = "\bunknown\[\]"; reason = "bare unknown array" },
+        @{ pattern = "Promise\s*<\s*unknown\s*>"; reason = "bare Promise<unknown>" },
+        @{ pattern = "Record\s*<\s*string\s*,\s*\(\.\.\.args:\s*unknown\[\]\)\s*=>\s*Promise\s*<\s*unknown\s*>\s*>"; reason = "raw bridge app proxy type" }
+      )) {
+      if ($textAndName.text -match $patternAndReason.pattern) {
+        $failures += "$($textAndName.name) still has weak bridge type marker: $($patternAndReason.reason)"
+      }
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "bridge_compat_type_contract" "missing_coverage" "failed" "M4.8 bridge compatibility type source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "bridge_compat_type_contract" "passed" "passed" "M4.8 desktopRpc and tauriWailsBridge compatibility arguments use named source-level type boundaries; the transitional bridge remains in place" @()
+}
+
 function Test-BrowserPayloadSchemaContract {
   $apiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
   $typesPath = Join-Path $projectRoot "src\modules\browser\types.ts"
@@ -1577,6 +1637,7 @@ $gates += Test-AutomationPrimitiveContract
 $gates += Test-ProviderDryRunContract
 $gates += Test-SessionBundleOperatorContract
 $gates += Test-TypedFacadeShrinkContract
+$gates += Test-BridgeCompatTypeContract
 $gates += Test-BrowserPayloadSchemaContract
 $gates += Test-DashboardFacadeContract
 $gates += Test-SettingsLogsFacadeContract
@@ -1613,7 +1674,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v26"
+  schemaVersion = "m4_acceptance_gate_v27"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1652,6 +1713,7 @@ $report = [ordered]@{
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
     "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer/workbench/report DTOs and browser Wails bindings without removing the transitional bridge.",
+    "Bridge compatibility type contract is source-level evidence only; it gives desktopRpc and tauriWailsBridge compatibility arguments named type boundaries without removing tauriWailsBridge.",
     "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",
     "Dashboard facade contract is source-level evidence only; it routes Dashboard stats/license/config/CD key calls through typed desktop service wrappers without removing every bridge compatibility path.",
     "Settings/logs facade contract is source-level evidence only; it routes Settings backup and Browser logs through typed desktop service wrappers while preserving the transitional compatibility bridge.",

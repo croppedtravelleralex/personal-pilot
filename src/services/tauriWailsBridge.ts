@@ -16,9 +16,14 @@ import {
   importSystemConfig,
   initializeSystemData,
 } from './desktop'
+import type { DesktopRpcArgs } from './desktop'
 import type { DesktopDestructivePreflight } from '../types/desktop'
 
-type RuntimeCallback = (...data: unknown[]) => void
+type BridgeEventData = Array<unknown>
+type BridgeRpcResult = unknown
+type BridgeRpcMethod = (...args: DesktopRpcArgs) => Promise<BridgeRpcResult>
+type BridgeAppProxy = Record<string, BridgeRpcMethod>
+type RuntimeCallback = (...data: BridgeEventData) => void
 type ListenerSet = Set<RuntimeCallback>
 
 interface WailsRuntimeShim {
@@ -27,7 +32,7 @@ interface WailsRuntimeShim {
   EventsOnce: (eventName: string, callback: RuntimeCallback) => () => void
   EventsOff: (eventName: string, ...additionalEventNames: string[]) => void
   EventsOffAll: () => void
-  EventsEmit: (eventName: string, ...data: unknown[]) => void
+  EventsEmit: (eventName: string, ...data: BridgeEventData) => void
   Environment: typeof desktopEnvironment
   Quit: typeof desktopQuit
   Hide: typeof desktopWindowHide
@@ -45,7 +50,7 @@ interface WailsRuntimeShim {
 interface BridgeWindow extends Window {
   go?: {
     main?: {
-      App?: Record<string, (...args: unknown[]) => Promise<unknown>>
+      App?: BridgeAppProxy
     }
   }
   runtime?: WailsRuntimeShim
@@ -54,13 +59,13 @@ interface BridgeWindow extends Window {
 
 interface SidecarEventPayload {
   eventName: string
-  data?: unknown[]
+  data?: BridgeEventData
 }
 
 const bridgeWindow = window as BridgeWindow
 const listeners = new Map<string, ListenerSet>()
 
-function emitLocal(eventName: string, ...data: unknown[]) {
+function emitLocal(eventName: string, ...data: BridgeEventData) {
   const callbacks = listeners.get(eventName)
   if (!callbacks) return
   for (const callback of Array.from(callbacks)) {
@@ -86,7 +91,7 @@ function onMultiple(eventName: string, callback: RuntimeCallback, maxCallbacks: 
   }
 }
 
-function createAppProxy(): Record<string, (...args: unknown[]) => Promise<unknown>> {
+function createAppProxy(): BridgeAppProxy {
   return new Proxy(
     {},
     {
@@ -98,10 +103,10 @@ function createAppProxy(): Record<string, (...args: unknown[]) => Promise<unknow
         if (property === 'GetAppLogs') return getAppLogs
         if (property === 'ClearAppLogs') return clearAppLogs
         if (property === 'BrowserSnapshotRestore') return restoreBrowserSnapshot
-        return (...args: unknown[]) => desktopRpc(property, args)
+        return (...args: DesktopRpcArgs) => desktopRpc(property, args)
       },
     },
-  ) as Record<string, (...args: unknown[]) => Promise<unknown>>
+  ) as BridgeAppProxy
 }
 
 async function restoreBrowserSnapshot(profileId?: unknown, snapshotId?: unknown) {

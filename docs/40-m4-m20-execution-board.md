@@ -449,3 +449,13 @@ Status: started 2026-06-12.
 3. Fix the existing playback-failed mojibake operator text while touching that path.
 4. Extend M4 acceptance gate to v26 by adding RecordingPanel to `ui_error_boundary_contract`.
 5. Keep this evidence scoped to the selected recording panel source contract only; it does not prove every legacy catch, `tauriWailsBridge`, external provider/proxy/session evidence, AdsPower refresh, or full `450` coverage.
+
+## Thirty-Eighth Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Continue M4.8 typed bridge shrink on `src/services/desktop.ts` and `src/services/tauriWailsBridge.ts`.
+2. Add named `DesktopRpcArg` / `DesktopRpcArgs` for the `desktopRpc` argument channel.
+3. Add named `BridgeEventData` / `BridgeRpcMethod` / `BridgeAppProxy` compatibility types for the Wails-compatible bridge.
+4. Extend M4 acceptance gate to v27 with `bridge_compat_type_contract`, blocking selected bridge files from regressing to bare `unknown[]` / `Promise<unknown>`.
+5. Keep this evidence scoped to source-level bridge type boundaries only; it does not remove `tauriWailsBridge`, close every browser/settings/core/proxy API, or prove external provider/proxy/session/AdsPower/`450` evidence.
