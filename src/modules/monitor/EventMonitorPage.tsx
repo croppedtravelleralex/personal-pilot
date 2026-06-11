@@ -2,12 +2,13 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Activity, AlertTriangle, Info, AlertCircle, XCircle, Search, Filter, Trash2, Pause, Play, Download, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, Button, toast } from '../../shared/components'
 import {
-  EventLogQuery,
-  EventLogCount,
-  EventLogPrune,
-  EventLogExport,
-} from '../../wailsjs/go/main/App'
-import type { backend, events } from '../../wailsjs/go/models'
+  countEventLog,
+  desktopRuntimeListen,
+  exportEventLog,
+  pruneEventLog,
+  queryEventLog,
+} from '../../services/desktop'
+import type { DesktopEventLogEntry, DesktopEventLogQueryInput } from '../../services/desktop'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,10 @@ function extractPayload(data: unknown): Record<string, unknown> {
   return {}
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
 // ─── Severity Badge ───────────────────────────────────────────────────────────
 
 const SEVERITY_CONFIG: Record<Severity, { icon: React.ReactNode; className: string; label: string }> = {
@@ -159,19 +164,21 @@ export function EventMonitorPage() {
   const [filterSev, setFilterSev] = useState<Severity | ''>('')
   const nextId = useRef(0)
   const pausedBuffer = useRef<EventEntry[]>([])
+  const pausedRef = useRef(paused)
+
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
 
   // Subscribe to all events
   useEffect(() => {
-    const runtime = (window as any).runtime
-    if (!runtime?.EventsOn) return
-
     const unsubs: (() => void)[] = []
 
     for (const eventName of ALL_EVENT_NAMES) {
       const sev = eventToSeverity(eventName)
       const ns = eventNamespace(eventName)
 
-      const unsub = runtime.EventsOn(eventName, (data: unknown) => {
+      const unsub = desktopRuntimeListen(eventName, (data: unknown) => {
         const entry: EventEntry = {
           id: nextId.current++,
           name: eventName,
@@ -181,7 +188,7 @@ export function EventMonitorPage() {
           timestamp: new Date(),
         }
 
-        if (paused) {
+        if (pausedRef.current) {
           pausedBuffer.current.push(entry)
         } else {
           setEvents(prev => {
@@ -474,7 +481,7 @@ function HistoryTab() {
   const [filterNs, setFilterNs] = useState('')
   const [filterSev, setFilterSev] = useState('')
   const [filterName, setFilterName] = useState('')
-  const [entries, setEntries] = useState<events.EventLogEntry[]>([])
+  const [entries, setEntries] = useState<DesktopEventLogEntry[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(0)
@@ -482,7 +489,7 @@ function HistoryTab() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
-  const buildQuery = useCallback((): backend.EventLogQueryInput => {
+  const buildQuery = useCallback((): DesktopEventLogQueryInput => {
     const range = TIME_RANGES.find(r => r.key === timeRange) || TIME_RANGES[0]
     const after = new Date(Date.now() - range.hours * 3600 * 1000).toISOString()
     return {
@@ -501,8 +508,8 @@ function HistoryTab() {
     try {
       const q = buildQuery()
       const [result, count] = await Promise.all([
-        EventLogQuery(q),
-        EventLogCount(q),
+        queryEventLog(q),
+        countEventLog(q),
       ])
       setEntries(result || [])
       setTotalCount(count || 0)
@@ -532,7 +539,7 @@ function HistoryTab() {
           limit: 0,
           offset: 0,
         }
-        const result = await EventLogQuery(q)
+        const result = await queryEventLog(q)
         const nsSet = new Set<string>()
         for (const e of (result || [])) {
           if (e.namespace) nsSet.add(e.namespace)
@@ -549,7 +556,7 @@ function HistoryTab() {
       const q = buildQuery()
       q.limit = 0 // no limit for export
       q.offset = 0
-      const json = await EventLogExport(q)
+      const json = await exportEventLog(q)
       const blob = new Blob([json], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -558,8 +565,8 @@ function HistoryTab() {
       a.click()
       URL.revokeObjectURL(url)
       toast.success('导出成功')
-    } catch (e: any) {
-      toast.error(e?.message || '导出失败')
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, '导出失败'))
     }
   }
 
@@ -568,11 +575,11 @@ function HistoryTab() {
     try {
       const range = TIME_RANGES.find(r => r.key === timeRange) || TIME_RANGES[0]
       const before = new Date(Date.now() - range.hours * 3600 * 1000).toISOString()
-      const count = await EventLogPrune(before)
+      const count = await pruneEventLog(before)
       toast.success(`已清理 ${count} 条日志`)
       await refresh()
-    } catch (e: any) {
-      toast.error(e?.message || '清理失败')
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, '清理失败'))
     }
   }
 

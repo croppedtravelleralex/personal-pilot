@@ -3059,6 +3059,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "m4-behavior-preset-facade" => Some("m4_behavior_preset_facade"),
         "m4-automation-facade" => Some("m4_automation_facade"),
         "m4-app-shell-facade" => Some("m4_app_shell_facade"),
+        "m4-monitor-facade" => Some("m4_monitor_facade"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "m8-session-handoff" => Some("m8_session_handoff"),
@@ -3307,6 +3308,10 @@ fn evidence_failure_reason_category(
         ("m4_app_shell_facade", "passed_app_shell_facade_contract") => "none",
         ("m4_app_shell_facade", "failed_app_shell_facade_contract") => {
             "app_shell_facade_contract_incomplete"
+        }
+        ("m4_monitor_facade", "passed_monitor_facade_contract") => "none",
+        ("m4_monitor_facade", "failed_monitor_facade_contract") => {
+            "monitor_facade_contract_incomplete"
         }
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
@@ -3629,6 +3634,25 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_else(|| "missing".to_string());
             format!(
                 "M4 app shell facade {status}: checksFailed={failed} appShellFacadeUsage={app_shell_facade_usage} directWailsImportsRemoved={direct_wails_import_removed} desktopWrappers={desktop_wrappers}"
+            )
+        }
+        "m4_monitor_facade" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let monitor_facade_usage = summary
+                .and_then(|item| value_text(item, "monitorFacadeUsage"))
+                .unwrap_or_else(|| "missing".to_string());
+            let direct_wails_import_removed = summary
+                .and_then(|item| value_text(item, "directWailsImportsRemoved"))
+                .unwrap_or_else(|| "unknown".to_string());
+            let desktop_wrappers = summary
+                .and_then(|item| value_text(item, "desktopWrappers"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!(
+                "M4 monitor facade {status}: checksFailed={failed} monitorFacadeUsage={monitor_facade_usage} directWailsImportsRemoved={direct_wails_import_removed} desktopWrappers={desktop_wrappers}"
             )
         }
         "taxonomy_audit" => format!(
@@ -4203,6 +4227,10 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("m4_app_shell_facade", "failed_app_shell_facade_contract") => {
             "app_shell_facade_contract_failed"
         }
+        ("m4_monitor_facade", "passed_monitor_facade_contract") => {
+            "monitor_facade_contract_partial"
+        }
+        ("m4_monitor_facade", "failed_monitor_facade_contract") => "monitor_facade_contract_failed",
         ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
@@ -4381,6 +4409,16 @@ fn evidence_next_action(
                         .to_string(),
                 )
             }),
+        ("m4_monitor_facade", "passed_monitor_facade_contract")
+        | ("m4_monitor_facade", "failed_monitor_facade_contract") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/m4_monitor_facade_gate.ps1, then continue shrinking remaining browser/workbench/core bridge APIs separately."
+                        .to_string(),
+                )
+            }),
         ("m10_headed_repeatability", "blocked_missing_headed_report")
         | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
         | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
@@ -4466,6 +4504,7 @@ pub fn list_desktop_evidence_reports(
         "m4-behavior-preset-facade",
         "m4-automation-facade",
         "m4-app-shell-facade",
+        "m4-monitor-facade",
         "m8-session-handoff",
         "release-smoke",
         "m5-release-health",
@@ -11687,6 +11726,18 @@ mod tests {
                 "app_shell_facade_contract_incomplete",
             ),
             (
+                "m4_monitor_facade",
+                "passed_monitor_facade_contract",
+                None,
+                "none",
+            ),
+            (
+                "m4_monitor_facade",
+                "failed_monitor_facade_contract",
+                None,
+                "monitor_facade_contract_incomplete",
+            ),
+            (
                 "runtime_adapter",
                 "blocked_evidence_required",
                 None,
@@ -11837,6 +11888,8 @@ mod tests {
             .expect("create m4 automation facade reports dir");
         fs::create_dir_all(reports_root.join("m4-app-shell-facade"))
             .expect("create m4 app shell facade reports dir");
+        fs::create_dir_all(reports_root.join("m4-monitor-facade"))
+            .expect("create m4 monitor facade reports dir");
         fs::create_dir_all(reports_root.join("m8-session-handoff"))
             .expect("create m8 session handoff reports dir");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
@@ -12080,6 +12133,26 @@ mod tests {
         .expect("write m4 app shell facade report");
         fs::write(
             reports_root
+                .join("m4-monitor-facade")
+                .join("m4-monitor-facade-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m4_monitor_facade_gate_v1",
+                "generatedAt": "2026-05-30T00:05:52Z",
+                "status": "passed_monitor_facade_contract",
+                "failureReason": "",
+                "summary": {
+                    "failed": 0,
+                    "monitorFacadeUsage": "present",
+                    "directWailsImportsRemoved": "yes",
+                    "desktopWrappers": "present",
+                    "nextAction": "Continue shrinking remaining browser/workbench/core bridge APIs without claiming tauriWailsBridge removal."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m4 monitor facade report");
+        fs::write(
+            reports_root
                 .join("m8-session-handoff")
                 .join("m8-session-handoff-gate-test.json"),
             serde_json::json!({
@@ -12135,7 +12208,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 13);
+        assert_eq!(history.report_count, 14);
 
         let headed = history
             .reports
@@ -12342,6 +12415,23 @@ mod tests {
             .summary
             .contains("directWailsImportsRemoved=yes"));
         assert!(m4_app_shell
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("tauriWailsBridge removal"));
+
+        let m4_monitor = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m4_monitor_facade")
+            .expect("m4 monitor facade report");
+        assert_eq!(m4_monitor.status, "passed_monitor_facade_contract");
+        assert_eq!(m4_monitor.evidence_level, "monitor_facade_contract_partial");
+        assert_eq!(m4_monitor.failure_reason_category, "none");
+        assert_eq!(m4_monitor.risk_level, "partial");
+        assert!(m4_monitor.summary.contains("monitorFacadeUsage=present"));
+        assert!(m4_monitor.summary.contains("directWailsImportsRemoved=yes"));
+        assert!(m4_monitor
             .next_action
             .as_deref()
             .unwrap_or_default()

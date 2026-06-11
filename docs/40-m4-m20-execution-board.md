@@ -333,3 +333,15 @@ Status: started 2026-06-11.
 4. Extend M4 acceptance gate to v15 with `app_shell_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
 5. Keep this evidence scoped to App shell source-level facade usage only; it does not prove `tauriWailsBridge` removal, full monitor/browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
 6. Continue next with EventMonitor/runtime event facade shrink or browser/workbench/core low-frequency bridge payloads.
+
+## Twenty-Seventh Implementation Batch
+
+Status: started 2026-06-11.
+
+1. Advance M4.8 by routing `src/modules/monitor/EventMonitorPage.tsx` live runtime subscriptions and event-log history query/count/export/prune through `src/services/desktop.ts` typed wrappers.
+2. Remove page-level direct Wails imports from `../../wailsjs/go/main/App` and `../../wailsjs/go/models`, stop reading `(window as any).runtime`, and keep monitor event payloads/error handling on `unknown` guards.
+3. Fix the live monitor pause buffer closure so the one-time runtime subscription reads the latest `paused` state without resubscribing every event.
+4. Add `scripts/m4_monitor_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Monitor` row for `m4_monitor_facade` reports.
+5. Extend M4 acceptance gate to v16 with `monitor_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
+6. Keep this evidence scoped to EventMonitor source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+7. Continue next with browser runtime/workbench/core low-frequency bridge payloads or a higher-value external evidence blocker if a real target environment is available.
