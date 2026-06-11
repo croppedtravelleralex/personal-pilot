@@ -49,6 +49,7 @@ const EVIDENCE_KINDS = [
   { kind: 'm4_profile_facade', label: 'M4 Profile' },
   { kind: 'm4_behavior_preset_facade', label: 'M4 Behavior' },
   { kind: 'm4_automation_facade', label: 'M4 Automation' },
+  { kind: 'm4_app_shell_facade', label: 'M4 App Shell' },
   { kind: 'm5_release_health', label: 'M5 Health' },
   { kind: 'release_performance', label: 'Release 性能' },
   { kind: 'runtime_adapter', label: 'Runtime Adapter' },

@@ -726,6 +726,52 @@ function Test-AutomationFacadeContract {
   return New-LocalGateResult "automation_facade_contract" "passed" "passed" "M4.8 AutomationPage scheduler/rule calls use the browser module API facade instead of direct Wails imports" @()
 }
 
+function Test-AppShellFacadeContract {
+  $appPath = Join-Path $projectRoot "src\App.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($appPath, $desktopServicePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $appText = if (Test-Path $appPath) { Get-Content -LiteralPath $appPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("desktopRuntimeListen", "desktopEnvironment", "desktopQuitAppOnly", "desktopQuitFull", "desktopQuit()", "desktopWindowHide", "desktopWindowMinimize")) {
+    if ($appText -notmatch [regex]::Escape($token)) {
+      $failures += "App shell does not use desktop facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("./wailsjs/go/main/App", "./wailsjs/runtime/runtime", "ForceQuit as ForceQuitApp", "QuitAppOnly as QuitAppOnlyApp", "Environment, Quit", "(window as any).runtime")) {
+    if ($appText -match [regex]::Escape($token)) {
+      $failures += "App shell still uses raw Wails/runtime marker: $token"
+    }
+  }
+
+  foreach ($token in @("export function desktopRuntimeListen", "export function desktopEnvironment", "export function desktopQuit", "export function desktopQuitAppOnly", "export function desktopQuitFull", "export function desktopWindowHide", "export function desktopWindowMinimize")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing app shell facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_app_shell_facade", "M4 App Shell")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing app shell facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "app_shell_facade_contract" "missing_coverage" "failed" "M4.8 app shell facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "app_shell_facade_contract" "passed" "passed" "M4.8 App shell close/notification/runtime calls use typed desktop service wrappers instead of direct Wails imports" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -1049,6 +1095,7 @@ $gates += Test-SettingsLogsFacadeContract
 $gates += Test-ProfileFacadeContract
 $gates += Test-BehaviorPresetFacadeContract
 $gates += Test-AutomationFacadeContract
+$gates += Test-AppShellFacadeContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -1073,7 +1120,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v14"
+  schemaVersion = "m4_acceptance_gate_v15"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1118,6 +1165,7 @@ $report = [ordered]@{
     "Profile facade contract is source-level evidence only; it routes Profile remote author loading through a typed desktop service wrapper while preserving browser preview fallback.",
     "Behavior preset facade contract is source-level evidence only; it routes FingerprintPanel behavior preset loading through the browser module API facade without removing every browser bridge compatibility path.",
     "Automation facade contract is source-level evidence only; it routes AutomationPage scheduler/rule calls through the browser module API facade without removing every browser/app shell/monitor bridge compatibility path.",
+    "App shell facade contract is source-level evidence only; it routes close confirmation, notification subscriptions, environment lookup, tray/minimize, and quit actions through typed desktop service wrappers without removing the transitional bridge.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

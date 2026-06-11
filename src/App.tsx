@@ -7,8 +7,15 @@ import { ToastContainer, Modal, Button, Loading } from './shared/components'
 import { AlertCircle } from 'lucide-react'
 import { useNotificationStore } from './store/notificationStore'
 import { useBackupStore } from './store/backupStore'
-import { ForceQuit as ForceQuitApp, QuitAppOnly as QuitAppOnlyApp } from './wailsjs/go/main/App'
-import { Environment, Quit, WindowHide, WindowMinimise } from './wailsjs/runtime/runtime'
+import {
+  desktopEnvironment,
+  desktopQuit,
+  desktopQuitAppOnly,
+  desktopQuitFull,
+  desktopRuntimeListen,
+  desktopWindowHide,
+  desktopWindowMinimize,
+} from './services/desktop'
 
 function lazyNamed<TModule extends Record<string, ComponentType<any>>>(
   loader: () => Promise<TModule>,
@@ -44,16 +51,30 @@ const EventMonitorPage = lazyNamed(() => import('./modules/monitor/EventMonitorP
 const UsageTutorialPage = lazyNamed(() => import('./modules/browser/pages/UsageTutorialPage'), 'UsageTutorialPage')
 const QuickLaunchModal = lazyNamed(() => import('./modules/browser/components/QuickLaunchModal'), 'QuickLaunchModal')
 
+interface BrowserCrashNotification {
+  profileId: string
+  profileName?: string
+  error: string
+}
+
+interface ProxyBridgeFailedNotification {
+  profileId: string
+  profileName?: string
+  error: string
+}
+
+interface ProxyBridgeDiedNotification {
+  key: string
+  error: string
+}
+
 function useWailsNotifications() {
   const addNotification = useNotificationStore((s) => s.addNotification)
 
   useEffect(() => {
-    const runtime = (window as any).runtime
-    if (!runtime?.EventsOn) return
-
-    const offCrashed = runtime.EventsOn(
+    const offCrashed = desktopRuntimeListen<BrowserCrashNotification>(
       'browser:instance:crashed',
-      (data: { profileId: string; profileName: string; error: string }) => {
+      (data) => {
         addNotification({
           type: 'error',
           title: '实例异常退出',
@@ -62,9 +83,9 @@ function useWailsNotifications() {
       }
     )
 
-    const offBridgeFailed = runtime.EventsOn(
+    const offBridgeFailed = desktopRuntimeListen<ProxyBridgeFailedNotification>(
       'proxy:bridge:failed',
-      (data: { profileId: string; profileName: string; error: string }) => {
+      (data) => {
         addNotification({
           type: 'error',
           title: '代理连接失败',
@@ -73,9 +94,9 @@ function useWailsNotifications() {
       }
     )
 
-    const offBridgeDied = runtime.EventsOn(
+    const offBridgeDied = desktopRuntimeListen<ProxyBridgeDiedNotification>(
       'proxy:bridge:died',
-      (data: { key: string; error: string }) => {
+      (data) => {
         addNotification({
           type: 'warning',
           title: '连接池节点失效',
@@ -85,9 +106,9 @@ function useWailsNotifications() {
     )
 
     return () => {
-      offCrashed?.()
-      offBridgeFailed?.()
-      offBridgeDied?.()
+      offCrashed()
+      offBridgeFailed()
+      offBridgeDied()
     }
   }, [addNotification])
 }
@@ -103,22 +124,17 @@ function CloseConfirmModal() {
   const quitting = quittingAction !== null
 
   useEffect(() => {
-    const runtime = (window as any).runtime
-    if (!runtime?.EventsOn) return
-
-    const off = runtime.EventsOn('app:request-close', () => {
+    const off = desktopRuntimeListen('app:request-close', () => {
       setQuittingAction(null)
       setOpen(true)
     })
-    return () => {
-      if (typeof off === 'function') off()
-    }
+    return off
   }, [])
 
   useEffect(() => {
     let cancelled = false
 
-    Environment()
+    desktopEnvironment()
       .then((info) => {
         if (!cancelled && info?.platform) {
           setPlatform(info.platform)
@@ -140,23 +156,23 @@ function CloseConfirmModal() {
     if (quitting) return
     setOpen(false)
     if (supportsTray) {
-      WindowHide()
+      desktopWindowHide()
       return
     }
-    WindowMinimise()
+    desktopWindowMinimize()
   }
 
   const handleQuitAppOnly = async () => {
     setQuittingAction('app-only')
     try {
-      await QuitAppOnlyApp()
-      await Quit()
+      await desktopQuitAppOnly()
+      desktopQuit()
     } catch (error) {
       console.error('QuitAppOnly failed', error)
       try {
-        await Quit()
+        desktopQuit()
       } catch (quitError) {
-        console.error('runtime.Quit failed', quitError)
+        console.error('desktopQuit failed', quitError)
       }
       setQuittingAction(null)
     }
@@ -165,13 +181,13 @@ function CloseConfirmModal() {
   const handleQuitAppAndBrowsers = async () => {
     setQuittingAction('app-and-browser')
     try {
-      await ForceQuitApp()
+      await desktopQuitFull()
     } catch (error) {
-      console.error('ForceQuit failed, falling back to runtime.Quit()', error)
+      console.error('ForceQuit failed, falling back to desktopQuit()', error)
       try {
-        await Quit()
+        desktopQuit()
       } catch (quitError) {
-        console.error('runtime.Quit failed', quitError)
+        console.error('desktopQuit failed', quitError)
       }
       setQuittingAction(null)
     }

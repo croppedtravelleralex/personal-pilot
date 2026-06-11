@@ -1,6 +1,6 @@
 # M4-M20 Execution Board
 
-Updated: 2026-06-02 (Asia/Shanghai)
+Updated: 2026-06-11 (Asia/Shanghai)
 
 ## Live Truth Boundary
 
@@ -322,3 +322,14 @@ Status: started 2026-06-02.
 3. Add `scripts/m4_automation_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Automation` row for `m4_automation_facade` reports.
 4. Extend M4 acceptance gate to v14 with `automation_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=13`, `expectedBlocked=4`, `failed=0`.
 5. Keep this evidence scoped to AutomationPage scheduler/rule source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/app shell/monitor/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+
+## Twenty-Sixth Implementation Batch
+
+Status: started 2026-06-11.
+
+1. Advance M4.8 by routing `src/App.tsx` app shell close confirmation, notification subscriptions, environment lookup, tray/minimize, and quit actions through `src/services/desktop.ts` typed wrappers.
+2. Remove App shell direct imports from `./wailsjs/go/main/App` and `./wailsjs/runtime/runtime`, and stop reading `(window as any).runtime` from the app root.
+3. Add `scripts/m4_app_shell_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 App Shell` row for `m4_app_shell_facade` reports.
+4. Extend M4 acceptance gate to v15 with `app_shell_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
+5. Keep this evidence scoped to App shell source-level facade usage only; it does not prove `tauriWailsBridge` removal, full monitor/browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+6. Continue next with EventMonitor/runtime event facade shrink or browser/workbench/core low-frequency bridge payloads.
