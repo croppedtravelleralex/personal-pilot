@@ -737,6 +737,51 @@ export interface DesktopCoreWorkbenchTask {
   error?: string;
 }
 
+export type DesktopCoreWorkbenchDetectionKind =
+  | "fingerprint_health"
+  | "identity_report"
+  | "detector_site_run";
+
+export interface DesktopCoreWorkbenchDetectionResult {
+  id: string;
+  profileId: string;
+  profileName: string;
+  kind: DesktopCoreWorkbenchDetectionKind | string;
+  score: number;
+  level: string;
+  source: string;
+  summary: string[];
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface DesktopCoreWorkbenchUiState {
+  search?: string;
+  statusFilter?: "all" | "running" | "stopped" | string;
+  groupFilter?: string;
+  activeGroupId?: string;
+  selectedIds?: string[];
+  scrollTop?: number;
+  targetUrl?: string;
+  selectedReportKind?: DesktopCoreWorkbenchDetectionKind | "" | string;
+  selectedReportId?: string;
+  selectedReportProfileId?: string;
+  expandedItems?: string[];
+  thirdPartyEnabled?: boolean;
+  updatedAt?: string;
+}
+
+export interface DesktopCoreWorkbenchDetectorSite {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  defaultOn: boolean;
+  gate: "medium" | "strict" | string;
+  traceWarning: string;
+  notes: string;
+}
+
 export type DesktopProfileStatus = "active" | "draft" | "disabled" | string;
 
 export type DesktopProfileRuntimeStatus =

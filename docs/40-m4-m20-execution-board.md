@@ -356,3 +356,14 @@ Status: started 2026-06-12.
 4. Extend M4 acceptance gate to v17 with `browser_runtime_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
 5. Keep this evidence scoped to Browser List/Detail runtime subscription source-level facade usage only; it does not prove `tauriWailsBridge` removal, settings/core/proxy/workbench bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
 6. Continue next with settings/core/proxy/workbench bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.
+
+## Twenty-Ninth Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Advance M4.8 by moving Workbench detection result, UI state, and detector site DTOs into `src/types/desktop.ts`.
+2. Update `src/services/desktop.ts` so Workbench detection results / detector sites / UI state / detector run wrappers no longer expose `unknown[]` or bare `unknown`.
+3. Remove matching `Array.isArray(results)` downgrade paths from `src/modules/synchronizer/api.ts` while preserving payload normalizers for compatibility.
+4. Extend M4 acceptance gate to v18 by checking Workbench DTO markers inside `typed_facade_shrink_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
+5. Keep this evidence scoped to Workbench source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+6. Continue next with settings/core/proxy bridge shrink or the higher-value external evidence tracks when real target environments are available.

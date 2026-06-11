@@ -18,7 +18,11 @@ import type {
   DesktopCoreSyncGroup,
   DesktopCoreSyncOperation,
   DesktopCoreSyncWindowPlacement,
+  DesktopCoreWorkbenchDetectionKind,
+  DesktopCoreWorkbenchDetectionResult,
+  DesktopCoreWorkbenchDetectorSite,
   DesktopCoreWorkbenchTask,
+  DesktopCoreWorkbenchUiState,
   DesktopDestructivePreflight,
   DesktopDirectoryTarget,
   DesktopImportExportSkeleton,
@@ -727,28 +731,28 @@ export const synchronizerSaveTasks = (tasks: DesktopCoreWorkbenchTask[]): Promis
 
 export const workbenchListDetectionResults = (
   profileId = "",
-  kind = "",
+  kind: DesktopCoreWorkbenchDetectionKind | "" = "",
   limit = 50,
-): Promise<unknown[]> =>
-  desktopRpc<unknown[]>("WorkbenchListDetectionResults", [profileId, kind, limit]);
+): Promise<DesktopCoreWorkbenchDetectionResult[]> =>
+  desktopRpc<DesktopCoreWorkbenchDetectionResult[]>("WorkbenchListDetectionResults", [profileId, kind, limit]);
 
-export const workbenchSaveDetectionResult = (result: unknown): Promise<void> =>
+export const workbenchSaveDetectionResult = (result: DesktopCoreWorkbenchDetectionResult): Promise<void> =>
   desktopRpc<void>("WorkbenchSaveDetectionResult", [result]);
 
-export const workbenchGetUiState = (): Promise<unknown> =>
-  desktopRpc<unknown>("WorkbenchGetUiState");
+export const workbenchGetUiState = (): Promise<DesktopCoreWorkbenchUiState> =>
+  desktopRpc<DesktopCoreWorkbenchUiState>("WorkbenchGetUiState");
 
-export const workbenchSaveUiState = (state: unknown): Promise<void> =>
+export const workbenchSaveUiState = (state: DesktopCoreWorkbenchUiState): Promise<void> =>
   desktopRpc<void>("WorkbenchSaveUiState", [state]);
 
-export const workbenchListDetectorSites = (): Promise<unknown[]> =>
-  desktopRpc<unknown[]>("WorkbenchListDetectorSites");
+export const workbenchListDetectorSites = (): Promise<DesktopCoreWorkbenchDetectorSite[]> =>
+  desktopRpc<DesktopCoreWorkbenchDetectorSite[]>("WorkbenchListDetectorSites");
 
 export const workbenchRunDetectorSite = (
   profileId: string,
   detectorId: string,
-): Promise<unknown> =>
-  desktopRpc<unknown>("WorkbenchRunDetectorSite", [profileId, detectorId]);
+): Promise<DesktopCoreWorkbenchDetectionResult> =>
+  desktopRpc<DesktopCoreWorkbenchDetectionResult>("WorkbenchRunDetectorSite", [profileId, detectorId]);
 
 export const collectValidationReport = (
   browserSignals: DesktopValidationBrowserSignal[] = [],

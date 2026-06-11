@@ -464,7 +464,7 @@ export async function listWorkbenchDetectionResults(
   limit = 50,
 ): Promise<WorkbenchDetectionResult[]> {
   const results = await workbenchListDetectionResults(profileId, kind, limit)
-  return Array.isArray(results) ? results.map(normalizeDetectionResult) : []
+  return results.map(normalizeDetectionResult)
 }
 
 export function saveWorkbenchDetectionResult(result: WorkbenchDetectionResult): Promise<void> {
@@ -481,21 +481,19 @@ export function saveWorkbenchUiState(state: WorkbenchUiState): Promise<void> {
 
 export async function listWorkbenchDetectorSites(): Promise<WorkbenchDetectorSite[]> {
   const results = await workbenchListDetectorSites()
-  return Array.isArray(results)
-    ? results.map((item) => {
-      const source = readRecord(item)
-      return {
-        id: readString(source, ['id']),
-        name: readString(source, ['name']),
-        url: readString(source, ['url']),
-        enabled: source.enabled !== false,
-        defaultOn: Boolean(source.defaultOn),
-        gate: readString(source, ['gate'], 'medium'),
-        traceWarning: readString(source, ['traceWarning']),
-        notes: readString(source, ['notes']),
-      }
-    })
-    : []
+  return results.map((item) => {
+    const source = readRecord(item)
+    return {
+      id: readString(source, ['id']),
+      name: readString(source, ['name']),
+      url: readString(source, ['url']),
+      enabled: source.enabled !== false,
+      defaultOn: Boolean(source.defaultOn),
+      gate: readString(source, ['gate'], 'medium'),
+      traceWarning: readString(source, ['traceWarning']),
+      notes: readString(source, ['notes']),
+    }
+  })
 }
 
 export async function runWorkbenchDetectorSite(profileId: string, detectorId: string): Promise<WorkbenchDetectionResult> {
