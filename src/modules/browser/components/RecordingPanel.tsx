@@ -5,6 +5,7 @@ import {
   Shield, ShieldAlert,
 } from 'lucide-react'
 import { Button, FormItem, Input, Select, Textarea, toast } from '../../../shared/components'
+import { messageFromUnknownError } from '../../../shared/errors'
 import {
   BEHAVIOR_EXECUTION_PERMISSION_MODES,
   BEHAVIOR_HUMAN_BOUNDARIES,
@@ -65,7 +66,7 @@ interface PlaybackRequest {
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return messageFromUnknownError(error, '未知错误')
 }
 
 export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
@@ -151,7 +152,7 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
     setIsPlaying(false)
     setPlaybackError(error)
     setPlaybackProgress(prev => prev ? { ...prev, status: 'failed' } : prev)
-    toast.error(`鍥炴斁澶辫触: ${error}`)
+    toast.error(`回放失败: ${error}`)
   }, [isPlaybackPayloadForProfile])
 
   useEffect(() => {
@@ -201,8 +202,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       setElapsedSec(0)
       await syncRecordingStatus()
       toast.success('录制已开始 - 请在浏览器中操作')
-    } catch (e) {
-      toast.error(`开始录制失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`开始录制失败: ${getErrorMessage(error)}`)
     } finally {
       setLoading(false)
     }
@@ -220,8 +221,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await syncRecordingStatus()
       toast.success('录制已保存')
       await loadRecordings()
-    } catch (e) {
-      toast.error(`停止录制失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`停止录制失败: ${getErrorMessage(error)}`)
     } finally {
       setLoading(false)
     }
@@ -236,8 +237,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       const rec = await quickRecord(profileId)
       if (rec) toast.success(`养号录制完成: ${rec.name}`)
       await loadRecordings()
-    } catch (e) {
-      toast.error(`养号录制失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`养号录制失败: ${getErrorMessage(error)}`)
     } finally {
       setLoading(false)
     }
@@ -251,8 +252,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await loadRecordings()
       if (playRecordingId === id) setPlayRecordingId('')
       if (detailRecordingId === id) setDetailRecordingId(null)
-    } catch (e) {
-      toast.error(`删除失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`删除失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -266,8 +267,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
         text: JSON.stringify(bundle, null, 2),
       })
       toast.success('导出 JSON 已生成')
-    } catch (e) {
-      toast.error(`导出失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`导出失败: ${getErrorMessage(error)}`)
     } finally {
       setToolLoadingId(null)
     }
@@ -281,8 +282,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await loadRecordings()
       if (copied?.id) setPlayRecordingId(copied.id)
       toast.success('模板副本已创建')
-    } catch (e) {
-      toast.error(`复制失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`复制失败: ${getErrorMessage(error)}`)
     } finally {
       setToolLoadingId(null)
     }
@@ -293,8 +294,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
     try {
       await navigator.clipboard.writeText(exportJson.text)
       toast.success('JSON 已复制')
-    } catch (e) {
-      toast.error(`复制失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`复制失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -325,8 +326,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       setImportName('')
       setImportPayload('')
       toast.success('录制已导入')
-    } catch (e) {
-      toast.error(`导入失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`导入失败: ${getErrorMessage(error)}`)
     } finally {
       setImporting(false)
     }
@@ -343,8 +344,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await renameRecording(editingId, editName.trim())
       setRecordings(prev => prev.map(r => r.id === editingId ? { ...r, name: editName.trim() } : r))
       toast.success('名称已更新')
-    } catch (e) {
-      toast.error(`重命名失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`重命名失败: ${getErrorMessage(error)}`)
     }
     setEditingId(null)
   }
@@ -375,12 +376,12 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await playRecording(requestWithPolicy.profileId, requestWithPolicy.recordingId, requestWithPolicy.variation)
       setIsPlaying(true)
       toast.success('回放已开始')
-    } catch (e) {
-      const error = getErrorMessage(e)
+    } catch (error: unknown) {
+      const message = getErrorMessage(error)
       setIsPlaying(false)
-      setPlaybackError(error)
+      setPlaybackError(message)
       setPlaybackProgress(prev => prev ? { ...prev, status: 'failed' } : prev)
-      toast.error(`回放失败: ${error}`)
+      toast.error(`回放失败: ${message}`)
     } finally {
       setLoading(false)
     }
@@ -409,8 +410,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await stopPlayback(profileId)
       setIsPlaying(false)
       toast.success('回放已停止')
-    } catch (e) {
-      toast.error(`停止回放失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`停止回放失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -425,8 +426,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
         setIsPlaying(false)
         toast.success('已终止回放')
       }
-    } catch (e) {
-      toast.error(`处理暂停失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`处理暂停失败: ${getErrorMessage(error)}`)
     } finally {
       setReviewLoading(null)
     }
@@ -439,8 +440,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       const ok = await activateBrowserProfile(profileId)
       if (ok) toast.success('已激活外部浏览器，请在真实窗口中接管')
       else toast.error('当前环境不支持激活外部浏览器')
-    } catch (e) {
-      toast.error(`接管失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`接管失败: ${getErrorMessage(error)}`)
     } finally {
       setReviewLoading(null)
     }
@@ -452,8 +453,8 @@ export function RecordingPanel({ profileId, isRunning }: RecordingPanelProps) {
       await cleanupRecordingSessions()
       toast.success('卡死会话已清理')
       await loadRecordings()
-    } catch (e) {
-      toast.error(`清理失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`清理失败: ${getErrorMessage(error)}`)
     }
   }
 

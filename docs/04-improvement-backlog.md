@@ -45,9 +45,11 @@ Current correction 2026-06-12:
 - Evidence ops: M4 UI error boundary contract 已扩展到 v23，CoreManagementPage 的内核操作和设置保存错误路径纳入 selected surface 检查；最新 M4 gate 仍为 `passed_with_expected_external_blockers`，`passed=18`、`expectedBlocked=4`、`failed=0`。
 - Evidence ops: M4 UI error boundary contract 已扩展到 v24，ProxyPoolPage 的代理订阅/导入/保存/删除/修复错误路径纳入 selected surface 检查，并阻止 selected files 回退到 `[key: string]: any`；最新 M4 gate 仍为 `passed_with_expected_external_blockers`，`passed=18`、`expectedBlocked=4`、`failed=0`。
 - Evidence ops: M4 generic any residue contract 已新增到 v25，shared Table 泛型约束、ProxyIPHealthResult rawData 和 ProxyPoolPage/types ClashProxy index signature 的选定 generic/index `any` 已收窄；最新 M4 gate 为 `passed_with_expected_external_blockers`，`passed=19`、`expectedBlocked=4`、`failed=0`。
+- Evidence ops: M4 UI error boundary contract 已扩展到 v26，RecordingPanel 的录制/回放/导入导出/复制/重命名/接管/清理错误路径纳入 selected surface 检查，回放失败 mojibake 文案已修正；最新 M4 gate 仍为 `passed_with_expected_external_blockers`，`passed=19`、`expectedBlocked=4`、`failed=0`。
 - UI consolidation: `BrowserListPage` / `BrowserDetailPage` 的 browser instance runtime 事件订阅已改走 `src/modules/browser/api.ts` 的 `onBrowserInstanceRuntimeEvents`，不再直接 import/call Wails `EventsOn`；browser runtime payload normalizer 仍在 API facade 内复用。`src/services/desktop.ts` 的 Workbench detection results / detector sites / UI state / detector run / fingerprint health / fingerprint snapshot / identity report / browser instance status API 也不再暴露 `unknown[]` 或裸 `unknown`。`SettingsPage` / `CoreManagementPage` / `ProxyPickerModal` / `ProxyPoolPage` / `LaunchApiDocsPage` / `UsageTutorialPage` 不再直接 import `wailsjs/runtime/runtime`。剩余 facade shrink 主要在更深的 settings/core/proxy bridge API 和过渡 `tauriWailsBridge` 兼容层。
 - UI consolidation: Dashboard、Dashboard API、Settings、Automation、NaturalLanguageTask、TagManagement、RecordingDetailModal、LaunchApiDocsPage 的本轮错误边界已从弱 `any`/cast 收窄；仓库内其他 legacy 页面仍有 `catch (...: any)`，后续继续按小批切片处理，不能把本轮写成全仓清零。
 - UI consolidation: BrowserListPage、BrowserDetailPage、BrowserEditPage、BrowserSettingsModal、QuickLaunchModal、CoreManagementPage、ProxyPoolPage 的本轮错误边界已从弱 `any` 收窄，BrowserList 启动成功/失败乱码已修正；本轮还收窄了选定 generic/index `any`，但仍不代表全仓显式 `any` 清零。
+- UI consolidation: RecordingPanel 的本轮错误边界已从未显式类型的 catch 收窄到 `unknown`，并复用共享错误文案 helper；仍不代表 Synchronizer、desktop service 或 `tauriWailsBridge` 兼容层已完成。
 
 ## 固定风险
 

@@ -439,3 +439,13 @@ Status: started 2026-06-12.
 3. Update `ProxyIPHealthResult.rawData` to `Record<string, unknown>` and `ProxyPoolPage/types.ts` ClashProxy index signature to `unknown`.
 4. Extend M4 acceptance gate to v25 with `generic_any_residue_contract`.
 5. Keep this evidence scoped to selected generic any residues only; it does not prove every explicit any in the repository is gone.
+
+## Thirty-Seventh Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Continue M4.8 UI error boundary shrink on `RecordingPanel`.
+2. Update recording, playback, import/export, copy, rename, takeover, and cleanup error paths to use `catch (error: unknown)` and the shared `messageFromUnknownError` helper.
+3. Fix the existing playback-failed mojibake operator text while touching that path.
+4. Extend M4 acceptance gate to v26 by adding RecordingPanel to `ui_error_boundary_contract`.
+5. Keep this evidence scoped to the selected recording panel source contract only; it does not prove every legacy catch, `tauriWailsBridge`, external provider/proxy/session evidence, AdsPower refresh, or full `450` coverage.

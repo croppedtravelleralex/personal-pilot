@@ -1013,6 +1013,7 @@ function Test-UiErrorBoundaryContract {
   $naturalLanguageTaskPath = Join-Path $projectRoot "src\modules\browser\components\NaturalLanguageTask.tsx"
   $tagManagementPath = Join-Path $projectRoot "src\modules\browser\pages\TagManagementPage.tsx"
   $recordingDetailPath = Join-Path $projectRoot "src\modules\browser\components\RecordingDetailModal.tsx"
+  $recordingPanelPath = Join-Path $projectRoot "src\modules\browser\components\RecordingPanel.tsx"
   $launchDocsPath = Join-Path $projectRoot "src\modules\browser\pages\LaunchApiDocsPage.tsx"
   $browserListPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserListPage.tsx"
   $browserDetailPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserDetailPage.tsx"
@@ -1032,6 +1033,7 @@ function Test-UiErrorBoundaryContract {
     $naturalLanguageTaskPath,
     $tagManagementPath,
     $recordingDetailPath,
+    $recordingPanelPath,
     $launchDocsPath,
     $browserListPath,
     $browserDetailPath,
@@ -1056,6 +1058,7 @@ function Test-UiErrorBoundaryContract {
   $naturalLanguageText = if (Test-Path $naturalLanguageTaskPath) { Get-Content -LiteralPath $naturalLanguageTaskPath -Raw -Encoding UTF8 } else { "" }
   $tagText = if (Test-Path $tagManagementPath) { Get-Content -LiteralPath $tagManagementPath -Raw -Encoding UTF8 } else { "" }
   $recordingDetailText = if (Test-Path $recordingDetailPath) { Get-Content -LiteralPath $recordingDetailPath -Raw -Encoding UTF8 } else { "" }
+  $recordingPanelText = if (Test-Path $recordingPanelPath) { Get-Content -LiteralPath $recordingPanelPath -Raw -Encoding UTF8 } else { "" }
   $launchDocsText = if (Test-Path $launchDocsPath) { Get-Content -LiteralPath $launchDocsPath -Raw -Encoding UTF8 } else { "" }
   $browserListText = if (Test-Path $browserListPath) { Get-Content -LiteralPath $browserListPath -Raw -Encoding UTF8 } else { "" }
   $browserDetailText = if (Test-Path $browserDetailPath) { Get-Content -LiteralPath $browserDetailPath -Raw -Encoding UTF8 } else { "" }
@@ -1079,6 +1082,7 @@ function Test-UiErrorBoundaryContract {
       @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
       @{ name = "TagManagementPage"; text = $tagText },
       @{ name = "RecordingDetailModal"; text = $recordingDetailText },
+      @{ name = "RecordingPanel"; text = $recordingPanelText },
       @{ name = "BrowserListPage"; text = $browserListText },
       @{ name = "BrowserEditPage"; text = $browserEditText },
       @{ name = "BrowserSettingsModal"; text = $browserSettingsModalText },
@@ -1087,6 +1091,26 @@ function Test-UiErrorBoundaryContract {
     )) {
     if ($textAndName.text -notmatch [regex]::Escape("messageFromUnknownError")) {
       $failures += "$($textAndName.name) missing shared unknown-error helper usage"
+    }
+  }
+
+  $unknownErrorFallbackText = -join @([char]0x672A, [char]0x77E5, [char]0x9519, [char]0x8BEF)
+  foreach ($marker in @(
+      "return messageFromUnknownError(error, '$unknownErrorFallbackText')",
+      "const message = getErrorMessage(error)",
+      "setPlaybackError(message)"
+    )) {
+    if ($recordingPanelText -notmatch [regex]::Escape($marker)) {
+      $failures += "RecordingPanel missing shared error-message flow marker: $marker"
+    }
+  }
+
+  foreach ($patternAndReason in @(
+      @{ pattern = "String\s*\(\s*error\s*\)"; reason = "String(error) fallback" },
+      @{ pattern = "\berror\s*\??\.\s*message\b"; reason = "direct error.message access" }
+    )) {
+    if ($recordingPanelText -match $patternAndReason.pattern) {
+      $failures += "RecordingPanel still has weak error-message marker: $($patternAndReason.reason)"
     }
   }
 
@@ -1108,6 +1132,7 @@ function Test-UiErrorBoundaryContract {
   $quickLaunchCodeFailedText = (-join @([char]0x6309)) + " Code " + (-join @([char]0x542F, [char]0x52A8, [char]0x5931, [char]0x8D25))
   $browserListStartMojibakeText = -join @([char]0x7039, [char]0x70B0, [char]0x7DE5, [char]0x5BB8, [char]0x63D2, [char]0x60CE, [char]0x9354)
   $browserListFailureMojibakeText = -join @([char]0x7039, [char]0x70B0, [char]0x7DE5, [char]0x935A)
+  $recordingPlaybackMojibakeText = -join @([char]0x9365, [char]0x70B4, [char]0x6581, [char]0x6FB6, [char]0x8FAB, [char]0x89E6)
 
   foreach ($token in @(
       "toast.error(resolveActionErrorMessage(error, '$browserStartFailedText'))",
@@ -1139,6 +1164,9 @@ function Test-UiErrorBoundaryContract {
       $failures += "BrowserListPage still has mojibake operator text marker: $token"
     }
   }
+  if ($recordingPanelText -match [regex]::Escape($recordingPlaybackMojibakeText)) {
+    $failures += "RecordingPanel still has playback failure mojibake operator text marker"
+  }
 
   foreach ($textAndName in @(
       @{ name = "DashboardPage"; text = $dashboardPageText },
@@ -1148,6 +1176,7 @@ function Test-UiErrorBoundaryContract {
       @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
       @{ name = "TagManagementPage"; text = $tagText },
       @{ name = "RecordingDetailModal"; text = $recordingDetailText },
+      @{ name = "RecordingPanel"; text = $recordingPanelText },
       @{ name = "LaunchApiDocsPage"; text = $launchDocsText },
       @{ name = "BrowserListPage"; text = $browserListText },
       @{ name = "BrowserDetailPage"; text = $browserDetailText },
@@ -1179,7 +1208,7 @@ function Test-UiErrorBoundaryContract {
   if ($failures.Count -gt 0) {
     return New-LocalGateResult "ui_error_boundary_contract" "missing_coverage" "failed" "M4.8 selected UI error boundary source contract is incomplete" $failures
   }
-  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, Core management, and Proxy pool UI error boundaries use unknown guards; legacy pages remain separate work" @()
+  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording panel/Docs, Browser instance, Core management, and Proxy pool UI error boundaries use unknown guards; legacy pages remain separate work" @()
 }
 
 function Test-GenericAnyResidueContract {
@@ -1584,7 +1613,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v25"
+  schemaVersion = "m4_acceptance_gate_v26"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1633,7 +1662,7 @@ $report = [ordered]@{
     "Monitor facade contract is source-level evidence only; it routes EventMonitor runtime subscriptions and event-log history calls through typed desktop service wrappers without removing the transitional bridge.",
     "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
     "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
-    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, Core management, and Proxy pool surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
+    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording panel/Docs, Browser instance, Core management, and Proxy pool surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
     "Generic any residue contract is source-level evidence only; it narrows selected shared/browser generic any markers without claiming every explicit any in the repository is gone.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
