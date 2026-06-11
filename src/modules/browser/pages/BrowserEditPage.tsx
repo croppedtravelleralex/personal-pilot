@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FolderOpen, Layers } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { BrowserCore, BrowserProfileInput, BrowserProxy, BrowserGroup } from '../types'
 import { createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile } from '../api'
 import { FingerprintPanel } from '../components/FingerprintPanel'
@@ -164,8 +165,8 @@ export function BrowserEditPage() {
       }
       setIsDirty(false)
       navigate('/browser/list')
-    } catch (error: any) {
-      setSaveError(typeof error === 'string' ? error : error?.message || '保存失败')
+    } catch (error: unknown) {
+      setSaveError(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -203,7 +204,7 @@ export function BrowserEditPage() {
     try {
       await openUserDataDir(formData.userDataDir)
     } catch (error: unknown) {
-      toast.error((error as Error)?.message || '打开目录失败')
+      toast.error(messageFromUnknownError(error, '打开目录失败'))
     }
   }
 

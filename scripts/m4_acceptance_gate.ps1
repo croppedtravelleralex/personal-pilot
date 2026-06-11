@@ -1014,6 +1014,11 @@ function Test-UiErrorBoundaryContract {
   $tagManagementPath = Join-Path $projectRoot "src\modules\browser\pages\TagManagementPage.tsx"
   $recordingDetailPath = Join-Path $projectRoot "src\modules\browser\components\RecordingDetailModal.tsx"
   $launchDocsPath = Join-Path $projectRoot "src\modules\browser\pages\LaunchApiDocsPage.tsx"
+  $browserListPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserListPage.tsx"
+  $browserDetailPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserDetailPage.tsx"
+  $browserEditPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserEditPage.tsx"
+  $browserSettingsModalPath = Join-Path $projectRoot "src\modules\browser\components\BrowserSettingsModal.tsx"
+  $quickLaunchModalPath = Join-Path $projectRoot "src\modules\browser\components\QuickLaunchModal.tsx"
   $failures = @()
 
   $paths = @(
@@ -1025,7 +1030,12 @@ function Test-UiErrorBoundaryContract {
     $naturalLanguageTaskPath,
     $tagManagementPath,
     $recordingDetailPath,
-    $launchDocsPath
+    $launchDocsPath,
+    $browserListPath,
+    $browserDetailPath,
+    $browserEditPath,
+    $browserSettingsModalPath,
+    $quickLaunchModalPath
   )
 
   foreach ($path in $paths) {
@@ -1043,6 +1053,11 @@ function Test-UiErrorBoundaryContract {
   $tagText = if (Test-Path $tagManagementPath) { Get-Content -LiteralPath $tagManagementPath -Raw -Encoding UTF8 } else { "" }
   $recordingDetailText = if (Test-Path $recordingDetailPath) { Get-Content -LiteralPath $recordingDetailPath -Raw -Encoding UTF8 } else { "" }
   $launchDocsText = if (Test-Path $launchDocsPath) { Get-Content -LiteralPath $launchDocsPath -Raw -Encoding UTF8 } else { "" }
+  $browserListText = if (Test-Path $browserListPath) { Get-Content -LiteralPath $browserListPath -Raw -Encoding UTF8 } else { "" }
+  $browserDetailText = if (Test-Path $browserDetailPath) { Get-Content -LiteralPath $browserDetailPath -Raw -Encoding UTF8 } else { "" }
+  $browserEditText = if (Test-Path $browserEditPath) { Get-Content -LiteralPath $browserEditPath -Raw -Encoding UTF8 } else { "" }
+  $browserSettingsModalText = if (Test-Path $browserSettingsModalPath) { Get-Content -LiteralPath $browserSettingsModalPath -Raw -Encoding UTF8 } else { "" }
+  $quickLaunchModalText = if (Test-Path $quickLaunchModalPath) { Get-Content -LiteralPath $quickLaunchModalPath -Raw -Encoding UTF8 } else { "" }
 
   foreach ($token in @("export function messageFromUnknownError(error: unknown", "error instanceof Error", "typeof error === 'string'", "return fallback")) {
     if ($sharedErrorText -notmatch [regex]::Escape($token)) {
@@ -1057,10 +1072,63 @@ function Test-UiErrorBoundaryContract {
       @{ name = "AutomationPage"; text = $automationText },
       @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
       @{ name = "TagManagementPage"; text = $tagText },
-      @{ name = "RecordingDetailModal"; text = $recordingDetailText }
+      @{ name = "RecordingDetailModal"; text = $recordingDetailText },
+      @{ name = "BrowserListPage"; text = $browserListText },
+      @{ name = "BrowserEditPage"; text = $browserEditText },
+      @{ name = "BrowserSettingsModal"; text = $browserSettingsModalText }
     )) {
     if ($textAndName.text -notmatch [regex]::Escape("messageFromUnknownError")) {
       $failures += "$($textAndName.name) missing shared unknown-error helper usage"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "BrowserListPage"; text = $browserListText; markers = @("resolveActionFeedback(error", "resolveActionErrorMessage(error") },
+      @{ name = "BrowserDetailPage"; text = $browserDetailText; markers = @("resolveActionFeedback(error", "resolveActionErrorMessage(error") },
+      @{ name = "QuickLaunchModal"; text = $quickLaunchModalText; markers = @("resolveActionFeedback(error") }
+    )) {
+    foreach ($marker in $textAndName.markers) {
+      if ($textAndName.text -notmatch [regex]::Escape($marker)) {
+        $failures += "$($textAndName.name) missing action error helper marker: $marker"
+      }
+    }
+  }
+
+  $browserStartFailedText = -join @([char]0x5B9E, [char]0x4F8B, [char]0x542F, [char]0x52A8, [char]0x5931, [char]0x8D25)
+  $browserStopFailedText = -join @([char]0x5B9E, [char]0x4F8B, [char]0x505C, [char]0x6B62, [char]0x5931, [char]0x8D25)
+  $browserRestartFailedText = -join @([char]0x5B9E, [char]0x4F8B, [char]0x91CD, [char]0x542F, [char]0x5931, [char]0x8D25)
+  $quickLaunchCodeFailedText = (-join @([char]0x6309)) + " Code " + (-join @([char]0x542F, [char]0x52A8, [char]0x5931, [char]0x8D25))
+  $browserListStartMojibakeText = -join @([char]0x7039, [char]0x70B0, [char]0x7DE5, [char]0x5BB8, [char]0x63D2, [char]0x60CE, [char]0x9354)
+  $browserListFailureMojibakeText = -join @([char]0x7039, [char]0x70B0, [char]0x7DE5, [char]0x935A)
+
+  foreach ($token in @(
+      "toast.error(resolveActionErrorMessage(error, '$browserStartFailedText'))",
+      "toast.error(resolveActionErrorMessage(error, '$browserStopFailedText'))",
+      "const feedback = resolveActionFeedback(error, '$browserRestartFailedText')",
+      "const feedback = resolveActionFeedback(error, '$browserStartFailedText')"
+    )) {
+    if ($browserListText -notmatch [regex]::Escape($token)) {
+      $failures += "BrowserListPage missing action-specific error marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "const feedback = resolveActionFeedback(error, '$browserStartFailedText')",
+      "toast.error(resolveActionErrorMessage(error, '$browserStopFailedText'))",
+      "const feedback = resolveActionFeedback(error, '$browserRestartFailedText')"
+    )) {
+    if ($browserDetailText -notmatch [regex]::Escape($token)) {
+      $failures += "BrowserDetailPage missing action-specific error marker: $token"
+    }
+  }
+
+  if ($quickLaunchModalText -notmatch [regex]::Escape("const feedback = resolveActionFeedback(error, '$quickLaunchCodeFailedText')")) {
+    $failures += "QuickLaunchModal missing action-specific error marker: resolveActionFeedback(error, '$quickLaunchCodeFailedText')"
+  }
+
+  foreach ($token in @($browserListStartMojibakeText, $browserListFailureMojibakeText)) {
+    if ($browserListText -match [regex]::Escape($token)) {
+      $failures += "BrowserListPage still has mojibake operator text marker: $token"
     }
   }
 
@@ -1072,7 +1140,12 @@ function Test-UiErrorBoundaryContract {
       @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
       @{ name = "TagManagementPage"; text = $tagText },
       @{ name = "RecordingDetailModal"; text = $recordingDetailText },
-      @{ name = "LaunchApiDocsPage"; text = $launchDocsText }
+      @{ name = "LaunchApiDocsPage"; text = $launchDocsText },
+      @{ name = "BrowserListPage"; text = $browserListText },
+      @{ name = "BrowserDetailPage"; text = $browserDetailText },
+      @{ name = "BrowserEditPage"; text = $browserEditText },
+      @{ name = "BrowserSettingsModal"; text = $browserSettingsModalText },
+      @{ name = "QuickLaunchModal"; text = $quickLaunchModalText }
     )) {
     foreach ($patternAndReason in @(
         @{ pattern = "(?<!\.)\bcatch\s*\([^)]*:\s*any\b"; reason = "typed any catch" },
@@ -1095,7 +1168,7 @@ function Test-UiErrorBoundaryContract {
   if ($failures.Count -gt 0) {
     return New-LocalGateResult "ui_error_boundary_contract" "missing_coverage" "failed" "M4.8 selected UI error boundary source contract is incomplete" $failures
   }
-  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording/Docs UI error boundaries use unknown guards; legacy pages remain separate work" @()
+  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording/Docs and Browser instance UI error boundaries use unknown guards; legacy pages remain separate work" @()
 }
 
 function Test-RuntimeAdapterOperatorContract {
@@ -1450,7 +1523,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v21"
+  schemaVersion = "m4_acceptance_gate_v22"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1499,7 +1572,7 @@ $report = [ordered]@{
     "Monitor facade contract is source-level evidence only; it routes EventMonitor runtime subscriptions and event-log history calls through typed desktop service wrappers without removing the transitional bridge.",
     "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
     "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
-    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording/Docs surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
+    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording/Docs and Browser instance surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

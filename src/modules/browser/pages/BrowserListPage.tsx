@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, LayoutGrid, List, Circle, Video } from 'lucide-react'
 import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
 import { InstanceFilterBar, EMPTY_FILTERS } from '../components/InstanceFilterBar'
 import type { InstanceFilters } from '../components/InstanceFilterBar'
@@ -144,8 +145,8 @@ function LaunchCodeCell({ profileId, code, onRefresh }: { profileId: string; cod
       const applied = await setBrowserProfileCode(profileId, value)
       onRefresh()
       toast.success(`Code 已更新为 ${applied}`)
-    } catch (error: any) {
-      toast.error(error?.message || '设置自定义 Code 失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '设置自定义 Code 失败'))
     } finally {
       setLoading(false)
     }
@@ -544,10 +545,10 @@ export function BrowserListPage() {
     try {
       const startedProfile = await startBrowserInstance(profileId)
       mergeProfileState(startedProfile)
-      toast.success('瀹炰緥宸插惎鍔?')
+      toast.success('实例已启动')
       await loadProfiles({ silent: true, syncRuntimeState: true })
-    } catch (error: any) {
-      toast.error(resolveActionErrorMessage(error, '瀹炰緥鍚姩澶辫触'))
+    } catch (error: unknown) {
+      toast.error(resolveActionErrorMessage(error, '实例启动失败'))
       await loadProfiles({ silent: true, syncRuntimeState: true })
     } finally {
       updatePendingIds(setStartingIds, profileId, false)
@@ -561,7 +562,7 @@ export function BrowserListPage() {
       mergeProfileState(stoppedProfile)
       toast.success('实例已停止')
       await loadProfiles({ silent: true, syncRuntimeState: true })
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(resolveActionErrorMessage(error, '实例停止失败'))
       await loadProfiles({ silent: true, syncRuntimeState: true })
     } finally {
@@ -574,8 +575,8 @@ export function BrowserListPage() {
       await startRecording(profileId)
       await syncRecordingProfiles()
       toast.success('录制已开始 - 请在浏览器中操作')
-    } catch (error: any) {
-      toast.error(`开始录制失败: ${error?.message || error}`)
+    } catch (error: unknown) {
+      toast.error(`开始录制失败: ${messageFromUnknownError(error, '未知错误')}`)
     }
   }
 
@@ -585,8 +586,8 @@ export function BrowserListPage() {
       await stopRecording(profileId, name)
       await syncRecordingProfiles()
       toast.success('录制已保存')
-    } catch (error: any) {
-      toast.error(`停止录制失败: ${error?.message || error}`)
+    } catch (error: unknown) {
+      toast.error(`停止录制失败: ${messageFromUnknownError(error, '未知错误')}`)
     }
   }
 
@@ -597,7 +598,7 @@ export function BrowserListPage() {
       mergeProfileState(restartedProfile)
       toast.success(`实例已重启${restartedProfile?.profileName ? `：${restartedProfile.profileName}` : ''}`)
       await loadProfiles({ silent: true, syncRuntimeState: true })
-    } catch (error: any) {
+    } catch (error: unknown) {
       const feedback = resolveActionFeedback(error, '实例重启失败')
       if (feedback.tone === 'warning') {
         toast.warning(feedback.message)
@@ -650,7 +651,7 @@ export function BrowserListPage() {
         const startedProfile = await startBrowserInstance(id)
         mergeProfileState(startedProfile)
         success++
-      } catch (error: any) {
+      } catch (error: unknown) {
         const feedback = resolveActionFeedback(error, '实例启动失败')
         if (feedback.pendingAttach) {
           pending++
@@ -727,9 +728,9 @@ export function BrowserListPage() {
       toast.success('实例已复制')
       closeCopyModal()
       loadProfiles()
-    } catch (error: any) {
+    } catch (error: unknown) {
       closeCopyModal()
-      setOpError(typeof error === 'string' ? error : error?.message || '复制失败')
+      setOpError(messageFromUnknownError(error, '复制失败'))
     } finally {
       setCopying(false)
     }
@@ -750,8 +751,8 @@ export function BrowserListPage() {
       })
       toast.success('配置已保存')
       setSettingsModalOpen(false)
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSavingSettings(false)
     }
@@ -788,8 +789,8 @@ export function BrowserListPage() {
       toast.success('内核已保存')
       setCoreModalOpen(false)
       loadCores()
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSavingCore(false)
     }

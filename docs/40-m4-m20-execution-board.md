@@ -399,3 +399,14 @@ Status: started 2026-06-12.
 3. Extend M4 acceptance gate to v21 with `ui_error_boundary_contract`, using regex source checks for weak catch/cast regressions on this selected file set.
 4. Keep this evidence scoped to selected UI error boundary source contracts only; it does not prove all legacy UI any-catches are gone, `tauriWailsBridge` is removed, external provider/proxy/session evidence is passed, or full `450` coverage exists.
 5. Continue next with remaining legacy UI any-catch batches, deeper settings/core/proxy bridge shrink, M6 same-run evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.
+
+## Thirty-Third Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Continue M4.8 UI error boundary shrink on the browser instance operation surface.
+2. Update BrowserListPage, BrowserDetailPage, BrowserEditPage, BrowserSettingsModal, and QuickLaunchModal so instance start/stop/restart, recording, copy, edit save, core save, and quick-launch errors use `unknown` guards.
+3. Preserve existing `resolveActionFeedback` / `resolveActionErrorMessage` behavior for background attach warnings and action-specific fallback text.
+4. Fix existing BrowserList start success/failure mojibake text while touching that path.
+5. Extend M4 acceptance gate to v22 by adding these Browser instance surfaces to `ui_error_boundary_contract`, with action-specific fallback markers and mojibake regression checks.
+6. Keep this evidence scoped to selected Browser instance UI source contracts only; it does not prove ProxyPool/CoreManagement or every legacy UI any-catch is complete, nor any external provider/proxy/session/450 coverage evidence.

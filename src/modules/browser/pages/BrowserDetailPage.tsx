@@ -109,7 +109,7 @@ export function BrowserDetailPage() {
       } else {
         toast.success('实例已启动')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const feedback = resolveActionFeedback(error, '实例启动失败')
       if (feedback.tone === 'warning') {
         toast.warning(feedback.message)
@@ -130,7 +130,7 @@ export function BrowserDetailPage() {
         setProfile(stoppedProfile)
       }
       toast.success('实例已停止')
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(resolveActionErrorMessage(error, '实例停止失败'))
     } finally {
       await loadProfile()
@@ -146,7 +146,7 @@ export function BrowserDetailPage() {
         setProfile(restartedProfile)
       }
       toast.success('实例已重启')
-    } catch (error: any) {
+    } catch (error: unknown) {
       const feedback = resolveActionFeedback(error, '实例重启失败')
       if (feedback.tone === 'warning') {
         toast.warning(feedback.message)
