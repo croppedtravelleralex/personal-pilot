@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { FolderOpen, Settings, Edit2 } from 'lucide-react'
 import { Badge, Button, Card, ConfirmModal, FormItem, Input, Modal, Table, Textarea, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserSettings, BrowserCoreExtended, BrowserProxy } from '../types'
 import { fetchBrowserCores, saveBrowserCore, deleteBrowserCore, setDefaultBrowserCore, validateBrowserCorePath, openCorePath, fetchBrowserSettings, saveBrowserSettings, fetchCoreExtendedInfo, scanBrowserCores, BrowserCoreDownload, fetchBrowserProxies } from '../api'
 import { desktopOpenExternalUrl, desktopRuntimeListen } from '../../../services/desktop'
@@ -232,8 +233,8 @@ export function CoreManagementPage() {
   const handleOpenPath = async (corePath: string) => {
     try {
       await openCorePath(corePath)
-    } catch (error: any) {
-      toast.error(error?.message || '打开目录失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '打开目录失败'))
     }
   }
 
@@ -244,8 +245,8 @@ export function CoreManagementPage() {
       await scanBrowserCores()
       await loadData()
       toast.success('扫描完成')
-    } catch (error: any) {
-      toast.error(error?.message || '扫描失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '扫描失败'))
     } finally {
       setScanning(false)
     }
@@ -293,8 +294,8 @@ export function CoreManagementPage() {
       await loadData()
       setEditModalOpen(false)
       toast.success(editingCore ? '内核已更新' : '内核已添加')
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -317,8 +318,8 @@ export function CoreManagementPage() {
       await deleteBrowserCore(deletingCore.coreId)
       await loadData()
       toast.success('内核已删除')
-    } catch (error: any) {
-      toast.error(error?.message || '删除失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除失败'))
     }
     setDeletingCore(null)
   }
@@ -329,8 +330,8 @@ export function CoreManagementPage() {
       await setDefaultBrowserCore(coreId)
       await loadData()
       toast.success('已设为默认内核')
-    } catch (error: any) {
-      toast.error(error?.message || '设置失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '设置失败'))
     }
   }
 
@@ -361,8 +362,8 @@ export function CoreManagementPage() {
       }
 
       await BrowserCoreDownload(downloadForm.name.trim(), downloadForm.url.trim(), targetProxy)
-    } catch (err: any) {
-      toast.error(err.message || '内部启动下载失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '内部启动下载失败'))
       setDownloadProgress(null)
     }
   }
@@ -396,8 +397,8 @@ export function CoreManagementPage() {
       setSettings(newSettings)
       setSettingsModalOpen(false)
       toast.success('设置已保存')
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSavingSettings(false)
     }

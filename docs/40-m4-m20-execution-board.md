@@ -410,3 +410,12 @@ Status: started 2026-06-12.
 4. Fix existing BrowserList start success/failure mojibake text while touching that path.
 5. Extend M4 acceptance gate to v22 by adding these Browser instance surfaces to `ui_error_boundary_contract`, with action-specific fallback markers and mojibake regression checks.
 6. Keep this evidence scoped to selected Browser instance UI source contracts only; it does not prove ProxyPool/CoreManagement or every legacy UI any-catch is complete, nor any external provider/proxy/session/450 coverage evidence.
+
+## Thirty-Fourth Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Continue M4.8 UI error boundary shrink on Core management.
+2. Update `CoreManagementPage` so open path, scan, save/delete core, set default, download start, and settings save errors use `catch (error: unknown)` with `messageFromUnknownError`.
+3. Extend M4 acceptance gate to v23 by adding Core management to `ui_error_boundary_contract`.
+4. Keep this evidence scoped to Core management source-level UI error boundaries only; it does not prove ProxyPoolPage or every legacy UI any-catch is complete.
