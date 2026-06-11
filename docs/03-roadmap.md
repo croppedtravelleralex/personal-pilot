@@ -80,12 +80,13 @@
    - 2026-06-11 current update：M4 Monitor facade 已把 `EventMonitorPage` 实时事件订阅与 event-log history query/count/export/prune 迁到 `src/services/desktop.ts` typed wrappers，新增 `scripts/m4_monitor_facade_gate.ps1`、`m4-monitor-facade` evidence kind 和 Dashboard `M4 Monitor` row；M4 gate v16 已纳入 `monitor_facade_contract`，最新 report 为 `passed_with_expected_external_blockers`、`passed=15`、`expectedBlocked=4`、`failed=0`。剩余 facade shrink 主要在 browser runtime/workbench/core bridge 与过渡 `tauriWailsBridge`。
    - 2026-06-12 current update：M4 Browser runtime facade 已把 Browser List/Detail 的 `browser:instance:*` runtime subscriptions 迁到 `src/modules/browser/api.ts` 的 `onBrowserInstanceRuntimeEvents`，API 内部统一通过 `desktopRuntimeListen` 订阅并复用 payload normalizer；新增 `scripts/m4_browser_runtime_facade_gate.ps1`、`m4-browser-runtime-facade` evidence kind 和 Dashboard `M4 Browser Runtime` row；M4 gate v17 已纳入 `browser_runtime_facade_contract`，最新复跑为 `passed_with_expected_external_blockers`、`passed=16`、`expectedBlocked=4`、`failed=0`。剩余 facade shrink 主要在 settings/core/proxy/workbench bridge 与过渡 `tauriWailsBridge`。
    - 2026-06-12 current update：M4 Workbench DTO shrink 已把 `src/services/desktop.ts` 的 Workbench detection results / detector sites / UI state / detector run API 从 `unknown[]` 或裸 `unknown` 收窄到 `src/types/desktop.ts` 共享 DTO，并更新 `src/modules/synchronizer/api.ts` 去掉对应 `Array.isArray(results)` 退化；M4 gate v18 已把 Workbench DTO 纳入 `typed_facade_shrink_contract`，最新复跑为 `passed_with_expected_external_blockers`、`passed=16`、`expectedBlocked=4`、`failed=0`。剩余 facade shrink 主要在 settings/core/proxy bridge 与过渡 `tauriWailsBridge`。
+   - 2026-06-12 current update：M4 Runtime facade 已把 `SettingsPage` backup export/import progress、`CoreManagementPage` download progress / external URL、`ProxyPickerModal` / `ProxyPoolPage` proxy result events、`LaunchApiDocsPage` / `UsageTutorialPage` external URL calls 迁到 `src/services/desktop.ts` 的 `desktopRuntimeListen` / `desktopOpenExternalUrl`；新增 `scripts/m4_runtime_facade_gate.ps1`、`m4-runtime-facade` evidence kind 和 Dashboard `M4 Runtime` row；M4 gate v19 已纳入 `runtime_facade_contract`，最新复跑为 `passed_with_expected_external_blockers`、`passed=17`、`expectedBlocked=4`、`failed=0`。剩余 facade shrink 主要在更深的 settings/core/proxy bridge API 与过渡 `tauriWailsBridge` 兼容层。
 
 6. Retire duplicate UI paths
    - 2026-05-27 已删除第二套 Tauri/Vite 控制台 UI 源码、根目录旁路 exe、`src-tauri/target/release` 持久 GUI exe 和仓库内 `gateway-ui` 静态 UI。
    - Gateway dashboard 静态 UI 不再作为仓库内置资产；如需临时使用，必须通过 `GATEWAY_UI_DIR` 显式指向外部目录。
    - 第二套 UI 不再作为发布入口，也不保留源码目录；后续只允许从历史提交中取设计参考。
-- 下一步不再做旧 UI 复活式迁移；改为在截图主线 UI 内继续缩小动态 facade 面积，保持 `tauriWailsBridge` 作为过渡兼容层，优先把剩余 settings/core/proxy bridge API 迁到统一 typed facade。
+- 下一步不再做旧 UI 复活式迁移；改为在截图主线 UI 内继续缩小动态 facade 面积，保持 `tauriWailsBridge` 作为过渡兼容层，优先把剩余 settings/core/proxy bridge API 和兼容层边界迁到统一 typed facade。
 
 ## Later：成熟度与评分刷新
 

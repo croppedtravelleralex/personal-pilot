@@ -4,7 +4,7 @@ import { Badge, Button, Card, ConfirmModal, FormItem, Input, Modal, Table, Texta
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserSettings, BrowserCoreExtended, BrowserProxy } from '../types'
 import { fetchBrowserCores, saveBrowserCore, deleteBrowserCore, setDefaultBrowserCore, validateBrowserCorePath, openCorePath, fetchBrowserSettings, saveBrowserSettings, fetchCoreExtendedInfo, scanBrowserCores, BrowserCoreDownload, fetchBrowserProxies } from '../api'
-import { EventsOn, EventsOff, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
+import { desktopOpenExternalUrl, desktopRuntimeListen } from '../../../services/desktop'
 
 const CORE_KIND_OPTIONS = [
   { value: 'chromium', label: 'Chromium' },
@@ -94,11 +94,7 @@ export function CoreManagementPage() {
         setDownloadProgress(null) // 清理进度使其可以重新开始
       }
     }
-    EventsOn('download:progress', onDownloadProgress)
-
-    return () => {
-      EventsOff('download:progress')
-    }
+    return desktopRuntimeListen('download:progress', onDownloadProgress)
   }, [])
 
   const loadData = async () => {
@@ -652,7 +648,7 @@ export function CoreManagementPage() {
               <span>推荐指纹内核: fingerprint-chromium</span>
               <button
                 type="button"
-                onClick={() => BrowserOpenURL('https://github.com/adryfish/fingerprint-chromium/releases')}
+                onClick={() => desktopOpenExternalUrl('https://github.com/adryfish/fingerprint-chromium/releases')}
                 className="text-[var(--color-accent)] hover:underline cursor-pointer font-medium"
               >
                 前往 Releases 页面获取链接

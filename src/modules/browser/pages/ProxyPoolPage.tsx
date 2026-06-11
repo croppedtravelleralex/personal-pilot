@@ -3,7 +3,7 @@ import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Switch, Tab
 import type { SortOrder, TableColumn } from '../../../shared/components/Table'
 import type { BrowserProxy, ProxyIPHealthResult } from '../types'
 import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, fetchSubscriptionImportFromURL, fixBrowserProxyNames } from '../api'
-import { EventsOn } from '../../../wailsjs/runtime/runtime'
+import { desktopRuntimeListen } from '../../../services/desktop'
 import yaml from 'js-yaml'
 
 // 内置代理 ID，不可删除、不可编辑
@@ -1187,7 +1187,7 @@ export function ProxyPoolPage() {
     setLatencyMap(prev => ({ ...prev, ...init }))
 
     // 监听后端实时推送的单个测速结果
-    const off = EventsOn('proxy:speed:result', (data: { proxyId: string; ok: boolean; latencyMs: number; error: string }) => {
+    const off = desktopRuntimeListen('proxy:speed:result', (data: { proxyId: string; ok: boolean; latencyMs: number; error: string }) => {
       const val = toLatencyValue(data.ok, data.latencyMs, data.error)
       queueLatencyPatch(data.proxyId, val)
     })
@@ -1240,7 +1240,7 @@ export function ProxyPoolPage() {
     const idSet = new Set(ids)
     setCheckingIPHealthIds(prev => new Set([...Array.from(prev), ...ids]))
 
-    const off = EventsOn('proxy:iphealth:result', (data: ProxyIPHealthResult) => {
+    const off = desktopRuntimeListen('proxy:iphealth:result', (data: ProxyIPHealthResult) => {
       if (!data?.proxyId || !idSet.has(data.proxyId)) return
       queueIPHealthPatch(data)
     })

@@ -4,9 +4,9 @@ import { Card, Button, FormItem, Input, Select, Switch, ThemeSwitcher, toast, Mo
 import { fetchSettings, saveSettings, resetSettings, initializeSystemData, exportSystemConfig, importSystemConfig } from './api'
 import type { AppSettings } from './types'
 import { defaultSettings } from './types'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { useBackupStore } from '../../store/backupStore'
 import {
+  desktopRuntimeListen,
   exportSessionBundle,
   preflightSessionBundleImport,
   readProviderProductionReadiness,
@@ -113,10 +113,7 @@ export function SettingsPage() {
       })
     }
 
-    EventsOn('backup:export:progress', onExportProgress)
-    return () => {
-      EventsOff('backup:export:progress')
-    }
+    return desktopRuntimeListen<BackupExportProgress>('backup:export:progress', onExportProgress)
   }, [])
 
   useEffect(() => {
@@ -151,10 +148,7 @@ export function SettingsPage() {
       })
     }
 
-    EventsOn('backup:import:progress', onImportProgress)
-    return () => {
-      EventsOff('backup:import:progress')
-    }
+    return desktopRuntimeListen<BackupExportProgress>('backup:import:progress', onImportProgress)
   }, [])
 
   useEffect(() => {

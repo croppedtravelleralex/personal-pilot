@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { CheckCircle, ChevronRight, Copy, FileText } from 'lucide-react'
 import { toast } from '../../../shared/components'
-import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
+import { desktopOpenExternalUrl } from '../../../services/desktop'
 import { fetchLaunchServerInfo, type LaunchServerInfo } from '../api'
 
 // ============================================================================
@@ -1505,7 +1505,7 @@ function MarkdownContent({ content }: { content: string }) {
             onClick={(e) => {
               e.preventDefault()
               if (href) {
-                BrowserOpenURL(href)
+                desktopOpenExternalUrl(href)
               }
             }}
             className="text-[var(--color-accent)] hover:underline cursor-pointer"

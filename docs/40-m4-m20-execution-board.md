@@ -367,3 +367,14 @@ Status: started 2026-06-12.
 4. Extend M4 acceptance gate to v18 by checking Workbench DTO markers inside `typed_facade_shrink_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
 5. Keep this evidence scoped to Workbench source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
 6. Continue next with settings/core/proxy bridge shrink or the higher-value external evidence tracks when real target environments are available.
+
+## Thirtieth Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Advance M4.8 by routing selected page-level Wails runtime event and external URL calls through `src/services/desktop.ts`.
+2. Update `SettingsPage` backup export/import progress, `CoreManagementPage` download progress / external URL, `ProxyPickerModal` and `ProxyPoolPage` proxy speed/IP health result events, plus docs/tutorial external links to use `desktopRuntimeListen` / `desktopOpenExternalUrl`.
+3. Add `scripts/m4_runtime_facade_gate.ps1`, `m4-runtime-facade` evidence history support, Dashboard `M4 Runtime` row, and M4 acceptance gate v19 `runtime_facade_contract`.
+4. The gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`; latest summary is `passed=17`, `expectedBlocked=4`, `failed=0`.
+5. Keep this evidence scoped to selected page-level runtime facade usage only; it does not prove `tauriWailsBridge` removal, every core/proxy/settings API closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+6. Continue next with deeper settings/core/proxy bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.

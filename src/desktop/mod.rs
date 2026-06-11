@@ -3061,6 +3061,7 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "m4-app-shell-facade" => Some("m4_app_shell_facade"),
         "m4-monitor-facade" => Some("m4_monitor_facade"),
         "m4-browser-runtime-facade" => Some("m4_browser_runtime_facade"),
+        "m4-runtime-facade" => Some("m4_runtime_facade"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "m8-session-handoff" => Some("m8_session_handoff"),
@@ -3317,6 +3318,10 @@ fn evidence_failure_reason_category(
         ("m4_browser_runtime_facade", "passed_browser_runtime_facade_contract") => "none",
         ("m4_browser_runtime_facade", "failed_browser_runtime_facade_contract") => {
             "browser_runtime_facade_contract_incomplete"
+        }
+        ("m4_runtime_facade", "passed_runtime_facade_contract") => "none",
+        ("m4_runtime_facade", "failed_runtime_facade_contract") => {
+            "runtime_facade_contract_incomplete"
         }
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
@@ -3677,6 +3682,25 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_else(|| "missing".to_string());
             format!(
                 "M4 browser runtime facade {status}: checksFailed={failed} browserRuntimeFacadeUsage={browser_runtime_facade_usage} directRuntimeImportsRemoved={direct_runtime_imports_removed} desktopRuntimeWrapper={desktop_runtime_wrapper}"
+            )
+        }
+        "m4_runtime_facade" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let runtime_facade_usage = summary
+                .and_then(|item| value_text(item, "runtimeFacadeUsage"))
+                .unwrap_or_else(|| "missing".to_string());
+            let direct_runtime_imports_removed = summary
+                .and_then(|item| value_text(item, "directRuntimeImportsRemoved"))
+                .unwrap_or_else(|| "unknown".to_string());
+            let external_url_wrapper = summary
+                .and_then(|item| value_text(item, "externalUrlWrapper"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!(
+                "M4 runtime facade {status}: checksFailed={failed} runtimeFacadeUsage={runtime_facade_usage} directRuntimeImportsRemoved={direct_runtime_imports_removed} externalUrlWrapper={external_url_wrapper}"
             )
         }
         "taxonomy_audit" => format!(
@@ -4261,6 +4285,10 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("m4_browser_runtime_facade", "failed_browser_runtime_facade_contract") => {
             "browser_runtime_facade_contract_failed"
         }
+        ("m4_runtime_facade", "passed_runtime_facade_contract") => {
+            "runtime_facade_contract_partial"
+        }
+        ("m4_runtime_facade", "failed_runtime_facade_contract") => "runtime_facade_contract_failed",
         ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
@@ -4459,6 +4487,16 @@ fn evidence_next_action(
                         .to_string(),
                 )
             }),
+        ("m4_runtime_facade", "passed_runtime_facade_contract")
+        | ("m4_runtime_facade", "failed_runtime_facade_contract") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/m4_runtime_facade_gate.ps1, then continue shrinking remaining core/proxy/settings bridge APIs and tauriWailsBridge compatibility paths separately."
+                        .to_string(),
+                )
+            }),
         ("m10_headed_repeatability", "blocked_missing_headed_report")
         | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
         | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
@@ -4546,6 +4584,7 @@ pub fn list_desktop_evidence_reports(
         "m4-app-shell-facade",
         "m4-monitor-facade",
         "m4-browser-runtime-facade",
+        "m4-runtime-facade",
         "m8-session-handoff",
         "release-smoke",
         "m5-release-health",
@@ -11791,6 +11830,18 @@ mod tests {
                 "browser_runtime_facade_contract_incomplete",
             ),
             (
+                "m4_runtime_facade",
+                "passed_runtime_facade_contract",
+                None,
+                "none",
+            ),
+            (
+                "m4_runtime_facade",
+                "failed_runtime_facade_contract",
+                None,
+                "runtime_facade_contract_incomplete",
+            ),
+            (
                 "runtime_adapter",
                 "blocked_evidence_required",
                 None,
@@ -11945,6 +11996,8 @@ mod tests {
             .expect("create m4 monitor facade reports dir");
         fs::create_dir_all(reports_root.join("m4-browser-runtime-facade"))
             .expect("create m4 browser runtime facade reports dir");
+        fs::create_dir_all(reports_root.join("m4-runtime-facade"))
+            .expect("create m4 runtime facade reports dir");
         fs::create_dir_all(reports_root.join("m8-session-handoff"))
             .expect("create m8 session handoff reports dir");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
@@ -12228,6 +12281,26 @@ mod tests {
         .expect("write m4 browser runtime facade report");
         fs::write(
             reports_root
+                .join("m4-runtime-facade")
+                .join("m4-runtime-facade-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m4_runtime_facade_gate_v1",
+                "generatedAt": "2026-05-30T00:05:54Z",
+                "status": "passed_runtime_facade_contract",
+                "failureReason": "",
+                "summary": {
+                    "failed": 0,
+                    "runtimeFacadeUsage": "present",
+                    "directRuntimeImportsRemoved": "yes",
+                    "externalUrlWrapper": "present",
+                    "nextAction": "Continue shrinking remaining core/proxy/settings bridge APIs and tauriWailsBridge compatibility paths separately."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m4 runtime facade report");
+        fs::write(
+            reports_root
                 .join("m8-session-handoff")
                 .join("m8-session-handoff-gate-test.json"),
             serde_json::json!({
@@ -12283,7 +12356,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 15);
+        assert_eq!(history.report_count, 16);
 
         let headed = history
             .reports
@@ -12538,6 +12611,26 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("tauriWailsBridge removal"));
+
+        let m4_runtime = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m4_runtime_facade")
+            .expect("m4 runtime facade report");
+        assert_eq!(m4_runtime.status, "passed_runtime_facade_contract");
+        assert_eq!(m4_runtime.evidence_level, "runtime_facade_contract_partial");
+        assert_eq!(m4_runtime.failure_reason_category, "none");
+        assert_eq!(m4_runtime.risk_level, "partial");
+        assert!(m4_runtime.summary.contains("runtimeFacadeUsage=present"));
+        assert!(m4_runtime
+            .summary
+            .contains("directRuntimeImportsRemoved=yes"));
+        assert!(m4_runtime.summary.contains("externalUrlWrapper=present"));
+        assert!(m4_runtime
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("tauriWailsBridge compatibility paths"));
 
         let m15 = history
             .reports

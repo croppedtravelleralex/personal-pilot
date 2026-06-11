@@ -894,6 +894,106 @@ function Test-BrowserRuntimeFacadeContract {
   return New-LocalGateResult "browser_runtime_facade_contract" "passed" "passed" "M4.8 Browser List/Detail runtime subscriptions use browser module facade and desktopRuntimeListen instead of direct Wails EventsOn imports" @()
 }
 
+function Test-RuntimeFacadeContract {
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $settingsPagePath = Join-Path $projectRoot "src\modules\settings\SettingsPage.tsx"
+  $corePagePath = Join-Path $projectRoot "src\modules\browser\pages\CoreManagementPage.tsx"
+  $proxyPickerPath = Join-Path $projectRoot "src\modules\browser\components\ProxyPickerModal.tsx"
+  $proxyPoolPath = Join-Path $projectRoot "src\modules\browser\pages\ProxyPoolPage.tsx"
+  $launchDocsPath = Join-Path $projectRoot "src\modules\browser\pages\LaunchApiDocsPage.tsx"
+  $tutorialPath = Join-Path $projectRoot "src\modules\browser\pages\UsageTutorialPage.tsx"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $desktopRustPath = Join-Path $projectRoot "src\desktop\mod.rs"
+  $failures = @()
+
+  foreach ($path in @($desktopServicePath, $settingsPagePath, $corePagePath, $proxyPickerPath, $proxyPoolPath, $launchDocsPath, $tutorialPath, $dashboardPagePath, $desktopRustPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $settingsText = if (Test-Path $settingsPagePath) { Get-Content -LiteralPath $settingsPagePath -Raw -Encoding UTF8 } else { "" }
+  $coreText = if (Test-Path $corePagePath) { Get-Content -LiteralPath $corePagePath -Raw -Encoding UTF8 } else { "" }
+  $proxyPickerText = if (Test-Path $proxyPickerPath) { Get-Content -LiteralPath $proxyPickerPath -Raw -Encoding UTF8 } else { "" }
+  $proxyPoolText = if (Test-Path $proxyPoolPath) { Get-Content -LiteralPath $proxyPoolPath -Raw -Encoding UTF8 } else { "" }
+  $launchDocsText = if (Test-Path $launchDocsPath) { Get-Content -LiteralPath $launchDocsPath -Raw -Encoding UTF8 } else { "" }
+  $tutorialText = if (Test-Path $tutorialPath) { Get-Content -LiteralPath $tutorialPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+  $desktopRustText = if (Test-Path $desktopRustPath) { Get-Content -LiteralPath $desktopRustPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("export function desktopRuntimeListen", "export function desktopOpenExternalUrl", "desktopWindow.runtime?.EventsOn", "desktopWindow.runtime?.BrowserOpenURL")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing runtime facade wrapper marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen<BackupExportProgress>", "backup:export:progress", "backup:import:progress")) {
+    if ($settingsText -notmatch [regex]::Escape($token)) {
+      $failures += "SettingsPage missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen", "download:progress", "desktopOpenExternalUrl")) {
+    if ($coreText -notmatch [regex]::Escape($token)) {
+      $failures += "CoreManagementPage missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen", "proxy:speed:result")) {
+    if ($proxyPickerText -notmatch [regex]::Escape($token)) {
+      $failures += "ProxyPickerModal missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen", "proxy:speed:result", "proxy:iphealth:result")) {
+    if ($proxyPoolText -notmatch [regex]::Escape($token)) {
+      $failures += "ProxyPoolPage missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "LaunchApiDocsPage"; text = $launchDocsText },
+      @{ name = "UsageTutorialPage"; text = $tutorialText }
+    )) {
+    if ($textAndName.text -notmatch [regex]::Escape("desktopOpenExternalUrl")) {
+      $failures += "$($textAndName.name) missing external URL facade marker"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "SettingsPage"; text = $settingsText },
+      @{ name = "CoreManagementPage"; text = $coreText },
+      @{ name = "ProxyPickerModal"; text = $proxyPickerText },
+      @{ name = "ProxyPoolPage"; text = $proxyPoolText },
+      @{ name = "LaunchApiDocsPage"; text = $launchDocsText },
+      @{ name = "UsageTutorialPage"; text = $tutorialText }
+    )) {
+    foreach ($token in @("wailsjs/runtime/runtime", "import { EventsOn", "import { EventsOff", "import { BrowserOpenURL", "EventsOn(", "EventsOff(", "BrowserOpenURL(")) {
+      if ($textAndName.text -match [regex]::Escape($token)) {
+        $failures += "$($textAndName.name) still uses raw Wails runtime marker: $token"
+      }
+    }
+  }
+
+  foreach ($token in @("m4_runtime_facade", "M4 Runtime")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing runtime facade evidence marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4-runtime-facade", "m4_runtime_facade", "passed_runtime_facade_contract", "runtimeFacadeUsage")) {
+    if ($desktopRustText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop evidence history missing runtime facade marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "runtime_facade_contract" "missing_coverage" "failed" "M4.8 page-level runtime facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "runtime_facade_contract" "passed" "passed" "M4.8 selected Settings/Core/Proxy/Docs runtime EventsOn/EventsOff/BrowserOpenURL calls use typed desktop facade wrappers; tauriWailsBridge remains transitional" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -1220,6 +1320,7 @@ $gates += Test-AutomationFacadeContract
 $gates += Test-AppShellFacadeContract
 $gates += Test-MonitorFacadeContract
 $gates += Test-BrowserRuntimeFacadeContract
+$gates += Test-RuntimeFacadeContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -1244,7 +1345,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v18"
+  schemaVersion = "m4_acceptance_gate_v19"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1292,6 +1393,7 @@ $report = [ordered]@{
     "App shell facade contract is source-level evidence only; it routes close confirmation, notification subscriptions, environment lookup, tray/minimize, and quit actions through typed desktop service wrappers without removing the transitional bridge.",
     "Monitor facade contract is source-level evidence only; it routes EventMonitor runtime subscriptions and event-log history calls through typed desktop service wrappers without removing the transitional bridge.",
     "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
+    "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."
