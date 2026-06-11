@@ -1020,6 +1020,7 @@ function Test-UiErrorBoundaryContract {
   $browserSettingsModalPath = Join-Path $projectRoot "src\modules\browser\components\BrowserSettingsModal.tsx"
   $quickLaunchModalPath = Join-Path $projectRoot "src\modules\browser\components\QuickLaunchModal.tsx"
   $coreManagementPath = Join-Path $projectRoot "src\modules\browser\pages\CoreManagementPage.tsx"
+  $proxyPoolPath = Join-Path $projectRoot "src\modules\browser\pages\ProxyPoolPage.tsx"
   $failures = @()
 
   $paths = @(
@@ -1037,7 +1038,8 @@ function Test-UiErrorBoundaryContract {
     $browserEditPath,
     $browserSettingsModalPath,
     $quickLaunchModalPath,
-    $coreManagementPath
+    $coreManagementPath,
+    $proxyPoolPath
   )
 
   foreach ($path in $paths) {
@@ -1061,6 +1063,7 @@ function Test-UiErrorBoundaryContract {
   $browserSettingsModalText = if (Test-Path $browserSettingsModalPath) { Get-Content -LiteralPath $browserSettingsModalPath -Raw -Encoding UTF8 } else { "" }
   $quickLaunchModalText = if (Test-Path $quickLaunchModalPath) { Get-Content -LiteralPath $quickLaunchModalPath -Raw -Encoding UTF8 } else { "" }
   $coreManagementText = if (Test-Path $coreManagementPath) { Get-Content -LiteralPath $coreManagementPath -Raw -Encoding UTF8 } else { "" }
+  $proxyPoolText = if (Test-Path $proxyPoolPath) { Get-Content -LiteralPath $proxyPoolPath -Raw -Encoding UTF8 } else { "" }
 
   foreach ($token in @("export function messageFromUnknownError(error: unknown", "error instanceof Error", "typeof error === 'string'", "return fallback")) {
     if ($sharedErrorText -notmatch [regex]::Escape($token)) {
@@ -1079,7 +1082,8 @@ function Test-UiErrorBoundaryContract {
       @{ name = "BrowserListPage"; text = $browserListText },
       @{ name = "BrowserEditPage"; text = $browserEditText },
       @{ name = "BrowserSettingsModal"; text = $browserSettingsModalText },
-      @{ name = "CoreManagementPage"; text = $coreManagementText }
+      @{ name = "CoreManagementPage"; text = $coreManagementText },
+      @{ name = "ProxyPoolPage"; text = $proxyPoolText }
     )) {
     if ($textAndName.text -notmatch [regex]::Escape("messageFromUnknownError")) {
       $failures += "$($textAndName.name) missing shared unknown-error helper usage"
@@ -1150,13 +1154,15 @@ function Test-UiErrorBoundaryContract {
       @{ name = "BrowserEditPage"; text = $browserEditText },
       @{ name = "BrowserSettingsModal"; text = $browserSettingsModalText },
       @{ name = "QuickLaunchModal"; text = $quickLaunchModalText },
-      @{ name = "CoreManagementPage"; text = $coreManagementText }
+      @{ name = "CoreManagementPage"; text = $coreManagementText },
+      @{ name = "ProxyPoolPage"; text = $proxyPoolText }
     )) {
     foreach ($patternAndReason in @(
         @{ pattern = "(?<!\.)\bcatch\s*\([^)]*:\s*any\b"; reason = "typed any catch" },
-        @{ pattern = "(?<!\.)\bcatch\s*\((?!\s*error\s*:\s*unknown\s*\))"; reason = "selected catch must use explicit error: unknown" },
+        @{ pattern = "(?<!\.)\bcatch\s*\((?!\s*[A-Za-z_$][A-Za-z0-9_$]*\s*:\s*unknown\s*\))"; reason = "selected catch must use explicit unknown type" },
         @{ pattern = "\bas\s+any\b"; reason = "as any cast" },
-        @{ pattern = "Record\s*<\s*string\s*,\s*any\s*>"; reason = "Record<string, any>" }
+        @{ pattern = "Record\s*<\s*string\s*,\s*any\s*>"; reason = "Record<string, any>" },
+        @{ pattern = "\[\s*key\s*:\s*string\s*\]\s*:\s*any\b"; reason = "string index any" }
       )) {
       if ($textAndName.text -match $patternAndReason.pattern) {
         $failures += "$($textAndName.name) still has weak UI error boundary marker: $($patternAndReason.reason)"
@@ -1173,7 +1179,7 @@ function Test-UiErrorBoundaryContract {
   if ($failures.Count -gt 0) {
     return New-LocalGateResult "ui_error_boundary_contract" "missing_coverage" "failed" "M4.8 selected UI error boundary source contract is incomplete" $failures
   }
-  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, and Core management UI error boundaries use unknown guards; legacy pages remain separate work" @()
+  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, Core management, and Proxy pool UI error boundaries use unknown guards; legacy pages remain separate work" @()
 }
 
 function Test-RuntimeAdapterOperatorContract {
@@ -1528,7 +1534,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v23"
+  schemaVersion = "m4_acceptance_gate_v24"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1577,7 +1583,7 @@ $report = [ordered]@{
     "Monitor facade contract is source-level evidence only; it routes EventMonitor runtime subscriptions and event-log history calls through typed desktop service wrappers without removing the transitional bridge.",
     "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
     "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
-    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, and Core management surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
+    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, Core management, and Proxy pool surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

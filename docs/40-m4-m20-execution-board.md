@@ -419,3 +419,13 @@ Status: started 2026-06-12.
 2. Update `CoreManagementPage` so open path, scan, save/delete core, set default, download start, and settings save errors use `catch (error: unknown)` with `messageFromUnknownError`.
 3. Extend M4 acceptance gate to v23 by adding Core management to `ui_error_boundary_contract`.
 4. Keep this evidence scoped to Core management source-level UI error boundaries only; it does not prove ProxyPoolPage or every legacy UI any-catch is complete.
+
+## Thirty-Fifth Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Continue M4.8 UI error boundary shrink on Proxy pool.
+2. Update `ProxyPoolPage` so source refresh, batch/single delete, proxy save, URL fetch fallback, subscription import, parse, import confirm, and name repair errors use explicit `unknown` guards with `messageFromUnknownError`.
+3. Narrow the local `ClashProxy` string index signature from `any` to `unknown`.
+4. Extend M4 acceptance gate to v24 by adding Proxy pool to `ui_error_boundary_contract` and checking selected files for `[key: string]: any` regressions.
+5. Keep this evidence scoped to selected source-level UI error boundaries only; it does not prove all generic any usage or external evidence is complete.

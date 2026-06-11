@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Switch, Table, Textarea, toast } from '../../../shared/components'
 import type { SortOrder, TableColumn } from '../../../shared/components/Table'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { BrowserProxy, ProxyIPHealthResult } from '../types'
 import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, fetchSubscriptionImportFromURL, fixBrowserProxyNames } from '../api'
 import { desktopRuntimeListen } from '../../../services/desktop'
@@ -36,7 +37,7 @@ interface ClashProxy {
   type: string
   server: string
   port: number
-  [key: string]: any
+  [key: string]: unknown
 }
 
 type ProxyImportMode = 'clash' | 'subscription' | 'direct'
@@ -252,7 +253,7 @@ function parseClashImportText(raw: string): ClashProxy[] {
       if (proxies) {
         return proxies
       }
-    } catch (error) {
+    } catch (error: unknown) {
       lastError = error
     }
   }
@@ -991,9 +992,9 @@ export function ProxyPoolPage() {
         toast.success(`订阅刷新成功：${meta.sourceUrl}（${refreshedSourceProxies.length} 条）`)
       }
       return true
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (!silent) {
-        toast.error(error?.message || '订阅刷新失败')
+        toast.error(messageFromUnknownError(error, '订阅刷新失败'))
       }
       return false
     } finally {
@@ -1162,8 +1163,8 @@ export function ProxyPoolPage() {
       await saveProxies(newProxies)
       toast.success(`已删除 ${selectedIds.size} 个代理`)
       setSelectedIds(new Set())
-    } catch (error: any) {
-      toast.error(error?.message || '删除失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除失败'))
     }
   }
 
@@ -1476,8 +1477,8 @@ export function ProxyPoolPage() {
       await saveProxies(newProxies)
       setEditModalOpen(false)
       toast.success('代理已更新')
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -1495,8 +1496,8 @@ export function ProxyPoolPage() {
       await saveProxies(newProxies)
       setSelectedIds(prev => { const next = new Set(prev); next.delete(deletingId); return next })
       toast.success('代理已删除')
-    } catch (error: any) {
-      toast.error(error?.message || '删除失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除失败'))
     }
     setDeletingId(null)
   }
@@ -1590,19 +1591,19 @@ export function ProxyPoolPage() {
       }
 
       toast.success(`URL 获取成功，检测到 ${Math.max(0, Number(result?.proxyCount || 0))} 个代理`)
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (importMode === 'clash') {
         try {
           await importSubscriptionURL(targetURL)
           return
-        } catch (fallbackError: any) {
+        } catch (fallbackError: unknown) {
           setImportResolvedUrl('')
-          toast.error(fallbackError?.message || error?.message || 'URL 获取失败')
+          toast.error(messageFromUnknownError(fallbackError, messageFromUnknownError(error, 'URL 获取失败')))
           return
         }
       }
       setImportResolvedUrl('')
-      toast.error(error?.message || 'URL 获取失败')
+      toast.error(messageFromUnknownError(error, 'URL 获取失败'))
     } finally {
       setFetchingImportUrl(false)
     }
@@ -1618,8 +1619,8 @@ export function ProxyPoolPage() {
       setFetchingImportUrl(true)
       try {
         await importSubscriptionURL(targetURL)
-      } catch (error: any) {
-        toast.error(error?.message || '订阅导入失败')
+      } catch (error: unknown) {
+        toast.error(messageFromUnknownError(error, '订阅导入失败'))
       } finally {
         setFetchingImportUrl(false)
       }
@@ -1640,8 +1641,8 @@ export function ProxyPoolPage() {
       setPreviewList(preview)
       setImportModalOpen(false)
       setPreviewModalOpen(true)
-    } catch (error: any) {
-      toast.error(`解析失败: ${error?.message || '未知错误'}`)
+    } catch (error: unknown) {
+      toast.error(`解析失败: ${messageFromUnknownError(error, '未知错误')}`)
     }
   }
 
@@ -1695,8 +1696,8 @@ export function ProxyPoolPage() {
       setPreviewList([])
       setRemovedPreviewProxyNames([])
       toast.success(`成功导入 ${newProxies.length} 个代理`)
-    } catch (error: any) {
-      toast.error(error?.message || '导入失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '导入失败'))
     } finally {
       setImporting(false)
     }
@@ -1712,8 +1713,8 @@ export function ProxyPoolPage() {
       }
       await loadProxies()
       toast.success(result.message || `已修复 ${result.fixed} 个代理名称`)
-    } catch (error: any) {
-      toast.error(error?.message || '代理名称修复失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '代理名称修复失败'))
     } finally {
       setFixingNames(false)
     }
