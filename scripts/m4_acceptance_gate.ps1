@@ -432,18 +432,20 @@ function Test-BrowserPayloadSchemaContract {
     }
   }
 
-  foreach ($token in @("normalizeBrowserRuntimeEventPayload", "BrowserRuntimeEventPayload", "profile_id", "lastError")) {
+  foreach ($token in @("normalizeBrowserRuntimeEventPayload", "BrowserRuntimeEventPayload", "profile_id", "lastError", "onBrowserInstanceRuntimeEvents")) {
     if ($apiText -notmatch [regex]::Escape($token)) {
       $failures += "browser runtime event normalizer missing marker: $token"
     }
   }
 
-  foreach ($token in @("normalizeBrowserRuntimeEventPayload")) {
-    if ($listText -notmatch [regex]::Escape($token)) {
-      $failures += "BrowserListPage does not use browser runtime payload normalizer"
-    }
-    if ($detailText -notmatch [regex]::Escape($token)) {
-      $failures += "BrowserDetailPage does not use browser runtime payload normalizer"
+  foreach ($textAndName in @(
+      [pscustomobject]@{ text = $listText; name = "BrowserListPage" },
+      [pscustomobject]@{ text = $detailText; name = "BrowserDetailPage" }
+    )) {
+    $usesPageNormalizer = $textAndName.text -match [regex]::Escape("normalizeBrowserRuntimeEventPayload")
+    $usesRuntimeFacade = $textAndName.text -match [regex]::Escape("onBrowserInstanceRuntimeEvents")
+    if (-not ($usesPageNormalizer -or $usesRuntimeFacade)) {
+      $failures += "$($textAndName.name) does not use browser runtime payload normalizer or typed runtime facade"
     }
   }
 
@@ -818,6 +820,70 @@ function Test-MonitorFacadeContract {
   return New-LocalGateResult "monitor_facade_contract" "passed" "passed" "M4.8 EventMonitor runtime subscriptions and event-log history calls use typed desktop service wrappers instead of direct Wails/runtime access" @()
 }
 
+function Test-BrowserRuntimeFacadeContract {
+  $browserApiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $browserTypesPath = Join-Path $projectRoot "src\modules\browser\types.ts"
+  $browserListPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserListPage.tsx"
+  $browserDetailPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserDetailPage.tsx"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($browserApiPath, $browserTypesPath, $browserListPath, $browserDetailPath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $browserApiText = if (Test-Path $browserApiPath) { Get-Content -LiteralPath $browserApiPath -Raw -Encoding UTF8 } else { "" }
+  $browserTypesText = if (Test-Path $browserTypesPath) { Get-Content -LiteralPath $browserTypesPath -Raw -Encoding UTF8 } else { "" }
+  $browserListText = if (Test-Path $browserListPath) { Get-Content -LiteralPath $browserListPath -Raw -Encoding UTF8 } else { "" }
+  $browserDetailText = if (Test-Path $browserDetailPath) { Get-Content -LiteralPath $browserDetailPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("desktopRuntimeListen", "onBrowserInstanceRuntimeEvents", "BROWSER_INSTANCE_RUNTIME_EVENT_NAMES", "normalizeBrowserRuntimeEventPayload")) {
+    if ($browserApiText -notmatch [regex]::Escape($token)) {
+      $failures += "Browser API missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("import { EventsOn } from '../../wailsjs/runtime'", "EventsOn(")) {
+    if ($browserApiText -match [regex]::Escape($token)) {
+      $failures += "Browser API still uses raw Wails runtime marker: $token"
+    }
+  }
+
+  foreach ($token in @("BrowserInstanceRuntimeEventName", "BrowserInstanceRuntimeEvent", "BrowserRuntimeEventPayload", "rawPayload")) {
+    if ($browserTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "Browser types missing runtime event contract marker: $token"
+    }
+  }
+
+  foreach ($pathAndText in @(
+      @{ name = "BrowserListPage"; text = $browserListText },
+      @{ name = "BrowserDetailPage"; text = $browserDetailText }
+    )) {
+    if ($pathAndText.text -notmatch [regex]::Escape("onBrowserInstanceRuntimeEvents")) {
+      $failures += "$($pathAndText.name) does not use browser runtime facade"
+    }
+    foreach ($token in @("../../../wailsjs/runtime/runtime", "../../wailsjs/runtime", "import { EventsOn }", "EventsOn(")) {
+      if ($pathAndText.text -match [regex]::Escape($token)) {
+        $failures += "$($pathAndText.name) still uses raw Wails runtime marker: $token"
+      }
+    }
+  }
+
+  foreach ($token in @("m4_browser_runtime_facade", "M4 Browser Runtime")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing browser runtime facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_runtime_facade_contract" "missing_coverage" "failed" "M4.8 browser runtime facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_runtime_facade_contract" "passed" "passed" "M4.8 Browser List/Detail runtime subscriptions use browser module facade and desktopRuntimeListen instead of direct Wails EventsOn imports" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -1143,6 +1209,7 @@ $gates += Test-BehaviorPresetFacadeContract
 $gates += Test-AutomationFacadeContract
 $gates += Test-AppShellFacadeContract
 $gates += Test-MonitorFacadeContract
+$gates += Test-BrowserRuntimeFacadeContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -1167,7 +1234,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v16"
+  schemaVersion = "m4_acceptance_gate_v17"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1214,6 +1281,7 @@ $report = [ordered]@{
     "Automation facade contract is source-level evidence only; it routes AutomationPage scheduler/rule calls through the browser module API facade without removing every browser/app shell/monitor bridge compatibility path.",
     "App shell facade contract is source-level evidence only; it routes close confirmation, notification subscriptions, environment lookup, tray/minimize, and quit actions through typed desktop service wrappers without removing the transitional bridge.",
     "Monitor facade contract is source-level evidence only; it routes EventMonitor runtime subscriptions and event-log history calls through typed desktop service wrappers without removing the transitional bridge.",
+    "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

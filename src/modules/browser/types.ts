@@ -40,6 +40,18 @@ export interface BrowserRuntimeEventPayload {
   error?: string
 }
 
+export type BrowserInstanceRuntimeEventName =
+  | 'browser:instance:started'
+  | 'browser:instance:updated'
+  | 'browser:instance:stopped'
+  | 'browser:instance:crashed'
+
+export interface BrowserInstanceRuntimeEvent {
+  eventName: BrowserInstanceRuntimeEventName
+  payload: BrowserRuntimeEventPayload
+  rawPayload: unknown
+}
+
 export interface BrowserProfileInput {
   profileName: string
   userDataDir: string

@@ -8,7 +8,6 @@ import { InstanceFilterBar, EMPTY_FILTERS } from '../components/InstanceFilterBa
 import type { InstanceFilters } from '../components/InstanceFilterBar'
 import { KeywordsModal } from '../components/KeywordsModal'
 import { RecordingPanel } from '../components/RecordingPanel'
-import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
 import {
   copyBrowserProfile,
@@ -30,7 +29,7 @@ import {
   validateBrowserCorePath,
   // validateProxyConfig,
   fetchRecordingStatus,
-  normalizeBrowserRuntimeEventPayload,
+  onBrowserInstanceRuntimeEvents,
   startRecording,
   stopRecording,
 } from '../api'
@@ -425,8 +424,7 @@ export function BrowserListPage() {
     fetchBrowserProxies().then(setProxies)
     fetchBrowserCores().then(setCores)
 
-    const clearPendingProfile = (payload: unknown) => {
-      const { profileId } = normalizeBrowserRuntimeEventPayload(payload)
+    const clearPendingProfile = (profileId: string) => {
       if (profileId) {
         updatePendingIds(setStartingIds, profileId, false)
         updatePendingIds(setStoppingIds, profileId, false)
@@ -434,22 +432,14 @@ export function BrowserListPage() {
     }
 
     // 监听浏览器实例生命周期事件，自动更新状态
-    const offStarted = EventsOn('browser:instance:started', (payload: unknown) => {
-      clearPendingProfile(payload)
-      void loadProfiles({ silent: true, syncRuntimeState: true })
-      void syncRecordingProfiles()
-    })
-    const offUpdated = EventsOn('browser:instance:updated', () => {
-      void loadProfiles({ silent: true, syncRuntimeState: true })
-      void syncRecordingProfiles()
-    })
-    const offStopped = EventsOn('browser:instance:stopped', (payload: unknown) => {
-      clearPendingProfile(payload)
-      void loadProfiles({ silent: true, syncRuntimeState: true })
-      void syncRecordingProfiles()
-    })
-    const offCrashed = EventsOn('browser:instance:crashed', (payload: unknown) => {
-      clearPendingProfile(payload)
+    const offLifecycle = onBrowserInstanceRuntimeEvents(({ eventName, payload }) => {
+      if (
+        eventName === 'browser:instance:started' ||
+        eventName === 'browser:instance:stopped' ||
+        eventName === 'browser:instance:crashed'
+      ) {
+        clearPendingProfile(payload.profileId)
+      }
       void loadProfiles({ silent: true, syncRuntimeState: true })
       void syncRecordingProfiles()
     })
@@ -462,10 +452,7 @@ export function BrowserListPage() {
 
     return () => {
       window.clearInterval(timer)
-      offStarted?.()
-      offUpdated?.()
-      offStopped?.()
-      offCrashed?.()
+      offLifecycle()
     }
   }, [])
 

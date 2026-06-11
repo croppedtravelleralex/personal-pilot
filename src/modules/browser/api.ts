@@ -1,4 +1,4 @@
-import { EventsOn } from '../../wailsjs/runtime'
+import { desktopRuntimeListen } from '../../services/desktop'
 import type {
   BehaviorExecutionPermissionMode, BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings,
   BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended,
@@ -6,11 +6,14 @@ import type {
   ProxyIPHealthResult, ActiveRecordingStatus, Recording, RecordingDetailPage, RecordingEventStats,
   RecordingSummary, RecordedEvent, NaturalLanguageAction, NaturalLanguageTaskEvent,
   PlaybackEventPayload, PlaybackProgressPayload, RecordingExportBundle, VariationConfig,
+  BrowserInstanceRuntimeEvent,
+  BrowserInstanceRuntimeEventName,
   BrowserRuntimeEventPayload,
 } from './types'
 import { DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE } from './types'
 
 type Unsubscribe = () => void
+type BrowserInstanceRuntimeEventHandler = (event: BrowserInstanceRuntimeEvent) => void
 type ProxyTestResult = { proxyId: string; ok: boolean; latencyMs: number; error: string }
 type ProxyValidationResult = { supported: boolean; errorMsg: string }
 type ProxyNameFixResult = { ok: boolean; fixed: number; total: number; message?: string; error?: string }
@@ -201,6 +204,13 @@ type BrowserNativeBindings = Partial<{
   LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>
 }>
 
+const BROWSER_INSTANCE_RUNTIME_EVENT_NAMES: BrowserInstanceRuntimeEventName[] = [
+  'browser:instance:started',
+  'browser:instance:updated',
+  'browser:instance:stopped',
+  'browser:instance:crashed',
+]
+
 const getBindings = async () => {
   try {
     return await import('../../wailsjs/go/main/App') as BrowserNativeBindings
@@ -213,14 +223,8 @@ function getWindowGoApp(): BrowserNativeBindings | null {
   return (window as BrowserNativeWindow).go?.main?.App ?? null
 }
 
-function noop() {}
-
 function onRuntimeEvent<T>(eventName: string, callback: (payload: T) => void): Unsubscribe {
-  try {
-    return EventsOn(eventName, (payload: T) => callback(payload))
-  } catch {
-    return noop
-  }
+  return desktopRuntimeListen(eventName, (payload: T) => callback(payload))
 }
 
 function combineUnsubscribes(offs: Unsubscribe[]): Unsubscribe {
@@ -298,6 +302,18 @@ export function normalizeBrowserRuntimeEventPayload(payload: unknown): BrowserRu
   if (running !== undefined) normalized.running = running
   if (reused !== undefined) normalized.reused = reused
   return normalized
+}
+
+export function onBrowserInstanceRuntimeEvents(
+  handler: BrowserInstanceRuntimeEventHandler,
+): Unsubscribe {
+  return combineUnsubscribes(BROWSER_INSTANCE_RUNTIME_EVENT_NAMES.map((eventName) => (
+    onRuntimeEvent(eventName, (payload: unknown) => handler({
+      eventName,
+      payload: normalizeBrowserRuntimeEventPayload(payload),
+      rawPayload: payload,
+    }))
+  )))
 }
 
 let mockProfiles: BrowserProfile[] = [

@@ -35,6 +35,11 @@ Current correction 2026-06-11:
 - Evidence ops: M4 Monitor facade 已新增 `scripts/m4_monitor_facade_gate.ps1`、`m4-monitor-facade` report kind、Dashboard `M4 Monitor` row 和 M4 gate v16 `monitor_facade_contract`；最新 M4 gate 仍为 `passed_with_expected_external_blockers`，`passed=15`、`expectedBlocked=4`、`failed=0`。
 - UI consolidation: 上表关于 2026-05-27 `monitor` 已完全收口与 `300ms` debounce/stale-result 的表述不再作为 live truth；当前代码事实是 2026-06-11 才把 `EventMonitorPage` 实时订阅和 event-log history CRUD 改走 `src/services/desktop.ts` typed wrappers，并修正 paused 状态闭包。剩余 facade shrink 主要在 browser runtime/workbench/core bridge API 和过渡 `tauriWailsBridge`。
 
+Current correction 2026-06-12:
+
+- Evidence ops: M4 Browser runtime facade 已新增 `scripts/m4_browser_runtime_facade_gate.ps1`、`m4-browser-runtime-facade` report kind、Dashboard `M4 Browser Runtime` row 和 M4 gate v17 `browser_runtime_facade_contract`；最新 M4 gate 仍为 `passed_with_expected_external_blockers`，`passed=16`、`expectedBlocked=4`、`failed=0`。
+- UI consolidation: `BrowserListPage` / `BrowserDetailPage` 的 browser instance runtime 事件订阅已改走 `src/modules/browser/api.ts` 的 `onBrowserInstanceRuntimeEvents`，不再直接 import/call Wails `EventsOn`；browser runtime payload normalizer 仍在 API facade 内复用。剩余 facade shrink 主要在 settings/core/proxy/workbench bridge API 和过渡 `tauriWailsBridge`。
+
 ## 固定风险
 
 - 把 `80` declared controls 误报成 `80` runtime-applied fields。

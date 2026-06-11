@@ -4,7 +4,6 @@ import { Copy, Globe, Play, RefreshCw, RotateCcw, Square } from 'lucide-react'
 import { Badge, Button, Card, Input, Table, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserProfile, BrowserTab } from '../types'
-import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import {
   fetchBrowserProfiles,
   fetchBrowserTabs,
@@ -13,7 +12,7 @@ import {
   restartBrowserInstance,
   startBrowserInstance,
   stopBrowserInstance,
-  normalizeBrowserRuntimeEventPayload,
+  onBrowserInstanceRuntimeEvents,
 } from '../api'
 import { CookieManagerCard } from '../components/CookieManagerCard'
 import { SnapshotTab } from '../components/SnapshotTab'
@@ -66,31 +65,22 @@ export function BrowserDetailPage() {
   useEffect(() => {
     if (!id) return
 
-    const handleRuntimeChange = (payload: unknown) => {
-      const eventPayload = normalizeBrowserRuntimeEventPayload(payload)
-      if (eventPayload.profileId !== id) return
+    const offLifecycle = onBrowserInstanceRuntimeEvents(({ payload, rawPayload }) => {
+      if (payload.profileId !== id) return
 
       setPendingAction(null)
       void loadProfile()
 
-      if (typeof payload === 'string' || eventPayload.error) {
+      if (typeof rawPayload === 'string' || payload.error) {
         setTabs([])
         return
       }
 
       void loadTabs()
-    }
-
-    const offStarted = EventsOn('browser:instance:started', handleRuntimeChange)
-    const offUpdated = EventsOn('browser:instance:updated', handleRuntimeChange)
-    const offStopped = EventsOn('browser:instance:stopped', handleRuntimeChange)
-    const offCrashed = EventsOn('browser:instance:crashed', handleRuntimeChange)
+    })
 
     return () => {
-      offStarted?.()
-      offUpdated?.()
-      offStopped?.()
-      offCrashed?.()
+      offLifecycle()
     }
   }, [id])
 

@@ -1,6 +1,6 @@
 # M4-M20 Execution Board
 
-Updated: 2026-06-11 (Asia/Shanghai)
+Updated: 2026-06-12 (Asia/Shanghai)
 
 ## Live Truth Boundary
 
@@ -345,3 +345,14 @@ Status: started 2026-06-11.
 5. Extend M4 acceptance gate to v16 with `monitor_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
 6. Keep this evidence scoped to EventMonitor source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
 7. Continue next with browser runtime/workbench/core low-frequency bridge payloads or a higher-value external evidence blocker if a real target environment is available.
+
+## Twenty-Eighth Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Advance M4.8 by routing Browser List/Detail `browser:instance:*` runtime subscriptions through `src/modules/browser/api.ts` instead of direct Wails `EventsOn` imports.
+2. Add `BrowserInstanceRuntimeEventName` / `BrowserInstanceRuntimeEvent` and expose `onBrowserInstanceRuntimeEvents`, with payload normalization kept inside the browser module API facade.
+3. Add `scripts/m4_browser_runtime_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Browser Runtime` row for `m4_browser_runtime_facade` reports.
+4. Extend M4 acceptance gate to v17 with `browser_runtime_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
+5. Keep this evidence scoped to Browser List/Detail runtime subscription source-level facade usage only; it does not prove `tauriWailsBridge` removal, settings/core/proxy/workbench bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+6. Continue next with settings/core/proxy/workbench bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.
