@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { isValidElement, useEffect, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
@@ -1407,6 +1407,24 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
+type MarkdownCodeElementProps = {
+  className?: string
+  children?: ReactNode
+}
+
+function readMarkdownCodeBlock(children: ReactNode) {
+  const child = Array.isArray(children) ? children[0] : children
+  if (!isValidElement<MarkdownCodeElementProps>(child)) {
+    return { lang: '', codeText: '' }
+  }
+
+  const className = typeof child.props.className === 'string' ? child.props.className : ''
+  return {
+    lang: className.replace('language-', ''),
+    codeText: child.props.children ?? '',
+  }
+}
+
 function MarkdownContent({ content }: { content: string }) {
   return (
     <ReactMarkdown
@@ -1455,9 +1473,7 @@ function MarkdownContent({ content }: { content: string }) {
           )
         },
         pre: ({ children }) => {
-          const codeEl = (children as any)?.props
-          const lang = codeEl?.className?.replace('language-', '') || ''
-          const codeText = codeEl?.children || ''
+          const { lang, codeText } = readMarkdownCodeBlock(children)
           return (
             <div className="my-4 rounded-lg overflow-hidden border border-[var(--color-border-default)]">
               <div className="flex items-center justify-between px-4 py-2 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-muted)]">

@@ -1,4 +1,5 @@
 import type { DashboardStats } from './types'
+import { messageFromUnknownError } from '../../shared/errors'
 import {
   collectValidationReport,
   generateDesktopCdKeys,
@@ -35,8 +36,8 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
       maxProfileLimit,
       appVersion: data?.appVersion ?? 'unknown',
     }
-  } catch (e) {
-    console.error('fetchDashboardStats error:', e)
+  } catch (error: unknown) {
+    console.error('fetchDashboardStats error:', error)
   }
 
   return {
@@ -53,8 +54,8 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
 export async function fetchEvidenceReportHistory(): Promise<DesktopEvidenceReportHistory> {
   try {
     return await listEvidenceReports()
-  } catch (e) {
-    console.error('fetchEvidenceReportHistory error:', e)
+  } catch (error: unknown) {
+    console.error('fetchEvidenceReportHistory error:', error)
     return {
       generatedAt: new Date().toISOString(),
       reportCount: 0,
@@ -67,8 +68,8 @@ export async function fetchEvidenceReportHistory(): Promise<DesktopEvidenceRepor
 export async function fetchReleaseSmokeContract(): Promise<DesktopReleaseSmokeContract | null> {
   try {
     return await readReleaseSmokeContract()
-  } catch (e) {
-    console.error('fetchReleaseSmokeContract error:', e)
+  } catch (error: unknown) {
+    console.error('fetchReleaseSmokeContract error:', error)
     return null
   }
 }
@@ -82,8 +83,8 @@ export async function collectDesktopWebViewEvidence(
 export async function reloadConfig(): Promise<void> {
   try {
     await reloadDesktopConfig()
-  } catch (e) {
-    console.error('reloadConfig error:', e)
+  } catch (error: unknown) {
+    console.error('reloadConfig error:', error)
   }
 }
 
@@ -91,7 +92,7 @@ export async function generateCDKeys(count: number): Promise<{ success: boolean,
   try {
     const keys = await generateDesktopCdKeys(count)
     return { success: true, keys: keys || [] }
-  } catch (e: any) {
-    return { success: false, keys: [], message: e.message || '生成失败' }
+  } catch (error: unknown) {
+    return { success: false, keys: [], message: messageFromUnknownError(error, '生成失败') }
   }
 }

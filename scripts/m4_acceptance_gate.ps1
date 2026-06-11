@@ -1004,6 +1004,100 @@ function Test-RuntimeFacadeContract {
   return New-LocalGateResult "runtime_facade_contract" "passed" "passed" "M4.8 selected Settings/Core/Proxy/Docs runtime EventsOn/EventsOff/BrowserOpenURL calls use typed desktop facade wrappers; tauriWailsBridge remains transitional" @()
 }
 
+function Test-UiErrorBoundaryContract {
+  $sharedErrorPath = Join-Path $projectRoot "src\shared\errors.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
+  $settingsPagePath = Join-Path $projectRoot "src\modules\settings\SettingsPage.tsx"
+  $automationPagePath = Join-Path $projectRoot "src\modules\browser\pages\AutomationPage.tsx"
+  $naturalLanguageTaskPath = Join-Path $projectRoot "src\modules\browser\components\NaturalLanguageTask.tsx"
+  $tagManagementPath = Join-Path $projectRoot "src\modules\browser\pages\TagManagementPage.tsx"
+  $recordingDetailPath = Join-Path $projectRoot "src\modules\browser\components\RecordingDetailModal.tsx"
+  $launchDocsPath = Join-Path $projectRoot "src\modules\browser\pages\LaunchApiDocsPage.tsx"
+  $failures = @()
+
+  $paths = @(
+    $sharedErrorPath,
+    $dashboardPagePath,
+    $dashboardApiPath,
+    $settingsPagePath,
+    $automationPagePath,
+    $naturalLanguageTaskPath,
+    $tagManagementPath,
+    $recordingDetailPath,
+    $launchDocsPath
+  )
+
+  foreach ($path in $paths) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $sharedErrorText = if (Test-Path $sharedErrorPath) { Get-Content -LiteralPath $sharedErrorPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardApiText = if (Test-Path $dashboardApiPath) { Get-Content -LiteralPath $dashboardApiPath -Raw -Encoding UTF8 } else { "" }
+  $settingsText = if (Test-Path $settingsPagePath) { Get-Content -LiteralPath $settingsPagePath -Raw -Encoding UTF8 } else { "" }
+  $automationText = if (Test-Path $automationPagePath) { Get-Content -LiteralPath $automationPagePath -Raw -Encoding UTF8 } else { "" }
+  $naturalLanguageText = if (Test-Path $naturalLanguageTaskPath) { Get-Content -LiteralPath $naturalLanguageTaskPath -Raw -Encoding UTF8 } else { "" }
+  $tagText = if (Test-Path $tagManagementPath) { Get-Content -LiteralPath $tagManagementPath -Raw -Encoding UTF8 } else { "" }
+  $recordingDetailText = if (Test-Path $recordingDetailPath) { Get-Content -LiteralPath $recordingDetailPath -Raw -Encoding UTF8 } else { "" }
+  $launchDocsText = if (Test-Path $launchDocsPath) { Get-Content -LiteralPath $launchDocsPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("export function messageFromUnknownError(error: unknown", "error instanceof Error", "typeof error === 'string'", "return fallback")) {
+    if ($sharedErrorText -notmatch [regex]::Escape($token)) {
+      $failures += "shared error helper missing marker: $token"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "DashboardPage"; text = $dashboardPageText },
+      @{ name = "DashboardApi"; text = $dashboardApiText },
+      @{ name = "SettingsPage"; text = $settingsText },
+      @{ name = "AutomationPage"; text = $automationText },
+      @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
+      @{ name = "TagManagementPage"; text = $tagText },
+      @{ name = "RecordingDetailModal"; text = $recordingDetailText }
+    )) {
+    if ($textAndName.text -notmatch [regex]::Escape("messageFromUnknownError")) {
+      $failures += "$($textAndName.name) missing shared unknown-error helper usage"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "DashboardPage"; text = $dashboardPageText },
+      @{ name = "DashboardApi"; text = $dashboardApiText },
+      @{ name = "SettingsPage"; text = $settingsText },
+      @{ name = "AutomationPage"; text = $automationText },
+      @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
+      @{ name = "TagManagementPage"; text = $tagText },
+      @{ name = "RecordingDetailModal"; text = $recordingDetailText },
+      @{ name = "LaunchApiDocsPage"; text = $launchDocsText }
+    )) {
+    foreach ($patternAndReason in @(
+        @{ pattern = "(?<!\.)\bcatch\s*\([^)]*:\s*any\b"; reason = "typed any catch" },
+        @{ pattern = "(?<!\.)\bcatch\s*\((?!\s*error\s*:\s*unknown\s*\))"; reason = "selected catch must use explicit error: unknown" },
+        @{ pattern = "\bas\s+any\b"; reason = "as any cast" },
+        @{ pattern = "Record\s*<\s*string\s*,\s*any\s*>"; reason = "Record<string, any>" }
+      )) {
+      if ($textAndName.text -match $patternAndReason.pattern) {
+        $failures += "$($textAndName.name) still has weak UI error boundary marker: $($patternAndReason.reason)"
+      }
+    }
+  }
+
+  foreach ($token in @("readMarkdownCodeBlock", "isValidElement<MarkdownCodeElementProps>")) {
+    if ($launchDocsText -notmatch [regex]::Escape($token)) {
+      $failures += "LaunchApiDocsPage missing typed markdown code block marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "ui_error_boundary_contract" "missing_coverage" "failed" "M4.8 selected UI error boundary source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording/Docs UI error boundaries use unknown guards; legacy pages remain separate work" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -1331,6 +1425,7 @@ $gates += Test-AppShellFacadeContract
 $gates += Test-MonitorFacadeContract
 $gates += Test-BrowserRuntimeFacadeContract
 $gates += Test-RuntimeFacadeContract
+$gates += Test-UiErrorBoundaryContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -1355,7 +1450,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v20"
+  schemaVersion = "m4_acceptance_gate_v21"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1404,6 +1499,7 @@ $report = [ordered]@{
     "Monitor facade contract is source-level evidence only; it routes EventMonitor runtime subscriptions and event-log history calls through typed desktop service wrappers without removing the transitional bridge.",
     "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
     "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
+    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording/Docs surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, Trash2, MousePointer, Keyboard, ScrollText, Clock, Monitor, Scissors } from 'lucide-react'
 import { Button, Input, Select, toast } from '../../../shared/components'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { RecordingDetailPage, RecordingEventStats } from '../types'
 import { fetchRecordingDetail, trimRecording } from '../api'
 
@@ -12,10 +13,6 @@ interface RecordingDetailModalProps {
 }
 
 const EVENT_PAGE_SIZES = [50, 100, 200]
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged }: RecordingDetailModalProps) {
   const [detail, setDetail] = useState<RecordingDetailPage | null>(null)
@@ -40,8 +37,8 @@ export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged
         const eventOffset = (eventPage - 1) * eventPageSize
         const nextDetail = await fetchRecordingDetail(recordingId, { eventOffset, eventLimit: eventPageSize })
         if (active) setDetail(nextDetail)
-      } catch (e: any) {
-        if (active) toast.error(`加载录制详情失败: ${e?.message || e}`)
+      } catch (error: unknown) {
+        if (active) toast.error(`加载录制详情失败: ${messageFromUnknownError(error, '未知错误')}`)
       } finally {
         if (active) setLoading(false)
       }
@@ -92,8 +89,8 @@ export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged
       await onChanged?.()
       setTrimOpen(false)
       toast.success('裁剪录制已保存')
-    } catch (e) {
-      toast.error(`裁剪失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`裁剪失败: ${messageFromUnknownError(error, '未知错误')}`)
     } finally {
       setTrimming(false)
     }

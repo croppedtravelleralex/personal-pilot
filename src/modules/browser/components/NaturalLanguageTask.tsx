@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Send, Play, Sparkles } from 'lucide-react'
 import { Button, toast, Textarea } from '../../../shared/components'
+import { messageFromUnknownError } from '../../../shared/errors'
 import { ActionTreeViewer, type ActionNode } from './ActionTreeViewer'
 import { executeNaturalLanguageTask, onNaturalLanguageTaskEvents, planNaturalLanguageTask } from '../api'
 import type { NaturalLanguageAction, NaturalLanguageTaskEvent } from '../types'
@@ -44,9 +45,9 @@ export function NaturalLanguageTask({ profileId, isRunning }: NaturalLanguageTas
       setPlan(nodes)
       setTaskState('idle')
       toast.success(`计划生成成功: ${nodes.length} 个步骤`)
-    } catch (e: any) {
+    } catch (error: unknown) {
       setTaskState('failed')
-      toast.error(`计划生成失败: ${e?.message || e}`)
+      toast.error(`计划生成失败: ${messageFromUnknownError(error, '未知错误')}`)
     } finally {
       setPlanning(false)
     }
@@ -152,11 +153,11 @@ export function NaturalLanguageTask({ profileId, isRunning }: NaturalLanguageTas
         setTaskState('completed')
         setExecuting(false)
       }
-    } catch (e: any) {
+    } catch (error: unknown) {
       if (isCurrentRun() && !finishedByEvent) {
         markFailed()
         setTaskState('failed')
-        toast.error(`执行失败: ${e?.message || e}`)
+        toast.error(`执行失败: ${messageFromUnknownError(error, '未知错误')}`)
       }
       setExecuting(false)
     } finally {

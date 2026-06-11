@@ -389,3 +389,13 @@ Status: started 2026-06-12.
 4. Extend M4 acceptance gate to v20 by checking these report DTO markers and blocking `Promise<unknown>` or direct report casts from returning.
 5. Keep this evidence scoped to source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, every settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
 6. Continue next with deeper settings/core/proxy bridge shrink or real external-evidence tracks when the required environment is available.
+
+## Thirty-Second Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Advance M4.8 by adding a shared UI error helper, `messageFromUnknownError(error: unknown)`, for selected operator surfaces.
+2. Update Dashboard, Dashboard API, Settings, Automation, NaturalLanguageTask, TagManagement, RecordingDetailModal, and Launch API docs so selected error paths no longer rely on `catch (...: any)`, `window as any`, `children as any`, or `Record<string, any>`.
+3. Extend M4 acceptance gate to v21 with `ui_error_boundary_contract`, using regex source checks for weak catch/cast regressions on this selected file set.
+4. Keep this evidence scoped to selected UI error boundary source contracts only; it does not prove all legacy UI any-catches are gone, `tauriWailsBridge` is removed, external provider/proxy/session evidence is passed, or full `450` coverage exists.
+5. Continue next with remaining legacy UI any-catch batches, deeper settings/core/proxy bridge shrink, M6 same-run evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings, Activity, AlertTriangle, CheckCircle2, Clock, ScanSearch } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button, Card, toast } from '../../shared/components'
+import { messageFromUnknownError } from '../../shared/errors'
 import { collectDesktopWebViewEvidence, fetchDashboardStats, fetchEvidenceReportHistory, fetchReleaseSmokeContract, reloadConfig } from './api'
 import type { DashboardStats } from './types'
 import type {
@@ -18,6 +19,10 @@ interface StatCardProps {
   value: string | number
   icon: React.ReactNode
   color: string
+}
+
+type WebkitAudioWindow = Window & {
+  webkitAudioContext?: typeof AudioContext
 }
 
 function StatCard({ title, value, icon, color }: StatCardProps) {
@@ -218,14 +223,15 @@ function collectDesktopWebViewSignals(): DesktopValidationBrowserSignal[] {
       `userAgent=${navigator.userAgent}; platform=${navigator.platform}; language=${navigator.language}; timezone=${timezone}; screen=${window.screen.width}x${window.screen.height}; hardwareConcurrency=${navigator.hardwareConcurrency || 0}`,
       elapsed(),
     ))
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = messageFromUnknownError(error, 'Desktop WebView fingerprint probe failed.')
     signals.push(desktopWebViewSignal(
       'desktop-webview-fingerprint-surface',
       'fingerprint',
       'failed',
       'Desktop WebView fingerprint surface',
-      error?.message || 'Desktop WebView fingerprint probe failed.',
-      `error=${error?.message || String(error)}`,
+      message,
+      `error=${message}`,
       elapsed(),
     ))
   }
@@ -262,20 +268,21 @@ function collectDesktopWebViewSignals(): DesktopValidationBrowserSignal[] {
         elapsed(),
       ))
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = messageFromUnknownError(error, 'Desktop WebView canvas probe failed.')
     signals.push(desktopWebViewSignal(
       'desktop-webview-canvas-render',
       'canvas',
       'failed',
       'Desktop WebView canvas render',
-      error?.message || 'Desktop WebView canvas probe failed.',
-      `error=${error?.message || String(error)}`,
+      message,
+      `error=${message}`,
       elapsed(),
     ))
   }
 
   try {
-    const AudioCtor = window.AudioContext || (window as any).webkitAudioContext
+    const AudioCtor = window.AudioContext || (window as WebkitAudioWindow).webkitAudioContext
     if (!AudioCtor) {
       signals.push(desktopWebViewSignal(
         'desktop-webview-audio-context',
@@ -300,14 +307,15 @@ function collectDesktopWebViewSignals(): DesktopValidationBrowserSignal[] {
         elapsed(),
       ))
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = messageFromUnknownError(error, 'Desktop WebView audio probe failed.')
     signals.push(desktopWebViewSignal(
       'desktop-webview-audio-context',
       'audio',
       'failed',
       'Desktop WebView audio context',
-      error?.message || 'Desktop WebView audio probe failed.',
-      `error=${error?.message || String(error)}`,
+      message,
+      `error=${message}`,
       elapsed(),
     ))
   }
@@ -325,14 +333,15 @@ function collectDesktopWebViewSignals(): DesktopValidationBrowserSignal[] {
       `rtcpPeerConnection=${hasWebRtc}`,
       elapsed(),
     ))
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = messageFromUnknownError(error, 'Desktop WebView WebRTC probe failed.')
     signals.push(desktopWebViewSignal(
       'desktop-webview-webrtc-api',
       'webrtc',
       'failed',
       'Desktop WebView WebRTC API',
-      error?.message || 'Desktop WebView WebRTC probe failed.',
-      `error=${error?.message || String(error)}`,
+      message,
+      `error=${message}`,
       elapsed(),
     ))
   }
@@ -359,14 +368,15 @@ function collectDesktopWebViewSignals(): DesktopValidationBrowserSignal[] {
       `cookieEnabled=${navigator.cookieEnabled}; localStorage=${localStorageAvailable}; sessionStorage=${sessionStorageAvailable}`,
       elapsed(),
     ))
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = messageFromUnknownError(error, 'Desktop WebView storage probe failed.')
     signals.push(desktopWebViewSignal(
       'desktop-webview-storage-scope',
       'leak',
       'failed',
       'Desktop WebView storage scope',
-      error?.message || 'Desktop WebView storage probe failed.',
-      `error=${error?.message || String(error)}`,
+      message,
+      `error=${message}`,
       elapsed(),
     ))
   }
@@ -470,8 +480,8 @@ export function DashboardPage() {
       const report = await collectDesktopWebViewEvidence(collectDesktopWebViewSignals())
       toast.success(`WebView evidence saved: ${report.signals.length} signals`)
       await load()
-    } catch (error: any) {
-      toast.error(error?.message || 'WebView evidence collection failed')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, 'WebView evidence collection failed'))
     } finally {
       setCollectingEvidence(false)
     }

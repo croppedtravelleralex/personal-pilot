@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Bot, Copy, Rocket, Plus, Play, Trash2, Clock, Repeat, Zap, Pause, RefreshCw, AlertCircle } from 'lucide-react'
 import { Button, Card, toast } from '../../../shared/components'
+import { messageFromUnknownError } from '../../../shared/errors'
 import {
   createAutomationRule,
   createSchedulerTask,
@@ -247,7 +248,7 @@ interface RuleTemplate {
   triggerEvent: string
   condition: string
   action: string
-  actionParams: Record<string, any>
+  actionParams: Record<string, unknown>
   cooldown: string
 }
 
@@ -678,8 +679,8 @@ export function AutomationPage() {
       })
       toast.success(`任务「${tpl.name}」已创建`)
       await refreshTasks()
-    } catch (e: any) {
-      toast.error(e?.message || '创建任务失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '创建任务失败'))
     }
   }
 
@@ -688,8 +689,8 @@ export function AutomationPage() {
       await deleteSchedulerTask(id)
       toast.success('任务已删除')
       await refreshTasks()
-    } catch (e: any) {
-      toast.error(e?.message || '删除任务失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除任务失败'))
     }
   }
 
@@ -698,8 +699,8 @@ export function AutomationPage() {
       await runSchedulerTaskNow(id)
       toast.success('任务已触发执行')
       await refreshTasks()
-    } catch (e: any) {
-      toast.error(e?.message || '任务触发失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '任务触发失败'))
     }
   }
 
@@ -734,8 +735,8 @@ export function AutomationPage() {
       })
       toast.success(`规则「${tpl.name}」已创建`)
       await refreshRules()
-    } catch (e: any) {
-      toast.error(e?.message || '创建规则失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '创建规则失败'))
     }
   }
 
@@ -744,8 +745,8 @@ export function AutomationPage() {
       await deleteAutomationRule(id)
       toast.success('规则已删除')
       await refreshRules()
-    } catch (e: any) {
-      toast.error(e?.message || '删除规则失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除规则失败'))
     }
   }
 
@@ -753,8 +754,8 @@ export function AutomationPage() {
     try {
       await toggleAutomationRule(id, enabled)
       await refreshRules()
-    } catch (e: any) {
-      toast.error(e?.message || (enabled ? '启用' : '禁用') + '规则失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, `${enabled ? '启用' : '禁用'}规则失败`))
     }
   }
 
@@ -762,8 +763,8 @@ export function AutomationPage() {
     try {
       await testFireAutomationRule(id)
       toast.success('测试事件已发送')
-    } catch (e: any) {
-      toast.error(e?.message || '测试触发失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '测试触发失败'))
     }
   }
 

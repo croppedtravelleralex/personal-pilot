@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Save, RotateCcw, Upload, Download, RefreshCw } from 'lucide-react'
 import { Card, Button, FormItem, Input, Select, Switch, ThemeSwitcher, toast, Modal, Progress } from '../../shared/components'
+import { messageFromUnknownError } from '../../shared/errors'
 import { fetchSettings, saveSettings, resetSettings, initializeSystemData, exportSystemConfig, importSystemConfig } from './api'
 import type { AppSettings } from './types'
 import { defaultSettings } from './types'
@@ -193,17 +194,11 @@ export function SettingsPage() {
     try {
       const data = await readProviderProductionReadiness()
       setProviderReadiness(data)
-    } catch (error: any) {
-      setProviderError(error?.message || 'Provider readiness 读取失败')
+    } catch (error: unknown) {
+      setProviderError(messageFromUnknownError(error, 'Provider readiness 读取失败'))
     } finally {
       setProviderLoading(false)
     }
-  }
-
-  const errorMessage = (error: any, fallback: string) => {
-    if (error?.message) return error.message
-    const value = String(error || '').trim()
-    return value || fallback
   }
 
   const handleSessionBundleExport = async () => {
@@ -224,8 +219,8 @@ export function SettingsPage() {
       setSessionBundlePreflight(null)
       setSessionBundleRestoreResult(null)
       toast.success('SessionBundle 已导出')
-    } catch (error: any) {
-      const message = errorMessage(error, 'SessionBundle 导出失败')
+    } catch (error: unknown) {
+      const message = messageFromUnknownError(error, 'SessionBundle 导出失败')
       setSessionBundleError(message)
       toast.error(message)
     } finally {
@@ -252,8 +247,8 @@ export function SettingsPage() {
       setSessionBundlePreflight(result)
       setSessionBundleRestoreResult(null)
       toast.success(result.restoreSupported ? 'Preflight 通过' : 'Preflight 已阻塞')
-    } catch (error: any) {
-      const message = errorMessage(error, 'SessionBundle preflight 失败')
+    } catch (error: unknown) {
+      const message = messageFromUnknownError(error, 'SessionBundle preflight 失败')
       setSessionBundleError(message)
       toast.error(message)
     } finally {
@@ -281,8 +276,8 @@ export function SettingsPage() {
       } else {
         toast.success(dryRun ? 'Dry-run 已完成' : '本机恢复已完成')
       }
-    } catch (error: any) {
-      const message = errorMessage(error, dryRun ? 'SessionBundle dry-run 失败' : 'SessionBundle 恢复失败')
+    } catch (error: unknown) {
+      const message = messageFromUnknownError(error, dryRun ? 'SessionBundle dry-run 失败' : 'SessionBundle 恢复失败')
       setSessionBundleError(message)
       toast.error(message)
     } finally {
@@ -303,8 +298,8 @@ export function SettingsPage() {
         setHasChanges(false)
         toast.success('设置已保存')
       }
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败，请检查配置')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败，请检查配置'))
     } finally {
       setSaving(false)
     }
@@ -330,8 +325,8 @@ export function SettingsPage() {
         return
       }
       toast.success(res.message || '初始化完成')
-    } catch (error: any) {
-      toast.error(error?.message || '初始化失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '初始化失败'))
     } finally {
       setActionLoading('none')
     }
@@ -353,19 +348,20 @@ export function SettingsPage() {
         ? prev
         : { phase: 'done', progress: 100, message: res.message || '导出完成' })
       toast.success(res.message || '导出完成')
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = messageFromUnknownError(error, '导出失败')
       setExportProgress(prev => ({
         phase: 'error',
         progress: prev?.progress ?? 0,
-        message: error?.message || '导出失败',
+        message,
       }))
       setExportLogs(prev => {
         const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-        const text = error?.message || '导出失败'
+        const text = message
         const next = [...prev, { id: Date.now() + Math.floor(Math.random() * 1000), phase: 'error', time: timestamp, text }]
         return next.length > 120 ? next.slice(next.length - 120) : next
       })
-      toast.error(error?.message || '导出失败')
+      toast.error(message)
     } finally {
       setActionLoading('none')
     }
@@ -410,13 +406,14 @@ export function SettingsPage() {
       }
       setImportModalOpen(false)
       setImportProgress(null)
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = messageFromUnknownError(error, '加载失败')
       setImportProgress(prev => ({
         phase: 'error',
         progress: prev?.progress ?? 0,
-        message: error?.message || '加载失败',
+        message,
       }))
-      toast.error(error?.message || '加载失败')
+      toast.error(message)
     } finally {
       setActionLoading('none')
     }
