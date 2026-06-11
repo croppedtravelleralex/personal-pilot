@@ -419,7 +419,7 @@ export function activateProfileWindow(profileId: string): Promise<void> {
 }
 
 export function getBrowserInstanceStatus(profileId: string): Promise<BrowserProfile | null> {
-  return browserInstanceStatus(profileId) as Promise<BrowserProfile | null>
+  return browserInstanceStatus(profileId)
 }
 
 export async function checkWorkbenchFingerprintHealthProfile(profileId: string): Promise<WorkbenchFingerprintHealthProfile> {
@@ -430,7 +430,7 @@ export async function checkWorkbenchFingerprintHealthProfile(profileId: string):
     )
   } catch (error) {
     if (!isMissingBackendFunction(error)) throw error
-    const fingerprint = await workbenchFingerprintProfile(profileId) as WorkbenchFingerprintSnapshot
+    const fingerprint = await workbenchFingerprintProfile(profileId)
     return buildHealthFromSnapshot(profileId, fingerprint)
   }
 }

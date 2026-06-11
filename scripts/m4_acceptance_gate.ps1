@@ -352,7 +352,11 @@ function Test-TypedFacadeShrinkContract {
       "DesktopCoreWorkbenchTask",
       "DesktopCoreWorkbenchDetectionResult",
       "DesktopCoreWorkbenchUiState",
-      "DesktopCoreWorkbenchDetectorSite"
+      "DesktopCoreWorkbenchDetectorSite",
+      "DesktopBrowserProfile",
+      "DesktopCoreWorkbenchFingerprintSnapshot",
+      "DesktopCoreWorkbenchFingerprintHealthProfile",
+      "DesktopCoreWorkbenchIdentityStrengthReport"
     )) {
     if ($desktopTypesText -notmatch [regex]::Escape($token)) {
       $failures += "desktop shared type missing: $token"
@@ -371,7 +375,11 @@ function Test-TypedFacadeShrinkContract {
       "workbenchGetUiState = (): Promise<unknown>",
       "workbenchSaveUiState = (state: unknown): Promise<void>",
       "workbenchListDetectorSites = (): Promise<unknown[]>",
-      "workbenchRunDetectorSite = (`r`n  profileId: string,`r`n  detectorId: string,`r`n): Promise<unknown>"
+      "workbenchRunDetectorSite = (`r`n  profileId: string,`r`n  detectorId: string,`r`n): Promise<unknown>",
+      "browserInstanceStatus = (profileId: string): Promise<unknown | null>",
+      "workbenchFingerprintHealthProfile = (profileId: string): Promise<unknown>",
+      "workbenchFingerprintProfile = (profileId: string): Promise<unknown>",
+      "identityReportProfile = (profileId: string): Promise<unknown>"
     )) {
     if ($desktopServiceText -match [regex]::Escape($token)) {
       $failures += "desktop service still exposes unknown typed synchronizer facade: $token"
@@ -383,6 +391,8 @@ function Test-TypedFacadeShrinkContract {
       "synchronizerArrangeProfiles(profileIds, layout) as Promise<SyncWindowPlacement[]>",
       "synchronizerGetOperationLog(limit ?? 50) as Promise<SyncOperation[]>",
       "synchronizerListTasks(limit ?? 200) as Promise<WorkbenchTask[]>",
+      "browserInstanceStatus(profileId) as Promise<BrowserProfile | null>",
+      "workbenchFingerprintProfile(profileId) as WorkbenchFingerprintSnapshot",
       "Array.isArray(results) ? results.map(normalizeDetectionResult) : []",
       "Array.isArray(results)`r`n    ? results.map((item) =>"
     )) {
@@ -415,7 +425,7 @@ function Test-TypedFacadeShrinkContract {
   if ($failures.Count -gt 0) {
     return New-LocalGateResult "typed_facade_shrink_contract" "missing_coverage" "failed" "M4.8 typed facade shrink source contract is incomplete" $failures
   }
-  return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 synchronizer/workbench DTOs and browser Wails bindings have typed source contracts; Wails bridge remains transitional" @()
+  return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 synchronizer/workbench/report DTOs and browser Wails bindings have typed source contracts; Wails bridge remains transitional" @()
 }
 
 function Test-BrowserPayloadSchemaContract {
@@ -1345,7 +1355,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v19"
+  schemaVersion = "m4_acceptance_gate_v20"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1383,7 +1393,7 @@ $report = [ordered]@{
     "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
-    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer/workbench DTOs and browser Wails bindings without removing the transitional bridge.",
+    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer/workbench/report DTOs and browser Wails bindings without removing the transitional bridge.",
     "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",
     "Dashboard facade contract is source-level evidence only; it routes Dashboard stats/license/config/CD key calls through typed desktop service wrappers without removing every bridge compatibility path.",
     "Settings/logs facade contract is source-level evidence only; it routes Settings backup and Browser logs through typed desktop service wrappers while preserving the transitional compatibility bridge.",

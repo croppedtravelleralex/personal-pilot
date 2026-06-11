@@ -7,6 +7,7 @@ import type {
   DesktopBrowserEnvironmentPolicySnapshot,
   DesktopBackupActionResult,
   DesktopBehaviorAuditContract,
+  DesktopBrowserProfile,
   DesktopCamoufoxCapability,
   DesktopCamoufoxCapabilityRequest,
   DesktopCamoufoxSettingsDraft,
@@ -21,6 +22,9 @@ import type {
   DesktopCoreWorkbenchDetectionKind,
   DesktopCoreWorkbenchDetectionResult,
   DesktopCoreWorkbenchDetectorSite,
+  DesktopCoreWorkbenchFingerprintHealthProfile,
+  DesktopCoreWorkbenchFingerprintSnapshot,
+  DesktopCoreWorkbenchIdentityStrengthReport,
   DesktopCoreWorkbenchTask,
   DesktopCoreWorkbenchUiState,
   DesktopDestructivePreflight,
@@ -702,17 +706,23 @@ export const synchronizerCaptureScreenshot = (profileId: string): Promise<string
 export const synchronizerActivateProfile = (profileId: string): Promise<void> =>
   desktopRpc<void>("SynchronizerActivateProfile", [profileId]);
 
-export const browserInstanceStatus = (profileId: string): Promise<unknown | null> =>
-  desktopRpc<unknown | null>("BrowserInstanceStatus", [profileId]);
+export const browserInstanceStatus = (profileId: string): Promise<DesktopBrowserProfile | null> =>
+  desktopRpc<DesktopBrowserProfile | null>("BrowserInstanceStatus", [profileId]);
 
-export const workbenchFingerprintHealthProfile = (profileId: string): Promise<unknown> =>
-  desktopRpc<unknown>("WorkbenchFingerprintHealthProfile", [profileId]);
+export const workbenchFingerprintHealthProfile = (
+  profileId: string,
+): Promise<DesktopCoreWorkbenchFingerprintHealthProfile> =>
+  desktopRpc<DesktopCoreWorkbenchFingerprintHealthProfile>("WorkbenchFingerprintHealthProfile", [profileId]);
 
-export const workbenchFingerprintProfile = (profileId: string): Promise<unknown> =>
-  desktopRpc<unknown>("WorkbenchFingerprintProfile", [profileId]);
+export const workbenchFingerprintProfile = (
+  profileId: string,
+): Promise<DesktopCoreWorkbenchFingerprintSnapshot> =>
+  desktopRpc<DesktopCoreWorkbenchFingerprintSnapshot>("WorkbenchFingerprintProfile", [profileId]);
 
-export const identityReportProfile = (profileId: string): Promise<unknown> =>
-  desktopRpc<unknown>("IdentityReportProfile", [profileId]);
+export const identityReportProfile = (
+  profileId: string,
+): Promise<DesktopCoreWorkbenchIdentityStrengthReport> =>
+  desktopRpc<DesktopCoreWorkbenchIdentityStrengthReport>("IdentityReportProfile", [profileId]);
 
 export const synchronizerArrangeProfiles = (
   profileIds: string[],

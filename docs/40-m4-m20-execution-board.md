@@ -378,3 +378,14 @@ Status: started 2026-06-12.
 4. The gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`; latest summary is `passed=17`, `expectedBlocked=4`, `failed=0`.
 5. Keep this evidence scoped to selected page-level runtime facade usage only; it does not prove `tauriWailsBridge` removal, every core/proxy/settings API closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
 6. Continue next with deeper settings/core/proxy bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.
+
+## Thirty-First Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Advance M4.8 by moving BrowserInstanceStatus and Workbench report-return DTOs into `src/types/desktop.ts`.
+2. Update `src/services/desktop.ts` so `BrowserInstanceStatus`, `WorkbenchFingerprintHealthProfile`, `WorkbenchFingerprintProfile`, and `IdentityReportProfile` no longer expose bare `unknown`.
+3. Remove matching status/report casts from `src/modules/synchronizer/api.ts` while keeping existing runtime payload normalizers and compatibility guards.
+4. Extend M4 acceptance gate to v20 by checking these report DTO markers and blocking `Promise<unknown>` or direct report casts from returning.
+5. Keep this evidence scoped to source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, every settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+6. Continue next with deeper settings/core/proxy bridge shrink or real external-evidence tracks when the required environment is available.

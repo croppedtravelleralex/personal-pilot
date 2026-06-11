@@ -675,6 +675,36 @@ export type DesktopJsonValue =
   | DesktopJsonValue[]
   | { [key: string]: DesktopJsonValue };
 
+export interface DesktopBrowserProfile {
+  profileId: string;
+  profileName: string;
+  userDataDir: string;
+  coreId: string;
+  fingerprintArgs: string[];
+  proxyId: string;
+  proxyConfig: string;
+  proxyBindSourceId?: string;
+  proxyBindSourceUrl?: string;
+  proxyBindName?: string;
+  proxyBindUpdatedAt?: string;
+  launchArgs: string[];
+  tags: string[];
+  keywords: string[];
+  groupId?: string;
+  running: boolean;
+  debugPort: number;
+  debugReady: boolean;
+  pid: number;
+  runtimeWarning: string;
+  lastError: string;
+  createdAt: string;
+  updatedAt: string;
+  lastStartAt?: string;
+  lastStopAt?: string;
+  launchCode?: string;
+  behaviorProfileId?: string;
+}
+
 export interface DesktopCoreSyncWindow {
   profileId: string;
   profileName: string;
@@ -780,6 +810,156 @@ export interface DesktopCoreWorkbenchDetectorSite {
   gate: "medium" | "strict" | string;
   traceWarning: string;
   notes: string;
+}
+
+export interface DesktopCoreWorkbenchFingerprintSnapshot {
+  userAgent?: string;
+  appVersion?: string;
+  appName?: string;
+  product?: string;
+  productSub?: string;
+  platform?: string;
+  webdriver?: boolean;
+  cookieEnabled?: boolean;
+  doNotTrack?: string;
+  pdfViewerEnabled?: boolean;
+  online?: boolean;
+  hardwareConcurrency?: number;
+  deviceMemory?: number;
+  colorDepth?: number;
+  pixelDepth?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+  availWidth?: number;
+  availHeight?: number;
+  devicePixelRatio?: number;
+  maxTouchPoints?: number;
+  vendor?: string;
+  timezone?: string;
+  timezoneOffset?: number;
+  language?: string;
+  languages?: string[];
+  intlLocale?: string;
+  intlCalendar?: string;
+  intlNumberingSystem?: string;
+  dateFormatSample?: string;
+  numberFormatSample?: string;
+  uaDataBrands?: string[];
+  uaDataMobile?: boolean;
+  uaDataPlatform?: string;
+  uaDataPlatformVersion?: string;
+  uaDataArchitecture?: string;
+  uaDataBitness?: string;
+  uaDataModel?: string;
+  uaDataFullVersionList?: string[];
+  innerWidth?: number;
+  innerHeight?: number;
+  outerWidth?: number;
+  outerHeight?: number;
+  visualViewportWidth?: number;
+  visualViewportHeight?: number;
+  visualViewportScale?: number;
+  pointerFine?: boolean;
+  pointerCoarse?: boolean;
+  hoverHover?: boolean;
+  hoverNone?: boolean;
+  prefersColorScheme?: string;
+  prefersReducedMotion?: string;
+  networkEffectiveType?: string;
+  networkDownlink?: number;
+  networkRtt?: number;
+  networkSaveData?: boolean;
+  storageQuota?: number;
+  storageUsage?: number;
+  canvasHash?: string;
+  webglVendor?: string;
+  webglRenderer?: string;
+  webglExtensionsHash?: string;
+  webglMaxTextureSize?: number;
+  webglMaxVertexAttribs?: number;
+  webglMaxViewportDims?: string;
+  fontHash?: string;
+  audioHash?: string;
+  pluginsHash?: string;
+  mimeTypesHash?: string;
+  webgpuAvailable?: boolean;
+  webrtcSupported?: boolean;
+}
+
+export type DesktopCoreWorkbenchFingerprintHealthLevel =
+  | "good"
+  | "warning"
+  | "risk"
+  | "unknown"
+  | string;
+
+export type DesktopCoreWorkbenchFingerprintHealthCheckStatus =
+  | "pass"
+  | "warning"
+  | "fail"
+  | "info"
+  | string;
+
+export interface DesktopCoreWorkbenchFingerprintHealthCheck {
+  id: string;
+  status: DesktopCoreWorkbenchFingerprintHealthCheckStatus;
+  message: string;
+  expected?: string;
+  actual?: string;
+  penalty?: number;
+}
+
+export interface DesktopCoreWorkbenchFingerprintHealthProfile {
+  profileId: string;
+  profileName?: string;
+  score: number;
+  level: DesktopCoreWorkbenchFingerprintHealthLevel;
+  checks: DesktopCoreWorkbenchFingerprintHealthCheck[];
+  fingerprint?: DesktopCoreWorkbenchFingerprintSnapshot;
+  capturedAt: string;
+  source: string;
+  error?: string;
+}
+
+export type DesktopCoreWorkbenchIdentityStrengthLevel =
+  | "strong"
+  | "normal"
+  | "weak"
+  | "risk"
+  | "unknown"
+  | string;
+
+export interface DesktopCoreWorkbenchIdentitySubscores {
+  fingerprintVisible: number;
+  consistency: number;
+  profilePersistence: number;
+  proxyNetwork: number;
+  behaviorNaturalness: number;
+  automationSafety: number;
+}
+
+export interface DesktopCoreWorkbenchIdentityDimension {
+  id: string;
+  category: string;
+  layer: string;
+  status: DesktopCoreWorkbenchFingerprintHealthCheckStatus;
+  message: string;
+  expected?: string;
+  actual?: string;
+  penalty?: number;
+}
+
+export interface DesktopCoreWorkbenchIdentityStrengthReport {
+  profileId: string;
+  profileName?: string;
+  score: number;
+  level: DesktopCoreWorkbenchIdentityStrengthLevel;
+  subscores: DesktopCoreWorkbenchIdentitySubscores;
+  dimensions: DesktopCoreWorkbenchIdentityDimension[];
+  fingerprint?: DesktopCoreWorkbenchFingerprintSnapshot;
+  capturedAt: string;
+  source: string;
+  summary: string[];
 }
 
 export type DesktopProfileStatus = "active" | "draft" | "disabled" | string;
