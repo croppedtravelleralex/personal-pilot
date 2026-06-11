@@ -49,7 +49,7 @@ interface TableProps<T> {
   virtualOverscan?: number
 }
 
-export function Table<T extends Record<string, any>>({
+export function Table<T extends object>({
   columns,
   data,
   rowKey,
@@ -151,7 +151,8 @@ export function Table<T extends Record<string, any>>({
     if (typeof rowKey === 'function') {
       return rowKey(record)
     }
-    return record[rowKey] ?? index.toString()
+    const value = (record as Record<string, unknown>)[rowKey]
+    return value == null ? index.toString() : String(value)
   }
 
   const handleSortClick = (column: TableColumn<T>) => {
@@ -186,8 +187,10 @@ export function Table<T extends Record<string, any>>({
     )
   }
 
-  const renderCell = (column: TableColumn<T>, record: T, index: number) =>
-    column.render ? column.render(record[column.key], record, index) : record[column.key]
+  const renderCell = (column: TableColumn<T>, record: T, index: number) => {
+    const value = (record as Record<string, unknown>)[column.key]
+    return column.render ? column.render(value, record, index) : (value as ReactNode)
+  }
 
   if (loading) {
     return (

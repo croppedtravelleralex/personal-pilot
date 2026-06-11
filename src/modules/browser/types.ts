@@ -136,7 +136,7 @@ export interface ProxyIPHealthResult {
   region: string
   city: string
   asOrganization: string
-  rawData: Record<string, any>
+  rawData: Record<string, unknown>
   updatedAt: string
 }
 

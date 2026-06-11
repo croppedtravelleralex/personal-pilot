@@ -429,3 +429,13 @@ Status: started 2026-06-12.
 3. Narrow the local `ClashProxy` string index signature from `any` to `unknown`.
 4. Extend M4 acceptance gate to v24 by adding Proxy pool to `ui_error_boundary_contract` and checking selected files for `[key: string]: any` regressions.
 5. Keep this evidence scoped to selected source-level UI error boundaries only; it does not prove all generic any usage or external evidence is complete.
+
+## Thirty-Sixth Implementation Batch
+
+Status: started 2026-06-12.
+
+1. Continue M4.8 type-boundary shrink on the remaining selected generic/index any residues.
+2. Update shared `Table` so its generic constraint no longer requires `Record<string, any>`; dynamic row lookups now use local `Record<string, unknown>` casts.
+3. Update `ProxyIPHealthResult.rawData` to `Record<string, unknown>` and `ProxyPoolPage/types.ts` ClashProxy index signature to `unknown`.
+4. Extend M4 acceptance gate to v25 with `generic_any_residue_contract`.
+5. Keep this evidence scoped to selected generic any residues only; it does not prove every explicit any in the repository is gone.

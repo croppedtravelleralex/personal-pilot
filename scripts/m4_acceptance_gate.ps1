@@ -1182,6 +1182,55 @@ function Test-UiErrorBoundaryContract {
   return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, Core management, and Proxy pool UI error boundaries use unknown guards; legacy pages remain separate work" @()
 }
 
+function Test-GenericAnyResidueContract {
+  $tablePath = Join-Path $projectRoot "src\shared\components\Table.tsx"
+  $browserTypesPath = Join-Path $projectRoot "src\modules\browser\types.ts"
+  $proxyPoolTypesPath = Join-Path $projectRoot "src\modules\browser\pages\ProxyPoolPage\types.ts"
+  $failures = @()
+
+  foreach ($path in @($tablePath, $browserTypesPath, $proxyPoolTypesPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $tableText = if (Test-Path $tablePath) { Get-Content -LiteralPath $tablePath -Raw -Encoding UTF8 } else { "" }
+  $browserTypesText = if (Test-Path $browserTypesPath) { Get-Content -LiteralPath $browserTypesPath -Raw -Encoding UTF8 } else { "" }
+  $proxyPoolTypesText = if (Test-Path $proxyPoolTypesPath) { Get-Content -LiteralPath $proxyPoolTypesPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($marker in @("export function Table<T extends object>", "Record<string, unknown>)[rowKey]", "Record<string, unknown>)[column.key]")) {
+    if ($tableText -notmatch [regex]::Escape($marker)) {
+      $failures += "Table missing generic-any shrink marker: $marker"
+    }
+  }
+  if ($browserTypesText -notmatch [regex]::Escape("rawData: Record<string, unknown>")) {
+    $failures += "Browser types still missing unknown rawData marker"
+  }
+  if ($proxyPoolTypesText -notmatch [regex]::Escape("[key: string]: unknown")) {
+    $failures += "ProxyPoolPage types still missing unknown index marker"
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "Table"; text = $tableText },
+      @{ name = "BrowserTypes"; text = $browserTypesText },
+      @{ name = "ProxyPoolPageTypes"; text = $proxyPoolTypesText }
+    )) {
+    foreach ($patternAndReason in @(
+        @{ pattern = "Record\s*<\s*string\s*,\s*any\s*>"; reason = "Record<string, any>" },
+        @{ pattern = "\[\s*key\s*:\s*string\s*\]\s*:\s*any\b"; reason = "string index any" }
+      )) {
+      if ($textAndName.text -match $patternAndReason.pattern) {
+        $failures += "$($textAndName.name) still has generic any marker: $($patternAndReason.reason)"
+      }
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "generic_any_residue_contract" "missing_coverage" "failed" "M4.8 selected generic any residue source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "generic_any_residue_contract" "passed" "passed" "M4.8 selected generic any residue is narrowed in shared Table, browser IP health rawData, and ProxyPoolPage types" @()
+}
+
 function Test-RuntimeAdapterOperatorContract {
   $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
   $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
@@ -1510,6 +1559,7 @@ $gates += Test-MonitorFacadeContract
 $gates += Test-BrowserRuntimeFacadeContract
 $gates += Test-RuntimeFacadeContract
 $gates += Test-UiErrorBoundaryContract
+$gates += Test-GenericAnyResidueContract
 $gates += Test-RuntimeAdapterOperatorContract
 $gates += Test-SafetyLoggingContract
 
@@ -1534,7 +1584,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v24"
+  schemaVersion = "m4_acceptance_gate_v25"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1584,6 +1634,7 @@ $report = [ordered]@{
     "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
     "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
     "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording/Docs, Browser instance, Core management, and Proxy pool surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
+    "Generic any residue contract is source-level evidence only; it narrows selected shared/browser generic any markers without claiming every explicit any in the repository is gone.",
     "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
     "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."

@@ -6,7 +6,7 @@ export interface ClashProxy {
   type: string
   server: string
   port: number
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export type ProxyImportMode = 'clash' | 'subscription' | 'direct'
