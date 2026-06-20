@@ -408,7 +408,7 @@ function Test-TypedFacadeShrinkContract {
       "BrowserProxyBatchTestSpeed: (proxyIds: string[], concurrency: number) => Promise<ProxyTestResult[]>",
       "BehaviorRecordingSummaryList: () => Promise<RecordingSummary[]>",
       "LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>",
-      "function getWindowGoApp(): BrowserNativeBindings | null",
+      "const getBindings = async () =>",
       "const bindings = await getBindings()"
     )) {
     if ($browserApiText -notmatch [regex]::Escape($token)) {
@@ -486,6 +486,66 @@ function Test-BridgeCompatTypeContract {
     return New-LocalGateResult "bridge_compat_type_contract" "missing_coverage" "failed" "M4.8 bridge compatibility type source contract is incomplete" $failures
   }
   return New-LocalGateResult "bridge_compat_type_contract" "passed" "passed" "M4.8 desktopRpc and tauriWailsBridge compatibility arguments use named source-level type boundaries; the transitional bridge remains in place" @()
+}
+
+function Test-BrowserWindowGoFallbackContract {
+  $apiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $failures = @()
+
+  foreach ($path in @($apiPath, $desktopServicePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $apiText = if (Test-Path $apiPath) { Get-Content -LiteralPath $apiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "export interface DesktopBrowserProxySubscriptionImportResult",
+      "export interface DesktopBrowserProxyNameFixResult",
+      "export interface DesktopBrowserProxyClashImportResult",
+      "export interface DesktopLaunchServerInfoResponse",
+      "export const importBrowserProxySubscriptionFromDesktop =",
+      '"BrowserProxyImportSubscriptionByURL"',
+      "export const fixBrowserProxyNamesFromDesktop =",
+      '"BrowserProxyFixNames"',
+      "export const fetchBrowserProxyClashFromDesktop =",
+      '"BrowserProxyFetchClashByURL"',
+      "export const readLaunchServerInfoFromDesktop =",
+      '"GetLaunchServerInfo"'
+    )) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop browser fallback wrapper marker missing: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "importBrowserProxySubscriptionFromDesktop",
+      "fixBrowserProxyNamesFromDesktop",
+      "fetchBrowserProxyClashFromDesktop",
+      "readLaunchServerInfoFromDesktop",
+      "const result = await importBrowserProxySubscriptionFromDesktop(targetURL, groupName)",
+      "const result = await fixBrowserProxyNamesFromDesktop()",
+      "const result = await fetchBrowserProxyClashFromDesktop(targetURL)",
+      "const launchServerInfo = await readLaunchServerInfoFromDesktop()"
+    )) {
+    if ($apiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API desktop fallback wrapper usage missing: $token"
+    }
+  }
+
+  foreach ($token in @("function getWindowGoApp", "getWindowGoApp()", "go?.main?.App", "BrowserNativeWindow", "window.go")) {
+    if ($apiText -match [regex]::Escape($token)) {
+      $failures += "browser API still has direct window.go fallback marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_window_go_fallback_contract" "missing_coverage" "failed" "M4.8 browser window.go fallback source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_window_go_fallback_contract" "passed" "passed" "M4.8 browser proxy/import and launch-server fallbacks use typed desktop service wrappers; the transitional bridge remains in place" @()
 }
 
 function Test-BrowserPayloadSchemaContract {
@@ -1638,6 +1698,7 @@ $gates += Test-ProviderDryRunContract
 $gates += Test-SessionBundleOperatorContract
 $gates += Test-TypedFacadeShrinkContract
 $gates += Test-BridgeCompatTypeContract
+$gates += Test-BrowserWindowGoFallbackContract
 $gates += Test-BrowserPayloadSchemaContract
 $gates += Test-DashboardFacadeContract
 $gates += Test-SettingsLogsFacadeContract
@@ -1674,7 +1735,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v27"
+  schemaVersion = "m4_acceptance_gate_v28"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus

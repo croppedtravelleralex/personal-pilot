@@ -1,4 +1,10 @@
-import { desktopRuntimeListen } from '../../services/desktop'
+import {
+  desktopRuntimeListen,
+  fetchBrowserProxyClashFromDesktop,
+  fixBrowserProxyNamesFromDesktop,
+  importBrowserProxySubscriptionFromDesktop,
+  readLaunchServerInfoFromDesktop,
+} from '../../services/desktop'
 import type {
   BehaviorExecutionPermissionMode, BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings,
   BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended,
@@ -29,14 +35,6 @@ type RecordingEventPagePayload = {
   limit?: number
   total?: number
 }
-type BrowserNativeWindow = Window & {
-  go?: {
-    main?: {
-      App?: BrowserNativeBindings
-    }
-  }
-}
-
 type AutomationActionParams = Record<string, unknown>
 
 export interface SchedulerTaskTrigger {
@@ -217,10 +215,6 @@ const getBindings = async () => {
   } catch {
     return null
   }
-}
-
-function getWindowGoApp(): BrowserNativeBindings | null {
-  return (window as BrowserNativeWindow).go?.main?.App ?? null
 }
 
 function onRuntimeEvent<T>(eventName: string, callback: (payload: T) => void): Unsubscribe {
@@ -662,70 +656,55 @@ export interface SubscriptionImportResult {
 }
 
 export async function fetchSubscriptionImportFromURL(targetURL: string, groupName: string): Promise<SubscriptionImportResult> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyImportSubscriptionByURL) {
-    const result = await bindings.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
-    return {
-      url: String(result?.url || targetURL),
-      importedCount: Number(result?.importedCount || 0),
-      skippedCount: Number(result?.skippedCount || 0),
-      totalCount: Number(result?.totalCount || 0),
-      groupName: String(result?.groupName || groupName),
-      allProxies: (result?.allProxies || []) as BrowserProxy[],
-    }
+  const result = await importBrowserProxySubscriptionFromDesktop(targetURL, groupName)
+  return {
+    url: String(result?.url || targetURL),
+    importedCount: Number(result?.importedCount || 0),
+    skippedCount: Number(result?.skippedCount || 0),
+    totalCount: Number(result?.totalCount || 0),
+    groupName: String(result?.groupName || groupName),
+    allProxies: (result?.allProxies || []) as BrowserProxy[],
   }
-
-  const goApp = getWindowGoApp()
-  if (goApp?.BrowserProxyImportSubscriptionByURL) {
-    const result = await goApp.BrowserProxyImportSubscriptionByURL(targetURL, groupName)
-    return {
-      url: String(result?.url || targetURL),
-      importedCount: Number(result?.importedCount || 0),
-      skippedCount: Number(result?.skippedCount || 0),
-      totalCount: Number(result?.totalCount || 0),
-      groupName: String(result?.groupName || groupName),
-      allProxies: (result?.allProxies || []) as BrowserProxy[],
-    }
-  }
-
-  throw new Error('当前环境不支持订阅 URL 导入')
 }
 
 export async function fixBrowserProxyNames(): Promise<{ ok: boolean; fixed: number; total: number; message?: string; error?: string }> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyFixNames) {
-    return (await bindings.BrowserProxyFixNames()) || { ok: false, fixed: 0, total: 0, error: '调用失败' }
+  const result = await fixBrowserProxyNamesFromDesktop()
+  if (!result) {
+    return { ok: false, fixed: 0, total: 0, error: '调用失败' }
   }
 
-  const goApp = getWindowGoApp()
-  if (goApp?.BrowserProxyFixNames) {
-    return (await goApp.BrowserProxyFixNames()) || { ok: false, fixed: 0, total: 0, error: '调用失败' }
+  return {
+    ok: Boolean(result.ok),
+    fixed: Number(result.fixed || 0),
+    total: Number(result.total || 0),
+    message: result.message,
+    error: result.error,
   }
-
-  throw new Error('当前环境不支持代理名称修复')
 }
 
 export async function fetchClashImportFromURL(targetURL: string): Promise<ClashImportURLResult> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyFetchClashByURL) {
-    return (await bindings.BrowserProxyFetchClashByURL(targetURL)) || {
+  const result = await fetchBrowserProxyClashFromDesktop(targetURL)
+  if (!result) {
+    return {
       url: targetURL,
       content: '',
       proxyCount: 0,
     }
   }
 
-  // 兜底：wailsjs 尚未刷新时，直接通过 window.go 调用后端绑定
-  const goApp = getWindowGoApp()
-  if (goApp?.BrowserProxyFetchClashByURL) {
-    return (await goApp.BrowserProxyFetchClashByURL(targetURL)) || {
-      url: targetURL,
-      content: '',
-      proxyCount: 0,
-    }
+  return {
+    url: String(result.url || targetURL),
+    content: String(result.content || ''),
+    proxyCount: Number(result.proxyCount || 0),
+    dnsServers: result.dnsServers,
+    suggestedGroup: result.suggestedGroup,
+    autoFallback: result.autoFallback,
+    importedCount: result.importedCount,
+    skippedCount: result.skippedCount,
+    totalCount: result.totalCount,
+    groupName: result.groupName,
+    allProxies: (result.allProxies || []) as BrowserProxy[],
   }
-
-  throw new Error('当前环境不支持 URL 导入 Clash 配置')
 }
 
 export async function saveBrowserProxies(proxies: BrowserProxy[]): Promise<boolean> {
@@ -1046,14 +1025,9 @@ function normalizeLaunchServerInfo(payload: unknown): LaunchServerInfo {
 }
 
 export async function fetchLaunchServerInfo(): Promise<LaunchServerInfo> {
-  const bindings = await getBindings()
-  if (bindings?.GetLaunchServerInfo) {
-    return normalizeLaunchServerInfo(await bindings.GetLaunchServerInfo())
-  }
-
-  const goApp = getWindowGoApp()
-  if (goApp?.GetLaunchServerInfo) {
-    return normalizeLaunchServerInfo(await goApp.GetLaunchServerInfo())
+  const launchServerInfo = await readLaunchServerInfoFromDesktop()
+  if (launchServerInfo) {
+    return normalizeLaunchServerInfo(launchServerInfo)
   }
 
   return {

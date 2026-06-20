@@ -147,6 +147,48 @@ export interface DesktopLicenseStatusResponse {
   maxLimit?: number;
 }
 
+export interface DesktopBrowserProxySubscriptionImportResult {
+  url?: string;
+  importedCount?: number;
+  skippedCount?: number;
+  totalCount?: number;
+  groupName?: string;
+  allProxies?: Array<Record<string, unknown>>;
+}
+
+export interface DesktopBrowserProxyNameFixResult {
+  ok?: boolean;
+  fixed?: number;
+  total?: number;
+  message?: string;
+  error?: string;
+}
+
+export interface DesktopBrowserProxyClashImportResult {
+  url?: string;
+  content?: string;
+  proxyCount?: number;
+  dnsServers?: string;
+  suggestedGroup?: string;
+  autoFallback?: boolean;
+  importedCount?: number;
+  skippedCount?: number;
+  totalCount?: number;
+  groupName?: string;
+  allProxies?: Array<Record<string, unknown>>;
+}
+
+export interface DesktopLaunchServerInfoResponse {
+  host?: string;
+  port?: number;
+  preferredPort?: number;
+  baseUrl?: string;
+  cdpUrl?: string;
+  activeDebugPort?: number;
+  ready?: boolean;
+  apiAuth?: string;
+}
+
 export interface DesktopEventLogQueryInput {
   after: string;
   before: string;
@@ -660,6 +702,29 @@ export const reloadDesktopConfig = (): Promise<void> => desktopRpc<void>("Reload
 
 export const generateDesktopCdKeys = (count: number): Promise<string[] | null> =>
   desktopRpc<string[] | null>("GenerateCDKeys", [count]);
+
+export const importBrowserProxySubscriptionFromDesktop = (
+  targetUrl: string,
+  groupName: string,
+): Promise<DesktopBrowserProxySubscriptionImportResult | null> =>
+  desktopRpc<DesktopBrowserProxySubscriptionImportResult | null>(
+    "BrowserProxyImportSubscriptionByURL",
+    [targetUrl, groupName],
+  );
+
+export const fixBrowserProxyNamesFromDesktop = (): Promise<DesktopBrowserProxyNameFixResult | null> =>
+  desktopRpc<DesktopBrowserProxyNameFixResult | null>("BrowserProxyFixNames");
+
+export const fetchBrowserProxyClashFromDesktop = (
+  targetUrl: string,
+): Promise<DesktopBrowserProxyClashImportResult | null> =>
+  desktopRpc<DesktopBrowserProxyClashImportResult | null>(
+    "BrowserProxyFetchClashByURL",
+    [targetUrl],
+  );
+
+export const readLaunchServerInfoFromDesktop = (): Promise<DesktopLaunchServerInfoResponse | null> =>
+  desktopRpc<DesktopLaunchServerInfoResponse | null>("GetLaunchServerInfo");
 
 export const getAppLogs = (): Promise<DesktopMemoryLogEntry[]> =>
   desktopRpc<DesktopMemoryLogEntry[]>("GetAppLogs");
