@@ -12,9 +12,15 @@ New-Item -ItemType Directory -Force -Path $absoluteOutputDir | Out-Null
 function ConvertTo-ReportSortKey($value, $fallback) {
   if ($null -ne $value) {
     $text = [string]$value
-    $epochMs = 0L
-    if ([Int64]::TryParse($text, [ref]$epochMs)) {
-      return [DateTimeOffset]::FromUnixTimeMilliseconds($epochMs).UtcDateTime
+    $epochValue = 0L
+    if ([Int64]::TryParse($text, [ref]$epochValue)) {
+      # Validation reports store epoch seconds (~1.7e9), other evidence reports store
+      # epoch milliseconds (~1.7e12). Treat values below 1e11 as seconds so the two
+      # timestamp conventions compare on the same time scale within the same-run window.
+      if ($epochValue -lt 100000000000) {
+        return [DateTimeOffset]::FromUnixTimeSeconds($epochValue).UtcDateTime
+      }
+      return [DateTimeOffset]::FromUnixTimeMilliseconds($epochValue).UtcDateTime
     }
 
     try {
