@@ -152,7 +152,7 @@ $report = [ordered]@{
   liveTruthBoundary = @(
     "This is source-level M4 facade evidence for browser settings/core/proxy calls.",
     "The transitional tauriWailsBridge still exists, but its App RPC surface is now explicitly allowlisted.",
-    "This does not prove provider credentials, remote proxy/TLS, full headed runtime, or full 450 observed/replay coverage."
+    "This does not prove CAPTCHA/SMS/Email credential-backed provider smoke."
   )
 }
 

@@ -6,34 +6,28 @@
   "bug_cycle_interval": 3,
   "completed_since_bug_cycle": 4,
   "consecutive_failures": 0,
-  "current_focus": "P28-P33 local-first implementation before manual/external smoke",
-  "current_objective": "先完成本机可实现功能，把需要人工、第二机器、真实 provider、外部浏览器实测的工作留到最后",
-  "last_result_summary": "Release smoke 增加 ready 轮询/进程树分解/旧实例清理；Behavior audit 增加 workflow graph/replay evidence 状态；Provider manager 和 profile-browser comparison 增加本机 gate；fingerprint audit 扩展 fingerprint observed category。",
-  "next_action_hint": "Run local gates, commit/push, then continue next local batch or schedule manual/external smoke pack last",
+  "current_focus": "local self-use closed; provider credential smoke pending",
+  "current_objective": "本机自用能力已闭环，只保留 CAPTCHA/SMS/Email 服务商真实账号凭证 smoke 为未验项",
+  "last_result_summary": "最终本机 gate 已复跑：observed fingerprint passed_full_observed_fingerprint_coverage、replay 461/450 contractOnly=0、M10 stability、M15 process/pool、本机 TLS、runtime adapter local self-use、M4 passed_with_expected_external_blockers passed=25 expectedBlocked=1 failed=0；release performance、外部分发、第二机、AdsPower 和远程代理账号均取消为当前目标。",
+  "next_action_hint": "等待用户提供 CAPTCHA/SMS/Email 真实账号、余额、API key 和允许消耗额度的测试目标后再跑 credential-backed smoke",
   "next_suggestions": [
     {
-      "title": "Run Lightpanda/CDP validation smoke",
+      "title": "Run provider credential smoke",
       "priority": 1,
-      "rationale": "validation_probe action 已接入，需要真实 runner 环境确认可重复 report",
+      "rationale": "当前唯一未验项是 CAPTCHA/SMS/Email 真实账号凭证 smoke",
       "kind": "verify"
     },
     {
-      "title": "Extract reusable browser evidence contract",
+      "title": "Keep local gates green",
       "priority": 2,
-      "rationale": "让 desktop WebView 与 profile browser report 使用同一信号 schema，减少后续迁移成本",
-      "kind": "feature"
+      "rationale": "代码改动后复跑 observed/replay/M10/M15/runtime/M4 gates 防止口径回退",
+      "kind": "verify"
     },
     {
-      "title": "Deepen fingerprint runtime with evidence split",
+      "title": "Do not reopen cancelled scope",
       "priority": 3,
-      "rationale": "projection 已扩到 26，下一步补 observed audit coverage，避免误报 runtime depth",
-      "kind": "feature"
-    },
-    {
-      "title": "Formalize SessionBundle profile portability",
-      "priority": 4,
-      "rationale": "export/import preflight/restore contract 已落地，下一步需要真实 restore write path 和 portability smoke",
-      "kind": "feature"
+      "rationale": "release performance、外部分发、第二机、AdsPower 和远程代理账号不是当前本机目标",
+      "kind": "docs"
     }
   ],
   "last_executed_actions": [
@@ -167,7 +161,7 @@
       "title": "P12 AdsPower boundary refresh guard",
       "kind": "docs",
       "status": "success",
-      "note": "AdsPower score refresh remains deferred because B1-B5 evidence is incomplete; docs and release smoke warnings now preserve the evidence gate instead of raising parity claims."
+      "note": "Historical: AdsPower score refresh was once deferred by B1-B5 evidence. Current local-only scope cancels AdsPower refresh as a goal."
     },
     {
       "title": "P13 external distribution readiness",
@@ -221,7 +215,7 @@
       "title": "P21 batch 6 runtime adapter evidence gate",
       "kind": "feature",
       "status": "success",
-      "note": "Runtime adapter evidence gate now reports Fake/Lightpanda/headed capabilities, lifecycle/CDP status, and keeps AdsPower refresh deferred until B1-B5 evidence is complete."
+      "note": "Runtime adapter evidence gate now reports Fake/Lightpanda/headed capabilities and local self-use proof; AdsPower refresh is not applicable in current local-only scope."
     },
     {
       "title": "P22 release measurement ingestion",

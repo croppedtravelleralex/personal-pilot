@@ -19,6 +19,9 @@ type Slot struct {
 	ProfileID           string
 	RouteTag            string
 	State               SlotState
+	Process             *ProcessAttachment
+	ProxyID             string
+	SessionBindingKey   string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 	LastLeasedAt        time.Time
@@ -68,6 +71,7 @@ type CleanupProof struct {
 	Reason        string
 	Cleaned       bool
 	Removed       bool
+	Process       *ProcessCleanupProof
 	CleanedAt     time.Time
 	LeaseCount    uint32
 	CleanupCount  uint32
@@ -80,6 +84,30 @@ type CleanupReport struct {
 	RemovedSlotIDs []string
 	Usage          ResourceUsage
 	Budget         BudgetStatus
+}
+
+type ProcessAttachment struct {
+	RootPID           int
+	ChildPIDs         []int
+	CDPPort           int
+	WorkingSetMB      float64
+	AttachedAt        time.Time
+	TempProfileDir    string
+	ProxyID           string
+	SessionBindingKey string
+}
+
+type ProcessCleanupProof struct {
+	RootPID               int
+	ObservedPIDs          []int
+	RemainingPIDs         []int
+	CDPReady              bool
+	ProcessCount          int
+	WorkingSetMB          float64
+	CleanupComplete       bool
+	TempProfileRemoved    bool
+	ProxyBindingCleaned   bool
+	SessionBindingCleaned bool
 }
 
 func (e *Engine) effectivePolicy() Policy {
@@ -185,8 +213,12 @@ func (e *Engine) ReleaseWithCleanup(slotID string, now time.Time, reason string)
 	for i := range e.Slots {
 		if e.Slots[i].ID == slotID {
 			from := e.Slots[i].State
+			process := e.Slots[i].Process
 			e.Slots[i].State = SlotIdle
 			e.Slots[i].ProfileID = ""
+			e.Slots[i].Process = nil
+			e.Slots[i].ProxyID = ""
+			e.Slots[i].SessionBindingKey = ""
 			e.Slots[i].UpdatedAt = now
 			e.Slots[i].LastReleasedAt = now
 			e.Slots[i].LastCleanedAt = now
@@ -194,7 +226,7 @@ func (e *Engine) ReleaseWithCleanup(slotID string, now time.Time, reason string)
 			e.Slots[i].LastCleanupReason = reason
 			e.Slots[i].LeaseUntil = time.Time{}
 			e.Slots[i].LastResourceSummary = e.Budget(now).Status
-			return CleanupProof{
+			proof := CleanupProof{
 				SlotID:        slotID,
 				FromState:     from,
 				ToState:       SlotIdle,
@@ -204,10 +236,51 @@ func (e *Engine) ReleaseWithCleanup(slotID string, now time.Time, reason string)
 				LeaseCount:    e.Slots[i].LeaseCount,
 				CleanupCount:  e.Slots[i].CleanupCount,
 				ResourceUsage: e.Usage(now),
-			}, true
+			}
+			if process != nil {
+				proof.Process = &ProcessCleanupProof{
+					RootPID:               process.RootPID,
+					ObservedPIDs:          append([]int{process.RootPID}, process.ChildPIDs...),
+					ProcessCount:          1 + len(process.ChildPIDs),
+					WorkingSetMB:          process.WorkingSetMB,
+					CleanupComplete:       false,
+					ProxyBindingCleaned:   process.ProxyID != "",
+					SessionBindingCleaned: process.SessionBindingKey != "",
+				}
+			}
+			return proof, true
 		}
 	}
 	return CleanupProof{}, false
+}
+
+func (e *Engine) AttachProcess(slotID string, attachment ProcessAttachment, now time.Time) bool {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	for i := range e.Slots {
+		if e.Slots[i].ID == slotID {
+			if attachment.AttachedAt.IsZero() {
+				attachment.AttachedAt = now
+			}
+			e.Slots[i].Process = &attachment
+			e.Slots[i].ProxyID = attachment.ProxyID
+			e.Slots[i].SessionBindingKey = attachment.SessionBindingKey
+			e.Slots[i].UpdatedAt = now
+			e.Slots[i].LastResourceSummary = e.Budget(now).Status
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Engine) ReleaseProcessWithCleanup(slotID string, now time.Time, reason string, processProof ProcessCleanupProof) (CleanupProof, bool) {
+	proof, ok := e.ReleaseWithCleanup(slotID, now, reason)
+	if !ok {
+		return CleanupProof{}, false
+	}
+	proof.Process = &processProof
+	return proof, true
 }
 
 func (e *Engine) MarkReady(slotID string, now time.Time) bool {

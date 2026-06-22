@@ -92,7 +92,7 @@ $report = [ordered]@{
   }
   liveTruthBoundary = @(
     "This gate validates Settings backup API and Browser logs source-level typed facade usage only.",
-    "It preserves the transitional tauriWailsBridge compatibility proxy and does not prove full bridge removal, profile/workbench/core facade closure, provider credentials, remote proxy/TLS, SessionBundle local restore beyond its own gate, AdsPower refresh, or full 450 observed/replay coverage."
+    "It preserves the transitional tauriWailsBridge compatibility proxy and does not prove full bridge removal or profile/workbench/core facade closure; CAPTCHA/SMS/Email credential-backed provider smoke remains separate."
   )
 }
 

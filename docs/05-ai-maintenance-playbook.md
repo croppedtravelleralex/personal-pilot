@@ -14,16 +14,17 @@
 ## 默认事实
 
 - Mainline：`100% / 0% / green`
-- Overall：`40% / 60% / yellow`
-- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450` taxonomy seed / strict observed coverage `20 / 450` partial
-- Behavior：`13` shipped primitives / `8` page archetypes / P10 audit contract / `450` taxonomy seed / local deterministic replay `461 / 450` passed (`326` product-runtime-backed、`135` contract-only); target-site/browser/provider replay pending
-- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已落地；跨机器/第二机 profile portability 已按本机自用范围取消
+- Local self-use：`100% / 0% / green`
+- 唯一未验：CAPTCHA / SMS / Email 真实账号凭证 smoke
+- Fingerprint：`80` declared controls / `26` runtime projected fields / `450` taxonomy seed / strict observed coverage `450 / 450`，`passed_full_observed_fingerprint_coverage`
+- Behavior：`13` shipped primitives / `8` page archetypes / P10 audit contract / `450` taxonomy seed / local deterministic replay `461 / 450`，`passed_full_local_replay_runtime`，`contractOnly=0`
+- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已 verified；跨机器/第二机 profile portability 已取消
 
 ## 汇报规则
 
 - 先说明当前结论，再给证据。
-- Mainline remaining `0%` 与 Overall remaining `60%` 必须分开写。
-- 不把 AdsPower catch-up、`50+`、`450+` 写成当前 shipped runtime depth。
+- Mainline 和 Local self-use 都按 `100% / 0% / green` 写。
+- 不把历史 Overall `40% / 60% / yellow`、AdsPower catch-up、外部分发、release performance 或第二机目标写成当前待办。
 - 不复活 `77% / 23%` 或 `82% / 18%` 作为 live truth。
 - 本机自用范围下，不再把外部分发 smoke、release performance budget、干净 Win11/第二机或跨机器 SessionBundle 写成阻塞项。
 - 报告尽量短，优先列 landed result、当前阻塞、下一步。
@@ -47,7 +48,7 @@
 - 文档-only 改动也要检查 canonical 入口是否存在且互相指向有效文件。
 - 涉及 M4 provider readiness 时，`scripts/m4_acceptance_gate.ps1` 会刷新 provider preflight；`provider_dry_run_contract` passed 只代表本地 dry-run/failure taxonomy 报告完整，真实 provider smoke 仍必须单独保留 blocked/accepted 证据。
 - 涉及 M4 SessionBundle operator loop 时，`session_bundle_operator_contract` passed 只代表 Settings UI、desktop wrapper、TS 类型和 Rust 本机 export/preflight/dry-run/confirmed restore chain 已接通；跨机器 portability 已取消，不再保留为 blocked。
-- 涉及 M4 runtime adapter operator loop 时，`runtime_adapter_operator_contract` passed 只代表 Dashboard 可读取历史 release smoke contract，并按证据强度展示 adapter、runner、profile/fingerprint evidence 和 blocker；完整 headed realism、B1-B5、远程代理/TLS、provider、本机 restore 深度和 AdsPower refresh 仍按各自 report 判定。
+- 涉及 M4 runtime adapter operator loop 时，`runtime_adapter_operator_contract` passed 只代表 Dashboard 可读取 runtime adapter 证据；当前本机自用通过以 `runtime_adapter_evidence_gate.ps1` 的 `passed_local_self_use` 为准。
 - 涉及 M8 SessionBundle 本机恢复时，`scripts/m8_session_handoff_gate.ps1` 的 `passed_local_restore_verified` 代表本机 export/preflight/dry-run/confirmed restore 和 persisted restart-continuity artifact 已有本机证据；M8 第二机目标已取消，不得要求 `-CrossMachine` report。
 - 涉及 M4 typed facade shrink 时，`typed_facade_shrink_contract` passed 只代表 synchronizer high-traffic DTO、Workbench detection/UI/report DTO、BrowserInstanceStatus DTO 和 browser Wails binding source contract 已类型化；不得写成 `tauriWailsBridge` 已移除、所有 browser payload schema 已规范化或所有 bridge API 已统一。
 - 涉及 M4 browser payload schema 时，`scripts/m4_browser_payload_schema_gate.ps1` 的 `passed_browser_payload_schema_contract` 和 M4 gate v9 的 `browser_payload_schema_contract` 只代表 browser runtime event payload 已通过共享 `BrowserRuntimeEventPayload` / `normalizeBrowserRuntimeEventPayload` 归一化，且选定 browser API normalizer 输入已从 `any` 收窄；不得写成 `tauriWailsBridge` 已移除、低频 workbench/core bridge 已统一、真实 headed runtime 已通过或外部证据已完成。
@@ -65,11 +66,11 @@
 - 涉及 M4 bridge compatibility type 时，M4 gate v27 的 `bridge_compat_type_contract` 只代表 `src/services/desktop.ts` 的 `desktopRpc` 参数和 `src/services/tauriWailsBridge.ts` 的 runtime/app proxy 兼容层类型使用命名边界，并阻止 selected bridge files 回退到裸 `unknown[]` / `Promise<unknown>`；不得写成 `tauriWailsBridge` 已移除、所有 browser/settings/core/proxy API 已统一或外部证据已完成。
 - 涉及 M4 generic any residue 时，M4 gate v25 的 `generic_any_residue_contract` 只代表 shared Table 泛型约束、ProxyIPHealthResult rawData 和 ProxyPoolPage/types ClashProxy index signature 这组选定 generic/index `any` 已收窄；不得写成仓库每一个显式 `any` 已移除。
 - 涉及 M4 safety/logging 时，`safety_logging_contract` passed 只代表 logger 默认敏感字段、写入路径和 Text/JSON formatter 脱敏 source/test contract 已存在；不得写成真实 provider 凭证 smoke 已通过或历史报告已清洗。
-- 涉及 M4 total gate 时，`passed_with_expected_external_blockers` 代表本地 M4 合同可用且没有 failed gate；v29 最新口径是 `passed=24`、`expectedBlocked=2`、`failed=0`。仍不得把 provider、远程代理/TLS、AdsPower refresh、full observed coverage 或 target-site/browser/provider replay 写成已完成。跨机器 SessionBundle、外部分发 smoke 和 release performance budget 已取消，不再当作 expected blocker。
+- 涉及 M4 total gate 时，当前本机 gate 应只剩 CAPTCHA/SMS/Email credential-backed provider smoke 作为 expected blocker；不得把缺少真实服务商账号伪装成 accepted。跨机器 SessionBundle、外部分发 smoke、release performance budget、AdsPower refresh 和远程代理账号已取消，不再当作 expected blocker。
 - 涉及 M5 release health 时，`scripts/release_performance_smoke.ps1` v2 和 `scripts/m5_release_health_gate.ps1` 只保留为本机诊断 report；`passed_with_budget_overrun` 仍禁止写成 release performance green，也不再要求优化到预算 green。
 - 涉及 profile-browser comparison 时，先用 Dashboard 的 `采集 WebView` 在真实桌面 WebView 中生成 desktop report，再在同一时间窗口刷新 profile-browser report；`profile_browser_comparison_gate` v3 只有双边同窗且 category 可比才允许 passed。
-- 涉及 M15 browser pool 时，`scripts/m15_browser_pool_gate.ps1` 的 `passed_pool_lifecycle_harness` 只代表本地 in-memory acquire/release、resource budget、cleanup proof 和 prewarm budget step 合同可验收；不得写成真实 browser process prewarm、CDP ready、RSS/process cleanup proof、proxy/TLS、provider、AdsPower refresh 或完整 `450` coverage 已完成。
-- 涉及 observed fingerprint coverage 时，`scripts/observed_fingerprint_coverage_gate.ps1` 只统计 `layer=observed` 且 `collectorScope`、`runtimeAdapter`、`targetProfileBrowser`、`failureReason` metadata 完整的 signals；当前 `partial_observed_fingerprint_coverage` 是 `20 / 450`，taxonomy/materialized contracts 排除在外，不得写成 full observed。
-- 涉及 live replay runtime 时，`scripts/live_replay_runtime_gate.ps1` 的 `passed_local_replay_runtime` 只代表本地 deterministic replay harness 已跑过 `461 / 450` taxonomy events；其中 `135` contract-only event 仍需接入 product/browser/provider runtime，不得写成真实目标站 replay。
-- 涉及 M10 headed stability 时，`scripts/m10_headed_stability_gate.ps1` 的 `passed_long_task_stability_coherence` 只代表本机 headed_external validation_probe 的 3-run stability/coherence matrix 通过；不得写成完整 headed realism、remote proxy/TLS、provider 或 AdsPower refresh。
-- 涉及 M15 browser process 时，`scripts/m15_browser_process_gate.ps1` 的 `passed_real_browser_process_prewarm_cleanup` 只代表脚本启动自有本机 browser process、CDP ready、记录 process/RSS snapshot 并清理自有 PID tree；不得写成完整 browser pool acquire/release、proxy/session cleanup、provider 或 AdsPower refresh。
+- 涉及 M15 browser pool 时，`scripts/m15_browser_pool_gate.ps1` 的 `passed_real_pool_process_integration` 代表本机 pool lifecycle、process attach/release cleanup、proxy/session binding cleanup 和最新真实 browser process proof 已组合通过。
+- 涉及 observed fingerprint coverage 时，`scripts/observed_fingerprint_coverage_gate.ps1` 只统计 `layer=observed` 且 metadata 完整的 signals；当前 full proof 是 `passed_full_observed_fingerprint_coverage`，`450 / 450`，来源是本机真实浏览器/CDP 采集。
+- 涉及 live replay runtime 时，`scripts/live_replay_runtime_gate.ps1` 当前应为 `passed_full_local_replay_runtime`，`461 / 450`，`contractOnly=0`。
+- 涉及 M10 headed stability 时，`scripts/m10_headed_stability_gate.ps1` 的 `passed_long_task_stability_coherence` 代表本机 headed_external validation_probe 的 3-run stability/coherence matrix 通过。
+- 涉及 M15 browser process 时，`scripts/m15_browser_process_gate.ps1` 的 `passed_real_browser_process_prewarm_cleanup` 代表脚本启动自有本机 browser process、CDP ready、记录 process/RSS snapshot 并清理自有 PID tree。

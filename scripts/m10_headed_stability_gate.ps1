@@ -244,7 +244,7 @@ $failureReason = if ($status -eq "passed_long_task_stability_coherence") {
 }
 
 $nextAction = if ($status -eq "passed_long_task_stability_coherence") {
-  "Keep this M10 stability matrix attached; continue with remote proxy/TLS and product replay wiring as separate evidence."
+  "Keep this M10 stability matrix attached; rerun after changing headed runtime behavior."
 } else {
   "Inspect the attempt matrix, fix headed_external instability, then rerun scripts/m10_headed_stability_gate.ps1."
 }
@@ -290,7 +290,7 @@ $reportOut = [ordered]@{
   failureReason = $failureReason
   liveTruthBoundary = @(
     "This gate validates local headed_external long-task repeatability and coherence matrix only.",
-    "It does not prove provider production closure, remote proxy/TLS, AdsPower refresh, or full 450 observed/replay coverage.",
+    "CAPTCHA/SMS/Email credential-backed provider smoke remains outside this gate.",
     "The refresh command may start real local browser processes through scripts/headed_external_smoke.ps1."
   )
 }

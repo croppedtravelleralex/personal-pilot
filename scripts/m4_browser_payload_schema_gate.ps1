@@ -74,7 +74,7 @@ $report = [ordered]@{
   }
   liveTruthBoundary = @(
     "This gate validates browser module source-level payload schema normalization only.",
-    "It does not prove real headed browser runtime, provider credentials, remote proxy/TLS, SessionBundle local restore beyond its own gate, AdsPower refresh, or full 450 observed/replay coverage.",
+    "It does not prove CAPTCHA/SMS/Email credential-backed provider smoke.",
     "It does not remove every tauriWailsBridge/core bridge compatibility path."
   )
 }

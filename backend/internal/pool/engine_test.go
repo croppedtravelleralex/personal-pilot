@@ -103,3 +103,53 @@ func TestPoolCleanupReclaimsStaleIdleAndFailedSlots(t *testing.T) {
 		t.Fatalf("expected empty pool after cleanup, got %+v", engine.Slots)
 	}
 }
+
+func TestPoolProcessAttachmentReleaseCleanupProof(t *testing.T) {
+	now := time.Date(2026, 6, 22, 11, 0, 0, 0, time.UTC)
+	engine := Engine{Policy: Policy{MaxSlots: 1, DefaultLease: time.Minute}}
+	slot, ok := engine.Acquire("profile-process", now)
+	if !ok {
+		t.Fatal("acquire slot")
+	}
+	attachment := ProcessAttachment{
+		RootPID:           1001,
+		ChildPIDs:         []int{1002, 1003},
+		CDPPort:           9222,
+		WorkingSetMB:      188.5,
+		TempProfileDir:    "D:/tmp/profile-process",
+		ProxyID:           "proxy-local",
+		SessionBindingKey: "session-local",
+	}
+	if !engine.AttachProcess(slot.ID, attachment, now.Add(time.Second)) {
+		t.Fatal("attach process")
+	}
+	if engine.Slots[0].Process == nil || engine.Slots[0].ProxyID != "proxy-local" || engine.Slots[0].SessionBindingKey != "session-local" {
+		t.Fatalf("process attachment was not retained: %+v", engine.Slots[0])
+	}
+
+	processProof := ProcessCleanupProof{
+		RootPID:               1001,
+		ObservedPIDs:          []int{1001, 1002, 1003},
+		RemainingPIDs:         nil,
+		CDPReady:              true,
+		ProcessCount:          3,
+		WorkingSetMB:          188.5,
+		CleanupComplete:       true,
+		TempProfileRemoved:    true,
+		ProxyBindingCleaned:   true,
+		SessionBindingCleaned: true,
+	}
+	proof, ok := engine.ReleaseProcessWithCleanup(slot.ID, now.Add(5*time.Second), "process_task_finished", processProof)
+	if !ok {
+		t.Fatal("release process slot")
+	}
+	if proof.Process == nil || !proof.Process.CleanupComplete || !proof.Process.ProxyBindingCleaned || !proof.Process.SessionBindingCleaned {
+		t.Fatalf("process cleanup proof missing fields: %+v", proof)
+	}
+	if proof.Process.ProcessCount != 3 || proof.Process.WorkingSetMB != 188.5 {
+		t.Fatalf("unexpected process cleanup proof: %+v", proof.Process)
+	}
+	if engine.Slots[0].Process != nil || engine.Slots[0].ProxyID != "" || engine.Slots[0].SessionBindingKey != "" {
+		t.Fatalf("slot did not clear process/proxy/session binding: %+v", engine.Slots[0])
+	}
+}

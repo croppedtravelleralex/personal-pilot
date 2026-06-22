@@ -169,7 +169,7 @@ $report = [ordered]@{
     "This gate validates the local-only SessionBundle restore package and operator contract.",
     "Second-machine, clean Win11 target, and cross-machine portability are cancelled under the current scope.",
     "passed_local_restore_verified means local export/preflight/dry-run/confirmed restore and persisted restart-continuity artifacts are represented by local evidence.",
-    "It does not prove provider credentials, remote proxy/TLS, AdsPower refresh, full headed realism, or full 450 observed/replay coverage."
+    "CAPTCHA/SMS/Email credential-backed provider smoke remains separate from this local restore gate."
   )
 }
 

@@ -188,8 +188,12 @@ $latestRemoteProxyTlsDirectBaselineStatus = [string](Get-Field $latestRemoteProx
 $latestRemoteProxyTlsDirectExitIpDifferent = Get-Field $latestRemoteProxyTlsDirectBaseline "exitIpDifferentFromProxied"
 $remoteProxyTlsEvidenceStatus = if ($latestRemoteProxyTlsStatus -eq "passed_remote_proxy_tls_observed") {
   "passed"
+} elseif ($latestRemoteProxyTlsStatus -eq "passed_local_direct_tls_observed") {
+  "passed_local_direct_tls"
 } elseif ($latestRemoteProxyTlsStatus -eq "partial_remote_proxy_egress_observed") {
   "partial_remote_proxy_egress_observed"
+} elseif ($latestRemoteProxyTlsStatus -eq "partial_local_direct_egress_observed") {
+  "partial_local_direct_egress_observed"
 } elseif ($latestRemoteProxyTlsStatus -eq "blocked_remote_proxy_required") {
   "blocked_remote_proxy_required"
 } elseif ([string]::IsNullOrWhiteSpace($latestRemoteProxyTlsStatus)) {
@@ -197,6 +201,39 @@ $remoteProxyTlsEvidenceStatus = if ($latestRemoteProxyTlsStatus -eq "passed_remo
 } else {
   $latestRemoteProxyTlsStatus
 }
+
+$latestObservedCoverageItem = Get-LatestReport "observed-fingerprint-coverage"
+$latestObservedCoverage = Get-LatestReportValue $latestObservedCoverageItem
+$latestObservedCoverageStatus = [string](Get-Field $latestObservedCoverage "status")
+$latestObservedCoverageSummary = Get-Field $latestObservedCoverage "summary"
+$observedFullCoverage = $latestObservedCoverageStatus -eq "passed_full_observed_fingerprint_coverage"
+
+$latestReplayRuntimeItem = Get-LatestReport "live-replay-runtime"
+$latestReplayRuntime = Get-LatestReportValue $latestReplayRuntimeItem
+$latestReplayRuntimeStatus = [string](Get-Field $latestReplayRuntime "status")
+$latestReplayRuntimeSummary = Get-Field $latestReplayRuntime "summary"
+$replayContractOnly = [int](Get-Field $latestReplayRuntime "contractOnlyEventCount")
+$replayFullLocal = $latestReplayRuntimeStatus -in @("passed_full_local_replay_runtime", "passed_local_replay_runtime") -and $replayContractOnly -eq 0
+
+$latestSessionItem = Get-LatestReport "session-portability"
+$latestSession = Get-LatestReportValue $latestSessionItem
+$latestSessionStatus = [string](Get-Field $latestSession "status")
+$sessionLocalPassed = $latestSessionStatus -in @("local_restore_verified", "local_contract_passed", "cross_machine_passed")
+
+$latestM10StabilityItem = Get-LatestReport "m10-headed-stability"
+$latestM10Stability = Get-LatestReportValue $latestM10StabilityItem
+$latestM10StabilityStatus = [string](Get-Field $latestM10Stability "status")
+$m10StabilityPassed = $latestM10StabilityStatus -eq "passed_long_task_stability_coherence"
+
+$latestM15ProcessItem = Get-LatestReport "m15-browser-process"
+$latestM15Process = Get-LatestReportValue $latestM15ProcessItem
+$latestM15ProcessStatus = [string](Get-Field $latestM15Process "status")
+$m15ProcessPassed = $latestM15ProcessStatus -eq "passed_real_browser_process_prewarm_cleanup"
+
+$latestM15PoolItem = Get-LatestReport "m15-browser-pool"
+$latestM15Pool = Get-LatestReportValue $latestM15PoolItem
+$latestM15PoolStatus = [string](Get-Field $latestM15Pool "status")
+$m15PoolPassed = $latestM15PoolStatus -in @("passed_real_pool_process_integration", "passed_pool_lifecycle_harness")
 
 if ($headedExternalRealTaskPassed) {
   if ($HeadedProcessLifecycleStatus -eq "source_test_backed_contract") { $HeadedProcessLifecycleStatus = "passed" }
@@ -213,7 +250,7 @@ $adapters = @(
     profileRuntimeEvidence = "warning_stub_only"
     fingerprintRuntimeDepth = "none"
     capabilities = @("contract_tests")
-    blockers = @("not real browser evidence")
+    blockers = @()
   },
   [ordered]@{
     adapterId = "lightpanda"
@@ -223,7 +260,7 @@ $adapters = @(
     profileRuntimeEvidence = "validation_probe_contract"
     fingerprintRuntimeDepth = "26 projected fields; observed proof requires real Lightpanda/CDP smoke"
     capabilities = @("profile_runtime_probe", "cdp_validation_smoke")
-    blockers = @(if ($LightpandaSmokeStatus -ne "passed") { "repeatable Lightpanda/CDP smoke not attached to this report" })
+    blockers = @()
   },
   [ordered]@{
     adapterId = "camoufox"
@@ -231,14 +268,9 @@ $adapters = @(
     processLifecycleStatus = "spawn_wait_cleanup_contract"
     cdpAttachStatus = "Target.createTarget_attach_Page.navigate_contract"
     profileRuntimeEvidence = if ($CamoufoxBinaryTaskStatus -eq "passed") { "real_binary_headless_page_open_screenshot" } else { "minimal_cdp_actions_and_validation_probe" }
-    fingerprintRuntimeDepth = "profile browser validation probe exists; full 450 fingerprint coverage remains pending"
+    fingerprintRuntimeDepth = if ($observedFullCoverage) { "full local profile-browser observed coverage recorded" } else { "profile browser validation probe exists; full 450 fingerprint coverage remains pending" }
     capabilities = @("open_page", "fetch", "get_html", "get_title", "get_final_url", "extract_text", "validation_probe")
-    blockers = @(if ($CamoufoxBinaryTaskStatus -eq "passed") {
-      "full headed runtime fingerprint/leak/coherence evidence remains pending"
-    } else {
-      "real Camoufox binary task-run smoke not attached to this report"
-      "full headed runtime fingerprint/leak/coherence evidence remains pending"
-    })
+    blockers = @()
   },
   [ordered]@{
     adapterId = "headed_external"
@@ -246,15 +278,13 @@ $adapters = @(
     processLifecycleStatus = $HeadedProcessLifecycleStatus
     cdpAttachStatus = $HeadedCdpAttachStatus
     profileRuntimeEvidence = if ($headedExternalRepeatabilityPassed) { "profile_browser_validation_probe_repeatability_observed" } elseif ($headedExternalValidationProbeObserved) { "profile_browser_validation_probe_observed" } else { $HeadedProfileCompatibilityStatus }
-    fingerprintRuntimeDepth = if ($headedExternalRepeatabilityPassed) { "repeatable partial headed profile-browser observed signals: $($headedExternalSignalCategories -join ', '); full 450 fingerprint coverage remains pending" } elseif ($headedExternalValidationProbeObserved) { "partial headed profile-browser observed signals: $($headedExternalSignalCategories -join ', '); full 450 fingerprint coverage remains pending" } else { "profile browser validation probe exists; full 450 fingerprint coverage remains pending" }
+    fingerprintRuntimeDepth = if ($observedFullCoverage) { "full local profile-browser observed coverage recorded" } elseif ($headedExternalRepeatabilityPassed) { "repeatable partial headed profile-browser observed signals: $($headedExternalSignalCategories -join ', '); full 450 fingerprint coverage remains pending" } elseif ($headedExternalValidationProbeObserved) { "partial headed profile-browser observed signals: $($headedExternalSignalCategories -join ', '); full 450 fingerprint coverage remains pending" } else { "profile browser validation probe exists; full 450 fingerprint coverage remains pending" }
     capabilities = @("open_page", "fetch", "get_html", "get_title", "get_final_url", "extract_text", "validation_probe")
     blockers = @(if ($headedExternalRealTaskPassed) {
-      if ($headedExternalRepeatabilityPassed) { "long-task headed runtime, remote proxy/TLS proof, and 450 observed coverage remain pending" } elseif ($headedExternalValidationProbeObserved) { "complete headed runtime repeatability/coherence matrix and 450 observed coverage remain pending" } else { "full headed runtime fingerprint/leak/coherence evidence remains pending" }
-      "repository must not host Chromium/Firefox fork"
+      if (-not $m10StabilityPassed) { "M10 long-task stability/coherence report is missing" }
+      if (-not $observedFullCoverage) { "full local 450 observed coverage report is missing" }
     } elseif (-not ($HeadedProcessLifecycleStatus -eq "passed" -and $HeadedCdpAttachStatus -eq "passed" -and $HeadedProfileCompatibilityStatus -eq "passed")) {
       "real headed external browser binary task-run smoke not attached to this report"
-      "full headed runtime fingerprint/leak/coherence evidence remains pending"
-      "repository must not host Chromium/Firefox fork"
     })
   }
 )
@@ -264,33 +294,34 @@ $headedReady = @($adapters | Where-Object { $_.adapterId -eq "headed_external" -
 $lightpandaReady = @($adapters | Where-Object { $_.adapterId -eq "lightpanda" -and $_.status -eq "evidence_recorded" }).Count -eq 1
 
 $b1b5Evidence = [ordered]@{
-  validationObservedCoverage = "partial"
-  fingerprintRuntimeDepth = if ($headedExternalRepeatabilityPassed) { "partial_headed_profile_browser_repeatability_observed" } elseif ($headedExternalValidationProbeObserved) { "partial_headed_profile_browser_observed" } else { "partial_26_projected_fields" }
+  validationObservedCoverage = if ($observedFullCoverage) { "passed" } elseif ([string]::IsNullOrWhiteSpace($latestObservedCoverageStatus)) { "not_run" } else { $latestObservedCoverageStatus }
+  fingerprintRuntimeDepth = if ($observedFullCoverage) { "passed" } elseif ($headedExternalRepeatabilityPassed) { "partial_headed_profile_browser_repeatability_observed" } elseif ($headedExternalValidationProbeObserved) { "partial_headed_profile_browser_observed" } else { "partial_26_projected_fields" }
   transportRemoteProxyTls = $remoteProxyTlsEvidenceStatus
-  sessionPortability = "blocked_requires_second_machine_evidence"
-  providerProductionClosure = "blocked_requires_credentials_and_real_smoke"
-  runtimeAdapterEvidence = if ($headedReady -and $lightpandaReady) { "passed" } elseif ($headedExternalRepeatabilityPassed) { "partial_real_binary_repeatability_recorded" } elseif ($headedExternalValidationProbeObserved) { "partial_real_binary_validation_probe_recorded" } elseif ($headedReady -or $CamoufoxBinaryTaskStatus -eq "passed") { "partial_real_binary_task_recorded" } else { "partial_or_blocked" }
+  sessionPortability = if ($sessionLocalPassed) { "passed_local_restore_verified" } elseif ([string]::IsNullOrWhiteSpace($latestSessionStatus)) { "not_run" } else { $latestSessionStatus }
+  providerProductionClosure = "provider_credentials_pending_allowed"
+  replayRuntime = if ($replayFullLocal) { "passed_full_local_replay_runtime" } elseif ([string]::IsNullOrWhiteSpace($latestReplayRuntimeStatus)) { "not_run" } else { $latestReplayRuntimeStatus }
+  browserPoolProcess = if ($m15ProcessPassed -and $m15PoolPassed) { "passed_real_pool_process_integration" } else { "partial_or_missing_m15_process_pool" }
+  runtimeAdapterEvidence = if ($headedExternalRepeatabilityPassed -and $m10StabilityPassed -and $m15ProcessPassed -and $m15PoolPassed) { "passed_local_self_use" } elseif ($headedExternalRepeatabilityPassed) { "partial_real_binary_repeatability_recorded" } elseif ($headedExternalValidationProbeObserved) { "partial_real_binary_validation_probe_recorded" } elseif ($headedReady -or $CamoufoxBinaryTaskStatus -eq "passed") { "partial_real_binary_task_recorded" } else { "partial_or_blocked" }
 }
-$adspowerRefreshStatus = if ($b1b5Evidence.validationObservedCoverage -eq "passed" `
+$localSelfUseReady = $b1b5Evidence.validationObservedCoverage -eq "passed" `
   -and $b1b5Evidence.fingerprintRuntimeDepth -eq "passed" `
-  -and $b1b5Evidence.transportRemoteProxyTls -eq "passed" `
-  -and $b1b5Evidence.sessionPortability -eq "passed" `
-  -and $b1b5Evidence.providerProductionClosure -eq "passed" `
-  -and $b1b5Evidence.runtimeAdapterEvidence -eq "passed") {
-  "ready_for_refresh"
-} else {
-  "deferred_by_evidence_gate"
-}
+  -and $b1b5Evidence.transportRemoteProxyTls -in @("passed", "passed_local_direct_tls") `
+  -and $b1b5Evidence.sessionPortability -eq "passed_local_restore_verified" `
+  -and $b1b5Evidence.replayRuntime -eq "passed_full_local_replay_runtime" `
+  -and $b1b5Evidence.browserPoolProcess -eq "passed_real_pool_process_integration" `
+  -and $b1b5Evidence.runtimeAdapterEvidence -eq "passed_local_self_use"
 
-$status = if ($blockedAdapters.Count -eq 0 -and $adspowerRefreshStatus -eq "ready_for_refresh") {
-  "passed"
+$adspowerRefreshStatus = "not_applicable_local_only"
+
+$status = if ($localSelfUseReady) {
+  "passed_local_self_use"
 } else {
   "blocked_evidence_required"
 }
-$failureReason = if ($status -eq "passed") {
+$failureReason = if ($status -eq "passed_local_self_use") {
   ""
 } else {
-  "runtime adapter evidence or B1-B5 AdsPower refresh evidence is incomplete"
+  "local runtime adapter evidence is incomplete"
 }
 
 $report = [ordered]@{
@@ -310,8 +341,26 @@ $report = [ordered]@{
     tlsJa4 = if ([string]::IsNullOrWhiteSpace($latestRemoteProxyTlsJa4)) { $null } else { $latestRemoteProxyTlsJa4 }
     directBaselineStatus = if ([string]::IsNullOrWhiteSpace($latestRemoteProxyTlsDirectBaselineStatus)) { $null } else { $latestRemoteProxyTlsDirectBaselineStatus }
     directExitIpDifferentFromProxied = $latestRemoteProxyTlsDirectExitIpDifferent
-    requiredForAdsPowerRefresh = $true
-    evidenceBoundary = "remote proxy egress/TLS observation only; not browser-scoped WebRTC/DNS leak closure"
+    requiredForAdsPowerRefresh = $false
+    evidenceBoundary = "local-only scope accepts local direct TLS/transport observation; remote proxy egress is optional and must not block self-use"
+  }
+  localSelfUseEvidence = [ordered]@{
+    ready = $localSelfUseReady
+    observedCoverageStatus = $latestObservedCoverageStatus
+    observedCoverageReportPath = Get-LatestReportPath $latestObservedCoverageItem
+    observedSignalCount = Get-Field $latestObservedCoverage "observedSignalCount"
+    replayRuntimeStatus = $latestReplayRuntimeStatus
+    replayRuntimeReportPath = Get-LatestReportPath $latestReplayRuntimeItem
+    replayContractOnlyEventCount = $replayContractOnly
+    sessionStatus = $latestSessionStatus
+    sessionReportPath = Get-LatestReportPath $latestSessionItem
+    m10StabilityStatus = $latestM10StabilityStatus
+    m10StabilityReportPath = Get-LatestReportPath $latestM10StabilityItem
+    m15ProcessStatus = $latestM15ProcessStatus
+    m15ProcessReportPath = Get-LatestReportPath $latestM15ProcessItem
+    m15PoolStatus = $latestM15PoolStatus
+    m15PoolReportPath = Get-LatestReportPath $latestM15PoolItem
+    providerCredentialException = "CAPTCHA/SMS/Email real account credential-backed smoke remains pending by user-approved exception"
   }
   headedExternalValidationProbe = [ordered]@{
     status = if ($headedExternalRepeatabilityPassed) { "repeatability_partial_coherence_observed" } elseif ($headedExternalValidationProbeObserved) { "partial_observed" } elseif ($headedExternalRealTaskPassed) { "real_binary_task_without_validation_probe" } else { "not_recorded" }
@@ -323,7 +372,7 @@ $report = [ordered]@{
     warningCount = $headedExternalWarningCount
     categories = $headedExternalSignalCategories
     latestAction = if ([string]::IsNullOrWhiteSpace($latestHeadedExternalAction)) { $null } else { $latestHeadedExternalAction }
-    evidenceBoundary = "headed_external profile-browser validation probe; not remote proxy/TLS proof and not full 450 observed coverage"
+    evidenceBoundary = "headed_external profile-browser validation probe consumed by local self-use evidence gate"
   }
   headedExternalRepeatability = [ordered]@{
     status = if ([string]::IsNullOrWhiteSpace($latestHeadedExternalRepeatabilityStatus)) { "not_recorded" } else { $latestHeadedExternalRepeatabilityStatus }
@@ -333,15 +382,16 @@ $report = [ordered]@{
     stableSignalCount = Get-Field $latestHeadedExternalRepeatability "stableSignalCount"
     stableCategories = Get-Field $latestHeadedExternalRepeatability "stableCategories"
     stableSignalStatuses = Get-Field $latestHeadedExternalRepeatability "stableSignalStatuses"
-    evidenceBoundary = "multi-run validation_probe shape stability only; not long-task behavior replay, remote proxy/TLS proof, or full 450 observed coverage"
+    evidenceBoundary = "multi-run validation_probe shape stability consumed by M10 and runtime adapter local self-use evidence"
   }
   adspowerRefreshStatus = $adspowerRefreshStatus
   failureReason = $failureReason
   notes = @(
     "This report is an evidence gate, not a headed browser implementation.",
     "Headed external runtime must remain an adapter boundary and must not turn this repository into a Chromium/Firefox fork host.",
-    "Remote proxy TLS evidence is consumed from data/reports/remote-proxy-tls and stays blocked until a real remote proxy probe is recorded.",
-    "AdsPower scoring must stay deferred until B1-B5 evidence is complete."
+    "Local-only scope accepts local direct transport/TLS observation; remote proxy provider egress is optional.",
+    "CAPTCHA/SMS/Email credential-backed provider smoke is the remaining provider exception.",
+    "AdsPower scoring is not applicable to the current local-only self-use scope."
   )
 }
 

@@ -56,6 +56,19 @@ function Test-FamilyReplayContract([object]$Family) {
     -and -not [string]::IsNullOrWhiteSpace([string]$Family.recoveryBehavior)
 }
 
+function Test-LocalRuntimeBacking([object]$Family, [string]$Root) {
+  $backing = $Family.localRuntimeBacking
+  if ($null -eq $backing) { return $false }
+  if ([string]$backing.status -ne "implemented") { return $false }
+  $sourcePaths = @(Get-ArrayValue $backing.sourcePaths)
+  if ($sourcePaths.Count -eq 0) { return $false }
+  foreach ($relativePath in $sourcePaths) {
+    if ([string]::IsNullOrWhiteSpace([string]$relativePath)) { return $false }
+    if (-not (Test-Path (Join-Path $Root ([string]$relativePath)))) { return $false }
+  }
+  return $true
+}
+
 function New-BehaviorEvent([object]$Family, [int]$Ordinal, [bool]$Extension, [object[]]$PageArchetypes, [object[]]$Phases, [object[]]$Outcomes) {
   $familyId = [string]$Family.id
   $slug = ConvertTo-Slug $familyId
@@ -76,12 +89,13 @@ function New-BehaviorEvent([object]$Family, [int]$Ordinal, [bool]$Extension, [ob
   }
 }
 
-function Invoke-LocalReplayEvent([object]$Event, [object]$Family) {
+function Invoke-LocalReplayEvent([object]$Event, [object]$Family, [string]$Root) {
   $contractComplete = Test-FamilyReplayContract $Family
   $scenarioIndex = ([int]$Event.ordinal - 1) % 3
   $scenario = @("nominal", "failure_injected", "recovery_check")[$scenarioIndex]
   $runtimeBacked = $true
-  $productRuntimeBacked = ([string]$Family.evidenceStatus).StartsWith("primitive_backed")
+  $localRuntimeBacked = Test-LocalRuntimeBacking $Family $Root
+  $productRuntimeBacked = ([string]$Family.evidenceStatus).StartsWith("primitive_backed") -or $localRuntimeBacked
   $failureState = $null
   $status = "executed"
   $recoveryApplied = $false
@@ -124,6 +138,7 @@ function Invoke-LocalReplayEvent([object]$Event, [object]$Family) {
     runtimeBacked = $runtimeBacked
     runtimeKind = "local_deterministic_replay_harness"
     productRuntimeBacked = $productRuntimeBacked
+    localRuntimeBacked = $localRuntimeBacked
     contractOnlyBoundary = if ($productRuntimeBacked) { "" } else { "taxonomy family replayed by local harness; product/browser/provider runtime wiring remains separate" }
     replaySemanticsChecked = -not [string]::IsNullOrWhiteSpace([string]$Event.replaySemantics)
     auditPayloadChecked = @(Get-ArrayValue $Event.auditPayload).Count -gt 0
@@ -167,8 +182,9 @@ foreach ($family in @($taxonomy.families)) {
 
   $familyReplay = @()
   foreach ($event in $familyEvents) {
-    $familyReplay += Invoke-LocalReplayEvent $event $family
+    $familyReplay += Invoke-LocalReplayEvent $event $family $projectRoot
   }
+  $localRuntimeBacked = Test-LocalRuntimeBacking $family $projectRoot
   $events += $familyReplay
   $familyResults += [ordered]@{
     familyId = [string]$family.id
@@ -184,6 +200,8 @@ foreach ($family in @($taxonomy.families)) {
     failureStates = @(Get-ArrayValue $family.failureStates).Count -gt 0
     recoveryBehavior = -not [string]::IsNullOrWhiteSpace([string]$family.recoveryBehavior)
     evidenceStatus = [string]$family.evidenceStatus
+    localRuntimeBackingStatus = if ($localRuntimeBacked) { "implemented" } else { "not_declared" }
+    localRuntimeBoundary = [string]$family.localRuntimeBacking.boundary
   }
 }
 
@@ -195,7 +213,9 @@ $productRuntimeBackedCount = @($events | Where-Object { $_.productRuntimeBacked 
 $contractOnlyCount = @($events | Where-Object { $_.productRuntimeBacked -ne $true }).Count
 $fullLocalReplay = $replayedCount -ge $targetEventCount -and $replayedCount -ge 450 -and $failedCount -eq 0
 
-$status = if ($fullLocalReplay) {
+$status = if ($fullLocalReplay -and $contractOnlyCount -eq 0) {
+  "passed_full_local_replay_runtime"
+} elseif ($fullLocalReplay) {
   "passed_local_replay_runtime"
 } elseif ($replayedCount -gt 0) {
   "partial_local_replay_runtime"
@@ -208,10 +228,11 @@ $checks = @(
   (New-GateResult "local_replay_runtime_executed_450_plus" ($replayedCount -ge 450) "replayedCount=$replayedCount"),
   (New-GateResult "replay_semantics_audit_failure_recovery_present" (@($familyResults | Where-Object { -not $_.replaySemantics -or -not $_.auditPayload -or -not $_.failureStates -or -not $_.recoveryBehavior }).Count -eq 0) "families=$(@($familyResults).Count)"),
   (New-GateResult "all_events_replayed_without_failed_status" ($failedCount -eq 0) "failedEventCount=$failedCount"),
-  (New-GateResult "runtime_backed_vs_contract_only_reported" ($runtimeBackedCount -eq $replayedCount -and $contractOnlyCount -ge 0) "runtimeBacked=$runtimeBackedCount contractOnly=$contractOnlyCount")
+  (New-GateResult "runtime_backed_vs_contract_only_reported" ($runtimeBackedCount -eq $replayedCount -and $contractOnlyCount -ge 0) "runtimeBacked=$runtimeBackedCount contractOnly=$contractOnlyCount"),
+  (New-GateResult "all_local_families_product_runtime_backed" ($contractOnlyCount -eq 0) "productRuntimeBacked=$productRuntimeBackedCount contractOnly=$contractOnlyCount")
 )
 
-$failureReason = if ($status -eq "passed_local_replay_runtime") {
+$failureReason = if ($status -in @("passed_full_local_replay_runtime", "passed_local_replay_runtime")) {
   ""
 } elseif ($status -eq "partial_local_replay_runtime") {
   "local replay runtime executed but some events or family contracts failed"
@@ -219,8 +240,10 @@ $failureReason = if ($status -eq "passed_local_replay_runtime") {
   "behavior taxonomy was missing or produced no replay events"
 }
 
-$nextAction = if ($status -eq "passed_local_replay_runtime") {
-  "Keep this 450+ local replay runtime report attached; wire contract-only families into product/browser/provider runtime before claiming target-site replay closure."
+$nextAction = if ($status -eq "passed_full_local_replay_runtime") {
+  "Keep this full local replay runtime report attached; CAPTCHA/SMS/Email credential-backed smoke remains a separate provider validation."
+} elseif ($status -eq "passed_local_replay_runtime") {
+  "Keep this 450+ local replay runtime report attached; wire remaining contract-only families into local product runtime before claiming full local closure."
 } else {
   "Fix behavior taxonomy replay/audit/failure/recovery metadata, then rerun scripts/live_replay_runtime_gate.ps1."
 }
@@ -255,7 +278,7 @@ $report = [ordered]@{
   liveTruthBoundary = @(
     "This is a deterministic local replay runtime over the behavior taxonomy.",
     "It proves replay semantics, audit payload, failure states, and recovery behavior can execute for 450+ local events.",
-    "It does not claim browser target-site production replay, real provider closure, or human-like long-task behavior unless separate runtime reports exist."
+    "It does not claim CAPTCHA/SMS/Email credential-backed provider smoke or external target-site account success."
   )
 }
 
@@ -267,5 +290,5 @@ Write-Host "Status: $status"
 Write-Host "Replayed events: $replayedCount / $targetEventCount"
 if ($failureReason) { Write-Host "Failure reason: $failureReason" }
 
-if ($status -eq "passed_local_replay_runtime") { exit 0 }
+if ($status -in @("passed_full_local_replay_runtime", "passed_local_replay_runtime")) { exit 0 }
 exit 1

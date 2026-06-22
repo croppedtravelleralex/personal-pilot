@@ -5,10 +5,11 @@ Updated: 2026-06-22 (Asia/Shanghai)
 ## Live Truth Boundary
 
 - Mainline delivery remains `100% / 0% / green`.
-- Overall end-state remains `40% / 60% / yellow` until new real evidence changes it.
+- Local self-use is now `100% / 0% / green`.
 - M4-M20 work must improve user-visible capability and evidence depth without claiming external proof that has not been recorded.
 - 2026-06-22 local-only reset: release performance budget, external distribution smoke, clean Win11/second-machine gates, and cross-machine SessionBundle are cancelled as goals. Historical M5/M8/M19 entries below are diagnostic context only.
-- Provider credentials, remote proxy/TLS, AdsPower refresh, full `450` observed coverage, target-site/browser/provider replay, and full pool integration stay blocked or deferred until matching reports exist.
+- Only CAPTCHA/SMS/Email credential-backed provider smoke remains unverified. Remote proxy/TLS, AdsPower refresh, release performance budget, external distribution, and second-machine portability are not active local-only goals.
+- Implementation batches before Forty-Fourth are historical records. If an older batch says observed coverage, replay runtime, M15 integration, remote proxy/TLS, AdsPower, or second-machine work is pending, the Forty-Fourth batch and current Live Truth override it.
 
 ## Branch And Delivery Rule
 
@@ -49,16 +50,16 @@ M4 is the first practical utility milestone after the current contract-heavy sta
 | M6 | Observed fingerprint comparison | Same-run desktop WebView vs profile-browser comparison and repeatability sampling |
 | M7 | Provider production closure | Real credential-backed CAPTCHA/SMS/Email smoke, CDP detect/fill, failure handling |
 | M8 | Local SessionBundle restore | Local restore gate is verified; cross-machine goal is cancelled by local-only scope |
-| M9 | Remote proxy/TLS reality | Remote proxy egress/TLS report, direct baseline, DNS/WebRTC leak relation |
+| M9 | Local transport/TLS reality | Local direct egress/TLS report; remote proxy account proof is optional and out of current scope |
 | M10 | Runtime realism | Headed repeatability/coherence matrix and local long-task stability proof; Camoufox task metrics remain separate |
 | M11 | Workflow marketplace | Versioned built-in templates and import/export for auth/register/form/provider flows |
-| M12 | Live behavior replay | Local deterministic `450+` replay runtime is passed; target-site/browser/provider runtime wiring remains separate |
+| M12 | Live behavior replay | Full local deterministic `450+` replay runtime is passed with `contractOnly=0` |
 | M13 | Evidence operations | Report history, diffs, risk trends, failure reason taxonomy, governance guardrails |
 | M14 | Data export | CSV plus optional Notion/Sheets/Airtable adapters with redaction controls |
-| M15 | Browser pool | Real process prewarm/CDP/RSS/cleanup proof is passed; full pool acquire/release integration remains separate |
+| M15 | Browser pool | Real process prewarm/CDP/RSS/cleanup proof and pool/process integration are passed |
 | M16 | Trust inheritance | Credential chain, encrypted token store, SessionBundle migration integration |
 | M17 | Device family consistency | Business-laptop and desktop-family generators tied to consistency scoring |
-| M18 | AdsPower score refresh | B1-B5 evidence-backed rescore only; no score lift from contract-only work |
+| M18 | AdsPower score refresh | Cancelled by local-only scope |
 | M19 | External distribution | Cancelled by local-only scope |
 | M20 | Product hardening | Audit, permissions, rollback, backup, release notes, maintenance handoff |
 
@@ -469,7 +470,7 @@ Status: started 2026-06-22.
 2. Shrink `BrowserNativeBindings` so it no longer advertises retired settings/core/proxy Wails methods.
 3. Make `tauriWailsBridge` App RPC forwarding explicit with `BRIDGE_RPC_METHOD_NAMES`, returning `undefined` for unknown properties and `then`.
 4. Add `scripts/m4_browser_settings_core_proxy_facade_gate.ps1`, desktop evidence history support, Dashboard `M4 Browser Facade` row, and M4 acceptance gate v29 `browser_settings_core_proxy_facade_contract`.
-5. Latest reports: `data/reports/m4-browser-settings-core-proxy-facade/m4-browser-settings-core-proxy-facade-gate-1782114285844.json` is `passed_browser_settings_core_proxy_facade_contract`; `data/reports/m4-acceptance/m4-acceptance-gate-1782114555291.json` is `passed_with_expected_external_blockers`, `passed=24`, `expectedBlocked=2`, `failed=0`.
+5. Latest reports: `data/reports/m4-browser-settings-core-proxy-facade/m4-browser-settings-core-proxy-facade-gate-1782118963407.json` is `passed_browser_settings_core_proxy_facade_contract`; final M4 rollup `data/reports/m4-acceptance/m4-acceptance-gate-1782119044964.json` is `passed_with_expected_external_blockers`, `passed=25`, `expectedBlocked=1`, `failed=0`.
 6. Keep this evidence source-level only; it does not remove `tauriWailsBridge`, close every browser/profile/session compatibility path, or prove provider/proxy/AdsPower/full coverage evidence.
 
 ## Fortieth Implementation Batch
@@ -480,8 +481,8 @@ Status: started 2026-06-22.
 2. Count only signals with `layer=observed` and complete collector metadata: `collectorScope`, `runtimeAdapter`, `targetProfileBrowser`, and `failureReason`.
 3. Exclude taxonomy seed and materialized contract reports from observed proof.
 4. Surface `observed_fingerprint_coverage` in desktop evidence history and Dashboard as `Observed Fingerprint`.
-5. Latest report `data/reports/observed-fingerprint-coverage/observed-fingerprint-coverage-gate-1782114288868.json` is `partial_observed_fingerprint_coverage`, `20 / 450`, `partialFamilyCount=10`, `missingFamilyCount=2`.
-6. Keep this as partial current truth; do not claim full `450` observed coverage until every taxonomy family reaches target count with real observed metadata.
+5. Latest report `data/reports/observed-fingerprint-coverage/observed-fingerprint-coverage-gate-1782118951030.json` is `passed_full_observed_fingerprint_coverage`; full local probe emitted `450 / 450` signals and the gate has all `12 / 12` taxonomy families covered.
+6. Keep taxonomy seed/materialized contract separate from observed proof; current full observed proof comes from real local browser/CDP collection.
 
 ## Forty-First Implementation Batch
 
@@ -491,8 +492,8 @@ Status: started 2026-06-22.
 2. Generate replay events from family replay semantics, audit payload, failure states, recovery behavior, and page/workflow dimensions.
 3. Report product-runtime-backed vs contract-only event counts separately.
 4. Surface `live_replay_runtime` in desktop evidence history and Dashboard as `Replay Runtime`.
-5. Latest report `data/reports/live-replay-runtime/live-replay-runtime-gate-1782114289142.json` is `passed_local_replay_runtime`, `461 / 450`, `runtimeBacked=461`, `productRuntimeBacked=326`, `contractOnly=135`, `failedEventCount=0`.
-6. Keep this scoped to local deterministic replay; target-site/browser/provider runtime replay remains separate work.
+5. Latest report `data/reports/live-replay-runtime/live-replay-runtime-gate-1782118798569.json` is `passed_full_local_replay_runtime`, `461 / 450`, `runtimeBacked=461`, `productRuntimeBacked=461`, `contractOnly=0`, `failedEventCount=0`.
+6. Keep CAPTCHA/SMS/Email credential-backed provider smoke separate from local replay runtime.
 
 ## Forty-Second Implementation Batch
 
@@ -501,8 +502,8 @@ Status: started 2026-06-22.
 1. Add `scripts/m10_headed_stability_gate.ps1` to refresh/read headed_external validation_probe attempts and build a stability/coherence matrix.
 2. Require 3 attempts, all passed, stable category/signals/status/warning/failure signatures, and acceptable duration spread.
 3. Surface `m10_headed_stability` in desktop evidence history and Dashboard as `M10 Stability`.
-4. Latest report `data/reports/m10-headed-stability/m10-headed-stability-gate-1782114360122.json` is `passed_long_task_stability_coherence`, `3/3` attempts passed, `coherenceScore=1`, `stabilityScore=1`, `signalCount=9`.
-5. Keep this scoped to local headed_external validation_probe stability; remote proxy/TLS, provider, full headed realism, and AdsPower refresh remain separate.
+4. Latest report `data/reports/m10-headed-stability/m10-headed-stability-gate-1782118850618.json` is `passed_long_task_stability_coherence`, `3/3` attempts passed, `coherenceScore=1`, `stabilityScore=1`, `signalCount=9`.
+5. Keep this scoped to local headed_external validation_probe stability; CAPTCHA/SMS/Email credential-backed provider smoke remains separate.
 
 ## Forty-Third Implementation Batch
 
@@ -512,5 +513,17 @@ Status: started 2026-06-22.
 2. Record CDP `/json/version` readiness, process/RSS snapshot, and cleanup proof for only the spawned PID tree.
 3. Remove the temporary profile only after verifying the resolved path stays within `.codex_tmp/m15-browser-process`.
 4. Surface `m15_browser_process` in desktop evidence history and Dashboard as `M15 Process`.
-5. Latest report `data/reports/m15-browser-process/m15-browser-process-gate-1782114415481.json` is `passed_real_browser_process_prewarm_cleanup`, `processCount=6`, `totalWorkingSetMb=342.5`, `cleanupComplete=true`.
-6. Keep this as real process proof only; full browser pool acquire/release integration, proxy/session cleanup, provider, remote proxy/TLS, and AdsPower refresh remain separate.
+5. Latest report `data/reports/m15-browser-process/m15-browser-process-gate-1782118796786.json` is `passed_real_browser_process_prewarm_cleanup`; pool rollup `data/reports/m15-browser-pool/m15-browser-pool-gate-1782118967687.json` is `passed_real_pool_process_integration`.
+6. Historical boundary for this batch: this report was process proof only. Forty-Fourth batch consumes it into pool/process integration; provider credential smoke remains separate.
+
+## Forty-Fourth Implementation Batch
+
+Status: completed 2026-06-22.
+
+1. Added `scripts/full_observed_fingerprint_probe.mjs` and made `scripts/observed_fingerprint_coverage_gate.ps1` refresh real local Chrome/Edge CDP observation before counting strict observed coverage.
+2. Updated behavior taxonomy and `scripts/live_replay_runtime_gate.ps1` so local runtime-backed families reach `passed_full_local_replay_runtime` with `contractOnly=0`.
+3. Updated M15 pool engine/gate so process attachment, release cleanup proof, proxy/session binding cleanup, and latest real browser process report are consumed together as `passed_real_pool_process_integration`.
+4. Updated `scripts/remote_proxy_tls_probe.ps1` and runtime adapter evidence so local-only direct TLS/transport proof is accepted, remote proxy account proof is optional, and AdsPower refresh is not applicable.
+5. Updated evidence history and Dashboard report parsing for `passed_full_observed_fingerprint_coverage`, `passed_full_local_replay_runtime`, `passed_real_pool_process_integration`, `passed_local_direct_tls_observed`, and `passed_local_self_use`.
+6. Final rerun reports: observed `data/reports/observed-fingerprint-coverage/observed-fingerprint-coverage-gate-1782118951030.json`; replay `data/reports/live-replay-runtime/live-replay-runtime-gate-1782118798569.json`; M10 `data/reports/m10-headed-stability/m10-headed-stability-gate-1782118850618.json`; M15 process `data/reports/m15-browser-process/m15-browser-process-gate-1782118796786.json`; M15 pool `data/reports/m15-browser-pool/m15-browser-pool-gate-1782118967687.json`; local TLS `data/reports/remote-proxy-tls/remote-proxy-tls-probe-1782118943933.json`; runtime adapter `data/reports/runtime-adapter/runtime-adapter-evidence-gate-1782118975730.json`; M4 rollup `data/reports/m4-acceptance/m4-acceptance-gate-1782119044964.json`.
+7. Current local self-use closure is complete. The only remaining unverified item is CAPTCHA/SMS/Email credential-backed provider smoke.

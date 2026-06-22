@@ -18,11 +18,12 @@
 ## 当前报告口径
 
 - Mainline delivery：`100% / 0% / green`
-- Overall end-state：`40% / 60% / yellow`
-- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450` taxonomy seed / strict observed coverage `20 / 450` partial
-- Behavior：`13` shipped primitives / `8` page archetypes / `450` taxonomy seed / local deterministic replay `461 / 450` passed (`326` product-runtime-backed, `135` contract-only); target-site/browser/provider replay pending
-- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已落地，可恢复 target profile 和 proxy session bindings；跨机器/第二机 portability 已按本机自用范围取消
-- Latest local gates：M4 v29 `passed=24` / `expectedBlocked=2` / `failed=0`；M10 stability/coherence `3/3` passed；M15 real browser process prewarm/CDP/RSS/cleanup proof passed
+- Local self-use：`100% / 0% / green`
+- 唯一未验：CAPTCHA / SMS / Email 服务商真实账号凭证 smoke；没有真实账号和密钥，不能伪造 accepted。
+- Fingerprint：`80` declared controls / `26` runtime projected fields / `450` taxonomy seed / strict observed coverage `450 / 450`，最新状态 `passed_full_observed_fingerprint_coverage`。
+- Behavior：`13` shipped primitives / `8` page archetypes / `450` taxonomy seed / local deterministic replay `461 / 450`，最新状态 `passed_full_local_replay_runtime`，`contractOnly=0`。
+- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` 本机 export、preflight、dry-run、confirmed restore 已 verified；跨机器/第二机 portability 已取消。
+- Runtime：M10 stability/coherence `3/3` passed；M15 real browser process prewarm/CDP/RSS/cleanup proof passed；M15 pool/process integration passed；本机 direct TLS/transport observed；runtime adapter gate 状态 `passed_local_self_use`。
 
 历史 `77% / 23%` 或 `82% / 18%` 只能作为历史上下文，不作为 live truth。
 
@@ -40,6 +41,6 @@
 - 路线变化更新 `03-roadmap.md`。
 - 未做、风险、技术债更新 `04-improvement-backlog.md`。
 - 接手规则变化更新 `05-ai-maintenance-playbook.md`。
-- 不把 Overall 目标数字伪装成 Mainline 已交付。
+- 不把历史 Overall `40% / 60% / yellow` 当成当前本机自用 live truth。
 - 不把 staged / fallback / mock 默认路径算作闭环交付。
-- 本机自用范围下，不再把外部分发 smoke、release performance 预算、干净 Win11/第二机验证或跨机器 SessionBundle portability 作为未完成项；相关旧文档只作历史上下文。
+- 本机自用范围下，不再把外部分发 smoke、release performance 预算、干净 Win11/第二机验证、跨机器 SessionBundle portability、AdsPower 刷分或远程代理账号当作未完成项；相关旧文档只作历史上下文。

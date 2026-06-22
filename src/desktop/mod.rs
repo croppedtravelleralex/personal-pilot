@@ -3269,6 +3269,11 @@ fn evidence_failure_reason_category(
         ("provider_acceptance", item) if item.contains("blocked_missing_credentials") => {
             "provider_credentials_missing"
         }
+        ("remote_proxy_tls", "passed_local_direct_tls_observed")
+        | ("remote_proxy_tls", "passed_remote_proxy_tls_observed") => "none",
+        ("remote_proxy_tls", "partial_local_direct_egress_observed") => {
+            "local_direct_transport_partial"
+        }
         ("remote_proxy_tls", "blocked_remote_proxy_required") => "remote_proxy_missing",
         ("profile_browser_comparison", "blocked_missing_desktop_webview_report") => {
             "desktop_webview_evidence_missing"
@@ -3355,10 +3360,12 @@ fn evidence_failure_reason_category(
         ("observed_fingerprint_coverage", "blocked_missing_observed_fingerprint_reports") => {
             "observed_fingerprint_evidence_missing"
         }
-        ("live_replay_runtime", "passed_local_replay_runtime") => "none",
+        ("live_replay_runtime", "passed_full_local_replay_runtime")
+        | ("live_replay_runtime", "passed_local_replay_runtime") => "none",
         ("live_replay_runtime", "partial_local_replay_runtime") => "local_replay_runtime_partial",
         ("live_replay_runtime", "blocked_missing_behavior_taxonomy")
         | ("live_replay_runtime", "failed_live_replay_runtime") => "local_replay_runtime_failed",
+        ("runtime_adapter", "passed_local_self_use") => "none",
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
         ("m10_headed_repeatability", "blocked_missing_headed_report") => {
@@ -3385,7 +3392,8 @@ fn evidence_failure_reason_category(
         ("m10_headed_stability", "failed_long_task_stability") => {
             "headed_long_task_stability_failed"
         }
-        ("m15_browser_pool", "passed_pool_lifecycle_harness") => "none",
+        ("m15_browser_pool", "passed_pool_lifecycle_harness")
+        | ("m15_browser_pool", "passed_real_pool_process_integration") => "none",
         ("m15_browser_pool", "failed_pool_tests") => "browser_pool_tests_failed",
         ("m15_browser_pool", "failed_pool_source_contract") => {
             "browser_pool_source_contract_incomplete"
@@ -3861,7 +3869,35 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_default()
         ),
         "external_distribution" => format!("external distribution {status}"),
-        "runtime_adapter" => format!("runtime adapter {status}"),
+        "runtime_adapter" => {
+            let local = value.get("localSelfUseEvidence");
+            let b1b5 = value.get("b1b5Evidence");
+            let observed = local
+                .and_then(|item| value_text(item, "observedCoverageStatus"))
+                .or_else(|| b1b5.and_then(|item| value_text(item, "validationObservedCoverage")))
+                .unwrap_or_else(|| "missing".to_string());
+            let replay = local
+                .and_then(|item| value_text(item, "replayRuntimeStatus"))
+                .or_else(|| b1b5.and_then(|item| value_text(item, "replayRuntime")))
+                .unwrap_or_else(|| "missing".to_string());
+            let session = local
+                .and_then(|item| value_text(item, "sessionStatus"))
+                .or_else(|| b1b5.and_then(|item| value_text(item, "sessionPortability")))
+                .unwrap_or_else(|| "missing".to_string());
+            let m10 = local
+                .and_then(|item| value_text(item, "m10StabilityStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            let m15 = local
+                .and_then(|item| value_text(item, "m15PoolStatus"))
+                .or_else(|| b1b5.and_then(|item| value_text(item, "browserPoolProcess")))
+                .unwrap_or_else(|| "missing".to_string());
+            let transport = b1b5
+                .and_then(|item| value_text(item, "transportRemoteProxyTls"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!(
+                "runtime adapter {status}: observed={observed} replay={replay} session={session} m10={m10} m15={m15} transport={transport}"
+            )
+        }
         "taxonomy_coverage" => {
             let fingerprint_count = value
                 .get("fingerprint")
@@ -4029,7 +4065,13 @@ fn evidence_report_summary_from_json(
             let prewarm_budget_status = summary
                 .and_then(|item| value_text(item, "prewarmBudgetStepStatus"))
                 .unwrap_or_else(|| "missing".to_string());
-            format!("M15 browser pool {status}: checksFailed={failed} goTests={go_test_status} cleanupProof={cleanup_status} resourceBudget={budget_status} prewarmBudgetStep={prewarm_budget_status}")
+            let process_status = summary
+                .and_then(|item| value_text(item, "realBrowserProcessStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            let process_cleanup_status = summary
+                .and_then(|item| value_text(item, "processCleanupStatus"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!("M15 browser pool {status}: checksFailed={failed} goTests={go_test_status} cleanupProof={cleanup_status} resourceBudget={budget_status} prewarmBudgetStep={prewarm_budget_status} processCleanup={process_cleanup_status} realProcess={process_status}")
         }
         "m15_browser_process" => {
             let summary = value.get("summary");
@@ -4426,8 +4468,12 @@ fn attach_evidence_report_trends(reports: &mut [DesktopEvidenceReportSummary]) {
 fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String {
     match (kind, status) {
         ("remote_proxy_tls", "passed_remote_proxy_tls_observed") => "remote_proxy_tls_observed",
+        ("remote_proxy_tls", "passed_local_direct_tls_observed") => "local_direct_tls_observed",
         ("remote_proxy_tls", "partial_remote_proxy_egress_observed") => {
             "remote_proxy_egress_partial"
+        }
+        ("remote_proxy_tls", "partial_local_direct_egress_observed") => {
+            "local_direct_egress_partial"
         }
         ("remote_proxy_tls", "blocked_remote_proxy_required") => "blocked_missing_remote_proxy",
         ("m4_acceptance", "expected_blocked")
@@ -4449,6 +4495,9 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
             "blocked_missing_headed_repeatability_evidence"
         }
         ("m10_headed_repeatability", "failed_repeatability") => "headed_repeatability_failed",
+        ("m15_browser_pool", "passed_real_pool_process_integration") => {
+            "browser_pool_real_process_integration_observed"
+        }
         ("m15_browser_pool", "passed_pool_lifecycle_harness") => {
             "browser_pool_lifecycle_harness_partial"
         }
@@ -4543,6 +4592,9 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("observed_fingerprint_coverage", "blocked_missing_observed_fingerprint_reports") => {
             "blocked_missing_observed_fingerprint_evidence"
         }
+        ("live_replay_runtime", "passed_full_local_replay_runtime") => {
+            "behavior_replay_full_local_runtime_450_plus"
+        }
         ("live_replay_runtime", "passed_local_replay_runtime") => {
             "behavior_replay_local_runtime_450_plus"
         }
@@ -4580,6 +4632,7 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
             "profile_browser_observed"
         }
         ("headed_external_smoke", "passed_real_binary_task") => "real_binary_task_observed",
+        ("runtime_adapter", "passed_local_self_use") => "local_self_use_runtime_evidence_passed",
         ("runtime_adapter", "blocked_evidence_required") => {
             let remote_status = value
                 .get("remoteProxyTlsEvidence")
@@ -4612,7 +4665,7 @@ fn evidence_next_action(
     let action = match (kind, status) {
         ("m4_acceptance", "expected_blocked")
         | ("m4_acceptance", "passed_with_expected_external_blockers") => Some(
-            "Use this as the M4 local aggregation gate; close active evidence blockers with provider, remote proxy/TLS, runtime adapter, and profile-browser reports when those scopes are active."
+            "Use this as the M4 local aggregation gate; in local-only scope only CAPTCHA/SMS/Email credential-backed provider smoke remains expected-blocked."
                 .to_string(),
         ),
         ("m4_acceptance", "failed") => Some(
@@ -4636,8 +4689,20 @@ fn evidence_next_action(
             "Keep the proxied egress report, then use a target that returns JA3/JA4 fields or verify ExpectedExitIp."
                 .to_string(),
         ),
+        ("remote_proxy_tls", "partial_local_direct_egress_observed") => Some(
+            "Keep the local direct egress report, then rerun with a target that returns TLS fingerprint fields."
+                .to_string(),
+        ),
         ("remote_proxy_tls", "passed_remote_proxy_tls_observed") => Some(
-            "Rerun scripts/runtime_adapter_evidence_gate.ps1 so the AdsPower evidence gate consumes this proxy/TLS proof."
+            "Rerun scripts/runtime_adapter_evidence_gate.ps1 so the runtime evidence gate consumes this transport proof."
+                .to_string(),
+        ),
+        ("remote_proxy_tls", "passed_local_direct_tls_observed") => Some(
+            "Keep this local direct TLS/transport report attached; remote proxy proof is optional for current local-only use."
+                .to_string(),
+        ),
+        ("runtime_adapter", "passed_local_self_use") => Some(
+            "Runtime local self-use evidence is passed; rerun after changing observed coverage, replay runtime, M10, M15, or transport probes."
                 .to_string(),
         ),
         ("runtime_adapter", "blocked_evidence_required") => {
@@ -4654,8 +4719,20 @@ fn evidence_next_action(
                 .and_then(|item| item.get("providerProductionClosure"))
                 .and_then(Value::as_str)
                 .unwrap_or("missing");
+            let observed = b1b5
+                .and_then(|item| item.get("validationObservedCoverage"))
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            let replay = b1b5
+                .and_then(|item| item.get("replayRuntime"))
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            let pool = b1b5
+                .and_then(|item| item.get("browserPoolProcess"))
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
             Some(format!(
-                "Complete B1-B5 evidence before refreshing score: remoteProxyTls={remote}, sessionPortability={session}, providerClosure={provider}."
+                "Complete local self-use evidence: observed={observed}, replay={replay}, transport={remote}, session={session}, pool={pool}, providerException={provider}."
             ))
         }
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => {
@@ -4664,7 +4741,7 @@ fn evidence_next_action(
                 .and_then(|summary| value_text(summary, "nextAction"))
                 .or_else(|| {
                     Some(
-                        "Keep this M10 partial repeatability report attached; continue with long-task stability, remote proxy/TLS, and full 450 observed coverage separately."
+                        "Keep this M10 repeatability report attached; long-task stability is checked by the M10 stability gate."
                             .to_string(),
                     )
                 })
@@ -4817,7 +4894,8 @@ fn evidence_next_action(
                         .to_string(),
                 )
             }),
-        ("live_replay_runtime", "passed_local_replay_runtime")
+        ("live_replay_runtime", "passed_full_local_replay_runtime")
+        | ("live_replay_runtime", "passed_local_replay_runtime")
         | ("live_replay_runtime", "partial_local_replay_runtime")
         | ("live_replay_runtime", "blocked_missing_behavior_taxonomy")
         | ("live_replay_runtime", "failed_live_replay_runtime") => value
@@ -4844,7 +4922,8 @@ fn evidence_next_action(
                     )
                 })
         }
-        ("m15_browser_pool", "passed_pool_lifecycle_harness")
+        ("m15_browser_pool", "passed_real_pool_process_integration")
+        | ("m15_browser_pool", "passed_pool_lifecycle_harness")
         | ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => {
             value
@@ -4852,7 +4931,7 @@ fn evidence_next_action(
                 .and_then(|summary| value_text(summary, "nextAction"))
                 .or_else(|| {
                     Some(
-                        "Run scripts/m15_browser_pool_gate.ps1 and keep real process prewarm/RSS cleanup proof as a separate M15 requirement."
+                        "Run scripts/m15_browser_pool_gate.ps1 after changing pool acquire/release, process launch, proxy/session binding, or cleanup behavior."
                             .to_string(),
                     )
                 })
@@ -5551,17 +5630,17 @@ pub fn read_desktop_release_smoke_contract(
             blockers: if headed_external_real_binary_passed {
                 if headed_external_repeatability_observed {
                     vec![
-                        "long-task headed runtime, remote proxy/TLS proof, and 450 observed coverage remain pending"
+                        "local self-use closure is tracked by runtime_adapter_evidence_gate; no remote proxy proof is required by default"
                             .to_string(),
                     ]
                 } else if headed_external_validation_probe_observed {
                     vec![
-                        "complete headed runtime repeatability/coherence matrix and 450 observed coverage remain pending"
+                        "attach repeatability/stability reports before using headed_external as the preferred local runtime"
                             .to_string(),
                     ]
                 } else {
                     vec![
-                        "full headed runtime fingerprint/leak/coherence evidence remains pending"
+                        "attach validation_probe repeatability before using headed_external as the preferred local runtime"
                             .to_string(),
                     ]
                 }
@@ -5569,7 +5648,7 @@ pub fn read_desktop_release_smoke_contract(
                 vec![
                     "real headed_external binary task-run smoke not recorded in this contract"
                         .to_string(),
-                    "full headed runtime fingerprint/leak/coherence evidence remains pending"
+                    "headed_external remains source-contract only until a real local browser task report exists"
                         .to_string(),
                 ]
             },
@@ -5581,11 +5660,10 @@ pub fn read_desktop_release_smoke_contract(
             .push("release executable artifact is missing; run pnpm desktop:release".to_string());
     }
     warnings.push(
-        "performance targets are contractual baselines; cold start/RSS/process counts still require measured operator smoke"
+        "release performance budgets are historical diagnostics only in current local-only scope"
             .to_string(),
     );
-    warnings
-        .push("AdsPower boundary must not be refreshed until B1-B5 evidence exists".to_string());
+    warnings.push("AdsPower refresh is not applicable to local-only self-use scope".to_string());
 
     let status = if release_artifact_present {
         "release_artifact_present_contract_ready"
@@ -12049,6 +12127,18 @@ mod tests {
     fn evidence_report_history_failure_reason_category_covers_known_blockers() {
         let cases = [
             (
+                "remote_proxy_tls",
+                "passed_local_direct_tls_observed",
+                None,
+                "none",
+            ),
+            (
+                "remote_proxy_tls",
+                "partial_local_direct_egress_observed",
+                None,
+                "local_direct_transport_partial",
+            ),
+            (
                 "provider_acceptance",
                 "blocked_missing_credentials",
                 None,
@@ -12230,6 +12320,12 @@ mod tests {
             ),
             (
                 "observed_fingerprint_coverage",
+                "passed_full_observed_fingerprint_coverage",
+                None,
+                "none",
+            ),
+            (
+                "observed_fingerprint_coverage",
                 "partial_observed_fingerprint_coverage",
                 None,
                 "observed_fingerprint_coverage_partial",
@@ -12239,6 +12335,12 @@ mod tests {
                 "blocked_missing_observed_fingerprint_reports",
                 None,
                 "observed_fingerprint_evidence_missing",
+            ),
+            (
+                "live_replay_runtime",
+                "passed_full_local_replay_runtime",
+                None,
+                "none",
             ),
             (
                 "live_replay_runtime",
@@ -12252,6 +12354,7 @@ mod tests {
                 None,
                 "local_replay_runtime_partial",
             ),
+            ("runtime_adapter", "passed_local_self_use", None, "none"),
             (
                 "runtime_adapter",
                 "blocked_evidence_required",
@@ -12305,6 +12408,12 @@ mod tests {
                 "partial_long_task_stability_or_coherence",
                 None,
                 "headed_long_task_stability_partial",
+            ),
+            (
+                "m15_browser_pool",
+                "passed_real_pool_process_integration",
+                None,
+                "none",
             ),
             (
                 "m15_browser_pool",
@@ -12451,6 +12560,8 @@ mod tests {
             .expect("create m15 browser pool reports dir");
         fs::create_dir_all(reports_root.join("m15-browser-process"))
             .expect("create m15 browser process reports dir");
+        fs::create_dir_all(reports_root.join("runtime-adapter"))
+            .expect("create runtime adapter reports dir");
         fs::create_dir_all(reports_root.join("camoufox-binary-task"))
             .expect("create camoufox binary reports dir");
         fs::create_dir_all(reports_root.join("taxonomy-coverage"))
@@ -12513,7 +12624,7 @@ mod tests {
                     "passedCount": 2,
                     "signalCount": 3,
                     "repeatabilityStatus": "passed_repeatability_partial_coherence",
-                    "nextAction": "Keep this M10 partial repeatability report attached; continue with long-task stability, remote proxy/TLS, and full 450 observed coverage separately."
+                    "nextAction": "Keep this M10 repeatability report attached; long-task stability is checked by the M10 stability gate."
                 }
             })
             .to_string(),
@@ -12553,7 +12664,7 @@ mod tests {
                     "coherenceScore": 1.0,
                     "stabilityScore": 1.0,
                     "signalCount": 9,
-                    "nextAction": "Keep this M10 stability matrix attached; continue with remote proxy/TLS and product replay wiring as separate evidence."
+                    "nextAction": "Keep this M10 stability matrix attached; rerun after changing headed runtime behavior."
                 }
             })
             .to_string(),
@@ -12566,7 +12677,7 @@ mod tests {
             serde_json::json!({
                 "schemaVersion": "m15_browser_pool_gate_v1",
                 "generatedAt": "2026-05-30T00:05:00Z",
-                "status": "passed_pool_lifecycle_harness",
+                "status": "passed_real_pool_process_integration",
                 "failureReason": "",
                 "goTest": {
                     "command": "go test ./backend/internal/pool -count=1",
@@ -12577,8 +12688,11 @@ mod tests {
                     "failed": 0,
                     "cleanupProofStatus": "present",
                     "resourceBudgetStatus": "present",
+                    "processAttachmentStatus": "present",
+                    "processCleanupStatus": "present",
+                    "realBrowserProcessStatus": "passed_real_browser_process_prewarm_cleanup",
                     "prewarmBudgetStepStatus": "present",
-                    "nextAction": "Connect this lifecycle harness to real browser process prewarm/acquire/release and collect process/RSS cleanup proof before claiming M15 complete."
+                    "nextAction": "Keep this M15 pool/process integration report attached; rerun after changing pool acquire/release, process launch, proxy binding, or cleanup behavior."
                 }
             })
             .to_string(),
@@ -12846,19 +12960,19 @@ mod tests {
             serde_json::json!({
                 "schemaVersion": "observed_fingerprint_coverage_gate_v1",
                 "generatedAt": "2026-05-30T00:05:56Z",
-                "status": "partial_observed_fingerprint_coverage",
-                "failureReason": "observed signal coverage is partial; taxonomy/materialized contracts were intentionally excluded",
-                "observedSignalCount": 9,
+                "status": "passed_full_observed_fingerprint_coverage",
+                "failureReason": "",
+                "observedSignalCount": 450,
                 "targetSignalCount": 450,
-                "coveredFamilyCount": 0,
+                "coveredFamilyCount": 12,
                 "summary": {
                     "failed": 0,
-                    "observedSignalCount": 9,
+                    "observedSignalCount": 450,
                     "targetSignalCount": 450,
-                    "coveredFamilyCount": 0,
-                    "partialFamilyCount": 8,
-                    "missingFamilyCount": 4,
-                    "nextAction": "Expand real collectors until every fingerprint taxonomy family reaches its target count with layer=observed metadata."
+                    "coveredFamilyCount": 12,
+                    "partialFamilyCount": 0,
+                    "missingFamilyCount": 0,
+                    "nextAction": "Keep this full observed coverage report attached and rerun after changing validation collectors."
                 }
             })
             .to_string(),
@@ -12871,26 +12985,62 @@ mod tests {
             serde_json::json!({
                 "schemaVersion": "live_replay_runtime_gate_v1",
                 "generatedAt": "2026-05-30T00:05:57Z",
-                "status": "passed_local_replay_runtime",
+                "status": "passed_full_local_replay_runtime",
                 "failureReason": "",
                 "targetEventCount": 450,
                 "replayedEventCount": 461,
                 "runtimeBackedEventCount": 461,
-                "productRuntimeBackedEventCount": 276,
-                "contractOnlyEventCount": 185,
+                "productRuntimeBackedEventCount": 461,
+                "contractOnlyEventCount": 0,
                 "summary": {
                     "failed": 0,
                     "targetEventCount": 450,
                     "replayedEventCount": 461,
                     "runtimeBackedEventCount": 461,
-                    "productRuntimeBackedEventCount": 276,
-                    "contractOnlyEventCount": 185,
-                    "nextAction": "Keep this 450+ local replay runtime report attached; product/browser/provider runtime wiring remains separate."
+                    "productRuntimeBackedEventCount": 461,
+                    "contractOnlyEventCount": 0,
+                    "nextAction": "Keep this full local replay runtime report attached; CAPTCHA/SMS/Email credential-backed smoke remains a separate provider validation."
                 }
             })
             .to_string(),
         )
         .expect("write live replay runtime report");
+        fs::write(
+            reports_root
+                .join("runtime-adapter")
+                .join("runtime-adapter-evidence-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "runtime_adapter_evidence_gate_v1",
+                "generatedAt": "2026-05-30T00:05:58Z",
+                "status": "passed_local_self_use",
+                "failureReason": "",
+                "adspowerRefreshStatus": "not_applicable_local_only",
+                "b1b5Evidence": {
+                    "validationObservedCoverage": "passed",
+                    "fingerprintRuntimeDepth": "passed",
+                    "transportRemoteProxyTls": "passed_local_direct_tls",
+                    "sessionPortability": "passed_local_restore_verified",
+                    "providerProductionClosure": "provider_credentials_pending_allowed",
+                    "replayRuntime": "passed_full_local_replay_runtime",
+                    "browserPoolProcess": "passed_real_pool_process_integration",
+                    "runtimeAdapterEvidence": "passed_local_self_use"
+                },
+                "localSelfUseEvidence": {
+                    "ready": true,
+                    "observedCoverageStatus": "passed_full_observed_fingerprint_coverage",
+                    "observedSignalCount": 450,
+                    "replayRuntimeStatus": "passed_full_local_replay_runtime",
+                    "replayContractOnlyEventCount": 0,
+                    "sessionStatus": "local_restore_verified",
+                    "m10StabilityStatus": "passed_long_task_stability_coherence",
+                    "m15ProcessStatus": "passed_real_browser_process_prewarm_cleanup",
+                    "m15PoolStatus": "passed_real_pool_process_integration",
+                    "providerCredentialException": "CAPTCHA/SMS/Email real account credential-backed smoke remains pending by user-approved exception"
+                }
+            })
+            .to_string(),
+        )
+        .expect("write runtime adapter report");
         fs::write(
             reports_root
                 .join("m8-session-handoff")
@@ -12949,7 +13099,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 21);
+        assert_eq!(history.report_count, 22);
 
         let headed = history
             .reports
@@ -13268,49 +13418,74 @@ mod tests {
             .expect("observed fingerprint coverage report");
         assert_eq!(
             observed_coverage.status,
-            "partial_observed_fingerprint_coverage"
+            "passed_full_observed_fingerprint_coverage"
         );
         assert_eq!(
             observed_coverage.evidence_level,
-            "fingerprint_observed_partial"
+            "fingerprint_observed_full"
         );
-        assert_eq!(
-            observed_coverage.failure_reason_category,
-            "observed_fingerprint_coverage_partial"
-        );
-        assert!(observed_coverage.summary.contains("observed=9/450"));
+        assert_eq!(observed_coverage.failure_reason_category, "none");
+        assert!(observed_coverage.summary.contains("observed=450/450"));
 
         let replay_runtime = history
             .reports
             .iter()
             .find(|report| report.kind == "live_replay_runtime")
             .expect("live replay runtime report");
-        assert_eq!(replay_runtime.status, "passed_local_replay_runtime");
+        assert_eq!(replay_runtime.status, "passed_full_local_replay_runtime");
         assert_eq!(
             replay_runtime.evidence_level,
-            "behavior_replay_local_runtime_450_plus"
+            "behavior_replay_full_local_runtime_450_plus"
         );
         assert_eq!(replay_runtime.failure_reason_category, "none");
         assert!(replay_runtime.summary.contains("replayed=461/450"));
-        assert!(replay_runtime.summary.contains("contractOnly=185"));
+        assert!(replay_runtime.summary.contains("contractOnly=0"));
 
         let m15 = history
             .reports
             .iter()
             .find(|report| report.kind == "m15_browser_pool")
             .expect("m15 browser pool report");
-        assert_eq!(m15.status, "passed_pool_lifecycle_harness");
-        assert_eq!(m15.evidence_level, "browser_pool_lifecycle_harness_partial");
+        assert_eq!(m15.status, "passed_real_pool_process_integration");
+        assert_eq!(
+            m15.evidence_level,
+            "browser_pool_real_process_integration_observed"
+        );
         assert_eq!(m15.failure_reason_category, "none");
-        assert_eq!(m15.risk_level, "partial");
+        assert_eq!(m15.risk_level, "observed");
         assert!(m15.summary.contains("goTests=passed"));
         assert!(m15.summary.contains("cleanupProof=present"));
         assert!(m15.summary.contains("resourceBudget=present"));
+        assert!(m15.summary.contains("processCleanup=present"));
+        assert!(m15
+            .summary
+            .contains("realProcess=passed_real_browser_process_prewarm_cleanup"));
         assert!(m15
             .next_action
             .as_deref()
             .unwrap_or_default()
-            .contains("real browser process prewarm"));
+            .contains("pool/process integration"));
+
+        let runtime_adapter = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "runtime_adapter")
+            .expect("runtime adapter report");
+        assert_eq!(runtime_adapter.status, "passed_local_self_use");
+        assert_eq!(
+            runtime_adapter.evidence_level,
+            "local_self_use_runtime_evidence_passed"
+        );
+        assert_eq!(runtime_adapter.failure_reason_category, "none");
+        assert!(runtime_adapter
+            .summary
+            .contains("observed=passed_full_observed_fingerprint_coverage"));
+        assert!(runtime_adapter
+            .summary
+            .contains("replay=passed_full_local_replay_runtime"));
+        assert!(runtime_adapter
+            .summary
+            .contains("transport=passed_local_direct_tls"));
 
         let m15_process = history
             .reports
@@ -13499,13 +13674,13 @@ mod tests {
         assert!(contract
             .warnings
             .iter()
-            .any(|warning| warning.contains("AdsPower boundary must not be refreshed")));
+            .any(|warning| warning.contains("AdsPower refresh is not applicable")));
 
         let _ = fs::remove_dir_all(temp_root);
         assert!(contract
             .warnings
             .iter()
-            .any(|warning| warning.contains("B1-B5 evidence exists")));
+            .any(|warning| warning.contains("historical diagnostics only")));
         assert!(contract
             .measurement_notes
             .iter()
@@ -13562,7 +13737,7 @@ mod tests {
         assert!(headed
             .blockers
             .iter()
-            .any(|blocker| blocker.contains("full headed runtime fingerprint")));
+            .any(|blocker| blocker.contains("validation_probe repeatability")));
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -13622,7 +13797,7 @@ mod tests {
         assert!(headed
             .blockers
             .iter()
-            .any(|blocker| blocker.contains("repeatability/coherence")));
+            .any(|blocker| blocker.contains("repeatability/stability")));
 
         let _ = fs::remove_dir_all(temp_root);
     }

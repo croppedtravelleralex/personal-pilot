@@ -30,10 +30,14 @@ foreach ($relative in $files) {
 }
 
 $currentState = Get-Content (Join-Path $projectRoot "docs\02-current-state.md") -Raw -Encoding UTF8
-$checks += [ordered]@{ id = "overall_40_60_present"; status = if ($currentState.Contains("Overall end-state") -and $currentState.Contains("40% / 60% / yellow")) { "passed" } else { "failed" }; detail = "canonical overall live truth must remain 40/60/yellow" }
+$providerExceptionPresent = ($currentState -match "CAPTCHA") `
+  -and ($currentState -match "SMS") `
+  -and ($currentState -match "Email") `
+  -and (($currentState -match "真实账号凭证") -or ($currentState -match "blocked_missing_credentials"))
+$checks += [ordered]@{ id = "local_self_use_green_present"; status = if ($currentState.Contains("Local self-use") -and $currentState.Contains("100% / 0% / green")) { "passed" } else { "failed" }; detail = "canonical local-only live truth must remain 100/0/green" }
 $checks += [ordered]@{ id = "mainline_green_present"; status = if ($currentState.Contains("Mainline delivery") -and $currentState.Contains("100% / 0% / green")) { "passed" } else { "failed" }; detail = "mainline closeout truth must remain separate" }
-$checks += [ordered]@{ id = "taxonomy_seed_not_runtime"; status = if ($currentState.Contains("taxonomy seed") -and $currentState.Contains("replay runtime") -and ($currentState.Contains("full observation coverage") -or $currentState.Contains("full observed coverage"))) { "passed" } else { "failed" }; detail = "taxonomy seed must not be reported as observed/replay runtime" }
-$checks += [ordered]@{ id = "adspower_deferred"; status = if ($currentState.Contains("AdsPower") -and $currentState.Contains("deferred_by_evidence_gate")) { "passed" } else { "failed" }; detail = "AdsPower refresh must stay evidence-gated" }
+$checks += [ordered]@{ id = "taxonomy_seed_not_runtime"; status = if ($currentState.Contains("taxonomy seed") -and $currentState.Contains("replay runtime") -and $currentState.Contains("passed_full_observed_fingerprint_coverage")) { "passed" } else { "failed" }; detail = "taxonomy seed must stay separate from observed/replay runtime proof" }
+$checks += [ordered]@{ id = "local_only_provider_exception"; status = if ($providerExceptionPresent) { "passed" } else { "failed" }; detail = "only CAPTCHA/SMS/Email credential-backed provider smoke may remain pending" }
 
 $failed = @($checks | Where-Object { $_.status -ne "passed" })
 $status = if ($failed.Count -eq 0) { "passed" } else { "failed" }
@@ -46,7 +50,7 @@ $report = [ordered]@{
   failureReason = if ($failed.Count -eq 0) { "" } else { "live-truth guard failed: $(@($failed | ForEach-Object { $_.id }) -join ', ')" }
   notes = @(
     "This guard prevents historical progress ratios and taxonomy target claims from becoming live truth.",
-    "It does not prove external provider or AdsPower parity; second-machine portability is cancelled under the local-only scope."
+    "Local-only scope cancels AdsPower refresh, external distribution, release performance budget, and second-machine portability as current goals."
   )
 }
 

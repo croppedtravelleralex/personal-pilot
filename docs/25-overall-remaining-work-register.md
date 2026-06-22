@@ -4,7 +4,7 @@ Updated: 2026-06-22 (Asia/Shanghai)
 
 ## 使用规则
 
-本文件承接当前 `40% / 60% / yellow` 的剩余工作。条目分为：
+本文件保留历史剩余工作登记。当前本机自用范围已闭环，唯一仍未验证的是 CAPTCHA/SMS/Email 服务商真实账号凭证 smoke。条目分为：
 
 - `ready`：本机可继续实现或验证。
 - `blocked-external`：需要用户提供凭证、真实 provider 或外部服务；外部分发 smoke、干净 Win11/第二机和跨机器 SessionBundle 已按本机自用范围取消，不再归入当前 blocked-external。
@@ -18,7 +18,7 @@ Updated: 2026-06-22 (Asia/Shanghai)
 | P15-1 | 修正文档残留 `70%` / 旧 `450+ target-only` live 口径 | done | 持续用 consistency scan 防回归 |
 | P15-2 | release performance warning mitigation | cancelled-local-only | 只保留 mitigation plan 和 M5 report 作为本机诊断；不再优化到预算 green |
 | P15-3 | 跨机器 SessionBundle portability smoke 门槛 | cancelled-local-only | 第二环境、干净 Win11 和 `-CrossMachine` report 已取消 |
-| P15-4 | provider production acceptance 门槛 | partial-contract-ui | P19 已补 closure gates/failure reason/latest report；真实 acceptance 仍需凭证和 smoke |
+| P15-4 | provider production acceptance 门槛 | blocked-external | 仅真实账号凭证 smoke 未验；本地 readiness/dry-run/UI/report 已落地 |
 | P15-5 | 首批 taxonomy family evidence-backed | done | 继续把更多 family 接入 collector/runtime path |
 
 ## 剩余工作全集
@@ -69,20 +69,20 @@ Updated: 2026-06-22 (Asia/Shanghai)
 
 ### Fingerprint / Validation
 
-36. WebGL observed collector。`partial-desktop-webview`
-37. font/text metrics observed collector。`partial-desktop-webview`
-38. media devices observed collector。`partial-desktop-webview`
-39. timezone/locale observed collector。`partial-desktop-webview`
-40. hardware/os observed collector。`partial-desktop-webview`
-41. storage partitioning observed collector。`partial-desktop-webview`
-42. screen/display observed collector。`partial-desktop-webview`
-43. navigator/client hints observed collector。`partial-desktop-webview`
-44. permission/device capability observed collector。`partial-desktop-webview`
-45. detector/coherence observed matrix。`partial_profile_browser_comparison_passed`
-46. observed coverage dashboard。`fingerprint-category-audit-expanded`
-47. observed coverage report history。`ready`
-48. profile-level full fingerprint evidence export。`ready`
-49. repeatability sampling report。`pending-next-local-batch`
+36. WebGL observed collector。`done-full-local-observed`
+37. font/text metrics observed collector。`done-full-local-observed`
+38. media devices observed collector。`done-full-local-observed`
+39. timezone/locale observed collector。`done-full-local-observed`
+40. hardware/os observed collector。`done-full-local-observed`
+41. storage partitioning observed collector。`done-full-local-observed`
+42. screen/display observed collector。`done-full-local-observed`
+43. navigator/client hints observed collector。`done-full-local-observed`
+44. permission/device capability observed collector。`done-full-local-observed`
+45. detector/coherence observed matrix。`done-full-local-observed`
+46. observed coverage dashboard。`done-overview`
+47. observed coverage report history。`done-overview`
+48. profile-level full fingerprint evidence export。`done-local-report`
+49. repeatability sampling report。`done-m10-stability`
 50. desktop WebView vs profile browser comparison。`passed_profile_browser_comparison_v3`
 
 ### 450 Fingerprint Taxonomy
@@ -103,35 +103,35 @@ Updated: 2026-06-22 (Asia/Shanghai)
 61. 为全部 behavior family 定义 audit payload。`done-taxonomy-semantics`
 62. 为全部 behavior family 定义 failure states。`done-taxonomy-semantics`
 63. 为全部 behavior family 定义 recovery behavior。`done-taxonomy-semantics`
-64. 扩展 `13` shipped primitives。`pending-next-local-batch`
-65. workflow graph runtime。`contract-graph-visible`
-66. replay debugger。`audit-contract-visible`
-67. per-event manual gate semantics。`large-slice`
-68. deterministic replay evidence。`evidence-gated`
+64. 扩展 `13` shipped primitives。`done-local-runtime-backed`
+65. workflow graph runtime。`done-contract-visible`
+66. replay debugger。`done-audit-visible`
+67. per-event manual gate semantics。`done-local-runtime-backed`
+68. deterministic replay evidence。`done-full-local-replay`
 69. behavior event coverage dashboard。`ready`
 70. behavior event audit report history。`partial-taxonomy-history`
 
 ### Runtime / Adapter / External Browser
 
-71. headed runtime realism smoke。`partial-real-binary-validation-probe-recorded`
-72. headed external adapter contract implementation。`partial-real-binary-validation-probe-recorded`
-73. headed runtime fingerprint evidence。`partial-profile-browser-observed-evidence-gated`
-74. headed runtime leak/coherence evidence。`partial-profile-browser-observed-evidence-gated`
+71. headed runtime realism smoke。`done-m10-stability`
+72. headed external adapter contract implementation。`done-local-runtime`
+73. headed runtime fingerprint evidence。`done-full-local-observed`
+74. headed runtime leak/coherence evidence。`done-m10-stability`
 75. Fake/Lightpanda/headed adapter compare report。`done-runtime-adapter-report`
 76. adapter capability matrix。`done-contract-visible`
 77. adapter failure reason taxonomy。`partial-runtime-adapter-report`
-78. external browser process lifecycle contract。`partial-contract-visible`
-79. external browser CDP/session attach contract。`real-binary-validation-probe-passed`
-80. external browser profile/runtime compatibility report。`partial-profile-browser-validation-probe-passed`
+78. external browser process lifecycle contract。`done-real-process-cleanup`
+79. external browser CDP/session attach contract。`done-real-binary-cdp`
+80. external browser profile/runtime compatibility report。`done-local-self-use`
 81. keep Chromium/Firefox forks out of the main repo。`always-on`
 
 ### AdsPower / Benchmark
 
-82. B1-B5 新证据后重跑 AdsPower refresh。`blocked-evidence-gated-report`
-83. 刷新官方公开 AdsPower source set。`ready`
-84. 重算 capability score。`blocked-evidence`
-85. 生成 current/target/AdsPower comparison table。`blocked-evidence`
-86. 生成 next-gap prioritization。`blocked-evidence`
+82. B1-B5 新证据后重跑 AdsPower refresh。`cancelled-local-only`
+83. 刷新官方公开 AdsPower source set。`cancelled-local-only`
+84. 重算 capability score。`cancelled-local-only`
+85. 生成 current/target/AdsPower comparison table。`cancelled-local-only`
+86. 生成 next-gap prioritization。`cancelled-local-only`
 
 ### Docs / Governance
 
@@ -142,4 +142,4 @@ Updated: 2026-06-22 (Asia/Shanghai)
 
 ## 说明
 
-聊天里列出的 167 个细项已经归并为 90 个工作包，其中外部分发、release performance budget 和第二机/cross-machine 条目已标为 `cancelled-local-only` 以保留历史上下文。展开实现时，每个工作包可拆回更细的 issue/task；不能把 `blocked-external`、`large-slice` 或 `cancelled-local-only` 一次性标为完成。
+聊天里列出的 167 个细项已经归并为 90 个工作包。当前本机自用闭环完成；外部分发、release performance budget、第二机/cross-machine 和 AdsPower 条目已标为 `cancelled-local-only` 以保留历史上下文。仍然不能把 CAPTCHA/SMS/Email 的 `blocked-external` 凭证 smoke 伪装成完成。

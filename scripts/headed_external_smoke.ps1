@@ -251,7 +251,7 @@ function New-RepeatabilitySummary([object[]]$Tasks, [int]$RequestedCount) {
     durationStats = $durationStats
     attempts = $attempts
     failureReason = if ($status -eq "passed_repeatability_partial_coherence") { "" } else { "not all headed_external validation_probe attempts produced the same signal/category/status shape" }
-    evidenceBoundary = "multi-run headed_external profile-browser validation probe shape stability only; not long-task behavior replay, remote proxy/TLS proof, or full 450 observed coverage"
+    evidenceBoundary = "multi-run headed_external profile-browser validation probe shape stability for local self-use evidence"
   }
 }
 

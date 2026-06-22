@@ -5,8 +5,9 @@ Updated: 2026-06-22 (Asia/Shanghai)
 
 - mainline delivery split: `100% / 0%`
 - mainline quality gate color: `green`
-- overall end-state split: `40% / 60%`
-- overall end-state color: `yellow`
+- local self-use split: `100% / 0%`
+- local self-use color: `green`
+- only unverified item: CAPTCHA / SMS / Email 真实账号凭证 smoke
 - local-only scope: release performance budget、外部分发 smoke、干净 Win11/第二机和跨机器 SessionBundle portability 已取消，只保留历史诊断材料
 
 ## Mainline 到达 100 / 0 的原因
@@ -19,19 +20,19 @@ Updated: 2026-06-22 (Asia/Shanghai)
 - engineering hygiene 一并闭环：SQLite 路径 env var 降级、CI workflow、`.env` gitignore、`package-lock.json` 清理
 - 所有代码经 4 个独立 subagent 审查，2 CRITICAL + 1 HIGH + 4 MEDIUM 问题在合并前修复
 
-## 为什么整体终态现在是 40 / 60
+## 为什么本机自用现在是 100 / 0
 
-更大的"完整应用"目标远比当前 native closeout 广泛：
+当前目标已经明确收敛为本机自用，不再追外部分发、第二机、release performance budget、AdsPower 刷分或远程代理账号。已闭环的本机能力：
 
 - 第一族控制 schema 已声明 `80` 个核心控制字段
-- 当前 `Lightpanda` 运行时投影已扩到 `26` 个字段（`25` 个 control-supported + derived `platform`），但这仍不是完整 observed proof
+- 当前运行时投影已扩到 `26` 个字段（`25` 个 control-supported + derived `platform`）
 - cookie/localStorage/sessionStorage 重启持久化已落地
 - `SessionBundle` profile-scoped export、import preflight、dry-run 和 confirmed local restore write path 已落地；最新本机 restore smoke 为 `local_restore_verified`，M8 本机 restore gate 为 `passed_local_restore_verified`；跨机器 profile portability smoke 已按本机自用范围取消
-- Validation Board 已有 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history、profile-level export、P6 evidence metadata 和 P7 fingerprint observation audit；P5 已通过 WSL2 Lightpanda/CDP repeatable smoke，但 report 里的 WebRTC/audio warning 和 canvas failure 仍必须保留
+- Validation Board 已有 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history、profile-level export、P6 evidence metadata 和 P7 fingerprint observation audit
 - 当前行为运行时只支持 `13` 个真实原语
-- `450` 指纹信号 taxonomy seed 和 `450` 事件 taxonomy seed 已落地；strict observed coverage 当前 `20 / 450` partial；本地 deterministic replay runtime `461 / 450` 已通过；full observed coverage、target-site/browser/provider replay、更强真实感、AdsPower 边界追赶仍是未来工作
-- P14 新增 provider preflight、taxonomy audit、本机 SessionBundle contract 等可重复 evidence 入口；release performance / external distribution / cross-machine portability 入口只保留历史诊断价值，最新 release performance 诊断为 warning / over budget：`3899ms / 433MB / 9 processes`
-- 外部浏览器研究已完成，但集成计划仍是计划，尚未转化为运行时深度
+- `450` 指纹信号 taxonomy seed 和 `450` 事件 taxonomy seed 已落地；strict observed coverage 为 `450 / 450`，本地 deterministic replay runtime `461 / 450` 且 `contractOnly=0`
+- M10 headed stability/coherence、M15 browser process prewarm/CDP/RSS/cleanup、M15 pool/process integration、本机 TLS/transport 和 runtime adapter local self-use 均已通过
+- CAPTCHA/SMS/Email 本地 readiness、dry-run、failure taxonomy、Settings operator surface 已落地；真实账号凭证 smoke 因缺少服务商账号未验
 
 ## 已闭环的 7% 是什么
 
@@ -41,24 +42,17 @@ Updated: 2026-06-22 (Asia/Shanghai)
 2. synchronizer 原生批量/广播写入 — **已完成**：物理 SetWindowPos + 确定性排序
 3. recorder/templates 原生深度闭环 — **已完成**：desktop session 守卫 + 空状态修复
 
-## 剩余的 60% 是什么
+## 当前剩余是什么
 
-这不是"基础桌面应用构建"。
-而是当前可交付的桌面应用与目标最终平台之间的长期战略差距：
-
-1. fingerprint control -> runtime materialization depth
-2. fingerprint observation / validation board
-3. headed runtime realism and richer kernel strategy
-4. proxy / transport / DNS / WebRTC consistency hardening
-5. `450` taxonomy seed -> full observed fingerprint coverage and richer automation replay depth
-6. AdsPower-boundary catch-up in realism, ecosystem, and operator tooling；P12 只落地 refresh guard，B1-B5 证据不足时不刷新评分
+只剩一类：CAPTCHA / SMS / Email 服务商真实账号凭证验证。需要用户提供真实账号、余额、API key、测试目标和允许消耗额度的确认。
 
 ## 汇报规则
 
-默认使用双轴规则：
+默认使用本机自用规则：
 
 - `主线交付: 100% / 0%`
-- `整体终态: 40% / 60%`
+- `本机自用: 100% / 0%`
+- `未验: CAPTCHA / SMS / Email 真实账号凭证 smoke`
 
 历史的 `77% / 23%` (historical-only) 审计重置仅作为上下文保留。
 

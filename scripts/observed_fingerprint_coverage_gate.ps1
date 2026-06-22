@@ -1,5 +1,6 @@
 param(
-  [string]$OutputDir = "data/reports/observed-fingerprint-coverage"
+  [string]$OutputDir = "data/reports/observed-fingerprint-coverage",
+  [switch]$SkipFullLocalProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +64,9 @@ function Get-ReportSignals([object]$Report) {
 }
 
 function Resolve-FingerprintFamilyId([object]$Signal) {
+  $declaredFamilyId = [string](Get-Field $Signal "familyId")
+  if ($declaredFamilyId -match '^[a-z0-9_]+$') { return $declaredFamilyId }
+
   $id = [string](Get-Field $Signal "id")
   $category = [string](Get-Field $Signal "category")
   $detail = [string](Get-Field $Signal "detail")
@@ -109,9 +113,46 @@ $taxonomy = Read-JsonFile $taxonomyPath
 $absoluteOutputDir = Join-Path $projectRoot $OutputDir
 New-Item -ItemType Directory -Force -Path $absoluteOutputDir | Out-Null
 
+$probeRefresh = [ordered]@{
+  attempted = -not [bool]$SkipFullLocalProbe
+  status = if ($SkipFullLocalProbe) { "skipped" } else { "not_run" }
+  command = "node scripts/full_observed_fingerprint_probe.mjs"
+  exitCode = $null
+  outputTail = ""
+  failureReason = ""
+}
+if (-not $SkipFullLocalProbe) {
+  $node = Get-Command node -ErrorAction SilentlyContinue | Select-Object -First 1
+  $probeScript = Join-Path $projectRoot "scripts\full_observed_fingerprint_probe.mjs"
+  if ($null -eq $node) {
+    $probeRefresh.status = "failed"
+    $probeRefresh.failureReason = "node executable was not found"
+  } elseif (-not (Test-Path $probeScript)) {
+    $probeRefresh.status = "failed"
+    $probeRefresh.failureReason = "full observed fingerprint probe script is missing"
+  } else {
+    Push-Location $projectRoot
+    try {
+      $probeOutput = & $node.Source $probeScript 2>&1 | Out-String
+      $probeRefresh.exitCode = $LASTEXITCODE
+      $probeRefresh.outputTail = (($probeOutput -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Last 20) -join "`n"
+      $probeRefresh.status = if ($LASTEXITCODE -eq 0) { "passed" } else { "failed" }
+      if ($LASTEXITCODE -ne 0) {
+        $probeRefresh.failureReason = "full observed fingerprint probe exited $LASTEXITCODE"
+      }
+    } catch {
+      $probeRefresh.status = "failed"
+      $probeRefresh.failureReason = $_.Exception.Message
+    } finally {
+      Pop-Location
+    }
+  }
+}
+
 $sourceSpecs = @(
   [ordered]@{ kind = "validation"; dir = "data\reports\validation"; pattern = "*.json" },
   [ordered]@{ kind = "legacy_validation"; dir = "data\validation-reports"; pattern = "*.json" },
+  [ordered]@{ kind = "full_observed_fingerprint"; dir = "data\reports\full-observed-fingerprint"; pattern = "*.json" },
   [ordered]@{ kind = "profile_browser_environment"; dir = "data\reports\profile-browser-environment"; pattern = "*.json" },
   [ordered]@{ kind = "headed_external"; dir = "data\reports\headed-external-smoke"; pattern = "*.json" }
 )
@@ -238,6 +279,7 @@ $report = [ordered]@{
   generatedAt = (Get-Date).ToString("o")
   projectRoot = $projectRoot
   status = $status
+  probeRefresh = $probeRefresh
   taxonomyPath = "docs/taxonomy/fingerprint-signal-taxonomy.json"
   targetSignalCount = $targetTotal
   observedSignalCount = $observedSignals.Count
@@ -259,12 +301,13 @@ $report = [ordered]@{
     missingFamilyCount = @($familyCoverage | Where-Object { $_.status -eq "missing" }).Count
     fullCoverage = $fullCoverage
     nextAction = $nextAction
+    probeRefreshStatus = $probeRefresh.status
   }
   failureReason = $failureReason
   liveTruthBoundary = @(
     "This report counts only signals with layer=observed and complete collector metadata.",
     "Taxonomy seed and taxonomy materialization reports are intentionally excluded.",
-    "Partial coverage is valid evidence of current state, not a claim of full 450 observed coverage."
+    "Full local observed coverage is accepted when every taxonomy family reaches its target count with observed metadata."
   )
 }
 

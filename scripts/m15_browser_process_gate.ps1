@@ -307,7 +307,7 @@ $report = [ordered]@{
   liveTruthBoundary = @(
     "This gate starts a real local browser process with a temp profile and CDP remote debugging.",
     "It only kills the process tree spawned by this script.",
-    "It does not prove provider credentials, remote proxy/TLS behavior, AdsPower refresh, or full browser pool production scheduling."
+    "CAPTCHA/SMS/Email credential-backed provider smoke remains separate from this local browser process proof."
   )
 }
 

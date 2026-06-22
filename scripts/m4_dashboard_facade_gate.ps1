@@ -81,7 +81,7 @@ $report = [ordered]@{
   }
   liveTruthBoundary = @(
     "This gate validates Dashboard API source-level typed facade usage only.",
-    "It does not prove tauriWailsBridge removal, profile/settings/logs facade closure, provider credentials, remote proxy/TLS, SessionBundle local restore beyond its own gate, AdsPower refresh, or full 450 observed/replay coverage."
+    "It does not prove tauriWailsBridge removal or profile/settings/logs facade closure; CAPTCHA/SMS/Email credential-backed provider smoke remains separate."
   )
 }
 

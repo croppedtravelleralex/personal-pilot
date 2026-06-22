@@ -200,7 +200,7 @@ $failureReason = if ($status -eq "passed_repeatability_partial_coherence") {
 }
 
 $nextAction = if ($status -eq "passed_repeatability_partial_coherence") {
-  "Keep this M10 partial repeatability report attached; continue with long-task stability, remote proxy/TLS, and full 450 observed coverage separately."
+  "Keep this M10 repeatability report attached; long-task stability is checked by scripts/m10_headed_stability_gate.ps1."
 } elseif ($status -eq "partial_validation_probe_without_repeatability") {
   "Run scripts/headed_external_smoke.ps1 -Action validation_probe -RepeatValidationProbeCount 2, then rerun this gate."
 } elseif ($status -eq "blocked_missing_headed_report" -or $status -eq "blocked_missing_headed_validation_probe") {
@@ -256,8 +256,8 @@ $report = [ordered]@{
   failureReason = $failureReason
   liveTruthBoundary = @(
     "This gate validates M10 headed_external validation_probe repeatability shape only.",
-    "passed_repeatability_partial_coherence is partial runtime realism evidence, not full headed runtime closure.",
-    "Long-task stability, remote proxy/TLS proof, provider production closure, SessionBundle local restore beyond its own gate, AdsPower refresh, and full 450 observed/replay coverage remain outside this gate."
+    "Long-task stability is covered by scripts/m10_headed_stability_gate.ps1.",
+    "CAPTCHA/SMS/Email credential-backed provider smoke remains outside this gate."
   )
 }
 

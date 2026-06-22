@@ -210,9 +210,17 @@
     {
       "id": "manual_gate",
       "targetCount": 42,
-      "currentEvidence": "operator commands exist; per-event semantics pending",
-      "evidenceStatus": "operator_surface_taxonomy_defined",
-      "runtimePath": "operator command/manual gate surfaces pending per-event replay wiring",
+      "currentEvidence": "operator commands and manual gate confirm/reject runtime surface are wired for local replay audit",
+      "evidenceStatus": "primitive_backed_local_runtime",
+      "runtimePath": "src/desktop/mod.rs confirm_manual_gate/reject_manual_gate and task run detail operator surface",
+      "localRuntimeBacking": {
+        "status": "implemented",
+        "sourcePaths": [
+          "src/desktop/mod.rs",
+          "src/services/desktop.ts"
+        ],
+        "boundary": "local operator gate only; no external provider account is required"
+      },
       "replaySemantics": "pause replay at declared manual gate and wait for operator decision or timeout",
       "auditPayload": [
         "phase",
@@ -231,9 +239,17 @@
     {
       "id": "debug_audit",
       "targetCount": 48,
-      "currentEvidence": "BehaviorTraceSummary audit contract",
-      "evidenceStatus": "audit_contract_taxonomy_defined",
-      "runtimePath": "BehaviorTraceSummary audit contract",
+      "currentEvidence": "BehaviorTraceSummary and run detail audit artifacts are wired for local replay audit",
+      "evidenceStatus": "primitive_backed_local_runtime",
+      "runtimePath": "src/desktop/mod.rs read_desktop_behavior_audit_contract and run detail artifacts",
+      "localRuntimeBacking": {
+        "status": "implemented",
+        "sourcePaths": [
+          "src/desktop/mod.rs",
+          "src/services/desktop.ts"
+        ],
+        "boundary": "local audit/runtime trace only"
+      },
       "replaySemantics": "emit deterministic trace events around each planned/executed/skipped primitive",
       "auditPayload": [
         "trace_id",
@@ -253,9 +269,18 @@
     {
       "id": "provider_assist",
       "targetCount": 42,
-      "currentEvidence": "CAPTCHA/SMS/Email readiness only; CDP fill pending",
-      "evidenceStatus": "readiness_contract_taxonomy_defined",
-      "runtimePath": "CAPTCHA/SMS/Email readiness surfaces and future CDP fill flow",
+      "currentEvidence": "CAPTCHA/SMS/Email readiness, dry-run, failure taxonomy and operator surface are wired; real credential smoke remains separate",
+      "evidenceStatus": "primitive_backed_local_runtime",
+      "runtimePath": "scripts/provider_acceptance_preflight.ps1 and Settings provider readiness surface",
+      "localRuntimeBacking": {
+        "status": "implemented",
+        "sourcePaths": [
+          "scripts/provider_acceptance_preflight.ps1",
+          "src/modules/settings/SettingsPage.tsx",
+          "src/desktop/mod.rs"
+        ],
+        "boundary": "local dry-run and operator readiness only; CAPTCHA/SMS/Email real account credentials are not verified"
+      },
       "replaySemantics": "delegate provider challenge/code steps to manager, then detect/fill through browser automation when wired",
       "auditPayload": [
         "provider_domain",

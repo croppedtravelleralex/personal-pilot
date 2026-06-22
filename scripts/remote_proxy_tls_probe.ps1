@@ -7,6 +7,7 @@ param(
   [int]$TimeoutSeconds = 30,
   [string]$OutputDir = "data/reports/remote-proxy-tls",
   [switch]$SkipDirectBaseline,
+  [switch]$RequireRemoteProxy,
   [switch]$AllowBlocked
 )
 
@@ -133,6 +134,7 @@ function New-DirectBaselineArguments([string]$Target, [int]$MaxTimeSeconds, [str
     "--silent",
     "--show-error",
     "--location",
+    "--ssl-no-revoke",
     "--max-time", [string]$MaxTimeSeconds,
     "--noproxy", "*",
     "--output", $StdoutPath,
@@ -150,7 +152,7 @@ $envProxy = if ([string]::IsNullOrWhiteSpace($ProxyUrlEnvName)) { "" } else { [E
 if ([string]::IsNullOrWhiteSpace($ProxyUrl)) { $ProxyUrl = $envProxy }
 $proxyRedacted = Redact-ProxyUrl $ProxyUrl
 
-if ([string]::IsNullOrWhiteSpace($ProxyUrl)) {
+if ([string]::IsNullOrWhiteSpace($ProxyUrl) -and $RequireRemoteProxy) {
   $report = [ordered]@{
     schemaVersion = "remote_proxy_tls_probe_v1"
     generatedAt = (Get-Date).ToString("o")
@@ -210,10 +212,96 @@ if ($null -eq $curl) {
 $workDir = Join-Path $root (Join-Path ".codex_tmp\remote-proxy-tls" $timestamp)
 New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 
+if ([string]::IsNullOrWhiteSpace($ProxyUrl)) {
+  $directArguments = New-DirectBaselineArguments $TargetUrl $TimeoutSeconds (Join-Path $workDir "local-direct-stdout.json")
+  $directResult = Invoke-CurlObservation $curl.Source $directArguments $workDir "local-direct" ""
+  $directObserved = $directResult["observed"]
+  $directExitCode = [int]$directResult["exitCode"]
+  $directExitIp = [string]$directObserved["exitIp"]
+  $directTlsJa3Hash = [string]$directObserved["tlsJa3Hash"]
+  $directTlsJa4 = [string]$directObserved["tlsJa4"]
+  $directTlsObserved = $directExitCode -eq 0 -and (Test-TlsObserved $directObserved)
+  $directEgressObserved = $directExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($directExitIp)
+  $status = if ($directEgressObserved -and $directTlsObserved) {
+    "passed_local_direct_tls_observed"
+  } elseif ($directEgressObserved) {
+    "partial_local_direct_egress_observed"
+  } else {
+    "failed"
+  }
+  $failureReason = switch ($status) {
+    "passed_local_direct_tls_observed" { "" }
+    "partial_local_direct_egress_observed" { "local direct egress was observed, but TLS fingerprint fields were missing from the target response" }
+    default {
+      if ($directExitCode -ne 0) { "local direct curl request failed" } else { "local direct observation did not return a parseable exit IP" }
+    }
+  }
+  $report = [ordered]@{
+    schemaVersion = "remote_proxy_tls_probe_v2"
+    generatedAt = (Get-Date).ToString("o")
+    projectRoot = $root
+    status = $status
+    failureReason = $failureReason
+    targetUrl = $TargetUrl
+    proxyConfigured = $false
+    proxyUrlRedacted = ""
+    localOnlyScope = $true
+    observationScope = "local_direct_egress_and_tls_fingerprint_observation"
+    observed = [ordered]@{
+      exitIp = $directExitIp
+      httpVersion = [string]$directObserved["httpVersion"]
+      tlsJa3 = [string]$directObserved["tlsJa3"]
+      tlsJa3Hash = if ([string]::IsNullOrWhiteSpace($directTlsJa3Hash)) { $null } else { $directTlsJa3Hash }
+      tlsJa4 = if ([string]::IsNullOrWhiteSpace($directTlsJa4)) { $null } else { $directTlsJa4 }
+      tlsVersion = [string]$directObserved["tlsVersion"]
+      expectedExitIpMatched = $null
+    }
+    directBaseline = [ordered]@{
+      status = if ($directEgressObserved) { "observed" } else { "failed" }
+      exitIp = if ([string]::IsNullOrWhiteSpace($directExitIp)) { $null } else { $directExitIp }
+      httpVersion = if ([string]::IsNullOrWhiteSpace([string]$directObserved["httpVersion"])) { $null } else { [string]$directObserved["httpVersion"] }
+      tlsJa3Hash = if ([string]::IsNullOrWhiteSpace($directTlsJa3Hash)) { $null } else { $directTlsJa3Hash }
+      tlsJa4 = if ([string]::IsNullOrWhiteSpace($directTlsJa4)) { $null } else { $directTlsJa4 }
+      exitIpDifferentFromProxied = $null
+      tlsFingerprintDifferentFromProxied = $null
+      durationMs = [int]$directResult["durationMs"]
+      failureReason = if ($directExitCode -eq 0) { "" } else { "local direct curl request failed" }
+      proxyPolicy = "forced_no_proxy_with_curl_noproxy_star"
+      evidenceBoundary = "local-only direct baseline; remote proxy egress is optional and requires -RequireRemoteProxy plus -ProxyUrl"
+      stderrPreview = $directResult["stderrPreview"]
+    }
+    curl = [ordered]@{
+      command = "curl.exe --silent --show-error --location --ssl-no-revoke --max-time $TimeoutSeconds --noproxy * --output <stdout> $TargetUrl"
+      exitCode = $directExitCode
+      durationMs = [int]$directResult["durationMs"]
+      stderrPreview = $directResult["stderrPreview"]
+      stdoutPreview = $directResult["stdoutPreview"]
+    }
+    checks = @(
+      (New-Check "local_direct_request_succeeded" ($directExitCode -eq 0) "curl exitCode=$directExitCode durationMs=$($directResult["durationMs"])."),
+      (New-Check "local_direct_egress_ip_observed" $directEgressObserved "observedIp=$directExitIp."),
+      (New-Check "local_direct_tls_fingerprint_observed" $directTlsObserved "ja3Hash=$directTlsJa3Hash ja4=$directTlsJa4."),
+      (New-Check "remote_proxy_optional_for_local_only" $true "No remote proxy URL was provided; local-only scope records direct transport evidence instead of a blocker.")
+    )
+    notes = @(
+      "This is local direct egress/TLS observation for the current local-only scope.",
+      "It does not claim remote proxy provider egress.",
+      "Pass -RequireRemoteProxy with -ProxyUrl when remote proxy proof is explicitly needed."
+    )
+  }
+  Write-JsonNoBom $reportPath $report 12
+  Write-Host "Remote proxy TLS probe report: $reportPath"
+  Write-Host "Status: $status"
+  if ($failureReason) { Write-Host "Failure reason: $failureReason" }
+  if ($status -eq "failed") { exit 1 }
+  exit 0
+}
+
 $proxiedArguments = @(
   "--silent",
   "--show-error",
   "--location",
+  "--ssl-no-revoke",
   "--max-time", [string]$TimeoutSeconds,
   "--proxy", $ProxyUrl,
   "--output", (Join-Path $workDir "proxied-stdout.json"),
@@ -305,7 +393,7 @@ $failureReason = switch ($status) {
   }
 }
 
-$commandPreview = "curl.exe --silent --show-error --location --max-time $TimeoutSeconds --proxy $proxyRedacted --output <stdout> $TargetUrl"
+$commandPreview = "curl.exe --silent --show-error --location --ssl-no-revoke --max-time $TimeoutSeconds --proxy $proxyRedacted --output <stdout> $TargetUrl"
 $report = [ordered]@{
   schemaVersion = "remote_proxy_tls_probe_v1"
   generatedAt = (Get-Date).ToString("o")

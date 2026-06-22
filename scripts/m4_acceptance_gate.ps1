@@ -1706,20 +1706,19 @@ foreach ($spec in $gateSpecs) {
         }
       }
       $adspower = [string](Get-Field $report "adspowerRefreshStatus")
-      if ($status -eq "passed") {
+      if ($status -in @("passed", "passed_local_self_use")) {
         if ($b1b5Properties.Count -eq 0 -or $b1b5Blocked.Count -gt 0 -or $adspower -eq "deferred_by_evidence_gate") {
           $classification = "failed"
           $reason = "runtime adapter report is marked passed while blockers remain"
-          $failures += "blocked or missing evidence misreported as passed: $($b1b5Blocked -join ', ') adspowerRefreshStatus=$adspower b1b5PropertyCount=$($b1b5Properties.Count)"
+          $failures += "blocked or missing local evidence misreported as passed: $($b1b5Blocked -join ', ') adspowerRefreshStatus=$adspower b1b5PropertyCount=$($b1b5Properties.Count)"
         } else {
           $classification = "passed"
-          $reason = "runtime adapter evidence gate passed"
+          $reason = if ($status -eq "passed_local_self_use") { "runtime adapter local self-use evidence gate passed" } else { "runtime adapter evidence gate passed" }
         }
       } elseif ($status -eq "blocked_evidence_required") {
         $classification = "expected_blocked"
-        $reason = "runtime adapter B1-B5 evidence remains externally blocked"
+        $reason = "runtime adapter local self-use evidence remains incomplete"
         $expectedBlockers += @($b1b5Blocked)
-        if ($adspower -eq "deferred_by_evidence_gate") { $expectedBlockers += "adspowerRefreshStatus=$adspower" }
       } else {
         $classification = "failed"
         $reason = "unexpected runtime adapter status"
@@ -1857,7 +1856,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v29"
+  schemaVersion = "m4_acceptance_gate_v30"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1883,7 +1882,7 @@ $report = [ordered]@{
     nextAction = if ($failedGates.Count -gt 0) {
       "Fix failed local gates before promoting M4."
     } elseif ($expectedBlockedGates.Count -gt 0) {
-      "M4 local contracts are usable; close expected external blockers with fresh provider, remote proxy/TLS, runtime adapter, and same-run profile-browser evidence when those scopes are active."
+      "M4 local contracts are usable; only provider credential-backed smoke remains expected-blocked when runtime local self-use evidence is passed."
     } else {
       "M4 local and active evidence gates are passed; continue with local runtime depth, observed coverage, replay runtime, and browser process cleanup proof."
     }
@@ -1910,8 +1909,8 @@ $report = [ordered]@{
     "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
     "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording panel/Docs, Browser instance, Core management, and Proxy pool surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
     "Generic any residue contract is source-level evidence only; it narrows selected shared/browser generic any markers without claiming every explicit any in the repository is gone.",
-    "Runtime adapter operator contract is source-level UI/API evidence only; full headed realism still requires repeatability/coherence, proxy/TLS, provider, portability, and B1-B5 reports.",
-    "Safety logging contract is local source/test evidence only; credential-backed provider smoke and external reports still require their own evidence.",
+    "Runtime adapter operator contract is source-level UI/API evidence only; runtime_adapter_evidence_gate carries the current local self-use proof.",
+    "Safety logging contract is local source/test evidence only; CAPTCHA/SMS/Email credential-backed provider smoke still requires real account evidence.",
     "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."
   )
 }

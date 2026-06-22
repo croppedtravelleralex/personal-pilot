@@ -88,7 +88,7 @@ $report = [ordered]@{
   liveTruthBoundary = @(
     "This gate validates the historical M5 release health report contract as local diagnostics only.",
     "Release performance budget green is cancelled for current scope.",
-    "Provider, remote proxy/TLS, SessionBundle local restore, AdsPower refresh, and full 450 coverage remain outside this diagnostic gate."
+    "CAPTCHA/SMS/Email credential-backed provider smoke remains outside this diagnostic gate."
   )
 }
 

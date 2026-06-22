@@ -25,9 +25,11 @@
    - 注意：这属于历史 Tauri/PersonaPilot 0.1.0 路线证据；2026-05-25 后主线 gate 必须改为验证 `personal-pilot-tauri.exe` 1.1.0
    - 2026-06-22 范围重置后，外部分发 readiness、人工 operator smoke 和 continuity integration test 已取消；只保留本机自用验收。
 
-## Now：Overall remaining `60%`
+## Now：Local Self-Use Closed
 
-目标：从 closeout-ready 本机 desktop app 走向更强的本机 operator 能力。此轨道已从 `30% / 70% / yellow` 推进到 `40% / 60% / yellow`，原因是 P14 新增了 provider/session/taxonomy 的可重复 evidence 入口和 machine-readable taxonomy seed；这些仍不得冒充完整 AdsPower 级闭环。release performance、外部分发和第二机/跨机器事项已取消。
+目标已改为只服务本机自用。当前本机自用口径为 `100% / 0% / green`：observed fingerprint、behavior replay、SessionBundle 本机 restore、M10 stability、M15 pool/process、settings/core/proxy facade、runtime adapter local self-use 和本机 TLS/transport 均已有本机证据。release performance、外部分发、第二机/跨机器、AdsPower 刷分和远程代理账号都已取消为当前目标。
+
+唯一未验：CAPTCHA / SMS / Email 服务商真实账号凭证 smoke。没有真实账号、余额、API key 和测试目标时，不得把 provider acceptance 写成 accepted。
 
 0. Single UI / exe convergence
    - 用户已确认唯一主线 UI 是截图所示 `personal-pilot` 1.1.0 / Wails v2 + React UI。
@@ -50,7 +52,7 @@
 
 2. Fingerprint runtime depth
    - 已从 `80` declared controls 和 `12` runtime projected fields 推进到 `26` runtime projected fields（`25` control-supported + derived `platform`）。
-   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；2026-05-28 已新增 Go 端环境注入编译器和 `Page.addScriptToEvaluateOnNewDocument` CDP 入口，覆盖 browser API/canvas/timezone/WebGL/media devices 基础 hook；`roadmap_evidence_smoke` 已证明本机实现覆盖，`profile_browser_environment_probe.mjs` 已用真实 Chromium profile-browser 观测 1.2/1.3/1.4 通过。本轮继续把环境注入接入实例启动流程，并把 environment audit 扩到 8 个注入族；`taxonomy_coverage_materialize.ps1` 已物化 `450 / 450` 条 fingerprint signal contract；2026-06-22 strict observed coverage gate 已跑通为 `partial_observed_fingerprint_coverage`，`20 / 450`，`partialFamilyCount=10`、`missingFamilyCount=2`。下一步继续加深真实采集，不把 taxonomy seed、materialized contract 或 projected/applied fields 报成 full observed coverage。
+   - P5 真实 Lightpanda/CDP smoke 已通过，P6 evidence schema 已收敛，P7 fingerprint observation audit 已接入 Validation Board；P14 已新增 `docs/taxonomy/fingerprint-signal-taxonomy.json`；2026-05-28 已新增 Go 端环境注入编译器和 `Page.addScriptToEvaluateOnNewDocument` CDP 入口，覆盖 browser API/canvas/timezone/WebGL/media devices 基础 hook；`taxonomy_coverage_materialize.ps1` 已物化 `450 / 450` 条 fingerprint signal contract；2026-06-22 full observed probe + strict coverage gate 已跑通为 `passed_full_observed_fingerprint_coverage`，`450 / 450`。
    - 保持 control / derived / observation layers 分离。
 
 3. Session / proxy orchestration
@@ -64,7 +66,7 @@
    - P14 已新增 `docs/taxonomy/behavior-event-taxonomy.json` 和 Automation taxonomy seed 可见性；2026-05-28 `taxonomy_coverage_materialize.ps1` 已物化 `461 / 450` 条 behavior replay contract。
    - 2026-05-28 已落地 Phase 2 P0 的 Go humanize 基础模型：Fitts Law 轨迹、粉噪、四段式点击、双击、拖拽和右键菜单计划，并以 Go 单测覆盖。
    - 2026-05-28 已把 shipped primitives 的 workflow graph/debug trace 状态前推到 runtime evidence backed。
-   - 2026-06-22 已新增 `scripts/live_replay_runtime_gate.ps1` 本地 deterministic replay runtime，最新 report 为 `passed_local_replay_runtime`，`461 / 450` events replayed，`326` product-runtime-backed、`135` contract-only。
+   - 2026-06-22 已新增 `scripts/live_replay_runtime_gate.ps1` 本地 deterministic replay runtime，最新状态为 `passed_full_local_replay_runtime`，`461 / 450` events replayed，`461` product-runtime-backed、`0` contract-only。
    - 下一步是把 contract-only families 和本地 replay harness 继续接入 product/browser/provider runtime；不能把它写成 target-site production replay。
    - CAPTCHA/SMS/Email 已有 production readiness contract、acceptance checklist、Settings operator surface 和 M4.4 dry-run/failure taxonomy 可见性；下一步是真实 manager wiring、CDP detect/fill 和 provider acceptance。
 
@@ -73,11 +75,10 @@
    - P11/P14 的 release measurement 字段和 `scripts/release_performance_smoke.ps1` 仅保留历史诊断价值；不再作为路线目标或 blocker。
    - 下一步只吸收高 ROI 外部浏览器思路。
    - 不把主仓库变成 Chromium / Firefox fork host。
-   - P12 已把 AdsPower benchmark refresh 固定为 boundary guard；P21 新增 runtime adapter evidence gate report：等 B1-B5 有新证据后再重算评分。
+   - P12 AdsPower benchmark refresh guard 已转为历史；当前本机自用范围下不重算 AdsPower 评分。
    - Camoufox 下一步按 `docs/18-external-browser-integration-plan.md` 的 `90` 分方案推进：2026-05-28 已先把它作为主线 `browser_cores.kind=camoufox` 内核类型接入 Go core manager、SQLite、sidecar RPC、实例启动参数分发和主线 UI 选择；本轮已把 Rust runner 从 skeleton 推进为最小 CDP runner，支持 open/html/text/title/final-url/validation-probe 和 stdout/stderr/content preview；真实 Camoufox binary 已通过 Firefox-compatible headless screenshot 打开 `https://example.com` 并产出持久 PNG。remote server、browser pool 和深度指纹拟真不进入第一主链；Chromium `/json/version` CDP attach 不宣称通过。
    - Phase 6 传输一致性已从死骨架推进到 Xray/SingBox 安全 ALPN 合并和 runtime family explain metadata；真实 Xray/SingBox 本地二进制配置验证已通过：Xray `run -test` 返回 `Configuration OK`，SingBox `check -c` exit code 为 `0`。这仍只是 direct outbound 配置接受性，不是远程代理出站或 TLS/HTTP2 指纹观测。
-   - 2026-06-02 已刷新 runtime adapter gate：Camoufox source smoke 与 binary page-open passed，headed_external real binary validation probe / repeatability 被 ranked selection 正确选中；当时 gate `data/reports/runtime-adapter/runtime-adapter-evidence-gate-1780375565693.json` 仍 blocked，但 `runtimeAdapterEvidence=partial_real_binary_repeatability_recorded`、`fingerprintRuntimeDepth=partial_headed_profile_browser_repeatability_observed`、`signalCount=9`；profile-browser comparison 后续已 passed。provider 为 `blocked_missing_credentials`，远程代理/TLS 为 `blocked_remote_proxy_required`；SessionBundle 当前只要求本机 local contract，跨机器 evidence、external distribution 和 release performance 不再作为 blocker。
-   - 2026-05-31 已新增 M4-M20 execution board 和 M4 acceptance harness：Dashboard 已展示 M4/adapter/对比/provider/session/taxonomy reports。2026-06-01 至 2026-06-22 已持续补 workflow task center、typed CDP primitives、provider dry-run/operator closure、SessionBundle operator loop、本机 restore gate、Runtime Adapter 卡、typed facade shrink、UI error boundary shrink、bridge compatibility type shrink、browser window.go fallback shrink、M6 profile/browser comparison、M10 repeatability/stability、M15 pool harness/real browser process proof、observed fingerprint strict gate、local replay runtime gate 和 report history trend。最新 M4 gate v29 `data/reports/m4-acceptance/m4-acceptance-gate-1782114555291.json` 为 `passed_with_expected_external_blockers`，summary `passed=24`、`expectedBlocked=2`、`failed=0`；profile-browser comparison `data/reports/profile-browser-comparison/profile-browser-comparison-1781941791434.json` 已 `passed`，SessionBundle portability `data/reports/session-portability/session-bundle-portability-smoke-1782111637335.json` 已 `local_restore_verified`；M15 process report `data/reports/m15-browser-process/m15-browser-process-gate-1782114415481.json` 已证明真实本机 browser process prewarm/CDP/RSS/cleanup。远程代理/TLS、provider credential smoke、完整 headed realism、完整 observed coverage、target-site replay 和真实 pool integration 仍未完成；外部分发、release performance budget 和第二机/M8 target run 已取消。
+   - 2026-06-22 runtime adapter gate 已按本机自用改为 `passed_local_self_use`；profile-browser comparison、SessionBundle 本机 restore、M10 stability、M15 process/pool、observed coverage、replay runtime 和本机 TLS/transport 都已通过。唯一未验是 provider credential smoke。
    - 2026-06-11 historical update：M4 Monitor facade 已把 `EventMonitorPage` 实时事件订阅与 event-log history query/count/export/prune 迁到 `src/services/desktop.ts` typed wrappers，新增 `scripts/m4_monitor_facade_gate.ps1`、`m4-monitor-facade` evidence kind 和 Dashboard `M4 Monitor` row；M4 gate v16 已纳入 `monitor_facade_contract`，当时 report 为 `passed_with_expected_external_blockers`、`passed=15`、`expectedBlocked=4`、`failed=0`。剩余 facade shrink 主要在 browser runtime/workbench/core bridge 与过渡 `tauriWailsBridge`。
    - 2026-06-12 historical update：M4 Browser runtime facade 已把 Browser List/Detail 的 `browser:instance:*` runtime subscriptions 迁到 `src/modules/browser/api.ts` 的 `onBrowserInstanceRuntimeEvents`，API 内部统一通过 `desktopRuntimeListen` 订阅并复用 payload normalizer；新增 `scripts/m4_browser_runtime_facade_gate.ps1`、`m4-browser-runtime-facade` evidence kind 和 Dashboard `M4 Browser Runtime` row；M4 gate v17 已纳入 `browser_runtime_facade_contract`，当时复跑为 `passed_with_expected_external_blockers`、`passed=16`、`expectedBlocked=4`、`failed=0`。剩余 facade shrink 主要在 settings/core/proxy/workbench bridge 与过渡 `tauriWailsBridge`。
    - 2026-06-12 historical update：M4 Workbench DTO shrink 已把 `src/services/desktop.ts` 的 Workbench detection results / detector sites / UI state / detector run API 从 `unknown[]` 或裸 `unknown` 收窄到 `src/types/desktop.ts` 共享 DTO，并更新 `src/modules/synchronizer/api.ts` 去掉对应 `Array.isArray(results)` 退化；M4 gate v18 已把 Workbench DTO 纳入 `typed_facade_shrink_contract`，当时复跑为 `passed_with_expected_external_blockers`、`passed=16`、`expectedBlocked=4`、`failed=0`。剩余 facade shrink 主要在 settings/core/proxy bridge 与过渡 `tauriWailsBridge`。
@@ -90,17 +91,15 @@
    - 2026-06-12 historical update：M4 generic any residue shrink 已把 shared Table 泛型约束、ProxyIPHealthResult rawData 和 ProxyPoolPage/types ClashProxy index signature 的选定 generic/index `any` 收窄到 `object` / `unknown`；M4 gate v25 新增 `generic_any_residue_contract` 后当时仍为 `passed_with_expected_external_blockers`、`passed=19`、`expectedBlocked=4`、`failed=0`。该切片不代表仓库每一个显式 `any` 已移除。
    - 2026-06-12 historical update：M4 RecordingPanel UI error boundary shrink 已把行为录制面板的录制、回放、导入导出、复制、重命名、接管和清理错误路径从未显式类型的 `catch (e)` 收窄到 `catch (error: unknown)`，错误文案走 `messageFromUnknownError`，并修正回放失败 mojibake 文案；M4 gate v26 扩展同一 `ui_error_boundary_contract` 后当时仍为 `passed_with_expected_external_blockers`、`passed=19`、`expectedBlocked=4`、`failed=0`。该切片不代表全仓 legacy catch 已清零。
    - 2026-06-12 historical update：M4 bridge compatibility type shrink 已把 `desktopRpc` 参数通道和 `tauriWailsBridge` 兼容层 runtime/app proxy 类型收敛到命名边界，新增 `bridge_compat_type_contract`，阻止 `desktop.ts` / `tauriWailsBridge.ts` 回退到裸 `unknown[]` / `Promise<unknown>`；M4 gate v27 当时仍为 `passed_with_expected_external_blockers`、`passed=20`、`expectedBlocked=4`、`failed=0`。该切片不代表 `tauriWailsBridge` 已移除。
-   - 2026-06-22 current update：M4 browser window.go fallback shrink 已进入 v28；M4 browser settings/core/proxy facade shrink 已进入 v29，相关 API 改走 `src/services/desktop.ts` typed wrappers，`tauriWailsBridge` App RPC surface 改为显式 allowlist；profile/browser comparison 已 passed；release smoke、external distribution smoke 和第二机/跨机器 portability 已取消为目标，只保留历史 report。
+   - 2026-06-22 current update：M4 browser window.go fallback shrink 已进入 v28；M4 browser settings/core/proxy facade shrink 已进入 v29，相关 API 改走 `src/services/desktop.ts` typed wrappers，`tauriWailsBridge` App RPC surface 改为显式 allowlist；profile/browser comparison 已 passed；strict observed coverage、full local replay runtime、M10 stability、M15 pool/process 和 runtime adapter local self-use 已 passed；release smoke、external distribution smoke、第二机/跨机器 portability、AdsPower 刷分和远程代理账号已取消为目标，只保留历史 report。
 
 6. Retire duplicate UI paths
    - 2026-05-27 已删除第二套 Tauri/Vite 控制台 UI 源码、根目录旁路 exe、`src-tauri/target/release` 持久 GUI exe 和仓库内 `gateway-ui` 静态 UI。
    - Gateway dashboard 静态 UI 不再作为仓库内置资产；如需临时使用，必须通过 `GATEWAY_UI_DIR` 显式指向外部目录。
    - 第二套 UI 不再作为发布入口，也不保留源码目录；后续只允许从历史提交中取设计参考。
-- 下一步不再做旧 UI 复活式迁移；改为在截图主线 UI 内继续缩小动态 facade 面积，保持 `tauriWailsBridge` 作为过渡兼容层。settings/core/proxy browser API 已进入 typed facade source gate，后续继续处理剩余 browser/profile/session 兼容路径、真实 pool integration、full observed coverage、product/browser/provider replay、remote proxy/TLS 和 provider credentials smoke。
+- 下一步不再做旧 UI 复活式迁移；`tauriWailsBridge` 作为过渡兼容层继续显式 allowlist。当前只等待 CAPTCHA/SMS/Email 真实账号凭证 smoke。
 
-## Later：成熟度与评分刷新
+## Later：仅在用户重开范围时
 
-- 只有新 shipped evidence 出现时才提高 capability score。
-- AdsPower comparison 只用官方公开边界和本仓库可验证证据刷新；当前 P12 结论是 deferred，不上调 score。
-- `50+`、`450+`、AdsPower catch-up、external integration 继续归入 Overall track，不能写成当前 runtime depth。
-- `docs/24-external-distribution-readiness.md`、`docs/release-performance-mitigation-plan.md` 和 `docs/sessionbundle-cross-machine-portability-runbook.md` 只作历史上下文；除非用户明确重新开启相关目标，否则不再作为 roadmap gate。
+- 只有用户明确重开外部分发、AdsPower 对比、release performance budget、第二机/跨机器或远程代理账号目标时，才重新建 gate。
+- `docs/24-external-distribution-readiness.md`、`docs/release-performance-mitigation-plan.md` 和 `docs/sessionbundle-cross-machine-portability-runbook.md` 只作历史上下文。
