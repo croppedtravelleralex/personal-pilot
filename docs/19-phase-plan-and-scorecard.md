@@ -1,5 +1,5 @@
 # 19 Phase Plan And Scorecard
-Updated: 2026-05-23 (Asia/Shanghai)
+Updated: 2026-06-22 (Asia/Shanghai)
 
 ## 规范角色
 
@@ -16,6 +16,7 @@ Updated: 2026-05-23 (Asia/Shanghai)
 - overall end-state: `40% / 60% / yellow`
 - internal capability score: `40 / 100`
 - AdsPower public-boundary reference score: `83 / 100`
+- local-only scope: release performance budget、外部分发 smoke、干净 Win11/第二机和跨机器 SessionBundle portability 已取消，不进入当前阶段计划或评分退出条件
 
 The progress split answers “how much of our declared scope is closed”.
 The capability score answers “how mature the product is relative to the final target and to AdsPower”.
@@ -28,9 +29,9 @@ The capability score answers “how mature the product is relative to the final 
 - 当前 `Lightpanda` 运行时投影 `26` 个字段（`25` 个 control-supported + derived `platform`），但完整 observed proof 尚未落地
 - 当前行为运行时仅交付 `13` 个真实原语
 - cookie/localStorage/sessionStorage 连续性已在应用重启间持久化和恢复
-- profile-scoped `SessionBundle` export、import preflight、non-destructive restore contract 已落地；真实 restore write path 和 profile portability smoke 尚未落地
-- Validation Board 已接入 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history 和 profile evidence export；真实 Lightpanda/CDP operator smoke 尚未完成
-- 当前真实运行器集仍为 `Fake + Lightpanda`；有头 Chromium/Firefox 深度运行时未落地
+- profile-scoped `SessionBundle` export、import preflight、dry-run 和 confirmed local restore write path 已落地；跨机器 profile portability smoke 已按本机自用范围取消
+- Validation Board 已接入 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history 和 profile evidence export；P5 Lightpanda/CDP smoke 已通过，但完整 observed coverage 尚未完成
+- 当前运行器证据集包括 `Fake`、`Lightpanda` 与 `headed_external` repeatability；有头 Chromium/Firefox 深度运行时仍未完整落地
 
 这意味着：
 
@@ -87,15 +88,15 @@ The capability score answers “how mature the product is relative to the final 
 - provider 侧代理轮换写入 — **已完成**：`changeProxyIp` 从本地桩升级为真实 HTTP POST/PUT/PATCH 引擎，含重试/冷却/回滚/7 种错误分类
 - synchronizer 原生广播写入路径 — **已完成**：物理 `SetWindowPos` 窗口排布，确定性排序，CWAC 感知布局
 - recorder/templates native-first 降级闭环 — **已完成**：desktop session 守卫防止草稿覆盖，空状态模板选择修复，源消息精确化
-- 主线 release gate：Win11 本地验收和 release build 已通过；发布给外部前可再做人工 operator smoke
+- 主线 release gate：Win11 本地验收和 release build 已通过；外部分发人工 operator smoke 已取消，只保留历史文档
 
-### 整体终态剩余 `70%`
+### 整体终态剩余 `60%`
 
-- Validation Board 已有 MVP、native report、history、profile export 和 runtime probe contract；真实 Lightpanda/CDP operator smoke 未落地
+- Validation Board 已有 MVP、native report、history、profile export、runtime probe contract 和 P5 Lightpanda/CDP smoke；完整 observed coverage 未落地
 - 运行时实现深度仍窄，仅 `26` 个投影字段，且不能等同于 observed proof
-- `450+` 指纹信号观察/审计覆盖未落地
-- `450+` 事件分类未落地
-- `SessionBundle` export、import preflight、restore contract 已落地；真实 restore write path 和 profile portability smoke 未落地
+- `450+` 指纹信号 taxonomy/materialized contract 已落地，但 full observed coverage 未落地
+- `450+` 事件分类/materialized contract 已落地，但 full live replay runtime 未落地
+- `SessionBundle` export、import preflight、dry-run 和 confirmed local restore write path 已落地；跨机器 portability smoke 已取消
 - 有头运行时真实感和更深的内核策略未落地
 - AdsPower 级真实感追赶未落地
 - 外部集成资产已规划但尚未运行时落地
@@ -110,8 +111,8 @@ The capability score answers “how mature the product is relative to the final 
 4. 从 `26` 个运行时投影字段扩展到实质性的应用/观察运行时覆盖
 5. 增长到 `450+` 总指纹信号（控制/派生/观察层）
 6. 从 `13` 个已交付原语增长到 `450+` 事件分类
-7. 将 `SessionBundle` 合约转变为真实可迁移、可导入、可恢复的 profile portability 闭环
-8. 将 Validation Board 已有 evidence contract 推进到真实 Lightpanda/CDP 可重复 operator smoke
+7. 将 `SessionBundle` 合约转变为本机可导入、可恢复、可诊断的 profile restore 闭环
+8. 将 Validation Board 已有 evidence contract 推进到真实 Lightpanda/CDP 可重复本机验证 smoke
 9. 吸收高 ROI 外部浏览器优势，不将浏览器 fork 拉入主仓库
 10. 在真实感、代理一致性、自动化深度和运营工具方面达到或超越 AdsPower
 
@@ -173,7 +174,7 @@ Primary report dimensions:
 - `mainline progress`
 - `verification / acceptance`
 
-## Axis B: Overall End-State Remaining `70%`
+## Axis B: Overall End-State Remaining `60%`
 
 ### B1 Validation Foundation
 
@@ -185,7 +186,7 @@ Detailed tasks:
 
 1. keep the landed `validation board` evidence split stable
 2. keep `ValidationProfile` and report history/export contracts stable
-3. run real Lightpanda/CDP operator smoke outside FakeRunner
+3. keep the passed Lightpanda/CDP local validation smoke attached to evidence history
 4. add deeper detector / leak / transport / coherence evidence collection
 
 Acceptance:
@@ -229,19 +230,19 @@ Primary report dimensions:
 
 Goal:
 
-- turn current restart continuity into a real session portability contract
+- turn current restart continuity into a real local session restore and proxy orchestration contract
 
 Detailed tasks:
 
 1. deepen the landed `SessionBundle` export/import preflight/restore contract
-2. add real restore write path and profile portability smoke
+2. add real local restore write path and failure-reason evidence
 3. add sticky residency + geo / locale / timezone linkage
 4. add proxy lease / cooldown / health / rollback semantics
 
 Acceptance:
 
 - restart continuity stays valid
-- profile portability is no longer only local persistence
+- profile restore is no longer only local persistence
 - proxy orchestration is coherent with session and fingerprint identity
 
 Primary report dimensions:
@@ -327,12 +328,12 @@ Primary report dimensions:
 | Stage | UI / TS layer | Desktop service layer | Rust / native / data layer | Validation / evidence layer |
 | --- | --- | --- | --- | --- |
 | `A1` Proxy / IP closeout | `src/pages/ProxiesPage.tsx`, `src/components/proxies/*`, `src/features/proxies/*` | `src/services/desktop.ts`, `src/types/desktop.ts` for typed proxy contracts | `src-tauri/src/commands.rs`, `src/desktop/mod.rs`, `src/runner/engine.rs`, proxy/session tables in `src/db/schema.rs` | provider smoke checks, continuity regression, Win11 local verify |
-| `A2` Synchronizer native closure | `src/pages/SynchronizerPage.tsx`, `src/components/synchronizer/*`, `src/features/synchronizer/*` | typed synchronizer read/write contracts in `src/services/desktop.ts` | `src-tauri/src/commands.rs`, `src/desktop/mod.rs`, native window command wiring | release smoke + multi-window behavior proof |
+| `A2` Synchronizer native closure | `src/pages/SynchronizerPage.tsx`, `src/components/synchronizer/*`, `src/features/synchronizer/*` | typed synchronizer read/write contracts in `src/services/desktop.ts` | `src-tauri/src/commands.rs`, `src/desktop/mod.rs`, native window command wiring | local behavior proof + historical release diagnostic |
 | `A3` Recorder / Templates native closure | `src/pages/AutomationPage.tsx`, `src/components/automation/*`, `src/features/recorder/*`, `src/features/templates/*` | typed compile / launch / recorder contracts in `src/services/desktop.ts` | `src-tauri/src/commands.rs`, `src/desktop/mod.rs`, recorder/template persistence paths | end-to-end template compile / replay verification |
 | `A4` Mainline release gate | thin UI touch only if regressions appear | no new API surface unless acceptance exposes a gap | whole repo build/test/release pipeline, Win11 enforcement scripts | `cargo test --quiet`, `windows_local_verify.ps1`, `pnpm desktop:release` |
 | `B1` Validation foundation | future `src/features/validation/*`, validation dashboards and evidence panels | typed validation commands / report reads in `src/services/desktop.ts` | detector/leak probe orchestration, report persistence, observation schema | detector, leak, DNS, WebRTC, transport, coherence evidence packs |
 | `B2` Fingerprint model and runtime depth | profile editors, explain panels, runtime diff views | typed fingerprint explain / report / projection APIs | `src/network_identity/*`, `src/runner/lightpanda.rs`, `src/runner/engine.rs`, report persistence | declared vs applied vs observed delta reports |
-| `B3` Session / Proxy orchestration | profile groups, import/export, portability and session-bundle screens | typed session-bundle and proxy orchestration APIs | `src/runner/engine.rs`, `src/db/schema.rs`, proxy/session lifecycle tables and serializers | portability proof, sticky residency proof, restart continuity proof |
+| `B3` Session / Proxy orchestration | profile groups, import/export, local restore and session-bundle screens | typed session-bundle and proxy orchestration APIs | `src/runner/engine.rs`, `src/db/schema.rs`, proxy/session lifecycle tables and serializers | local restore proof, sticky residency proof, restart continuity proof |
 | `B4` Event grammar and automation expansion | automation graph, replay debugger, audit timeline, manual-gate UI | typed replay / debug / audit / event graph contracts | `src/behavior/*`, `src/workflow/*`, `src/runner/lightpanda.rs`, automation data model | replay determinism, auditability, recovery-path proof |
 | `B5` Runtime adapter and external integration | adapter selection UI only if needed, usually thin surface | stable adapter contracts in `src/services/desktop.ts` | `src/runner/*`, `src/network_identity/*`, `src/desktop/mod.rs`, imported external patterns | cross-adapter compare reports and integration proof |
 | `B6` AdsPower boundary refresh | benchmark panels and reporting outputs | no heavy new API, mostly report aggregation | score aggregation, benchmark snapshots, doc generation | official public-source refresh + evidence-backed re-score |
@@ -518,7 +519,7 @@ Suggested agent plan:
 Task packages:
 
 1. `SessionBundle contract`
-2. `profile group and portability flows`
+2. `profile group and local restore flows`
 3. `sticky residency / lease / cooldown engine`
 4. `geo-locale-timezone coherence enforcement`
 5. `import / export / restore operator flows`
@@ -531,7 +532,7 @@ Task volume:
 
 Suggested agent plan:
 
-- worker A: `src/features/profiles/*`, portability UI
+- worker A: `src/features/profiles/*`, local restore UI
 - worker B: `src/features/proxies/*`, proxy orchestration UI/state
 - worker C: `src/runner/engine.rs`, `src/db/schema.rs`
 - worker D: service/typed contract layer
@@ -663,7 +664,7 @@ Use score only for capability maturity and benchmark distance.
 
 `Current capability score = 40 / 100`
 
-P14 result: score moves from `34 / 100` to `40 / 100` because repeatable evidence entrypoints and machine-readable taxonomy seeds landed. AdsPower parity score is not raised; B1-B5 still need real provider, portability, runtime, and observed/replay evidence before AdsPower refresh.
+P14 result: score moves from `34 / 100` to `40 / 100` because repeatable evidence entrypoints and machine-readable taxonomy seeds landed. AdsPower parity score is not raised; B1-B5 still need real provider, local restore/orchestration depth, runtime, and observed/replay evidence before AdsPower refresh.
 
 | Dimension | Weight | Current evidence | Current score | Weighted score | Final target | AdsPower public boundary |
 | --- | ---: | --- | ---: | ---: | --- | --- |
@@ -671,8 +672,8 @@ P14 result: score moves from `34 / 100` to `40 / 100` because repeatable evidenc
 | Fingerprint realism | 20 | first-family consistency start exists, but runtime depth and validation are shallow | `2/10` | `4.0` | headed realism + validation board + observation evidence | public score `8/10` |
 | Event taxonomy | 15 | `13` shipped primitives / `450` taxonomy seed / replay runtime pending | `4/10` | `6.0` | `450+` replayable event taxonomy | public count undisclosed, public breadth score `8/10` |
 | Proxy / IP | 15 | sticky-aware contract + session bindings and provider-aware rotation are landed; broader provider ecosystem evidence remains incomplete | `5/10` | `7.5` | provider-grade rotation + lease / cooldown / rollback + coherence evidence | public score `7/10` |
-| Session continuity | 10 | restart continuity, `SessionBundle` export/import preflight/restore contract, and local portability smoke contract are landed; real cross-machine smoke is open | `7/10` | `7.0` | full `SessionBundle` + portability + import/export | public score `8/10` |
-| Product surface | 10 | real desktop entry, multi-workbench surface, external distribution preflight, and readiness docs are landed | `6/10` | `6.0` | richer operator tooling, groups, portability, team-grade workflows | public score `9/10` |
+| Session continuity | 10 | restart continuity, `SessionBundle` export/import preflight/restore contract, and local restore smoke are verified on this machine; cross-machine smoke is cancelled | `7/10` | `7.0` | deeper local session orchestration and restore diagnostics | public score `8/10` |
+| Product surface | 10 | real desktop entry, multi-workbench surface, local evidence dashboard, and readiness docs are landed | `6/10` | `6.0` | richer operator tooling, groups, local restore, personal workflows | public score `9/10` |
 | AdsPower parity | 15 | current product has a base surface and some real contracts, but deep parity is far away | `2/10` | `3.0` | reach or surpass AdsPower on the benchmark board | AdsPower baseline `10/10` |
 
 `AdsPower public-boundary reference score = 83 / 100`
@@ -685,13 +686,13 @@ Always report fingerprint and event quantities as multi-part numbers:
 
 - fingerprint: `declared / runtime / target`
 - event taxonomy: `shipped / target`
-- session continuity: `restart continuity landed / SessionBundle contract landed / portability smoke not yet landed`
+- session continuity: `restart continuity landed / SessionBundle contract landed / local restore smoke verified / cross-machine smoke cancelled`
 
 Default wording:
 
 - fingerprint quantity: `80 declared / 26 runtime-projected / 450 taxonomy seed / full observed coverage pending`
 - event quantity: `13 shipped / 450 taxonomy seed / full replay runtime pending`
-- continuity: `restart continuity landed / SessionBundle contract landed / local portability contract landed / cross-machine smoke not yet landed`
+- continuity: `restart continuity landed / SessionBundle contract landed / local restore verified / cross-machine smoke cancelled`
 
 ## AdsPower Benchmark Summary
 

@@ -221,7 +221,7 @@ function Get-ReleaseMitigationHints([array]$BudgetResults, [object]$Idle) {
   }
 
   if ($hints.Count -eq 0) {
-    $hints += "All measured release health budgets are within target; keep release smoke in the gate before claiming performance green."
+    $hints += "All measured local startup diagnostics are within the historical targets; keep this as diagnostic context only."
   }
 
   return @($hints | Select-Object -Unique)
@@ -343,7 +343,7 @@ $healthNextAction = if ($status -eq "failed") {
 } elseif ($budgetStatus -eq "within_10_percent_drift_requires_reason") {
   "Rerun with -DriftReason before accepting any 10 percent release budget drift."
 } else {
-  "Use processBreakdown and mitigationHints to reduce cold start, RSS, or process count before claiming release performance green."
+  "Keep processBreakdown and mitigationHints as local startup diagnostics; release performance budget green is cancelled for current scope."
 }
 $healthSummaryText = "Release health $healthStatus; budget=$budgetStatus; primaryBottleneck=$primaryBottleneck; exceeded=$($exceededMetricIds -join ',')."
 
@@ -383,8 +383,8 @@ $report = [ordered]@{
   notes = @(
     "Measures a release executable, not Vite/dev mode.",
     "Ready time is a local operator smoke approximation based on main window, WebView/child process detection, or timeout survival.",
-    "Use this as evidence input for release smoke, not as a full UX startup profiler.",
-    "budgetStatus and healthSummary classify local release health; warning still means performance green is not allowed."
+    "Use this as local startup diagnostic input, not as a release gate.",
+    "budgetStatus and healthSummary classify local startup health; release performance budget green is cancelled for current scope."
   )
 }
 

@@ -2,7 +2,7 @@
 
 > 所有待实现功能，按依赖关系分 5 个 Phase，按 P0-P2 排列。
 >
-> 2026-05-28 更新：Phase 1 P1/P2、Phase 2 P1 与 Phase 3-5 roadmap 文件级待办均已有可测试实现或 adapter/contract 实现；Camoufox 已作为主线 browser core kind 接入内核管理/校验/启动参数分发/UI 选择，并新增最小 CDP task runner（source/test/smoke 级证据）。Phase 6 已推进 P0 集成断层：环境注入进入实例启动流程，`transport/` 被 Xray/SingBox 配置生成引用，`environment_audit` 扩到 8 个注入族。2026-05-28 回归修复要求：Camoufox 不能只停留在源码类型或文档口径，`data/app.db` 必须存在 `browser_cores.kind` 且至少一条 `kind=camoufox` 的可见 core row；根目录 `personal-pilot-tauri.exe` 对应的 `bin/personal-pilot-core.exe` / Tauri sidecar 副本必须同步重建。当前本机 DB 已有 `core-camoufox-manual`，显示名 `Camoufox（配置路径后可用）`。`scripts/roadmap_evidence_smoke.ps1` 最新 report 为 `data/reports/roadmap-evidence/roadmap-evidence-smoke-1779976243311.json`，状态 `passed_with_external_evidence_pending`；`scripts/profile_browser_environment_probe.mjs` 已生成真实 Chromium profile-browser 观测报告 `data/validation-reports/profile-browser-environment-1779951691042.json`，状态 `passed`；taxonomy coverage 已物化 fingerprint `450 / 450`、behavior `461 / 450`；真实 Xray/SingBox 本地二进制配置验证已通过；真实 Camoufox binary page-open 已通过。仍需用真实 provider、跨机器、远程代理出站/TLS 指纹观测、真实 headed_external browser task-run 和外部分发 smoke 证明生产闭环。
+> 2026-05-28 更新：Phase 1 P1/P2、Phase 2 P1 与 Phase 3-5 roadmap 文件级待办均已有可测试实现或 adapter/contract 实现；Camoufox 已作为主线 browser core kind 接入内核管理/校验/启动参数分发/UI 选择，并新增最小 CDP task runner（source/test/smoke 级证据）。Phase 6 已推进 P0 集成断层：环境注入进入实例启动流程，`transport/` 被 Xray/SingBox 配置生成引用，`environment_audit` 扩到 8 个注入族。2026-05-28 回归修复要求：Camoufox 不能只停留在源码类型或文档口径，`data/app.db` 必须存在 `browser_cores.kind` 且至少一条 `kind=camoufox` 的可见 core row；根目录 `personal-pilot-tauri.exe` 对应的 `bin/personal-pilot-core.exe` / Tauri sidecar 副本必须同步重建。当前本机 DB 已有 `core-camoufox-manual`，显示名 `Camoufox（配置路径后可用）`。`scripts/roadmap_evidence_smoke.ps1` 最新 report 为 `data/reports/roadmap-evidence/roadmap-evidence-smoke-1779976243311.json`，状态 `passed_with_external_evidence_pending`；`scripts/profile_browser_environment_probe.mjs` 已生成真实 Chromium profile-browser 观测报告 `data/validation-reports/profile-browser-environment-1779951691042.json`，状态 `passed`；taxonomy coverage 已物化 fingerprint `450 / 450`、behavior `461 / 450`；真实 Xray/SingBox 本地二进制配置验证已通过；真实 Camoufox binary page-open 已通过。2026-06-22 本机自用范围重置后，跨机器、第二机、外部分发 smoke 和 release performance budget 已取消；仍需真实 provider、远程代理出站/TLS 指纹观测、真实 headed_external/browser process 深度和本机 observed/replay evidence 证明更高成熟度。
 
 ---
 
@@ -229,7 +229,7 @@
 - [x] **5.5.2** Chromium 启动参数集成 contract
 - [x] **5.5.3** Xray/Sing-Box 出站配置集成
 
-## Phase 6: 信任继承与环境一致性治理架构 **（P0 已接入，P1/P2 外部证据待补）**
+## Phase 6: 信任继承与环境一致性治理架构 **（P0 已接入，P1/P2 本机证据待补）**
 
 **来源：** `docs/39-adversarial-trust-inheritance.md`
 **估时：** 待估算
@@ -278,7 +278,7 @@
 ### P2 — 验证与增强
 
 - [x] **6.8** environment_audit.go 扩展到全部 8+ 个注入族
-- [ ] **6.9** 跨机器凭证迁移验证（SessionBundle + adversarial_credential_chains）
+- [x] **6.9** 跨机器凭证迁移验证（SessionBundle + adversarial_credential_chains）— 2026-06-22 本机自用范围下取消，不再实施
 - [ ] **6.10** 传输层参数表自动更新机制（追踪浏览器版本变化）
 
 ---

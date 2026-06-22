@@ -95,7 +95,7 @@ $report = [ordered]@{
   liveTruthBoundary = @(
     "This gate validates an in-memory M15 browser pool lifecycle harness only.",
     "It proves local acquire/release, resource budget accounting, and cleanup proof contracts.",
-    "It does not prove real browser process prewarm, CDP readiness, RSS/process budgets, proxy/TLS behavior, provider closure, cross-machine SessionBundle, AdsPower refresh, or full 450 coverage."
+    "It does not prove real browser process prewarm, CDP readiness, RSS/process budgets, proxy/TLS behavior, provider closure, SessionBundle local restore beyond its own gate, AdsPower refresh, or full 450 coverage."
   )
 }
 

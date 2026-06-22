@@ -82,7 +82,7 @@ $report = [ordered]@{
   }
   liveTruthBoundary = @(
     "This gate validates Profile remote author source-level typed facade usage only.",
-    "It preserves the browser fetch fallback for non-desktop previews and does not prove tauriWailsBridge removal, workbench/core facade closure, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full 450 observed/replay coverage."
+    "It preserves the browser fetch fallback for non-desktop previews and does not prove tauriWailsBridge removal, workbench/core facade closure, provider credentials, remote proxy/TLS, SessionBundle local restore beyond its own gate, AdsPower refresh, or full 450 observed/replay coverage."
   )
 }
 

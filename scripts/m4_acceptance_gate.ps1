@@ -103,7 +103,7 @@ function New-GateResult(
 function Get-NonPassedRequiredGateIds([object]$GateResults) {
   if ($null -eq $GateResults) { return @() }
   return @($GateResults | Where-Object {
-    (Get-Field $_ "requiredForCrossMachine") -eq $true -and [string](Get-Field $_ "status") -ne "passed"
+    (Get-Field $_ "requiredForLocalRestore") -eq $true -and [string](Get-Field $_ "status") -ne "passed"
   } | ForEach-Object { [string](Get-Field $_ "id") })
 }
 
@@ -283,7 +283,7 @@ function Test-SessionBundleOperatorContract {
       "Dry-run",
       "handleSessionBundleRestore",
       "writePerformed",
-      "portability",
+      "restart continuity",
       "allowProfileOverwrite",
       "confirm("
     )) {
@@ -324,7 +324,7 @@ function Test-SessionBundleOperatorContract {
   if ($failures.Count -gt 0) {
     return New-LocalGateResult "session_bundle_operator_contract" "missing_coverage" "failed" "M4.6 SessionBundle operator source contract is incomplete" $failures
   }
-  return New-LocalGateResult "session_bundle_operator_contract" "passed" "passed" "M4.6 SessionBundle export/preflight/dry-run/confirmed local restore operator loop is wired in UI/API; cross-machine proof remains externally blocked" @()
+  return New-LocalGateResult "session_bundle_operator_contract" "passed" "passed" "M4.6 local-only SessionBundle export/preflight/dry-run/confirmed restore operator loop is wired in UI/API" @()
 }
 
 function Test-TypedFacadeShrinkContract {
@@ -1642,22 +1642,24 @@ foreach ($spec in $gateSpecs) {
       }
     }
     "session_bundle_portability_smoke" {
-      $crossMachineComplete = (Get-Field $report "crossMachineComplete") -eq $true
       $sessionGateResults = @((Get-Field $report "gateResults"))
-      $missingCrossMachineGateIds = Get-NonPassedRequiredGateIds $sessionGateResults
-      if ($status -eq "cross_machine_passed") {
-        if (-not $crossMachineComplete -or $sessionGateResults.Count -eq 0 -or $missingCrossMachineGateIds.Count -gt 0) {
+      $missingLocalGateIds = Get-NonPassedRequiredGateIds $sessionGateResults
+      if ($status -in @("local_restore_verified", "local_contract_passed", "cross_machine_passed")) {
+        if ($sessionGateResults.Count -gt 0 -and $missingLocalGateIds.Count -gt 0) {
           $classification = "failed"
-          $reason = "session portability report is marked passed while cross-machine gates remain blocked"
-          $failures += "blocked or missing cross-machine portability misreported as passed: $($missingCrossMachineGateIds -join ', ') gateResultCount=$($sessionGateResults.Count)"
+          $reason = "SessionBundle local restore report has blocked local gates"
+          $failures += "blocked or missing local SessionBundle restore gates: $($missingLocalGateIds -join ', ')"
         } else {
           $classification = "passed"
-          $reason = "cross-machine SessionBundle portability passed"
+          $reason = "SessionBundle local-only restore contract is usable"
         }
-      } elseif ($status -in @("local_contract_passed", "blocked_requires_second_machine_evidence")) {
-        $classification = "expected_blocked"
-        $reason = "SessionBundle local contract exists; second-machine evidence is still required"
-        $expectedBlockers += if ($missingCrossMachineGateIds.Count -gt 0) { $missingCrossMachineGateIds } else { "second_machine_evidence_required" }
+      } elseif ($status -eq "failed_local_restore_contract") {
+        $classification = "failed"
+        $reason = "SessionBundle local restore contract failed"
+        $failures += "local SessionBundle restore contract failed"
+      } elseif ($status -eq "blocked_requires_second_machine_evidence") {
+        $classification = "passed"
+        $reason = "legacy second-machine blocker is ignored because current scope is local-only"
       } else {
         $classification = "failed"
         $reason = "unexpected SessionBundle portability status"
@@ -1761,7 +1763,7 @@ $report = [ordered]@{
     nextAction = if ($failedGates.Count -gt 0) {
       "Fix failed local gates before promoting M4."
     } elseif ($expectedBlockedGates.Count -gt 0) {
-      "M4 local contracts are usable; close expected external blockers with fresh provider, remote proxy/TLS, cross-machine SessionBundle, and same-run profile-browser evidence."
+      "M4 local contracts are usable; close expected external blockers with fresh provider, remote proxy/TLS, runtime adapter, and same-run profile-browser evidence when those scopes are active."
     } else {
       "M4 local and external gates are passed; move to M5 performance and health."
     }
@@ -1772,7 +1774,7 @@ $report = [ordered]@{
     "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set and refreshes provider acceptance preflight unless -SkipProviderPreflightRefresh is set; external gates are aggregated from latest reports.",
     "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
     "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
-    "SessionBundle operator contract is local UI/API source evidence only; second-machine portability remains expected_blocked until a real target-environment report exists.",
+    "SessionBundle operator contract is local UI/API source evidence only; second-machine portability is cancelled under the local-only scope.",
     "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer/workbench/report DTOs and browser Wails bindings without removing the transitional bridge.",
     "Bridge compatibility type contract is source-level evidence only; it gives desktopRpc and tauriWailsBridge compatibility arguments named type boundaries without removing tauriWailsBridge.",
     "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",

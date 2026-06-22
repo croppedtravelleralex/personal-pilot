@@ -1,5 +1,5 @@
 # Final Goal Progress Breakdown
-Updated: 2026-05-27 (Asia/Shanghai)
+Updated: 2026-06-22 (Asia/Shanghai)
 
 ## Current Split
 
@@ -7,6 +7,7 @@ Updated: 2026-05-27 (Asia/Shanghai)
 - mainline quality gate color: `green`
 - overall end-state split: `40% / 60%`
 - overall end-state color: `yellow`
+- local-only scope: release performance budget、外部分发 smoke、干净 Win11/第二机和跨机器 SessionBundle portability 已取消，只保留历史诊断材料
 
 ## Mainline 到达 100 / 0 的原因
 
@@ -25,11 +26,11 @@ Updated: 2026-05-27 (Asia/Shanghai)
 - 第一族控制 schema 已声明 `80` 个核心控制字段
 - 当前 `Lightpanda` 运行时投影已扩到 `26` 个字段（`25` 个 control-supported + derived `platform`），但这仍不是完整 observed proof
 - cookie/localStorage/sessionStorage 重启持久化已落地
-- `SessionBundle` profile-scoped export、import preflight、dry-run 和 confirmed local restore write path 已落地；P14 新增 portability smoke contract，跨机器 profile portability smoke 尚未落地
+- `SessionBundle` profile-scoped export、import preflight、dry-run 和 confirmed local restore write path 已落地；最新本机 restore smoke 为 `local_restore_verified`，M8 本机 restore gate 为 `passed_local_restore_verified`；跨机器 profile portability smoke 已按本机自用范围取消
 - Validation Board 已有 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history、profile-level export、P6 evidence metadata 和 P7 fingerprint observation audit；P5 已通过 WSL2 Lightpanda/CDP repeatable smoke，但 report 里的 WebRTC/audio warning 和 canvas failure 仍必须保留
 - 当前行为运行时只支持 `13` 个真实原语
 - `450` 指纹信号 taxonomy seed 和 `450` 事件 taxonomy seed 已落地；full observed coverage、full replay runtime、更强真实感、AdsPower 边界追赶仍是未来工作
-- P14 新增 release performance、external distribution、provider preflight、SessionBundle portability、taxonomy audit 的可重复 evidence 入口；release performance 当前为 warning：`10274ms / 672MB / 22 processes`
+- P14 新增 provider preflight、taxonomy audit、本机 SessionBundle contract 等可重复 evidence 入口；release performance / external distribution / cross-machine portability 入口只保留历史诊断价值，最新 release performance 诊断为 warning / over budget：`3899ms / 433MB / 9 processes`
 - 外部浏览器研究已完成，但集成计划仍是计划，尚未转化为运行时深度
 
 ## 已闭环的 7% 是什么

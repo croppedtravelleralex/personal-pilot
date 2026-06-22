@@ -12,6 +12,7 @@ backend/data/
 backend/SelfMadeToolpersonal-pilotdata/
 .playwright-mcp/
 .claude/
+.codex_tmp/
 
 # Generated binaries and logs
 *.exe

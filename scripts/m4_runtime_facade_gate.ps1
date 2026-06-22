@@ -126,7 +126,7 @@ $report = [ordered]@{
   }
   liveTruthBoundary = @(
     "This gate validates selected page-level runtime EventsOn/EventsOff/BrowserOpenURL source-level facade usage only.",
-    "It does not prove tauriWailsBridge removal, every core/proxy/settings API closure, real provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full 450 observed/replay coverage."
+    "It does not prove tauriWailsBridge removal, every core/proxy/settings API closure, real provider credentials, remote proxy/TLS, SessionBundle local restore beyond its own gate, AdsPower refresh, or full 450 observed/replay coverage."
   )
 }
 

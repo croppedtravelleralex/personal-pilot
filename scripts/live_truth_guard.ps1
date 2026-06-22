@@ -46,7 +46,7 @@ $report = [ordered]@{
   failureReason = if ($failed.Count -eq 0) { "" } else { "live-truth guard failed: $(@($failed | ForEach-Object { $_.id }) -join ', ')" }
   notes = @(
     "This guard prevents historical progress ratios and taxonomy target claims from becoming live truth.",
-    "It does not prove external provider, second-machine portability, or AdsPower parity."
+    "It does not prove external provider or AdsPower parity; second-machine portability is cancelled under the local-only scope."
   )
 }
 

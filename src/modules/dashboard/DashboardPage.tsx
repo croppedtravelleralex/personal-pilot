@@ -59,7 +59,7 @@ const EVIDENCE_KINDS = [
   { kind: 'm4_browser_runtime_facade', label: 'M4 Browser Runtime' },
   { kind: 'm4_runtime_facade', label: 'M4 Runtime' },
   { kind: 'm5_release_health', label: 'M5 Health' },
-  { kind: 'release_performance', label: 'Release 性能' },
+  { kind: 'release_performance', label: '启动诊断' },
   { kind: 'runtime_adapter', label: 'Runtime Adapter' },
   { kind: 'profile_browser_comparison', label: 'Browser 对比' },
   { kind: 'm10_headed_repeatability', label: 'M10 Repeatability' },
@@ -69,10 +69,10 @@ const EVIDENCE_KINDS = [
   { kind: 'camoufox_binary_task', label: 'Camoufox' },
   { kind: 'provider_acceptance', label: 'Provider' },
   { kind: 'session_portability', label: 'SessionBundle' },
-  { kind: 'm8_session_handoff', label: 'M8 Handoff' },
+  { kind: 'm8_session_handoff', label: 'M8 本机恢复' },
   { kind: 'taxonomy_coverage', label: 'Taxonomy 覆盖' },
   { kind: 'taxonomy_audit', label: 'Taxonomy Audit' },
-  { kind: 'external_distribution', label: '外部分发' },
+  { kind: 'external_distribution', label: '外发历史' },
 ]
 
 const UNLIMITED = Number.POSITIVE_INFINITY

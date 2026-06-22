@@ -257,7 +257,7 @@ $report = [ordered]@{
   liveTruthBoundary = @(
     "This gate validates M10 headed_external validation_probe repeatability shape only.",
     "passed_repeatability_partial_coherence is partial runtime realism evidence, not full headed runtime closure.",
-    "Long-task stability, remote proxy/TLS proof, provider production closure, cross-machine SessionBundle, AdsPower refresh, and full 450 observed/replay coverage remain outside this gate."
+    "Long-task stability, remote proxy/TLS proof, provider production closure, SessionBundle local restore beyond its own gate, AdsPower refresh, and full 450 observed/replay coverage remain outside this gate."
   )
 }
 

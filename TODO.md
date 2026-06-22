@@ -38,10 +38,10 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 ## Mainline Release Evidence
 
 - [x] Run Win11 local release gate without reopening scope (`scripts/windows_local_verify.ps1 -SkipContinuityTest`)
-- [x] Add P13 external distribution readiness doc with known limitations, manual smoke checklist, and release-note boundaries
-- [x] Add repeatable P14 smoke/audit entries for release performance, external distribution, provider acceptance preflight, SessionBundle portability, and taxonomy accounting
+- [x] Add P13 external distribution readiness doc; 2026-06-22 local-only reset changed it to historical-only
+- [x] Add repeatable P14 smoke/audit entries; release performance, external distribution, and cross-machine portability entries are now diagnostic/historical only
 - [x] Add P15 remaining-work register and first-priority execution gates
-- [ ] Execute manual operator smoke before external distribution
+- [x] Cancel manual operator smoke before external distribution under current local-only scope
 
 ## Overall End-State 60%
 
@@ -52,7 +52,7 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Add WebRTC/leak observed contract warning signals to validation reports
 - [x] Add desktop WebView scoped WebRTC/canvas/audio/storage observed probes without claiming profile browser coverage
 - [x] Add profile browser runtime / CDP scoped `validation_probe` runner action and merge its signals into validation reports
-- [x] Run real Lightpanda/CDP operator smoke to confirm WebRTC/leak/canvas/audio profile runtime reports are repeatable outside FakeRunner
+- [x] Run real Lightpanda/CDP local validation smoke to confirm WebRTC/leak/canvas/audio profile runtime reports are repeatable outside FakeRunner
   - [x] Add repeatable local smoke entry: `scripts/validation_lightpanda_smoke.ps1`
   - [x] Install/use official Lightpanda nightly through WSL2 and run `validation_lightpanda_smoke --use-wsl-lightpanda` with `status=passed`
 - [x] Converge validation evidence schema with explicit scope / adapter / target-profile / failure fields
@@ -66,13 +66,13 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
   - [x] Restore target profile and proxy session bindings from included local bundle payloads
   - [x] Add profile-scoped export contract with redacted-by-default session evidence
   - [x] Add import preflight and restore contract
-  - [ ] Verify profile portability end to end with restart continuity
+  - [x] Verify local profile restore end to end with restart continuity
 - [x] Grow the behavior layer from `13` shipped primitives toward a replayable `450+` event taxonomy
   - [x] Add behavior audit contract for `13` shipped primitives and `8` page archetypes
   - [x] Surface workflow/debug/manual-gate/recovery coverage in Automation
   - [x] Preserve `450` event taxonomy seed as replay-runtime pending until real taxonomy execution is shipped
-- [x] Add runtime adapter / release smoke contract without hosting Chromium/Firefox forks
-- [x] Add release measurement pending fields and Overview adapter boundary visibility without using dev metrics as release evidence
+- [x] Add runtime adapter / historical release smoke diagnostic contract without hosting Chromium/Firefox forks
+- [x] Add release measurement diagnostic fields and Overview adapter boundary visibility without using dev metrics as release evidence
 - [x] Add AdsPower boundary refresh guard: defer score refresh until B1-B5 evidence exists
 - [x] Add machine-readable `450` fingerprint signal taxonomy seed and taxonomy audit gate
 - [x] Add machine-readable `450` behavior event taxonomy seed and expose taxonomy seed status in Automation behavior audit

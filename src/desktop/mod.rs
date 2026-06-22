@@ -3273,15 +3273,25 @@ fn evidence_failure_reason_category(
         }
         ("profile_browser_comparison", "blocked_stale_comparison_pair") => "same_run_window_stale",
         ("profile_browser_comparison", "partial_comparison_only") => "comparison_category_gap",
-        ("session_portability", item)
-            if item.contains("local_contract") || item.contains("blocked") =>
-        {
-            "cross_machine_session_pending"
+        ("session_portability", "local_restore_verified") => "none",
+        ("session_portability", item) if item.contains("local_contract") => {
+            "local_session_restore_contract"
         }
-        ("m8_session_handoff", "passed_cross_machine_evidence_attached") => "none",
-        ("m8_session_handoff", "passed_handoff_package_ready") => "cross_machine_session_pending",
-        ("m8_session_handoff", "failed_handoff_package_contract") => {
-            "session_handoff_contract_incomplete"
+        ("session_portability", item) if item.contains("failed") => {
+            "local_session_restore_contract_failed"
+        }
+        ("session_portability", item) if item.contains("blocked") => {
+            "cancelled_cross_machine_legacy"
+        }
+        ("m8_session_handoff", "passed_local_restore_verified") => "none",
+        ("m8_session_handoff", "passed_local_restore_contract_ready") => {
+            "local_session_restore_contract"
+        }
+        ("m8_session_handoff", "passed_cross_machine_evidence_attached")
+        | ("m8_session_handoff", "passed_handoff_package_ready") => "cancelled_cross_machine_legacy",
+        ("m8_session_handoff", "failed_local_restore_contract")
+        | ("m8_session_handoff", "failed_handoff_package_contract") => {
+            "session_restore_contract_incomplete"
         }
         ("m4_browser_payload_schema", "passed_browser_payload_schema_contract") => "none",
         ("m4_browser_payload_schema", "failed_browser_payload_schema_contract") => {
@@ -3343,9 +3353,8 @@ fn evidence_failure_reason_category(
         ("m15_browser_pool", "failed_pool_source_contract") => {
             "browser_pool_source_contract_incomplete"
         }
-        ("external_distribution", item) if item.contains("blocked") => {
-            "external_operator_smoke_required"
-        }
+        ("external_distribution", "cancelled_local_only") => "none",
+        ("external_distribution", item) if item.contains("blocked") => "cancelled_local_only",
         ("m4_acceptance", "expected_blocked")
         | ("m4_acceptance", "passed_with_expected_external_blockers") => {
             "expected_external_blockers"
@@ -3485,11 +3494,15 @@ fn evidence_report_summary_from_json(
                 .unwrap_or_default()
         ),
         "session_portability" => format!(
-            "session portability {status}: crossMachineComplete={}",
+            "session portability {status}: localRestoreComplete={} crossMachineCancelled={}",
             value
-                .get("crossMachineComplete")
+                .get("localRestoreComplete")
                 .and_then(Value::as_bool)
-                .unwrap_or(false)
+                .unwrap_or_else(|| status == "local_restore_verified"),
+            value
+                .get("crossMachineCancelled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
         ),
         "m8_session_handoff" => {
             let summary = value.get("summary");
@@ -3503,6 +3516,9 @@ fn evidence_report_summary_from_json(
             let local_status = summary
                 .and_then(|item| value_text(item, "localPortabilityReportStatus"))
                 .unwrap_or_else(|| "missing".to_string());
+            let local_restore_status = summary
+                .and_then(|item| value_text(item, "localRestoreStatus"))
+                .unwrap_or_else(|| "contract_ready".to_string());
             let desktop_status = summary
                 .and_then(|item| value_text(item, "desktopContractStatus"))
                 .unwrap_or_else(|| "missing".to_string());
@@ -3510,7 +3526,7 @@ fn evidence_report_summary_from_json(
                 .and_then(|item| value_text(item, "operatorSurfaceStatus"))
                 .unwrap_or_else(|| "missing".to_string());
             format!(
-                "M8 SessionBundle handoff {status}: checksFailed={failed} runbook={runbook_status} localPortability={local_status} desktopContract={desktop_status} operatorSurface={operator_status}"
+                "M8 SessionBundle local restore {status}: checksFailed={failed} runbook={runbook_status} localPortability={local_status} localRestore={local_restore_status} desktopContract={desktop_status} operatorSurface={operator_status}"
             )
         }
         "m4_browser_payload_schema" => {
@@ -4022,6 +4038,11 @@ fn evidence_risk_from_level(evidence_level: &str, status: &str) -> (String, i32)
     let combined = format!("{evidence_level} {status}").to_lowercase();
     if combined.contains("failed") {
         ("failed".to_string(), 90)
+    } else if combined.contains("historical_cancelled")
+        || combined.contains("cancelled_local_only")
+        || combined.contains("cancelled_cross_machine_legacy")
+    {
+        ("historical_cancelled".to_string(), 20)
     } else if combined.contains("expected_external_blockers") {
         ("expected_external_blocker".to_string(), 50)
     } else if combined.contains("blocked") {
@@ -4228,12 +4249,25 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
         ("m15_browser_pool", "passed_pool_lifecycle_harness") => {
             "browser_pool_lifecycle_harness_partial"
         }
-        ("m8_session_handoff", "passed_cross_machine_evidence_attached") => {
-            "cross_machine_session_observed"
+        ("session_portability", "local_restore_verified") => "session_restore_verified",
+        ("session_portability", "local_contract_passed") => "session_restore_contract_local",
+        ("session_portability", "failed_local_restore_contract") => {
+            "session_restore_contract_failed"
         }
-        ("m8_session_handoff", "passed_handoff_package_ready") => "session_handoff_package_partial",
-        ("m8_session_handoff", "failed_handoff_package_contract") => {
-            "session_handoff_contract_failed"
+        ("session_portability", "blocked_requires_second_machine_evidence") => {
+            "cancelled_cross_machine_legacy"
+        }
+        ("m8_session_handoff", "passed_local_restore_verified") => "session_restore_verified",
+        ("m8_session_handoff", "passed_local_restore_contract_ready") => {
+            "session_restore_contract_local"
+        }
+        ("m8_session_handoff", "passed_cross_machine_evidence_attached")
+        | ("m8_session_handoff", "passed_handoff_package_ready") => {
+            "cancelled_cross_machine_legacy"
+        }
+        ("m8_session_handoff", "failed_local_restore_contract")
+        | ("m8_session_handoff", "failed_handoff_package_contract") => {
+            "session_restore_contract_failed"
         }
         ("m4_browser_payload_schema", "passed_browser_payload_schema_contract") => {
             "browser_payload_schema_contract_partial"
@@ -4307,6 +4341,8 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
                 "blocked_missing_remote_proxy_or_b1_b5_evidence"
             }
         }
+        ("external_distribution", "cancelled_local_only") => "historical_cancelled",
+        ("external_distribution", item) if item.contains("blocked") => "historical_cancelled",
         (_, item) if item.contains("passed") || item.contains("observed") => "observed",
         (_, item) if item.contains("blocked") => "blocked",
         (_, item) if item.contains("failed") => "failed",
@@ -4325,7 +4361,7 @@ fn evidence_next_action(
     let action = match (kind, status) {
         ("m4_acceptance", "expected_blocked")
         | ("m4_acceptance", "passed_with_expected_external_blockers") => Some(
-            "Use this as the M4 local aggregation gate; close external blockers with provider, remote proxy, profile-browser comparison, and cross-machine reports."
+            "Use this as the M4 local aggregation gate; close active evidence blockers with provider, remote proxy/TLS, runtime adapter, and profile-browser reports when those scopes are active."
                 .to_string(),
         ),
         ("m4_acceptance", "failed") => Some(
@@ -4333,10 +4369,10 @@ fn evidence_next_action(
                 .to_string(),
         ),
         ("m5_release_health", "passed_with_budget_overrun")
-        | ("m5_release_health", "passed_with_recorded_drift") => value
-            .get("summary")
-            .and_then(|summary| value_text(summary, "nextAction"))
-            .or_else(|| Some("Use scripts/release_performance_smoke.ps1 mitigation hints before claiming release performance green.".to_string())),
+        | ("m5_release_health", "passed_with_recorded_drift") => Some(
+            "Keep this M5 report as local startup diagnostics; release performance budget green is cancelled for current scope."
+                .to_string(),
+        ),
         ("m5_release_health", "failed") => Some(
             "Fix the M5 release health schema/report checks, then rerun scripts/m5_release_health_gate.ps1."
                 .to_string(),
@@ -4382,7 +4418,10 @@ fn evidence_next_action(
                     )
                 })
         }
-        ("m8_session_handoff", "passed_cross_machine_evidence_attached")
+        ("m8_session_handoff", "passed_local_restore_verified")
+        | ("m8_session_handoff", "passed_local_restore_contract_ready")
+        | ("m8_session_handoff", "failed_local_restore_contract")
+        | ("m8_session_handoff", "passed_cross_machine_evidence_attached")
         | ("m8_session_handoff", "passed_handoff_package_ready")
         | ("m8_session_handoff", "failed_handoff_package_contract") => {
             value
@@ -4390,7 +4429,7 @@ fn evidence_next_action(
                 .and_then(|summary| value_text(summary, "nextAction"))
                 .or_else(|| {
                     Some(
-                        "Run scripts/m8_session_handoff_gate.ps1, then attach real second-machine SessionBundle evidence before claiming cross-machine portability."
+                        "Run scripts/m8_session_handoff_gate.ps1 to refresh the local SessionBundle restore evidence."
                             .to_string(),
                     )
                 })
@@ -4526,26 +4565,31 @@ fn evidence_next_action(
                 })
         }
         ("release_performance", item) if item.contains("warning") || item.contains("failed") => {
-            value
-                .get("healthSummary")
-                .and_then(|summary| value_text(summary, "nextAction"))
-                .or_else(|| {
-                    Some(
-                        "Use scripts/release_performance_smoke.ps1 budgetResults/processBreakdown before claiming release performance green."
-                            .to_string(),
-                    )
-                })
+            Some(
+                "Keep this release smoke as local startup diagnostics; no release performance budget target is active."
+                    .to_string(),
+            )
         }
         ("provider_acceptance", item) if item.contains("blocked") => Some(
             "Configure real provider credentials and rerun scripts/provider_acceptance_preflight.ps1."
                 .to_string(),
         ),
-        ("session_portability", item) if item.contains("local_contract") || item.contains("blocked") => Some(
-            "Run the SessionBundle restore smoke on a second Win11 machine and attach the resulting report."
+        ("session_portability", item)
+            if item.contains("local_contract")
+                || item.contains("local_restore")
+                || item.contains("blocked") =>
+        {
+            Some(
+                "Run scripts/session_bundle_portability_smoke.ps1 to refresh local export/preflight/dry-run/confirmed restore evidence."
+                .to_string(),
+            )
+        }
+        ("external_distribution", item) if item.contains("blocked") => Some(
+            "External distribution smoke is cancelled for current local-only scope; keep this report as historical context."
                 .to_string(),
         ),
-        ("external_distribution", item) if item.contains("blocked") => Some(
-            "Run the manual clean-Win11 operator smoke from docs/24-external-distribution-readiness.md."
+        ("external_distribution", "cancelled_local_only") => Some(
+            "External distribution smoke is cancelled for current local-only scope; keep this report as historical context."
                 .to_string(),
         ),
         ("profile_browser_comparison", "blocked_missing_validation_report")
@@ -4947,13 +4991,9 @@ pub fn read_desktop_release_smoke_contract(
         .unwrap_or_else(|| {
             format!("Release health {release_health_status}; budget={budget_status}.")
         });
-    let release_health_next_action = latest_release_report
-        .as_ref()
-        .and_then(|report| report.get("healthSummary"))
-        .and_then(|summary| value_text(summary, "nextAction"))
-        .unwrap_or_else(|| {
-            "Run scripts/release_performance_smoke.ps1 against personal-pilot-tauri.exe and keep warning status until budgets pass.".to_string()
-        });
+    let release_health_next_action =
+        "Keep this report as local startup diagnostics; release performance budget green is cancelled for current scope."
+            .to_string();
     let mitigation_hints = latest_release_report
         .as_ref()
         .map(|report| value_string_array(report, "mitigationHints"))
@@ -5109,7 +5149,7 @@ pub fn read_desktop_release_smoke_contract(
             evidence_requirements: vec![
                 "PERSONA_PILOT_CAMOUFOX_CONFIG real binary task-run smoke".to_string(),
                 "timeout/cleanup process residue proof".to_string(),
-                "release performance report with Camoufox task-run metrics".to_string(),
+                "Camoufox task-run diagnostics with timeout/cleanup metrics".to_string(),
             ],
             blockers: if camoufox_binary_passed {
                 vec![
@@ -11148,7 +11188,7 @@ mod tests {
                 "measuredProcessCount": 14,
                 "healthSummary": {
                     "status": "budget_overrun",
-                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                    "nextAction": "Keep this report as local startup diagnostics; release performance budget green is cancelled for current scope."
                 }
             })
             .to_string(),
@@ -11167,7 +11207,7 @@ mod tests {
                 "measuredProcessCount": 9,
                 "healthSummary": {
                     "status": "budget_overrun",
-                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                    "nextAction": "Keep this report as local startup diagnostics; release performance budget green is cancelled for current scope."
                 }
             })
             .to_string(),
@@ -11184,7 +11224,7 @@ mod tests {
                     "failed": 0,
                     "budgetResultCount": 3,
                     "healthStatus": "budget_overrun",
-                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                    "nextAction": "Keep this report as local startup diagnostics; release performance budget green is cancelled for current scope."
                 }
             })
             .to_string(),
@@ -11254,7 +11294,7 @@ mod tests {
             .next_action
             .as_deref()
             .unwrap_or_default()
-            .contains("mitigationHints"));
+            .contains("local startup diagnostics"));
         let m5 = history
             .reports
             .iter()
@@ -11273,7 +11313,7 @@ mod tests {
             .next_action
             .as_deref()
             .unwrap_or_default()
-            .contains("mitigationHints"));
+            .contains("local startup diagnostics"));
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -11713,13 +11753,25 @@ mod tests {
                 "session_portability",
                 "local_contract_passed",
                 None,
-                "cross_machine_session_pending",
+                "local_session_restore_contract",
+            ),
+            (
+                "session_portability",
+                "local_restore_verified",
+                None,
+                "none",
             ),
             (
                 "m8_session_handoff",
-                "passed_handoff_package_ready",
+                "passed_local_restore_contract_ready",
                 None,
-                "cross_machine_session_pending",
+                "local_session_restore_contract",
+            ),
+            (
+                "m8_session_handoff",
+                "passed_local_restore_verified",
+                None,
+                "none",
             ),
             (
                 "m4_browser_payload_schema",
@@ -11905,7 +11957,7 @@ mod tests {
                 "external_distribution",
                 "blocked_external_smoke_required",
                 None,
-                "external_operator_smoke_required",
+                "cancelled_local_only",
             ),
             (
                 "custom_gate",
@@ -12304,17 +12356,18 @@ mod tests {
                 .join("m8-session-handoff")
                 .join("m8-session-handoff-gate-test.json"),
             serde_json::json!({
-                "schemaVersion": "m8_session_handoff_gate_v1",
+                "schemaVersion": "m8_session_handoff_gate_v2",
                 "generatedAt": "2026-05-30T00:05:30Z",
-                "status": "passed_handoff_package_ready",
+                "status": "passed_local_restore_verified",
                 "failureReason": "",
                 "summary": {
                     "failed": 0,
-                    "runbookStatus": "present",
-                    "localPortabilityReportStatus": "local_contract_passed",
+                    "runbookStatus": "historical_cancelled",
+                    "localPortabilityReportStatus": "local_restore_verified",
+                    "localRestoreStatus": "verified",
                     "desktopContractStatus": "present",
                     "operatorSurfaceStatus": "present",
-                    "nextAction": "Use the handoff manifest on a second clean Win11 target, then rerun scripts/session_bundle_portability_smoke.ps1 -CrossMachine with passed target statuses."
+                    "nextAction": "Keep this local SessionBundle restore report attached; rerun scripts/m8_session_handoff_gate.ps1 after changing export, preflight, restore, or continuity persistence."
                 }
             })
             .to_string(),
@@ -12395,19 +12448,20 @@ mod tests {
             .iter()
             .find(|report| report.kind == "m8_session_handoff")
             .expect("m8 session handoff report");
-        assert_eq!(m8.status, "passed_handoff_package_ready");
-        assert_eq!(m8.evidence_level, "session_handoff_package_partial");
-        assert_eq!(m8.failure_reason_category, "cross_machine_session_pending");
-        assert_eq!(m8.risk_level, "partial");
+        assert_eq!(m8.status, "passed_local_restore_verified");
+        assert_eq!(m8.evidence_level, "session_restore_verified");
+        assert_eq!(m8.failure_reason_category, "none");
+        assert_eq!(m8.risk_level, "observed");
         assert!(m8
             .summary
-            .contains("localPortability=local_contract_passed"));
+            .contains("localPortability=local_restore_verified"));
+        assert!(m8.summary.contains("localRestore=verified"));
         assert!(m8.summary.contains("operatorSurface=present"));
         assert!(m8
             .next_action
             .as_deref()
             .unwrap_or_default()
-            .contains("second clean Win11"));
+            .contains("local SessionBundle restore"));
 
         let m4_payload = history
             .reports
@@ -12732,7 +12786,7 @@ mod tests {
                 "healthSummary": {
                     "status": "budget_overrun",
                     "summary": "Release health budget_overrun; budget=over_budget.",
-                    "nextAction": "Use processBreakdown and mitigationHints before claiming release performance green."
+                    "nextAction": "Keep this report as local startup diagnostics; release performance budget green is cancelled for current scope."
                 },
                 "mitigationHints": [
                     "Delay heavy startup reads.",
@@ -12762,7 +12816,7 @@ mod tests {
             .any(|item| item.id == "cold_start" && item.drift_target == 2200));
         assert!(contract
             .release_health_next_action
-            .contains("mitigationHints"));
+            .contains("local startup diagnostics"));
         assert!(contract
             .mitigation_hints
             .iter()

@@ -10,21 +10,21 @@ PersonaPilot 是一个面向 Windows 11 的本地桌面 operator console，用�
 - 整体终态：`40% / 60% / yellow`。
 - Win11 release gate 已于 2026-05-23 通过。
 - 当前主线入口只保留根目录 `personal-pilot-tauri.exe`；release build 的 target 产物只作为临时构建输出，完成后必须同步到根目录并清理。除该 root exe 外，不允许保留其他用户可打开 GUI exe 或旁路 UI。
-- Validation Board 已进入桌面导航，并严格区分 `declared / applied / observed` evidence。
-- P13 已新增外部分发前检查入口：`docs/24-external-distribution-readiness.md`。
-- M5 release health gate 已新增：`scripts/m5_release_health_gate.ps1` 可验收 release performance v2 报告；当前仍是 over budget warning，不能写成 performance green。
+- Validation Board 已进入 Dashboard / evidence history surface，并严格区分 `declared / applied / observed` evidence。
+- 当前范围已收缩为本机自用：不再追求外部分发 smoke、干净 Win11/第二机验收、跨机器 SessionBundle portability 或 release performance 预算达标。
+- release / external / cross-machine 相关 report 和脚本只保留为历史诊断材料，不再作为待办、阻塞项或成功标准。
 
 维护真相源在 `docs/`。接手、汇报、规划时先读 `/docs/README.md`、`/docs/root-entrypoint-map.md` 和 `/docs/02-current-state.md`，不要把根 README 当成唯一事实来源。
 
 ## 已包含能力
 
-- Dashboard、Profiles、Proxies、Automation、Synchronizer、Logs、Settings、Validation 页面。
+- Dashboard、Browser List、Workbench/Synchronizer、Recording、Automation、Core、Proxy、Bookmarks、Tags、Monitor、Settings、Tutorial、Logs 和 API docs 页面；Validation evidence 作为 Dashboard/报告面板呈现，不是独立导航页。
 - Native desktop 能力统一经 `src/services/desktop.ts` 暴露。
 - Provider-aware proxy rotation contract，包含 rollback、cooldown、retry 语义。
 - Native-first recorder/template flow，fallback 只作为恢复路径。
 - Synchronizer read/focus/set-main/layout native desktop contract。
 - Validation Board 覆盖 detector、leak、DNS、WebRTC、canvas、audio、worker、transport evidence 类别。
-- Provider readiness、behavior audit、runtime posture 和 release measurement pending 可在 operator surface 查看。
+- Provider readiness、behavior audit、runtime posture 和历史 release measurement 诊断可在 operator surface 查看。
 
 ## 重要边界
 
@@ -91,15 +91,21 @@ powershell -ExecutionPolicy Bypass -File scripts\windows_local_verify.ps1 -SkipC
 
 ```text
 src/
-  app/
-  pages/
-  components/
-  features/
-  hooks/
-  store/
+  App.tsx
+  main.tsx
+  modules/
+    dashboard/
+    browser/
+    monitor/
+    settings/
+    synchronizer/
+    charts/        # 未进导航的内部 demo/sample route: /charts
   services/
   types/
-  utils/
+  shared/
+  api/             # Rust crate modules
+  desktop/         # Rust crate modules
+  runner/          # Rust crate modules
 src-tauri/
   src/
   capabilities/
@@ -112,7 +118,7 @@ docs/
 Native 和 system-capability 调用必须走固定链路：
 
 ```text
-pages/components -> features/hooks/store -> src/services/desktop.ts -> tauri
+src/modules/** 或 app shell -> src/services/desktop.ts -> tauri
 ```
 
 UI 代码不得直接调用 Tauri。
@@ -127,14 +133,13 @@ UI 代码不得直接调用 Tauri。
 - `docs/04-improvement-backlog.md`
 - `docs/05-ai-maintenance-playbook.md`
 - `docs/root-entrypoint-map.md`
-- `docs/24-external-distribution-readiness.md`
+- `docs/24-external-distribution-readiness.md`（historical-only / cancelled）
 
 状态变化时，先更新对应 canonical docs，再更新根入口摘要。
 
 ## 下一步
 
-1. 按 `docs/24-external-distribution-readiness.md` 执行外部分发前人工 operator smoke。
-2. 运行 `scripts/release_performance_smoke.ps1`、`scripts/external_distribution_smoke.ps1`、`scripts/session_bundle_portability_smoke.ps1` 和 `scripts/taxonomy_audit.ps1` 生成 evidence report。
-3. 运行 `scripts/m5_release_health_gate.ps1` 检查 release health/budget/mitigation schema，并继续压低 cold start/RSS/process count。
-4. 验证 `SessionBundle` 跨机器 profile portability。
-5. 补齐 CAPTCHA/SMS/Email production manager wiring、provider acceptance 和 CDP detect/fill。
+1. 继续按本机自用路线收缩 `tauriWailsBridge` 和剩余 settings/core/proxy bridge API。
+2. 继续扩大本机 Validation / fingerprint observed coverage，保留真实 warning/failure reason。
+3. 继续补齐本机 workflow/task run history、取消/暂停 controls 和行为 replay 证据。
+4. 按需补齐 CAPTCHA/SMS/Email 本机 operator 配置和 provider dry-run；真实 provider smoke 只在用户实际提供凭证时再做。

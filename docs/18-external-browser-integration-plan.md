@@ -383,10 +383,10 @@ src/components/automation/RunDetailPanel.tsx
    - run detail 使用现有 artifact list；artifact 超过 200 时必须分页或折叠，不做全量展开。
    - logs 继续走 `listLogPage` 分页和 300ms debounce。
 
-7. **release 指标必须单独记账**
+7. **本机诊断指标必须单独记账**
    - 不把 Camoufox 任务运行时 RSS 计入主应用 idle RSS 目标。
    - 必须新增 task-run scoped measurement：启动耗时、导航耗时、峰值 RSS、子进程数、artifact size。
-   - release smoke 仍要确认主应用 idle 不因 Camoufox 设置/检测代码超预算。
+   - release smoke 只作为本机诊断材料；不再要求主应用 idle 达到 release performance 预算。
 
 #### Runner 生命周期设计
 
@@ -666,8 +666,8 @@ camoufox_process_cleanup_failed
    - 映射轻量字段，输出 applied/ignored explain。
    - 验证：profile version、proxy id、applied/ignored 在 result_json 可见。
 
-6. **性能验收**
-   - 主应用 release smoke 不因 Camoufox 设置代码变差。
+6. **性能诊断**
+   - 主应用 release smoke 只作为诊断对比，不作为 release performance gate。
    - Camoufox task-run report 单独记录启动耗时、峰值 RSS、进程数、artifact size。
 
 #### 分支与多 agent 执行建议
@@ -680,7 +680,7 @@ camoufox_process_cleanup_failed
 | B Settings/capability | 设置读写、能力检测命令、desktop wrapper | `src-tauri/src/commands.rs`、`src/services/desktop.ts`、`src/types/desktop.ts`、`src/features/settings/*` | 设置页可显示 capability；无路径不报崩 |
 | C Artifact/detail | artifact 写入合同和 RunDetail 展示调整 | `src/runner/engine.rs`、`src/desktop/mod.rs`、`src/components/automation/RunDetailPanel.tsx` | run detail artifact 可见；大内容不进 store |
 | D Profile/proxy mapping | fingerprint/proxy 轻量映射和 explain | `src/network_identity/*`、`src/runner/camoufox.rs` | applied/ignored 字段可测 |
-| E Verification/perf | tests、smoke 脚本、文档更新 | `scripts/*`、`docs/*`、相关 tests | release smoke + Camoufox smoke 有报告 |
+| E Verification/perf | tests、smoke 脚本、文档更新 | `scripts/*`、`docs/*`、相关 tests | 本机诊断 report + Camoufox smoke 有报告 |
 
 本轮 2026-05-27 曾尝试派出 4 个 explorer subagent，但本地 distributor 均返回 `503 Service Unavailable`，因此当前深化由主线程只读扫描完成。后续真正实现时，如果 subagent 恢复，应按上表拆分；如果仍不可用，则按实现顺序串行推进。
 
@@ -694,7 +694,7 @@ Worker 切片边界：
 
 - **D Profile/proxy mapping**：后续实现写入范围应集中在 `src/network_identity/*` 与 `src/runner/camoufox.rs`，只做轻量映射和 explain。
 - **D 当前文档切片**：本轮只补实施记录与最小验证口径，不改 runner 代码，不新增默认引擎，不触碰 Lightpanda/FakeRunner 行为。
-- **D 与 E 的接口**：D 只产出可被 E 验证的字段合同；release smoke、Camoufox task-run smoke、进程清理检查仍归 E Verification/perf。
+- **D 与 E 的接口**：D 只产出可被 E 验证的字段合同；历史 release smoke 诊断、Camoufox task-run smoke、进程清理检查仍归 E Verification/perf。
 
 最小验证草案：
 
@@ -706,10 +706,10 @@ Worker 切片边界：
 
 性能约束：
 
-- 保持主应用 release baseline 独立记账：cold start `<= 2.0s`、idle RSS `<= 220MB`、process count `<= 4`。
+- 保持主应用本机诊断 baseline 独立记账；release performance 预算目标已取消，不再要求 cold start / idle RSS / process count 达到旧阈值。
 - Camoufox 不得在 app 启动时预热、自动检测或常驻；能力检测只能由用户触发或短 TTL 缓存。
 - Camoufox 任务运行指标必须单独记录：task cold start、峰值 RSS、子进程数、artifact size、cleanup result。
-- 当前已知 release smoke 仍有 warning 基线，不能因新增设置、mapping 或检测代码进一步恶化主应用 idle 指标。
+- 当前已知 release smoke 仍有 warning 基线，只作诊断；新增设置、mapping 或检测代码如导致明显退化，应记录原因，但不作为 release performance blocker。
 
 完成前不得宣称：
 

@@ -76,8 +76,8 @@ $report = [ordered]@{
   remainingExternalEvidence = @(
     "profile-browser observed proof for 44/38/34 target families",
     "real provider credentials and smoke",
-    "second-machine SessionBundle portability",
-    "real Camoufox task runtime page/artifact/cancel/performance smoke",
+    "local SessionBundle restore and restart-continuity verification",
+    "real Camoufox task runtime page/artifact/cancel diagnostics",
     "real browser pool prewarm and Xray/Sing-Box outbound runtime proof"
   )
   notes = @(

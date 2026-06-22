@@ -11,7 +11,7 @@
 5. `docs/03-roadmap.md`：Now / Next / Later 路线。
 6. `docs/04-improvement-backlog.md`：待办池和风险。
 7. `docs/05-ai-maintenance-playbook.md`：AI 接手、更新和验收规则。
-8. `docs/24-external-distribution-readiness.md`：外部分发前限制、人工 smoke 和发布说明边界。
+8. `docs/24-external-distribution-readiness.md`：历史外部分发方案；当前本机自用范围下已取消，不作为接手必读阻塞项。
 9. `docs/25-overall-remaining-work-register.md`：`40% / 60%` 后的剩余工作全集和执行状态。
 10. `docs/40-m4-m20-execution-board.md`：M4-M20 执行板、harness 规则、验收边界和分批 commit 纪律。
 
@@ -21,7 +21,7 @@
 - Overall end-state：`40% / 60% / yellow`
 - Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450` taxonomy seed / full observed coverage pending
 - Behavior：`13` shipped primitives / `8` page archetypes / `450` taxonomy seed / full replay runtime pending
-- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已落地，可恢复 target profile 和 proxy session bindings；外部机器 portability 仍需真实环境验收
+- Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已落地，可恢复 target profile 和 proxy session bindings；跨机器/第二机 portability 已按本机自用范围取消
 
 历史 `77% / 23%` 或 `82% / 18%` 只能作为历史上下文，不作为 live truth。
 
@@ -41,4 +41,4 @@
 - 接手规则变化更新 `05-ai-maintenance-playbook.md`。
 - 不把 Overall 目标数字伪装成 Mainline 已交付。
 - 不把 staged / fallback / mock 默认路径算作闭环交付。
-- 外部分发前必须读取 `docs/24-external-distribution-readiness.md`，并保留 provider、portability、release measurement、AdsPower 和 `450+` taxonomy 限制。
+- 本机自用范围下，不再把外部分发 smoke、release performance 预算、干净 Win11/第二机验证或跨机器 SessionBundle portability 作为未完成项；相关旧文档只作历史上下文。

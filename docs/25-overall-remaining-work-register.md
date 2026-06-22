@@ -1,13 +1,14 @@
 # Overall Remaining Work Register
 
-Updated: 2026-05-31 (Asia/Shanghai)
+Updated: 2026-06-22 (Asia/Shanghai)
 
 ## 使用规则
 
 本文件承接当前 `40% / 60% / yellow` 的剩余工作。条目分为：
 
 - `ready`：本机可继续实现或验证。
-- `blocked-external`：需要凭证、第二台机器、真实 provider、外部服务或人工验收。
+- `blocked-external`：需要用户提供凭证、真实 provider 或外部服务；外部分发 smoke、干净 Win11/第二机和跨机器 SessionBundle 已按本机自用范围取消，不再归入当前 blocked-external。
+- `cancelled-local-only`：本机自用范围下明确取消；只保留历史文档、脚本或 report 作为诊断上下文。
 - `large-slice`：需要拆成多轮实现，不能一次提交伪装完成。
 
 ## P15：先做的 5 项
@@ -15,8 +16,8 @@ Updated: 2026-05-31 (Asia/Shanghai)
 | ID | 任务 | 状态 | 下一步 |
 | --- | --- | --- | --- |
 | P15-1 | 修正文档残留 `70%` / 旧 `450+ target-only` live 口径 | done | 持续用 consistency scan 防回归 |
-| P15-2 | release performance warning mitigation | ready | 已有 mitigation plan；P16 已接入 evidence report history，下一步优化启动/RSS/进程数 |
-| P15-3 | 跨机器 SessionBundle portability smoke 门槛 | blocked-external | 按 `docs/sessionbundle-cross-machine-portability-runbook.md` 在第二环境执行 |
+| P15-2 | release performance warning mitigation | cancelled-local-only | 只保留 mitigation plan 和 M5 report 作为本机诊断；不再优化到预算 green |
+| P15-3 | 跨机器 SessionBundle portability smoke 门槛 | cancelled-local-only | 第二环境、干净 Win11 和 `-CrossMachine` report 已取消 |
 | P15-4 | provider production acceptance 门槛 | partial-contract-ui | P19 已补 closure gates/failure reason/latest report；真实 acceptance 仍需凭证和 smoke |
 | P15-5 | 首批 taxonomy family evidence-backed | done | 继续把更多 family 接入 collector/runtime path |
 
@@ -24,26 +25,26 @@ Updated: 2026-05-31 (Asia/Shanghai)
 
 ### Release / Distribution
 
-1. 执行外部分发前 manual operator smoke。`blocked-external-gated`
-2. 在干净 Win11 机器验证安装、启动、卸载。`blocked-external-gated`
-3. 验证全页面可打开。`blocked-external-gated`
+1. 执行外部分发前 manual operator smoke。`cancelled-local-only`
+2. 在干净 Win11 机器验证安装、启动、卸载。`cancelled-local-only`
+3. 验证全页面可打开。`cancelled-local-only`
 4. 保持 release notes 与真实能力一致。`ready`
-5. 优化 cold start：`10274ms -> <= 2000ms`。`warning`
-6. 优化 idle RSS：`672MB -> <= 220MB`。`warning`
-7. 优化 process count：`22 -> <= 4` 或记录例外。`warning`
-8. 生成 release performance history。`done`
-9. 将 release performance report 接入 Overview / Settings。`done-overview`
+5. 优化 cold start：`3899ms -> <= 2000ms`。`cancelled-local-only`
+6. 优化 idle RSS：`433MB -> <= 220MB`。`cancelled-local-only`
+7. 优化 process count：`9 -> <= 4` 或记录例外。`cancelled-local-only`
+8. 生成 release performance history。`done-diagnostic`
+9. 将 release performance report 接入 Overview / Settings。`done-diagnostic`
 
 ### Session / Portability
 
-10. 第二环境导出/迁移/导入 bundle。`blocked-external-gated`
-11. target machine preflight evidence。`blocked-external-gated`
-12. target machine dry-run evidence。`blocked-external-gated`
-13. target machine confirmed restore evidence。`blocked-external-gated`
-14. restart continuity after restore evidence。`blocked-external-gated`
-15. profile portability UI 完善。`partial-settings-report-visible`
-16. portability failure reason viewer。`partial-settings-report-visible`
-17. portability report history。`done-overview`
+10. 第二环境导出/迁移/导入 bundle。`cancelled-local-only`
+11. target machine preflight evidence。`cancelled-local-only`
+12. target machine dry-run evidence。`cancelled-local-only`
+13. target machine confirmed restore evidence。`cancelled-local-only`
+14. restart continuity after restore evidence。`done-local-report`
+15. 本机 profile restore UI 完善。`done-settings-operator`
+16. 本机 restore failure reason viewer。`done-local-report`
+17. 本机 SessionBundle report history。`done-overview`
 
 ### Provider Closure
 
@@ -77,12 +78,12 @@ Updated: 2026-05-31 (Asia/Shanghai)
 42. screen/display observed collector。`partial-desktop-webview`
 43. navigator/client hints observed collector。`partial-desktop-webview`
 44. permission/device capability observed collector。`partial-desktop-webview`
-45. detector/coherence observed matrix。`blocked_missing_desktop_webview_report`
+45. detector/coherence observed matrix。`partial_profile_browser_comparison_passed`
 46. observed coverage dashboard。`fingerprint-category-audit-expanded`
 47. observed coverage report history。`ready`
 48. profile-level full fingerprint evidence export。`ready`
 49. repeatability sampling report。`pending-next-local-batch`
-50. desktop WebView vs profile browser comparison。`blocked_missing_desktop_webview_report`
+50. desktop WebView vs profile browser comparison。`passed_profile_browser_comparison_v3`
 
 ### 450 Fingerprint Taxonomy
 
@@ -141,4 +142,4 @@ Updated: 2026-05-31 (Asia/Shanghai)
 
 ## 说明
 
-聊天里列出的 167 个细项已经归并为 90 个可执行工作包。展开实现时，每个工作包可拆回更细的 issue/task；不能把 `blocked-external` 或 `large-slice` 一次性标为完成。
+聊天里列出的 167 个细项已经归并为 90 个工作包，其中外部分发、release performance budget 和第二机/cross-machine 条目已标为 `cancelled-local-only` 以保留历史上下文。展开实现时，每个工作包可拆回更细的 issue/task；不能把 `blocked-external`、`large-slice` 或 `cancelled-local-only` 一次性标为完成。

@@ -10,7 +10,7 @@
 2. 不实现绕过 CAPTCHA、403、账号验证、访问控制或平台反滥用机制的自动化方案。
 3. 发现风险/验证信号时，默认暂停任务、记录证据、交由人工复核，而不是自动规避。
 4. 凭证管理必须遵守最小权限、显式授权、可撤销和加密存储原则。
-5. 任何真实 provider、OAuth2 或跨机器迁移验收都必须先记录授权范围和数据处理边界。
+5. 任何真实 provider 或 OAuth2 验收都必须先记录授权范围和数据处理边界；跨机器迁移验收已按本机自用范围取消。
 
 ## 设计哲学
 
@@ -49,14 +49,14 @@
 
 ### 层2 — 凭证治理层
 
-**目标**：对用户明确授权的 session/token 做生命周期管理，避免凭证散落、过期后误用或跨机器迁移失控。
+**目标**：对用户明确授权的 session/token 做生命周期管理，避免凭证散落、过期后误用或本机 restore 失控。
 
 **关键设计**：
 
 - `CredentialChain`：绑定到 Profile 的授权来源、scope、创建时间、过期时间、刷新状态和撤销状态。
 - 信任等级：`initial`（首次授权）→ `established`（凭证可用）→ `needs_review`（需要人工确认）→ `revoked`（已撤销）。
 - Access Token / Refresh Token 加密存储，复用现有 AES-GCM 基础设施。
-- Profile 跨机器迁移时凭证默认不导出；只有显式本地开关和授权记录齐全时才纳入 SessionBundle。
+- Profile 本机导入/恢复时凭证默认不导出；只有显式本地开关和授权记录齐全时才纳入 SessionBundle。跨机器凭证迁移已取消。
 
 **集成点**：`session/bundle.go` 扩展、SQLite 新增 `adversarial_credential_chains` 表。
 

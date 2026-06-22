@@ -1,5 +1,6 @@
 param(
   [switch]$SkipPortabilityRefresh,
+  [switch]$SkipRustSessionBundleTest,
   [string]$OutputDir = "data/reports/m8-session-handoff"
 )
 
@@ -46,7 +47,11 @@ $desktopServicePath = Join-Path $projectRoot "src/services/desktop.ts"
 $desktopTypesPath = Join-Path $projectRoot "src/types/desktop.ts"
 
 $portabilityRefresh = [ordered]@{
-  command = "powershell -ExecutionPolicy Bypass -File scripts\session_bundle_portability_smoke.ps1"
+  command = if ($SkipRustSessionBundleTest) {
+    "powershell -ExecutionPolicy Bypass -File scripts\session_bundle_portability_smoke.ps1 -SkipRustSessionBundleTest"
+  } else {
+    "powershell -ExecutionPolicy Bypass -File scripts\session_bundle_portability_smoke.ps1"
+  }
   skipped = [bool]$SkipPortabilityRefresh
   exitCode = $null
   outputTail = ""
@@ -55,9 +60,11 @@ $portabilityRefresh = [ordered]@{
 if (-not $SkipPortabilityRefresh) {
   Push-Location $projectRoot
   try {
-    $output = & powershell -ExecutionPolicy Bypass -File $portabilityScriptPath 2>&1 | Out-String
+    $args = @("-ExecutionPolicy", "Bypass", "-File", $portabilityScriptPath)
+    if ($SkipRustSessionBundleTest) { $args += "-SkipRustSessionBundleTest" }
+    $output = & powershell @args 2>&1 | Out-String
     $portabilityRefresh.exitCode = $LASTEXITCODE
-    $portabilityRefresh.outputTail = (($output -split "`r?`n") | Select-Object -Last 20) -join "`n"
+    $portabilityRefresh.outputTail = (($output -split "`r?`n") | Select-Object -Last 30) -join "`n"
   } finally {
     Pop-Location
   }
@@ -66,85 +73,88 @@ if (-not $SkipPortabilityRefresh) {
 $sessionReportsDir = Join-Path $projectRoot "data/reports/session-portability"
 $latestSessionReport = Get-LatestJsonReport $sessionReportsDir "session-bundle-portability-smoke-*.json"
 $sessionReportStatus = "missing"
-$sessionCrossMachineComplete = $false
 $sessionReportPath = ""
+$sessionLocalRestoreComplete = $false
+$sessionCrossMachineCancelled = $true
 if ($latestSessionReport) {
   $sessionReportPath = $latestSessionReport.FullName
   $sessionReportJson = Get-Content -LiteralPath $latestSessionReport.FullName -Raw | ConvertFrom-Json
   $sessionReportStatus = [string]$sessionReportJson.status
-  $sessionCrossMachineComplete = [bool]$sessionReportJson.crossMachineComplete
+  $sessionLocalRestoreComplete = (Get-Member -InputObject $sessionReportJson -Name "localRestoreComplete" -MemberType NoteProperty) -and [bool]$sessionReportJson.localRestoreComplete
+  $sessionCrossMachineCancelled = -not (Get-Member -InputObject $sessionReportJson -Name "crossMachineCancelled" -MemberType NoteProperty) -or [bool]$sessionReportJson.crossMachineCancelled
 }
 
+$localReadyStatuses = @("local_restore_verified", "local_contract_passed", "cross_machine_passed")
 $checks = @(
   (New-GateResult "portability_refresh_successful" ($SkipPortabilityRefresh -or $portabilityRefresh.exitCode -eq 0) "session_bundle_portability_smoke refresh skipped=$([bool]$SkipPortabilityRefresh) exitCode=$($portabilityRefresh.exitCode)"),
-  (New-GateResult "runbook_ready" (Test-FileContains $runbookPath @("Source machine", "Target machine", "import preflight", "dry-run restore", "confirmed restore", "restart continuity")) "docs/sessionbundle-cross-machine-portability-runbook.md must describe source/target handoff, preflight, dry-run, confirmed restore, and restart continuity"),
-  (New-GateResult "portability_smoke_contract_ready" (Test-FileContains $portabilityScriptPath @("session_bundle_portability_smoke_v2", "gateResults", "nextManualSteps", "cross-machine portability is not complete")) "scripts/session_bundle_portability_smoke.ps1 must expose v2 gate results and manual next steps"),
-  (New-GateResult "local_portability_report_ready" ($sessionReportStatus -in @("local_contract_passed", "cross_machine_passed")) "latest session portability report status=$sessionReportStatus path=$sessionReportPath"),
-  (New-GateResult "desktop_export_preflight_restore_ready" (Test-FileContains $desktopPath @("export_desktop_session_bundle", "preflight_desktop_session_bundle_import", "restore_desktop_session_bundle", "export_session_bundle_writes_manifest_and_respects_sensitive_payload_flag", "session_bundle_import_preflight_and_restore_write_confirmed_copy")) "desktop SessionBundle commands and tests must cover export, preflight, dry-run, and confirmed local restore"),
+  (New-GateResult "runbook_historical_cancelled" (Test-FileContains $runbookPath @("CANCELLED", "historical-only", "confirmed local restore", "restart continuity")) "historical runbook must state that second-machine portability is cancelled and local restore remains current scope"),
+  (New-GateResult "local_restore_smoke_contract_ready" (Test-FileContains $portabilityScriptPath @("session_bundle_portability_smoke_v3", "localRestoreComplete", "crossMachineCancelled", "nextLocalSteps")) "scripts/session_bundle_portability_smoke.ps1 must expose v3 local restore fields"),
+  (New-GateResult "local_portability_report_ready" ($sessionReportStatus -in $localReadyStatuses) "latest session portability report status=$sessionReportStatus path=$sessionReportPath"),
+  (New-GateResult "desktop_export_preflight_restore_ready" (Test-FileContains $desktopPath @("export_desktop_session_bundle", "preflight_desktop_session_bundle_import", "restore_desktop_session_bundle", "export_session_bundle_writes_manifest_and_respects_sensitive_payload_flag", "session_bundle_import_preflight_and_restore_write_confirmed_copy")) "desktop SessionBundle commands and tests must cover export, preflight, dry-run, confirmed local restore, and persisted session artifacts"),
   (New-GateResult "settings_operator_surface_ready" (Test-FileContains $settingsPath @("handleSessionBundleExport", "handleSessionBundlePreflight", "handleSessionBundleRestore", "sessionBundleAction")) "Settings must expose the local operator loop"),
   (New-GateResult "typed_desktop_contract_ready" ((Test-FileContains $desktopServicePath @("exportSessionBundle", "preflightSessionBundleImport", "restoreSessionBundle")) -and (Test-FileContains $desktopTypesPath @("DesktopSessionBundleExport", "DesktopSessionBundleImportPreflight", "DesktopSessionBundleRestoreResult"))) "desktop service and shared TS types must include SessionBundle contracts"),
-  (New-GateResult "m4_boundary_guard_ready" (Test-FileContains $m4GatePath @("session_bundle_operator_contract", "second-machine portability remains expected_blocked", "session_bundle_portability_smoke")) "M4 gate must keep cross-machine portability externally blocked until real evidence exists")
+  (New-GateResult "m4_local_only_boundary_ready" (Test-FileContains $m4GatePath @("session_bundle_operator_contract", "local-only SessionBundle", "session_bundle_portability_smoke")) "M4 gate must treat SessionBundle as local-only and not require second-machine evidence")
 )
 
 $failed = @($checks | Where-Object { $_.status -ne "passed" })
-$status = if ($sessionReportStatus -eq "cross_machine_passed" -and $sessionCrossMachineComplete -and $failed.Count -eq 0) {
-  "passed_cross_machine_evidence_attached"
-} elseif ($failed.Count -eq 0) {
-  "passed_handoff_package_ready"
+$status = if ($failed.Count -gt 0) {
+  "failed_local_restore_contract"
+} elseif ($sessionReportStatus -eq "local_restore_verified" -and $sessionLocalRestoreComplete) {
+  "passed_local_restore_verified"
 } else {
-  "failed_handoff_package_contract"
+  "passed_local_restore_contract_ready"
 }
 
-$failureReason = if ($status -eq "failed_handoff_package_contract") {
-  "M8 handoff package checks failed: $(@($failed | ForEach-Object { $_.id }) -join ', ')"
+$failureReason = if ($status -eq "failed_local_restore_contract") {
+  "M8 local restore checks failed: $(@($failed | ForEach-Object { $_.id }) -join ', ')"
 } else {
   ""
 }
 
+$nextAction = if ($status -eq "passed_local_restore_verified") {
+  "Keep this local SessionBundle restore report attached; rerun scripts/m8_session_handoff_gate.ps1 after changing export, preflight, restore, or continuity persistence."
+} elseif ($status -eq "passed_local_restore_contract_ready") {
+  "Run scripts/session_bundle_portability_smoke.ps1 without -SkipRustSessionBundleTest to refresh local restore verification when needed."
+} else {
+  "Fix missing local restore smoke, desktop API, Settings operator surface, typed contract, or M4 local-only boundary checks, then rerun scripts/m8_session_handoff_gate.ps1."
+}
+
 $report = [ordered]@{
-  schemaVersion = "m8_session_handoff_gate_v1"
+  schemaVersion = "m8_session_handoff_gate_v2"
   generatedAt = (Get-Date).ToString("o")
   projectRoot = $projectRoot
   status = $status
   failureReason = $failureReason
+  localOnlyScope = $true
   portabilityRefresh = $portabilityRefresh
   sessionPortabilityReport = [ordered]@{
     path = $sessionReportPath
     status = $sessionReportStatus
-    crossMachineComplete = $sessionCrossMachineComplete
+    localRestoreComplete = $sessionLocalRestoreComplete
+    crossMachineCancelled = $sessionCrossMachineCancelled
+    crossMachineComplete = $false
   }
   checks = $checks
   summary = [ordered]@{
     failed = $failed.Count
-    runbookStatus = if (($checks | Where-Object { $_.id -eq "runbook_ready" }).status -eq "passed") { "present" } else { "missing" }
-    portabilitySmokeStatus = if (($checks | Where-Object { $_.id -eq "portability_smoke_contract_ready" }).status -eq "passed") { "present" } else { "missing" }
+    runbookStatus = if (($checks | Where-Object { $_.id -eq "runbook_historical_cancelled" }).status -eq "passed") { "historical_cancelled" } else { "missing" }
+    portabilitySmokeStatus = if (($checks | Where-Object { $_.id -eq "local_restore_smoke_contract_ready" }).status -eq "passed") { "present" } else { "missing" }
     localPortabilityReportStatus = $sessionReportStatus
+    localRestoreStatus = if ($sessionLocalRestoreComplete) { "verified" } else { "contract_ready" }
     desktopContractStatus = if (($checks | Where-Object { $_.id -eq "desktop_export_preflight_restore_ready" }).status -eq "passed") { "present" } else { "missing" }
     operatorSurfaceStatus = if (($checks | Where-Object { $_.id -eq "settings_operator_surface_ready" }).status -eq "passed") { "present" } else { "missing" }
-    nextAction = if ($status -eq "passed_cross_machine_evidence_attached") {
-      "Attach the cross-machine SessionBundle evidence to runtime_adapter/B1-B5 scoring and rerun scripts/m4_acceptance_gate.ps1."
-    } elseif ($status -eq "passed_handoff_package_ready") {
-      "Use the handoff manifest on a second clean Win11 target, then rerun scripts/session_bundle_portability_smoke.ps1 -CrossMachine with passed target statuses."
-    } else {
-      "Fix missing M8 runbook, smoke, desktop API, Settings operator surface, or M4 boundary checks, then rerun scripts/m8_session_handoff_gate.ps1."
-    }
+    crossMachineScope = "cancelled_local_only"
+    nextAction = $nextAction
   }
-  handoffManifest = [ordered]@{
-    sourceMachineSteps = @(
-      "Export a redacted test SessionBundle from Settings or export_session_bundle.",
-      "Record source profile id, bundle id, collector version, export path, and sensitive payload setting.",
-      "Copy the bundle and this report to a clean Win11 target machine."
-    )
-    targetMachineSteps = @(
-      "Run import preflight with a new target profile id.",
+  localRestoreManifest = [ordered]@{
+    localSteps = @(
+      "Export a redacted or sensitive-included SessionBundle from Settings or export_session_bundle.",
+      "Run import preflight with a target profile id.",
       "Run dry-run restore and confirm writePerformed=false.",
       "Run confirmed restore and confirm target profile plus proxy_session_bindings were written.",
-      "Restart PersonaPilot and record restart continuity evidence.",
-      "Run scripts/session_bundle_portability_smoke.ps1 -CrossMachine with passed target statuses."
+      "Confirm persisted cookie/localStorage/sessionStorage artifacts are available for restart continuity."
     )
     requiredEvidenceFields = @(
-      "sourceMachine",
-      "targetMachine",
       "bundlePath",
       "sourceProfileId",
       "targetProfileId",
@@ -156,9 +166,9 @@ $report = [ordered]@{
     )
   }
   liveTruthBoundary = @(
-    "This gate validates the M8 SessionBundle handoff package and local operator contract only.",
-    "passed_handoff_package_ready means the second-machine runbook, commands, UI/API contracts, and local portability report are ready.",
-    "It does not prove cross-machine SessionBundle portability until a real second Win11 target report has crossMachineComplete=true.",
+    "This gate validates the local-only SessionBundle restore package and operator contract.",
+    "Second-machine, clean Win11 target, and cross-machine portability are cancelled under the current scope.",
+    "passed_local_restore_verified means local export/preflight/dry-run/confirmed restore and persisted restart-continuity artifacts are represented by local evidence.",
     "It does not prove provider credentials, remote proxy/TLS, AdsPower refresh, full headed realism, or full 450 observed/replay coverage."
   )
 }
@@ -166,9 +176,9 @@ $report = [ordered]@{
 $reportPath = Join-Path $absoluteOutputDir ("m8-session-handoff-gate-{0}.json" -f ([DateTimeOffset]::Now.ToUnixTimeMilliseconds()))
 $report | ConvertTo-Json -Depth 10 | Set-Content -Path $reportPath -Encoding UTF8
 
-Write-Host "M8 SessionBundle handoff gate report: $reportPath"
+Write-Host "M8 SessionBundle local restore gate report: $reportPath"
 Write-Host "Status: $status"
 if ($failureReason) { Write-Host "Failure reason: $failureReason" }
 
-if ($status -eq "failed_handoff_package_contract") { exit 1 }
+if ($status -eq "failed_local_restore_contract") { exit 1 }
 exit 0

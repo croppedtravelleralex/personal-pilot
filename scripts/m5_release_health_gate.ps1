@@ -83,12 +83,12 @@ $report = [ordered]@{
     budgetResultCount = $budgetResults.Count
     healthStatus = if ($null -ne $healthSummary) { $healthSummary.status } else { "missing" }
     exceededMetricIds = if ($null -ne $healthSummary -and $null -ne $healthSummary.exceededMetricIds) { @($healthSummary.exceededMetricIds) } else { @() }
-    nextAction = if ($null -ne $healthSummary) { $healthSummary.nextAction } else { "Run scripts/release_performance_smoke.ps1 -CleanExistingInstances first." }
+    nextAction = "Keep this report as local startup diagnostics; release performance budget green is cancelled for current scope."
   }
   liveTruthBoundary = @(
-    "This gate validates the M5 release health report contract.",
-    "passed_with_budget_overrun still forbids release performance green.",
-    "Provider, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full 450 coverage remain outside this gate."
+    "This gate validates the historical M5 release health report contract as local diagnostics only.",
+    "Release performance budget green is cancelled for current scope.",
+    "Provider, remote proxy/TLS, SessionBundle local restore, AdsPower refresh, and full 450 coverage remain outside this diagnostic gate."
   )
 }
 

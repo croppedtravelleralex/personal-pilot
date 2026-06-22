@@ -82,7 +82,7 @@ $report = [ordered]@{
   }
   liveTruthBoundary = @(
     "This gate validates AutomationPage scheduler/rule source-level facade usage only.",
-    "It does not prove tauriWailsBridge removal, full browser API closure, monitor/app shell runtime closure, workbench/core facade closure, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full 450 observed/replay coverage."
+    "It does not prove tauriWailsBridge removal, full browser API closure, monitor/app shell runtime closure, workbench/core facade closure, provider credentials, remote proxy/TLS, SessionBundle local restore beyond its own gate, AdsPower refresh, or full 450 observed/replay coverage."
   )
 }
 

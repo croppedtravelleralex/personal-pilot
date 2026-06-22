@@ -1,13 +1,14 @@
 # M4-M20 Execution Board
 
-Updated: 2026-06-12 (Asia/Shanghai)
+Updated: 2026-06-22 (Asia/Shanghai)
 
 ## Live Truth Boundary
 
 - Mainline delivery remains `100% / 0% / green`.
 - Overall end-state remains `40% / 60% / yellow` until new real evidence changes it.
 - M4-M20 work must improve user-visible capability and evidence depth without claiming external proof that has not been recorded.
-- Provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full `450` observed/replay coverage stay blocked or deferred until matching reports exist.
+- 2026-06-22 local-only reset: release performance budget, external distribution smoke, clean Win11/second-machine gates, and cross-machine SessionBundle are cancelled as goals. Historical M5/M8/M19 entries below are diagnostic context only.
+- Provider credentials, remote proxy/TLS, AdsPower refresh, and full `450` observed/replay coverage stay blocked or deferred until matching reports exist.
 
 ## Branch And Delivery Rule
 
@@ -17,7 +18,7 @@ Updated: 2026-06-12 (Asia/Shanghai)
   - `m4-harness`
   - `m4-workflow-runtime`
   - `m4-provider-dryrun`
-  - `m5-performance`
+  - `m5-performance` (historical-diagnostic only)
   - `m6-observed-fingerprint`
   - later milestone slices only after fresh gates pass.
 
@@ -34,7 +35,7 @@ M4 is the first practical utility milestone after the current contract-heavy sta
 | M4.3 | Automation primitive v1 | Wait/select/dialog/download/upload/iframe/tab support has targeted tests or explicit gap report | No target-site production claim |
 | M4.4 | Provider dry-run closure | CAPTCHA/SMS/Email dry-run path and failure taxonomy are visible | Real provider smoke remains blocked |
 | M4.5 | Evidence console | Latest reports show passed/warning/blocked with path and failure reason | Blocked is not failure when expected |
-| M4.6 | SessionBundle operator loop | Export/import/preflight/dry-run/confirmed local restore remains reproducible | Cross-machine remains blocked |
+| M4.6 | SessionBundle operator loop | Export/import/preflight/dry-run/confirmed local restore remains reproducible | Cross-machine cancelled |
 | M4.7 | Runtime adapter operator loop | Camoufox/headed_external probes are visible and ranked by evidence strength | Full headed realism remains pending |
 | M4.8 | Typed facade shrink | Synchronizer/browser high-traffic APIs move away from dynamic RPC where practical | Wails bridge remains transitional |
 | M4.9 | Safety and logging | Config/load errors and credential redaction rules are explicit | No credential values in reports/logs |
@@ -44,10 +45,10 @@ M4 is the first practical utility milestone after the current contract-heavy sta
 
 | Milestone | Theme | Required shipped evidence |
 | --- | --- | --- |
-| M5 | Release performance and health | Fresh release smoke, detailed health report, startup/RSS/process mitigation notes |
+| M5 | Release performance and health | Historical diagnostic only; no budget green target |
 | M6 | Observed fingerprint comparison | Same-run desktop WebView vs profile-browser comparison and repeatability sampling |
 | M7 | Provider production closure | Real credential-backed CAPTCHA/SMS/Email smoke, CDP detect/fill, failure handling |
-| M8 | Cross-machine SessionBundle | Handoff package gate plus second Win11 target preflight, dry-run, confirmed restore, restart continuity |
+| M8 | Local SessionBundle restore | Local restore gate is verified; cross-machine goal is cancelled by local-only scope |
 | M9 | Remote proxy/TLS reality | Remote proxy egress/TLS report, direct baseline, DNS/WebRTC leak relation |
 | M10 | Runtime realism | Headed repeatability/coherence matrix, long-task stability, Camoufox task metrics |
 | M11 | Workflow marketplace | Versioned built-in templates and import/export for auth/register/form/provider flows |
@@ -58,22 +59,22 @@ M4 is the first practical utility milestone after the current contract-heavy sta
 | M16 | Trust inheritance | Credential chain, encrypted token store, SessionBundle migration integration |
 | M17 | Device family consistency | Business-laptop and desktop-family generators tied to consistency scoring |
 | M18 | AdsPower score refresh | B1-B5 evidence-backed rescore only; no score lift from contract-only work |
-| M19 | External distribution | Clean Win11 install/start/uninstall and full-page operator smoke |
+| M19 | External distribution | Cancelled by local-only scope |
 | M20 | Product hardening | Audit, permissions, rollback, backup, release notes, maintenance handoff |
 
 ## Extreme Acceptance And Drift Rules
 
 | Dimension | Hard target | 10% drift rule |
 | --- | --- | --- |
-| Startup | cold start `<= 2.0s` | `<= 2.2s` only if reason recorded |
-| Memory | idle RSS `<= 220MB` | `<= 242MB` only if reason recorded |
-| Process count | `<= 4` | `<= 5` only if sidecar exception recorded |
+| Startup | historical diagnostic only | no release performance drift target |
+| Memory | historical diagnostic only | no release performance drift target |
+| Process count | historical diagnostic only | no release performance drift target |
 | Workflow mock E2E | `>= 95%` pass | `>= 90%` only for timing/network variance |
 | Evidence schema | required paths/status/failureReason present | no drift allowed |
 | Safety | no secrets in logs/reports | no drift allowed |
 | Live truth | no false `Overall` uplift | no drift allowed |
 | Provider | no fake `accepted` without credentials and smoke | no drift allowed |
-| Portability | no cross-machine claim without second machine report | no drift allowed |
+| Portability | local restore only; no cross-machine goal unless user reopens scope | no drift allowed |
 | Runtime | no full realism claim from single probe | no drift allowed |
 | Docs | current-state/roadmap/backlog/logs synchronized | no drift allowed |
 
@@ -102,7 +103,7 @@ Status: started 2026-06-01.
 1. Close the local M4.3 primitive gap by adding typed scheduler actions for `select`, `dialog`, `download`, `upload`, `iframe`, and `tab`.
 2. Keep raw `cdp` available for escape hatches, but make common operator actions first-class runner behavior.
 3. Verify with mock CDP runner tests; this is not a target-site production claim.
-4. Preserve external blockers for provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full `450` observed/replay coverage.
+4. Preserve external blockers for provider credentials, remote proxy/TLS, AdsPower refresh, and full `450` observed/replay coverage; cross-machine SessionBundle is cancelled.
 5. Continue next with provider dry-run/operator closure, same-run desktop/profile comparison, and typed facade shrink.
 
 ## Fourth Implementation Batch
@@ -113,7 +114,7 @@ Status: started 2026-06-01.
 2. Expose CAPTCHA/SMS/Email dry-run contract, next action, failure taxonomy, latest report path, and real smoke blocker through desktop readiness API and Settings.
 3. Extend M4 gate with `provider_dry_run_contract` local report validation while keeping real provider acceptance as `expected_blocked`.
 4. Verify with provider preflight, M4 gate, Rust provider readiness test, `pnpm typecheck`, `cargo fmt --check`, and diff hygiene.
-5. Continue next with same-run desktop/profile comparison, typed facade shrink, SessionBundle operator evidence loop, and M5 performance work.
+5. Continue next with same-run desktop/profile comparison, typed facade shrink, SessionBundle operator evidence loop, and local evidence history work.
 
 ## Fifth Implementation Batch
 
@@ -133,7 +134,7 @@ Status: started 2026-06-01.
 2. Keep confirmed restore behind an explicit local confirmation and show restore plan, missing references, conflicts, `writePerformed`, and restored binding count.
 3. Extend M4 gate with `session_bundle_operator_contract` source checks for UI, desktop service wrapper, TS types, and Rust implementation/test markers.
 4. Verify with `pnpm typecheck`, M4 gate, and diff hygiene.
-5. Continue next with actual desktop/profile same-run evidence, typed facade shrink, runtime adapter operator loop, and M5 performance work.
+5. Continue next with actual desktop/profile same-run evidence, typed facade shrink, runtime adapter operator loop, and local report diagnostics.
 
 ## Seventh Implementation Batch
 
@@ -150,11 +151,11 @@ Status: started 2026-06-01.
 
 Status: started 2026-06-01.
 
-1. Close the local M4.7 runtime adapter operator visibility gap by reading the release smoke contract in Dashboard.
+1. Close the local M4.7 runtime adapter operator visibility gap by reading the historical release smoke contract in Dashboard.
 2. Rank runtime adapters by evidence strength and show adapter id, runner kind, status, profile evidence, fingerprint depth, and top blockers.
 3. Extend M4 gate with `runtime_adapter_operator_contract` source checks for Dashboard UI, Dashboard API, desktop service wrapper, and shared TS types.
-4. Keep full headed realism, B1-B5, remote proxy/TLS, provider, cross-machine portability, AdsPower refresh, and full `450` observed/replay coverage externally blocked until matching reports exist.
-5. Continue next with actual desktop/profile same-run evidence, remaining browser facade shrink, and M5 release performance mitigation.
+4. Keep full headed realism, B1-B5, remote proxy/TLS, provider, AdsPower refresh, and full `450` observed/replay coverage externally blocked until matching reports exist; cross-machine portability is cancelled.
+5. Continue next with actual desktop/profile same-run evidence, remaining browser facade shrink, and local runtime diagnostics.
 
 ## Ninth Implementation Batch
 
@@ -164,7 +165,7 @@ Status: started 2026-06-01.
 2. Apply redaction before logger writers receive entries and before Text/JSON formatters serialize entries, so direct `LogEntry` paths do not bypass the safety boundary.
 3. Extend default interceptor sensitive fields beyond password/token/secret to include API keys, authorization, credentials, cookies, client secrets, private keys, and related aliases.
 4. Extend M4 gate with `safety_logging_contract` source/test checks and keep it local evidence only.
-5. Keep provider credentials, historical report scrubbing, external log audit, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, and full `450` observed/replay coverage blocked until their own reports exist.
+5. Keep provider credentials, historical report scrubbing, remote proxy/TLS, AdsPower refresh, and full `450` observed/replay coverage blocked until their own reports exist; external distribution log audit and cross-machine SessionBundle are cancelled.
 
 ## Tenth Implementation Batch
 
@@ -174,17 +175,17 @@ Status: started 2026-06-01.
 2. Preserve `gateClassificationStatus=expected_blocked` so old live-truth semantics and blocker classification remain machine-readable.
 3. Add `m4TotalGate` to the report with local contract status, passed gate ids, failed gate ids, expected blocker ids, external blocker count, and next action.
 4. Update Dashboard evidence history so the new status still renders as expected external blockers, not as a failed gate.
-5. Continue to M5 performance/health only after the v8 gate reports `failed=0`.
+5. Historical note: M5 performance/health was started after the v8 gate reported `failed=0`; it is now diagnostic-only.
 
 ## Eleventh Implementation Batch
 
 Status: started 2026-06-01.
 
-1. Start M5 by upgrading `scripts/release_performance_smoke.ps1` to v2 with `budgetStatus`, per-metric `budgetResults`, 10% drift targets, drift reason enforcement, `healthSummary`, `mitigationHints`, and process breakdown hints.
-2. Add `scripts/m5_release_health_gate.ps1` so M5 validates the latest v2 release health report instead of relying on a raw smoke file.
-3. Update desktop release contract and Dashboard evidence history to surface M5 Health, release health status, budget results, and mitigation hints.
-4. Keep `passed_with_budget_overrun` as a valid M5 report-contract result while explicitly forbidding performance green until cold start/RSS/process budgets pass.
-5. Continue next with actual metric mitigation, M6 same-run desktop/profile evidence, M13 report diff/risk trends, or M10 headed repeatability without claiming provider, proxy/TLS, cross-machine, AdsPower, or full `450` coverage.
+1. Historical diagnostic: M5 upgraded `scripts/release_performance_smoke.ps1` to v2 with `budgetStatus`, per-metric `budgetResults`, 10% drift targets, drift reason enforcement, `healthSummary`, `mitigationHints`, and process breakdown hints.
+2. Historical diagnostic: `scripts/m5_release_health_gate.ps1` validates the latest v2 release health report instead of relying on a raw smoke file.
+3. Desktop release contract and Dashboard evidence history surface M5 Health, release health status, budget results, and mitigation hints as diagnostics.
+4. Keep `passed_with_budget_overrun` as a valid historical M5 report-contract result while explicitly forbidding performance green claims.
+5. Continue next with M6 same-run desktop/profile evidence, M13 report diff/risk trends, or M10 headed repeatability without claiming provider, proxy/TLS, AdsPower, or full `450` coverage; cross-machine is cancelled.
 
 ## Twelfth Implementation Batch
 
@@ -221,7 +222,7 @@ Status: started 2026-06-02.
 Status: started 2026-06-02.
 
 1. Extend M13 evidence operations with `failureReasonCategory`.
-2. Categorize common local report blockers: release budget overrun, provider credentials missing, remote proxy missing, desktop/profile comparison gaps, cross-machine SessionBundle pending, runtime adapter evidence required, external operator smoke required, and expected external blockers.
+2. Categorize common local report blockers: historical release budget overrun, provider credentials missing, remote proxy missing, desktop/profile comparison gaps, runtime adapter evidence required, and expected external blockers. Cross-machine SessionBundle pending and external operator smoke are cancelled categories.
 3. Surface the category in Dashboard evidence rows while preserving original `failureReason`, `status`, `evidenceLevel`, and gate semantics.
 4. Verify with evidence report history tests, `pnpm typecheck`, live truth guard, M4 gate, and diff hygiene.
 
@@ -243,7 +244,7 @@ Status: started 2026-06-02.
 2. Add `scripts/m10_headed_repeatability_gate.ps1` so the latest ranked headed_external repeatability report becomes a machine-readable M10 gate.
 3. Surface `m10_headed_repeatability` in desktop evidence history and Dashboard without changing headed_external, runtime_adapter, B1-B5, or AdsPower semantics.
 4. Keep `passed_repeatability_partial_coherence` scoped to multi-run validation_probe signal/category/status shape stability only.
-5. Continue next with long-task stability, full headed coherence matrix, M6 same-run desktop/profile evidence, remote proxy/TLS, provider credentials, cross-machine SessionBundle, and full `450` observed/replay coverage as separate gates.
+5. Continue next with long-task stability, full headed coherence matrix, M6 same-run desktop/profile evidence, remote proxy/TLS, provider credentials, and full `450` observed/replay coverage as separate gates.
 
 ## Eighteenth Implementation Batch
 
@@ -251,17 +252,17 @@ Status: started 2026-06-02.
 
 1. Advance M15 by turning the existing pool prewarm contract into a local lifecycle harness with usage accounting, budget status, release cleanup proof, expired lease cleanup, stale idle reclaim, and failed slot reclaim.
 2. Add `scripts/m15_browser_pool_gate.ps1` so the local harness emits `data/reports/m15-browser-pool/*` with `passed_pool_lifecycle_harness` only when Go tests and source contract checks pass.
-3. Surface `m15_browser_pool` in desktop evidence history and Dashboard as `M15 Pool` without changing runtime adapter, headed external, M4, M5, provider, SessionBundle, or AdsPower semantics.
-4. Keep this evidence scoped to in-memory lifecycle behavior only; it does not prove real browser process prewarm, CDP readiness, RSS/process budgets, proxy/TLS behavior, provider closure, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
-5. Continue next with real browser process pool integration, process/RSS cleanup proof, timeout/cancel cleanup, M10 long-task stability, M6 same-run evidence, and M8 second-machine SessionBundle proof as separate gates.
+3. Surface `m15_browser_pool` in desktop evidence history and Dashboard as `M15 Pool` without changing runtime adapter, headed external, M4, historical M5, provider, SessionBundle, or AdsPower semantics.
+4. Keep this evidence scoped to in-memory lifecycle behavior only; it does not prove real browser process prewarm, CDP readiness, RSS/process budgets, proxy/TLS behavior, provider closure, AdsPower refresh, or full `450` coverage.
+5. Continue next with real browser process pool integration, process/RSS cleanup proof, timeout/cancel cleanup, M10 long-task stability, and M6 same-run evidence.
 
 ## Nineteenth Implementation Batch
 
 Status: started 2026-06-02.
 
-1. Advance M8 by adding `scripts/m8_session_handoff_gate.ps1`, which refreshes local SessionBundle portability smoke, validates the refresh result, and checks the runbook, Settings operator surface, desktop command/tests, typed TS wrapper/types, and M4 boundary guard.
-2. Surface `m8_session_handoff` in desktop evidence history and Dashboard as `M8 Handoff` with `session_handoff_package_partial` evidence while `passed_handoff_package_ready` remains a cross-machine pending category.
-3. Keep this evidence scoped to handoff package readiness only; it does not prove second-machine portability, provider credentials, remote proxy/TLS, AdsPower refresh, full headed realism, or full `450` observed/replay coverage.
+1. Local restore diagnostic: M8 `scripts/m8_session_handoff_gate.ps1` now refreshes local SessionBundle restore smoke, validates the refresh result, and checks the historical runbook, Settings operator surface, desktop command/tests, typed TS wrapper/types, and M4 boundary guard.
+2. Surface `m8_session_handoff` in desktop evidence history and Dashboard as local restore evidence with `passed_local_restore_verified`; legacy second-machine category is cancelled.
+3. Keep this evidence scoped to local export/preflight/dry-run/confirmed restore and persisted restart-continuity artifacts only; it does not prove provider credentials, remote proxy/TLS, AdsPower refresh, full headed realism, or full `450` observed/replay coverage.
 
 ## Twentieth Implementation Batch
 
@@ -271,17 +272,17 @@ Status: started 2026-06-02.
 2. Replace Browser List/Detail runtime lifecycle event handlers that used `payload: any` with shared normalizer calls, and narrow selected browser API normalizer inputs from `any` to `unknown`.
 3. Add `scripts/m4_browser_payload_schema_gate.ps1`, desktop evidence history support, and Dashboard `M4 Payload` row for `m4_browser_payload_schema` reports.
 4. Extend M4 acceptance gate to v9 with `browser_payload_schema_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=8`, `expectedBlocked=4`, `failed=0`.
-5. Keep this evidence scoped to browser module source-level payload schema normalization only; it does not prove `tauriWailsBridge` removal, low-frequency workbench/core bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to browser module source-level payload schema normalization only; it does not prove `tauriWailsBridge` removal, low-frequency workbench/core bridge closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 
 ## Twenty-First Implementation Batch
 
 Status: started 2026-06-02.
 
 1. Advance M4.8 by routing Dashboard stats/license/config/CD key calls through `src/services/desktop.ts` typed wrappers instead of direct dynamic Wails imports.
-2. Remove `const bindings: any` and `../../wailsjs/go/main/App` import usage from `src/modules/dashboard/api.ts` while preserving stats fallback, evidence history, release smoke contract, WebView evidence collection, reload config, and CD key behavior.
+2. Remove `const bindings: any` and `../../wailsjs/go/main/App` import usage from `src/modules/dashboard/api.ts` while preserving stats fallback, evidence history, historical release smoke contract, WebView evidence collection, reload config, and CD key behavior.
 3. Add `scripts/m4_dashboard_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Dashboard` row for `m4_dashboard_facade` reports.
 4. Extend M4 acceptance gate to v10 with `dashboard_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=9`, `expectedBlocked=4`, `failed=0`.
-5. Keep this evidence scoped to Dashboard API source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/settings/logs facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to Dashboard API source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/settings/logs facade closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 
 ## Twenty-Second Implementation Batch
 
@@ -291,7 +292,7 @@ Status: started 2026-06-02.
 2. Preserve destructive backup preflight, native file dialog selection, confirmation prompts, and the Wails-compatible `tauriWailsBridge` proxy while removing raw module-level dynamic imports from `src/modules/settings/api.ts` and `src/modules/browser/pages/BrowserLogsPage.tsx`.
 3. Add `scripts/m4_settings_logs_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Settings/Logs` row for `m4_settings_logs_facade` reports.
 4. Extend M4 acceptance gate to v11 with `settings_logs_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=10`, `expectedBlocked=4`, `failed=0`.
-5. Keep this evidence scoped to Settings backup API and Browser logs source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to Settings backup API and Browser logs source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, profile/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 
 ## Twenty-Third Implementation Batch
 
@@ -301,7 +302,7 @@ Status: started 2026-06-02.
 2. Preserve the browser `fetch` fallback for non-desktop previews while removing `const bindings: any`, direct `../../wailsjs/go/main/App` dynamic import, and `(window as any).go?.main?.App` from `src/modules/profile/api.ts`.
 3. Add `scripts/m4_profile_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Profile` row for `m4_profile_facade` reports.
 4. Extend M4 acceptance gate to v12 with `profile_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=11`, `expectedBlocked=4`, `failed=0`.
-5. Keep this evidence scoped to Profile remote author source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to Profile remote author source-level typed facade usage only; it does not prove `tauriWailsBridge` removal, workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 
 ## Twenty-Fourth Implementation Batch
 
@@ -311,7 +312,7 @@ Status: started 2026-06-02.
 2. Preserve the existing browser API facade and fallback behavior while removing component-level raw Wails access from `src/modules/browser/components/FingerprintPanel.tsx`.
 3. Add `scripts/m4_behavior_preset_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Behavior` row for `m4_behavior_preset_facade` reports.
 4. Extend M4 acceptance gate to v13 with `behavior_preset_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=12`, `expectedBlocked=4`, `failed=0`.
-5. Keep this evidence scoped to FingerprintPanel behavior preset source-level facade usage only; it does not prove `tauriWailsBridge` removal, browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to FingerprintPanel behavior preset source-level facade usage only; it does not prove `tauriWailsBridge` removal, browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 
 ## Twenty-Fifth Implementation Batch
 
@@ -321,7 +322,7 @@ Status: started 2026-06-02.
 2. Replace page-level `backend` model constructors with plain typed `SchedulerTaskInput` / `AutomationRuleInput` DTOs while preserving task template creation, delete, run-now, rule creation, toggle, delete, and test-fire behavior.
 3. Add `scripts/m4_automation_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Automation` row for `m4_automation_facade` reports.
 4. Extend M4 acceptance gate to v14 with `automation_facade_contract`; latest gate remains `passed_with_expected_external_blockers` with `passed=13`, `expectedBlocked=4`, `failed=0`.
-5. Keep this evidence scoped to AutomationPage scheduler/rule source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/app shell/monitor/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to AutomationPage scheduler/rule source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/app shell/monitor/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 
 ## Twenty-Sixth Implementation Batch
 
@@ -331,7 +332,7 @@ Status: started 2026-06-11.
 2. Remove App shell direct imports from `./wailsjs/go/main/App` and `./wailsjs/runtime/runtime`, and stop reading `(window as any).runtime` from the app root.
 3. Add `scripts/m4_app_shell_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 App Shell` row for `m4_app_shell_facade` reports.
 4. Extend M4 acceptance gate to v15 with `app_shell_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
-5. Keep this evidence scoped to App shell source-level facade usage only; it does not prove `tauriWailsBridge` removal, full monitor/browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to App shell source-level facade usage only; it does not prove `tauriWailsBridge` removal, full monitor/browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 6. Continue next with EventMonitor/runtime event facade shrink or browser/workbench/core low-frequency bridge payloads.
 
 ## Twenty-Seventh Implementation Batch
@@ -343,7 +344,7 @@ Status: started 2026-06-11.
 3. Fix the live monitor pause buffer closure so the one-time runtime subscription reads the latest `paused` state without resubscribing every event.
 4. Add `scripts/m4_monitor_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Monitor` row for `m4_monitor_facade` reports.
 5. Extend M4 acceptance gate to v16 with `monitor_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
-6. Keep this evidence scoped to EventMonitor source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+6. Keep this evidence scoped to EventMonitor source-level facade usage only; it does not prove `tauriWailsBridge` removal, full browser/workbench/core facade closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 7. Continue next with browser runtime/workbench/core low-frequency bridge payloads or a higher-value external evidence blocker if a real target environment is available.
 
 ## Twenty-Eighth Implementation Batch
@@ -354,8 +355,8 @@ Status: started 2026-06-12.
 2. Add `BrowserInstanceRuntimeEventName` / `BrowserInstanceRuntimeEvent` and expose `onBrowserInstanceRuntimeEvents`, with payload normalization kept inside the browser module API facade.
 3. Add `scripts/m4_browser_runtime_facade_gate.ps1`, desktop evidence history support, and Dashboard `M4 Browser Runtime` row for `m4_browser_runtime_facade` reports.
 4. Extend M4 acceptance gate to v17 with `browser_runtime_facade_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
-5. Keep this evidence scoped to Browser List/Detail runtime subscription source-level facade usage only; it does not prove `tauriWailsBridge` removal, settings/core/proxy/workbench bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
-6. Continue next with settings/core/proxy/workbench bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.
+5. Keep this evidence scoped to Browser List/Detail runtime subscription source-level facade usage only; it does not prove `tauriWailsBridge` removal, settings/core/proxy/workbench bridge closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
+6. Continue next with settings/core/proxy/workbench bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, or M15 real process pool proof.
 
 ## Twenty-Ninth Implementation Batch
 
@@ -365,7 +366,7 @@ Status: started 2026-06-12.
 2. Update `src/services/desktop.ts` so Workbench detection results / detector sites / UI state / detector run wrappers no longer expose `unknown[]` or bare `unknown`.
 3. Remove matching `Array.isArray(results)` downgrade paths from `src/modules/synchronizer/api.ts` while preserving payload normalizers for compatibility.
 4. Extend M4 acceptance gate to v18 by checking Workbench DTO markers inside `typed_facade_shrink_contract`; the gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`.
-5. Keep this evidence scoped to Workbench source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to Workbench source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 6. Continue next with settings/core/proxy bridge shrink or the higher-value external evidence tracks when real target environments are available.
 
 ## Thirtieth Implementation Batch
@@ -376,8 +377,8 @@ Status: started 2026-06-12.
 2. Update `SettingsPage` backup export/import progress, `CoreManagementPage` download progress / external URL, `ProxyPickerModal` and `ProxyPoolPage` proxy speed/IP health result events, plus docs/tutorial external links to use `desktopRuntimeListen` / `desktopOpenExternalUrl`.
 3. Add `scripts/m4_runtime_facade_gate.ps1`, `m4-runtime-facade` evidence history support, Dashboard `M4 Runtime` row, and M4 acceptance gate v19 `runtime_facade_contract`.
 4. The gate must remain `passed_with_expected_external_blockers` with local failed gates at `0`; latest summary is `passed=17`, `expectedBlocked=4`, `failed=0`.
-5. Keep this evidence scoped to selected page-level runtime facade usage only; it does not prove `tauriWailsBridge` removal, every core/proxy/settings API closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
-6. Continue next with deeper settings/core/proxy bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.
+5. Keep this evidence scoped to selected page-level runtime facade usage only; it does not prove `tauriWailsBridge` removal, every core/proxy/settings API closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
+6. Continue next with deeper settings/core/proxy bridge shrink, M6 same-run desktop/profile evidence, M10 long-task stability, or M15 real process pool proof.
 
 ## Thirty-First Implementation Batch
 
@@ -387,7 +388,7 @@ Status: started 2026-06-12.
 2. Update `src/services/desktop.ts` so `BrowserInstanceStatus`, `WorkbenchFingerprintHealthProfile`, `WorkbenchFingerprintProfile`, and `IdentityReportProfile` no longer expose bare `unknown`.
 3. Remove matching status/report casts from `src/modules/synchronizer/api.ts` while keeping existing runtime payload normalizers and compatibility guards.
 4. Extend M4 acceptance gate to v20 by checking these report DTO markers and blocking `Promise<unknown>` or direct report casts from returning.
-5. Keep this evidence scoped to source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, every settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, cross-machine SessionBundle, AdsPower refresh, or full `450` coverage.
+5. Keep this evidence scoped to source-level DTO boundaries only; it does not prove `tauriWailsBridge` removal, every settings/core/proxy bridge closure, real headed runtime, provider credentials, remote proxy/TLS, AdsPower refresh, or full `450` coverage.
 6. Continue next with deeper settings/core/proxy bridge shrink or real external-evidence tracks when the required environment is available.
 
 ## Thirty-Second Implementation Batch
@@ -398,7 +399,7 @@ Status: started 2026-06-12.
 2. Update Dashboard, Dashboard API, Settings, Automation, NaturalLanguageTask, TagManagement, RecordingDetailModal, and Launch API docs so selected error paths no longer rely on `catch (...: any)`, `window as any`, `children as any`, or `Record<string, any>`.
 3. Extend M4 acceptance gate to v21 with `ui_error_boundary_contract`, using regex source checks for weak catch/cast regressions on this selected file set.
 4. Keep this evidence scoped to selected UI error boundary source contracts only; it does not prove all legacy UI any-catches are gone, `tauriWailsBridge` is removed, external provider/proxy/session evidence is passed, or full `450` coverage exists.
-5. Continue next with remaining legacy UI any-catch batches, deeper settings/core/proxy bridge shrink, M6 same-run evidence, M10 long-task stability, M15 real process pool proof, or M8 second-machine SessionBundle proof.
+5. Continue next with remaining legacy UI any-catch batches, deeper settings/core/proxy bridge shrink, M6 same-run evidence, M10 long-task stability, or M15 real process pool proof.
 
 ## Thirty-Third Implementation Batch
 

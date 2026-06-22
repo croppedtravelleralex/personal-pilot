@@ -882,7 +882,7 @@ export function SettingsPage() {
           )}
 
           <div className="rounded-md border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
-            跨机器 portability 仍需要第二 Win11 环境 report；本卡只记录本机 export / preflight / dry-run / confirmed restore operator loop。
+            当前范围只做本机 SessionBundle：本卡记录 export / preflight / dry-run / confirmed restore，并以本机持久化的 cookie、localStorage、sessionStorage 作为 restart continuity 证据。
           </div>
         </div>
       </Card>
