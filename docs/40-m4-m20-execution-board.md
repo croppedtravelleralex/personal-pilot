@@ -8,7 +8,7 @@ Updated: 2026-06-22 (Asia/Shanghai)
 - Overall end-state remains `40% / 60% / yellow` until new real evidence changes it.
 - M4-M20 work must improve user-visible capability and evidence depth without claiming external proof that has not been recorded.
 - 2026-06-22 local-only reset: release performance budget, external distribution smoke, clean Win11/second-machine gates, and cross-machine SessionBundle are cancelled as goals. Historical M5/M8/M19 entries below are diagnostic context only.
-- Provider credentials, remote proxy/TLS, AdsPower refresh, and full `450` observed/replay coverage stay blocked or deferred until matching reports exist.
+- Provider credentials, remote proxy/TLS, AdsPower refresh, full `450` observed coverage, target-site/browser/provider replay, and full pool integration stay blocked or deferred until matching reports exist.
 
 ## Branch And Delivery Rule
 
@@ -50,12 +50,12 @@ M4 is the first practical utility milestone after the current contract-heavy sta
 | M7 | Provider production closure | Real credential-backed CAPTCHA/SMS/Email smoke, CDP detect/fill, failure handling |
 | M8 | Local SessionBundle restore | Local restore gate is verified; cross-machine goal is cancelled by local-only scope |
 | M9 | Remote proxy/TLS reality | Remote proxy egress/TLS report, direct baseline, DNS/WebRTC leak relation |
-| M10 | Runtime realism | Headed repeatability/coherence matrix, long-task stability, Camoufox task metrics |
+| M10 | Runtime realism | Headed repeatability/coherence matrix and local long-task stability proof; Camoufox task metrics remain separate |
 | M11 | Workflow marketplace | Versioned built-in templates and import/export for auth/register/form/provider flows |
-| M12 | Live behavior replay | `450` behavior taxonomy connected to replay runtime and deterministic audit reports |
+| M12 | Live behavior replay | Local deterministic `450+` replay runtime is passed; target-site/browser/provider runtime wiring remains separate |
 | M13 | Evidence operations | Report history, diffs, risk trends, failure reason taxonomy, governance guardrails |
 | M14 | Data export | CSV plus optional Notion/Sheets/Airtable adapters with redaction controls |
-| M15 | Browser pool | Real prewarm/acquire/release with resource budgets and cleanup proof |
+| M15 | Browser pool | Real process prewarm/CDP/RSS/cleanup proof is passed; full pool acquire/release integration remains separate |
 | M16 | Trust inheritance | Credential chain, encrypted token store, SessionBundle migration integration |
 | M17 | Device family consistency | Business-laptop and desktop-family generators tied to consistency scoring |
 | M18 | AdsPower score refresh | B1-B5 evidence-backed rescore only; no score lift from contract-only work |
@@ -460,3 +460,57 @@ Status: started 2026-06-12.
 3. Add named `BridgeEventData` / `BridgeRpcMethod` / `BridgeAppProxy` compatibility types for the Wails-compatible bridge.
 4. Extend M4 acceptance gate to v27 with `bridge_compat_type_contract`, blocking selected bridge files from regressing to bare `unknown[]` / `Promise<unknown>`.
 5. Keep this evidence scoped to source-level bridge type boundaries only; it does not remove `tauriWailsBridge`, close every browser/settings/core/proxy API, or prove external provider/proxy/session/AdsPower/`450` evidence.
+
+## Thirty-Ninth Implementation Batch
+
+Status: started 2026-06-22.
+
+1. Advance M4.8 by moving browser Settings/Core/Proxy API calls through `src/services/desktop.ts` typed wrappers.
+2. Shrink `BrowserNativeBindings` so it no longer advertises retired settings/core/proxy Wails methods.
+3. Make `tauriWailsBridge` App RPC forwarding explicit with `BRIDGE_RPC_METHOD_NAMES`, returning `undefined` for unknown properties and `then`.
+4. Add `scripts/m4_browser_settings_core_proxy_facade_gate.ps1`, desktop evidence history support, Dashboard `M4 Browser Facade` row, and M4 acceptance gate v29 `browser_settings_core_proxy_facade_contract`.
+5. Latest reports: `data/reports/m4-browser-settings-core-proxy-facade/m4-browser-settings-core-proxy-facade-gate-1782114285844.json` is `passed_browser_settings_core_proxy_facade_contract`; `data/reports/m4-acceptance/m4-acceptance-gate-1782114555291.json` is `passed_with_expected_external_blockers`, `passed=24`, `expectedBlocked=2`, `failed=0`.
+6. Keep this evidence source-level only; it does not remove `tauriWailsBridge`, close every browser/profile/session compatibility path, or prove provider/proxy/AdsPower/full coverage evidence.
+
+## Fortieth Implementation Batch
+
+Status: started 2026-06-22.
+
+1. Add `scripts/observed_fingerprint_coverage_gate.ps1` as a strict observed coverage gate.
+2. Count only signals with `layer=observed` and complete collector metadata: `collectorScope`, `runtimeAdapter`, `targetProfileBrowser`, and `failureReason`.
+3. Exclude taxonomy seed and materialized contract reports from observed proof.
+4. Surface `observed_fingerprint_coverage` in desktop evidence history and Dashboard as `Observed Fingerprint`.
+5. Latest report `data/reports/observed-fingerprint-coverage/observed-fingerprint-coverage-gate-1782114288868.json` is `partial_observed_fingerprint_coverage`, `20 / 450`, `partialFamilyCount=10`, `missingFamilyCount=2`.
+6. Keep this as partial current truth; do not claim full `450` observed coverage until every taxonomy family reaches target count with real observed metadata.
+
+## Forty-First Implementation Batch
+
+Status: started 2026-06-22.
+
+1. Add `scripts/live_replay_runtime_gate.ps1` as a local deterministic replay harness over `docs/taxonomy/behavior-event-taxonomy.json`.
+2. Generate replay events from family replay semantics, audit payload, failure states, recovery behavior, and page/workflow dimensions.
+3. Report product-runtime-backed vs contract-only event counts separately.
+4. Surface `live_replay_runtime` in desktop evidence history and Dashboard as `Replay Runtime`.
+5. Latest report `data/reports/live-replay-runtime/live-replay-runtime-gate-1782114289142.json` is `passed_local_replay_runtime`, `461 / 450`, `runtimeBacked=461`, `productRuntimeBacked=326`, `contractOnly=135`, `failedEventCount=0`.
+6. Keep this scoped to local deterministic replay; target-site/browser/provider runtime replay remains separate work.
+
+## Forty-Second Implementation Batch
+
+Status: started 2026-06-22.
+
+1. Add `scripts/m10_headed_stability_gate.ps1` to refresh/read headed_external validation_probe attempts and build a stability/coherence matrix.
+2. Require 3 attempts, all passed, stable category/signals/status/warning/failure signatures, and acceptable duration spread.
+3. Surface `m10_headed_stability` in desktop evidence history and Dashboard as `M10 Stability`.
+4. Latest report `data/reports/m10-headed-stability/m10-headed-stability-gate-1782114360122.json` is `passed_long_task_stability_coherence`, `3/3` attempts passed, `coherenceScore=1`, `stabilityScore=1`, `signalCount=9`.
+5. Keep this scoped to local headed_external validation_probe stability; remote proxy/TLS, provider, full headed realism, and AdsPower refresh remain separate.
+
+## Forty-Third Implementation Batch
+
+Status: started 2026-06-22.
+
+1. Add `scripts/m15_browser_process_gate.ps1` to start a real local browser process with a temp profile and CDP remote debugging.
+2. Record CDP `/json/version` readiness, process/RSS snapshot, and cleanup proof for only the spawned PID tree.
+3. Remove the temporary profile only after verifying the resolved path stays within `.codex_tmp/m15-browser-process`.
+4. Surface `m15_browser_process` in desktop evidence history and Dashboard as `M15 Process`.
+5. Latest report `data/reports/m15-browser-process/m15-browser-process-gate-1782114415481.json` is `passed_real_browser_process_prewarm_cleanup`, `processCount=6`, `totalWorkingSetMb=342.5`, `cleanupComplete=true`.
+6. Keep this as real process proof only; full browser pool acquire/release integration, proxy/session cleanup, provider, remote proxy/TLS, and AdsPower refresh remain separate.

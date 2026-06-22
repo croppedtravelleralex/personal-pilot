@@ -65,6 +65,78 @@ interface SidecarEventPayload {
 const bridgeWindow = window as BridgeWindow
 const listeners = new Map<string, ListenerSet>()
 
+const BRIDGE_RPC_METHOD_NAMES = new Set<string>([
+  'BrowserProfileList',
+  'BrowserProfileListByTag',
+  'BrowserGetAllTags',
+  'BrowserProfileCreate',
+  'BrowserProfileUpdate',
+  'BrowserProfileDelete',
+  'BrowserProfileCopy',
+  'BrowserInstanceStart',
+  'BrowserInstanceStartByCode',
+  'BrowserInstanceStop',
+  'BrowserInstanceRestart',
+  'BrowserInstanceOpenUrl',
+  'BrowserInstanceGetTabs',
+  'BrowserGetCookies',
+  'BrowserClearCookies',
+  'BrowserExportCookies',
+  'BrowserSnapshotList',
+  'BrowserSnapshotCreate',
+  'BrowserSnapshotDelete',
+  'BookmarkList',
+  'BookmarkSave',
+  'BookmarkReset',
+  'BrowserProfileSetKeywords',
+  'GetLaunchServerInfo',
+  'BrowserProfileGetCode',
+  'BrowserProfileRegenerateCode',
+  'BrowserProfileSetCode',
+  'BrowserProfileBatchSetTags',
+  'BrowserProfileBatchRemoveTags',
+  'BrowserRenameTag',
+  'ListGroups',
+  'CreateGroup',
+  'UpdateGroup',
+  'DeleteGroup',
+  'MoveInstancesToGroup',
+  'BehaviorStartRecording',
+  'BehaviorStopRecording',
+  'BehaviorRecordingList',
+  'BehaviorRecordingSummaryList',
+  'BehaviorRecordingMetaList',
+  'BehaviorRecordingStatus',
+  'ActiveRecordingStatus',
+  'BehaviorRecordingDelete',
+  'BehaviorGetRecording',
+  'BehaviorGetRecordingDetail',
+  'BehaviorGetRecordingMeta',
+  'BehaviorGetRecordingEvents',
+  'BehaviorPlayRecording',
+  'BehaviorStopPlayback',
+  'BehaviorQuickRecord',
+  'BehaviorPresetList',
+  'CleanupStaleRecordingSessions',
+  'BehaviorRecordingRename',
+  'BehaviorRecordingExport',
+  'BehaviorRecordingImport',
+  'BehaviorRecordingCopy',
+  'BehaviorPlaybackReview',
+  'BehaviorRecordingTrim',
+  'SchedulerListTasks',
+  'SchedulerAddTask',
+  'SchedulerRemoveTask',
+  'SchedulerRunTaskNow',
+  'AutomationRuleList',
+  'AutomationRuleCreate',
+  'AutomationRuleDelete',
+  'AutomationRuleToggle',
+  'AutomationRuleTestFire',
+  'LLMPlanOnly',
+  'LLMExecuteTask',
+])
+
 function emitLocal(eventName: string, ...data: BridgeEventData) {
   const callbacks = listeners.get(eventName)
   if (!callbacks) return
@@ -92,18 +164,27 @@ function onMultiple(eventName: string, callback: RuntimeCallback, maxCallbacks: 
 }
 
 function createAppProxy(): BridgeAppProxy {
+  const directMethods: BridgeAppProxy = {
+    BackupInitializeSystem: initializeSystemData,
+    BackupExportPackage: exportSystemConfig,
+    BackupImportPackage: importSystemConfig,
+    GetAppLogs: getAppLogs,
+    ClearAppLogs: clearAppLogs,
+    BrowserSnapshotRestore: restoreBrowserSnapshot,
+  }
+
   return new Proxy(
     {},
     {
       get(_target, property) {
         if (typeof property !== 'string') return undefined
-        if (property === 'BackupInitializeSystem') return initializeSystemData
-        if (property === 'BackupExportPackage') return exportSystemConfig
-        if (property === 'BackupImportPackage') return importSystemConfig
-        if (property === 'GetAppLogs') return getAppLogs
-        if (property === 'ClearAppLogs') return clearAppLogs
-        if (property === 'BrowserSnapshotRestore') return restoreBrowserSnapshot
-        return (...args: DesktopRpcArgs) => desktopRpc(property, args)
+        if (property === 'then') return undefined
+        const directMethod = directMethods[property]
+        if (directMethod) return directMethod
+        if (BRIDGE_RPC_METHOD_NAMES.has(property)) {
+          return (...args: DesktopRpcArgs) => desktopRpc(property, args)
+        }
+        return undefined
       },
     },
   ) as BridgeAppProxy

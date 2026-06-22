@@ -405,7 +405,7 @@ function Test-TypedFacadeShrinkContract {
       "type BrowserNativeBindings = Partial<{",
       "BrowserProfileList: () => Promise<BrowserProfile[]>",
       "BrowserInstanceStart: (profileId: string) => Promise<BrowserProfile>",
-      "BrowserProxyBatchTestSpeed: (proxyIds: string[], concurrency: number) => Promise<ProxyTestResult[]>",
+      "BrowserGetCookies: (profileId: string) => Promise<CookieInfo[]>",
       "BehaviorRecordingSummaryList: () => Promise<RecordingSummary[]>",
       "LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>",
       "const getBindings = async () =>",
@@ -546,6 +546,125 @@ function Test-BrowserWindowGoFallbackContract {
     return New-LocalGateResult "browser_window_go_fallback_contract" "missing_coverage" "failed" "M4.8 browser window.go fallback source contract is incomplete" $failures
   }
   return New-LocalGateResult "browser_window_go_fallback_contract" "passed" "passed" "M4.8 browser proxy/import and launch-server fallbacks use typed desktop service wrappers; the transitional bridge remains in place" @()
+}
+
+function Test-BrowserSettingsCoreProxyFacadeContract {
+  $apiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $bridgePath = Join-Path $projectRoot "src\services\tauriWailsBridge.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($apiPath, $desktopServicePath, $bridgePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $apiText = if (Test-Path $apiPath) { Get-Content -LiteralPath $apiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $bridgeText = if (Test-Path $bridgePath) { Get-Content -LiteralPath $bridgePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "readBrowserSettingsFromDesktop",
+      "saveBrowserSettingsFromDesktop",
+      "listBrowserCoresFromDesktop",
+      "saveBrowserCoreFromDesktop",
+      "deleteBrowserCoreFromDesktop",
+      "setDefaultBrowserCoreFromDesktop",
+      "validateBrowserCoreForKindFromDesktop",
+      "listBrowserProxiesFromDesktop",
+      "saveBrowserProxiesFromDesktop",
+      "browserProxyCheckIPHealthFromDesktop",
+      "openUserDataDirFromDesktop",
+      "openCorePathFromDesktop"
+    )) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing browser settings/core/proxy wrapper marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "tryDesktop(() => readBrowserSettingsFromDesktop())",
+      "tryDesktopVoid(() => saveBrowserSettingsFromDesktop(settings))",
+      "tryDesktop(() => listBrowserCoresFromDesktop())",
+      "tryDesktopVoid(() => saveBrowserCoreFromDesktop(input))",
+      "tryDesktop(() => listBrowserProxiesFromDesktop())",
+      "tryDesktopVoid(() => saveBrowserProxiesFromDesktop(proxies))",
+      "tryDesktop(() => browserProxyCheckIPHealthFromDesktop(proxyId))"
+    )) {
+    if ($apiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API missing settings/core/proxy desktop wrapper usage marker: $token"
+    }
+  }
+
+  $settingsSection = ""
+  $coreSection = ""
+  $proxySection = ""
+  $settingsStart = $apiText.IndexOf("// Settings API")
+  $coreStart = $apiText.IndexOf("// Core API")
+  $proxyStart = $apiText.IndexOf("// Proxy API")
+  $cookieStart = $apiText.IndexOf("// Cookie API")
+  if ($settingsStart -ge 0 -and $coreStart -gt $settingsStart) {
+    $settingsSection = $apiText.Substring($settingsStart, $coreStart - $settingsStart)
+  }
+  if ($coreStart -ge 0 -and $proxyStart -gt $coreStart) {
+    $coreSection = $apiText.Substring($coreStart, $proxyStart - $coreStart)
+  }
+  if ($proxyStart -ge 0 -and $cookieStart -gt $proxyStart) {
+    $proxySection = $apiText.Substring($proxyStart, $cookieStart - $proxyStart)
+  }
+  foreach ($sectionAndName in @(
+      @{ name = "Settings section"; text = $settingsSection },
+      @{ name = "Core section"; text = $coreSection },
+      @{ name = "Proxy section"; text = $proxySection }
+    )) {
+    foreach ($token in @("getBindings()", "bindings?.")) {
+      if ($sectionAndName.text -match [regex]::Escape($token)) {
+        $failures += "$($sectionAndName.name) still uses dynamic binding marker: $token"
+      }
+    }
+  }
+
+  $bindingBlock = ""
+  $bindingStart = $apiText.IndexOf("type BrowserNativeBindings = Partial<{")
+  $bindingEnd = if ($bindingStart -ge 0) { $apiText.IndexOf("}>", $bindingStart) } else { -1 }
+  if ($bindingStart -ge 0 -and $bindingEnd -gt $bindingStart) {
+    $bindingBlock = $apiText.Substring($bindingStart, $bindingEnd - $bindingStart)
+  }
+  foreach ($token in @(
+      "GetBrowserSettings:",
+      "SaveBrowserSettings:",
+      "BrowserCoreList:",
+      "BrowserCoreSave:",
+      "BrowserProxyList:",
+      "SaveBrowserProxies:",
+      "BrowserProxyCheckIPHealth:",
+      "OpenUserDataDir:",
+      "OpenCorePath:"
+    )) {
+    if ($bindingBlock -match [regex]::Escape($token)) {
+      $failures += "BrowserNativeBindings still advertises retired settings/core/proxy method: $token"
+    }
+  }
+
+  foreach ($token in @("const BRIDGE_RPC_METHOD_NAMES = new Set<string>", "BRIDGE_RPC_METHOD_NAMES.has(property)", "if (property === 'then') return undefined", "return undefined")) {
+    if ($bridgeText -notmatch [regex]::Escape($token)) {
+      $failures += "tauriWailsBridge explicit allowlist marker missing: $token"
+    }
+  }
+
+  foreach ($token in @("m4_browser_settings_core_proxy_facade", "M4 Browser Facade")) {
+    if ($dashboardText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing browser settings/core/proxy facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_settings_core_proxy_facade_contract" "missing_coverage" "failed" "M4.8 browser settings/core/proxy facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_settings_core_proxy_facade_contract" "passed" "passed" "M4.8 browser settings/core/proxy APIs use typed desktop wrappers and tauriWailsBridge has an explicit App RPC allowlist; the transitional bridge remains in place" @()
 }
 
 function Test-BrowserPayloadSchemaContract {
@@ -1701,6 +1820,7 @@ $gates += Test-SessionBundleOperatorContract
 $gates += Test-TypedFacadeShrinkContract
 $gates += Test-BridgeCompatTypeContract
 $gates += Test-BrowserWindowGoFallbackContract
+$gates += Test-BrowserSettingsCoreProxyFacadeContract
 $gates += Test-BrowserPayloadSchemaContract
 $gates += Test-DashboardFacadeContract
 $gates += Test-SettingsLogsFacadeContract
@@ -1737,7 +1857,7 @@ $operatorStatus = if ($failedGates.Count -gt 0) {
 }
 
 $report = [ordered]@{
-  schemaVersion = "m4_acceptance_gate_v28"
+  schemaVersion = "m4_acceptance_gate_v29"
   generatedAt = (Get-Date).ToString("o")
   status = $operatorStatus
   gateClassificationStatus = $gateClassificationStatus
@@ -1765,7 +1885,7 @@ $report = [ordered]@{
     } elseif ($expectedBlockedGates.Count -gt 0) {
       "M4 local contracts are usable; close expected external blockers with fresh provider, remote proxy/TLS, runtime adapter, and same-run profile-browser evidence when those scopes are active."
     } else {
-      "M4 local and external gates are passed; move to M5 performance and health."
+      "M4 local and active evidence gates are passed; continue with local runtime depth, observed coverage, replay runtime, and browser process cleanup proof."
     }
   }
   notes = @(
@@ -1777,6 +1897,7 @@ $report = [ordered]@{
     "SessionBundle operator contract is local UI/API source evidence only; second-machine portability is cancelled under the local-only scope.",
     "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer/workbench/report DTOs and browser Wails bindings without removing the transitional bridge.",
     "Bridge compatibility type contract is source-level evidence only; it gives desktopRpc and tauriWailsBridge compatibility arguments named type boundaries without removing tauriWailsBridge.",
+    "Browser settings/core/proxy facade contract is source-level evidence only; it routes settings, browser core, and proxy APIs through typed desktop service wrappers while keeping the transitional bridge explicitly allowlisted.",
     "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",
     "Dashboard facade contract is source-level evidence only; it routes Dashboard stats/license/config/CD key calls through typed desktop service wrappers without removing every bridge compatibility path.",
     "Settings/logs facade contract is source-level evidence only; it routes Settings backup and Browser logs through typed desktop service wrappers while preserving the transitional compatibility bridge.",

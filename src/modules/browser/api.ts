@@ -1,9 +1,34 @@
 import {
+  browserProxyBatchCheckIPHealthFromDesktop,
+  browserProxyBatchTestSpeedFromDesktop,
+  browserProxyCheckIPHealthFromDesktop,
+  browserProxyTestSpeedFromDesktop,
+  deleteBrowserCoreFromDesktop,
+  downloadBrowserCoreFromDesktop,
   desktopRuntimeListen,
   fetchBrowserProxyClashFromDesktop,
   fixBrowserProxyNamesFromDesktop,
   importBrowserProxySubscriptionFromDesktop,
+  listBrowserCoreExtendedInfoFromDesktop,
+  listBrowserCoresFromDesktop,
+  listBrowserProxiesByGroupFromDesktop,
+  listBrowserProxiesFromDesktop,
+  listBrowserProxyGroupsFromDesktop,
+  openCorePathFromDesktop,
+  openUserDataDirFromDesktop,
+  readBrowserSettingsFromDesktop,
   readLaunchServerInfoFromDesktop,
+  saveBrowserCoreFromDesktop,
+  saveBrowserProxiesFromDesktop,
+  saveBrowserSettingsFromDesktop,
+  scanBrowserCoresFromDesktop,
+  setDefaultBrowserCoreFromDesktop,
+  testProxyConnectivityFromDesktop,
+  testProxyRealConnectivityFromDesktop,
+  validateBrowserCoreForKindFromDesktop,
+  validateBrowserCoreFromDesktop,
+  validateProxyConfigFromDesktop,
+  DesktopServiceError,
 } from '../../services/desktop'
 import type {
   BehaviorExecutionPermissionMode, BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings,
@@ -20,12 +45,6 @@ import { DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE } from './types'
 
 type Unsubscribe = () => void
 type BrowserInstanceRuntimeEventHandler = (event: BrowserInstanceRuntimeEvent) => void
-type ProxyTestResult = { proxyId: string; ok: boolean; latencyMs: number; error: string }
-type ProxyValidationResult = { supported: boolean; errorMsg: string }
-type ProxyNameFixResult = { ok: boolean; fixed: number; total: number; message?: string; error?: string }
-type BrowserProxyImportPayload = Partial<SubscriptionImportResult & ClashImportURLResult> & {
-  allProxies?: BrowserProxy[]
-}
 type RecordingEventPagePayload = {
   events?: RecordedEvent[]
   eventTotal?: number
@@ -116,33 +135,6 @@ type BrowserNativeBindings = Partial<{
   BrowserInstanceRestart: (profileId: string) => Promise<BrowserProfile>
   BrowserInstanceOpenUrl: (profileId: string, targetUrl: string) => Promise<boolean>
   BrowserInstanceGetTabs: (profileId: string) => Promise<BrowserTab[]>
-  GetBrowserSettings: () => Promise<BrowserSettings>
-  SaveBrowserSettings: (settings: BrowserSettings) => Promise<void>
-  BrowserCoreList: () => Promise<BrowserCore[]>
-  BrowserCoreSave: (input: BrowserCoreInput) => Promise<void>
-  BrowserCoreDelete: (coreId: string) => Promise<void>
-  BrowserCoreSetDefault: (coreId: string) => Promise<void>
-  BrowserCoreValidateForKind: (corePath: string, kind: string) => Promise<BrowserCoreValidateResult>
-  BrowserCoreValidate: (corePath: string) => Promise<BrowserCoreValidateResult>
-  BrowserCoreExtendedInfo: () => Promise<BrowserCoreExtended[]>
-  BrowserCoreScan: () => Promise<BrowserCore[]>
-  BrowserCoreDownload: (coreName: string, url: string, proxyConfig: string) => Promise<void>
-  BrowserProxyList: () => Promise<BrowserProxy[]>
-  BrowserProxyListGroups: () => Promise<string[]>
-  BrowserProxyListByGroup: (groupName: string) => Promise<BrowserProxy[]>
-  BrowserProxyImportSubscriptionByURL: (targetURL: string, groupName: string) => Promise<BrowserProxyImportPayload>
-  BrowserProxyFixNames: () => Promise<ProxyNameFixResult>
-  BrowserProxyFetchClashByURL: (targetURL: string) => Promise<ClashImportURLResult>
-  SaveBrowserProxies: (proxies: BrowserProxy[]) => Promise<void>
-  ValidateProxyConfig: (proxyConfig: string, proxyId: string) => Promise<ProxyValidationResult>
-  TestProxyConnectivity: (proxyId: string, proxyConfig: string) => Promise<ProxyTestResult>
-  TestProxyRealConnectivity: (proxyId: string) => Promise<ProxyTestResult>
-  BrowserProxyTestSpeed: (proxyId: string) => Promise<ProxyTestResult>
-  BrowserProxyBatchTestSpeed: (proxyIds: string[], concurrency: number) => Promise<ProxyTestResult[]>
-  BrowserProxyCheckIPHealth: (proxyId: string) => Promise<ProxyIPHealthResult>
-  BrowserProxyBatchCheckIPHealth: (proxyIds: string[], concurrency: number) => Promise<ProxyIPHealthResult[]>
-  OpenUserDataDir: (userDataDir: string) => Promise<void>
-  OpenCorePath: (corePath: string) => Promise<void>
   BrowserGetCookies: (profileId: string) => Promise<CookieInfo[]>
   BrowserClearCookies: (profileId: string) => Promise<void>
   BrowserExportCookies: (profileId: string) => Promise<string>
@@ -214,6 +206,39 @@ const getBindings = async () => {
     return await import('../../wailsjs/go/main/App') as BrowserNativeBindings
   } catch {
     return null
+  }
+}
+
+async function tryDesktop<T>(call: () => Promise<T>): Promise<T | null> {
+  try {
+    return await call()
+  } catch (error) {
+    if (
+      error instanceof DesktopServiceError &&
+      (error.code === 'desktop_invoke_unavailable' || error.code === 'desktop_command_not_ready')
+    ) {
+      return null
+    }
+    throw error
+  }
+}
+
+async function tryDesktopVoid(call: () => Promise<void>): Promise<boolean> {
+  const result = await tryDesktop(async () => {
+    await call()
+    return true
+  })
+  return result === true
+}
+
+function defaultBrowserSettings(): BrowserSettings {
+  return {
+    userDataRoot: 'data',
+    defaultFingerprintArgs: [],
+    defaultLaunchArgs: [],
+    defaultProxy: '',
+    startReadyTimeoutMs: 3000,
+    startStableWindowMs: 1200,
   }
 }
 
@@ -505,19 +530,13 @@ export async function fetchBrowserTabs(profileId: string): Promise<BrowserTab[]>
 // ============================================================================
 
 export async function fetchBrowserSettings(): Promise<BrowserSettings> {
-  const bindings = await getBindings()
-  if (bindings?.GetBrowserSettings) {
-    return (await bindings.GetBrowserSettings()) || { userDataRoot: 'data', defaultFingerprintArgs: [], defaultLaunchArgs: [], defaultProxy: '', startReadyTimeoutMs: 3000, startStableWindowMs: 1200 }
-  }
-  return { userDataRoot: 'data', defaultFingerprintArgs: [], defaultLaunchArgs: [], defaultProxy: '', startReadyTimeoutMs: 3000, startStableWindowMs: 1200 }
+  const settings = await tryDesktop(() => readBrowserSettingsFromDesktop())
+  if (settings) return settings
+  return defaultBrowserSettings()
 }
 
 export async function saveBrowserSettings(settings: BrowserSettings): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.SaveBrowserSettings) {
-    await bindings.SaveBrowserSettings(settings)
-    return true
-  }
+  await tryDesktopVoid(() => saveBrowserSettingsFromDesktop(settings))
   return true
 }
 
@@ -526,19 +545,13 @@ export async function saveBrowserSettings(settings: BrowserSettings): Promise<bo
 // ============================================================================
 
 export async function fetchBrowserCores(): Promise<BrowserCore[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreList) {
-    return (await bindings.BrowserCoreList()) || []
-  }
+  const cores = await tryDesktop(() => listBrowserCoresFromDesktop())
+  if (cores) return cores
   return mockCores
 }
 
 export async function saveBrowserCore(input: BrowserCoreInput): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreSave) {
-    await bindings.BrowserCoreSave(input)
-    return true
-  }
+  await tryDesktopVoid(() => saveBrowserCoreFromDesktop(input))
   const index = mockCores.findIndex(c => c.coreId === input.coreId)
   if (index >= 0) {
     mockCores[index] = input
@@ -549,58 +562,37 @@ export async function saveBrowserCore(input: BrowserCoreInput): Promise<boolean>
 }
 
 export async function deleteBrowserCore(coreId: string): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreDelete) {
-    await bindings.BrowserCoreDelete(coreId)
-    return true
-  }
+  await tryDesktopVoid(() => deleteBrowserCoreFromDesktop(coreId))
   mockCores = mockCores.filter(c => c.coreId !== coreId)
   return true
 }
 
 export async function setDefaultBrowserCore(coreId: string): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreSetDefault) {
-    await bindings.BrowserCoreSetDefault(coreId)
-    return true
-  }
+  await tryDesktopVoid(() => setDefaultBrowserCoreFromDesktop(coreId))
   mockCores = mockCores.map(c => ({ ...c, isDefault: c.coreId === coreId }))
   return true
 }
 
 export async function validateBrowserCorePath(corePath: string, kind: BrowserCoreInput['kind'] = 'chromium'): Promise<BrowserCoreValidateResult> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreValidateForKind) {
-    return (await bindings.BrowserCoreValidateForKind(corePath, kind || 'chromium')) || { valid: false, message: '验证失败' }
-  }
-  if (bindings?.BrowserCoreValidate) {
-    return (await bindings.BrowserCoreValidate(corePath)) || { valid: false, message: '验证失败' }
-  }
+  const kindResult = await tryDesktop(() => validateBrowserCoreForKindFromDesktop(corePath, kind || 'chromium'))
+  if (kindResult) return kindResult
+  const legacyResult = await tryDesktop(() => validateBrowserCoreFromDesktop(corePath))
+  if (legacyResult) return legacyResult
   return { valid: true, message: '路径有效（模拟）' }
 }
 
 export async function fetchCoreExtendedInfo(): Promise<BrowserCoreExtended[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreExtendedInfo) {
-    return (await bindings.BrowserCoreExtendedInfo()) || []
-  }
-  return []
+  return await tryDesktop(() => listBrowserCoreExtendedInfoFromDesktop()) || []
 }
 
 export async function scanBrowserCores(): Promise<BrowserCore[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreScan) {
-    return (await bindings.BrowserCoreScan()) || []
-  }
+  const cores = await tryDesktop(() => scanBrowserCoresFromDesktop())
+  if (cores) return cores
   return mockCores
 }
 
 export async function BrowserCoreDownload(coreName: string, url: string, proxyConfig?: string): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserCoreDownload) {
-    await bindings.BrowserCoreDownload(coreName, url, proxyConfig || '')
-    return true
-  }
+  await tryDesktopVoid(() => downloadBrowserCoreFromDesktop(coreName, url, proxyConfig || ''))
   return true
 }
 
@@ -609,26 +601,18 @@ export async function BrowserCoreDownload(coreName: string, url: string, proxyCo
 // ============================================================================
 
 export async function fetchBrowserProxies(): Promise<BrowserProxy[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyList) {
-    return (await bindings.BrowserProxyList()) || []
-  }
+  const proxies = await tryDesktop(() => listBrowserProxiesFromDesktop())
+  if (proxies) return proxies
   return mockProxies
 }
 
 export async function fetchBrowserProxyGroups(): Promise<string[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyListGroups) {
-    return (await bindings.BrowserProxyListGroups()) || []
-  }
-  return []
+  return await tryDesktop(() => listBrowserProxyGroupsFromDesktop()) || []
 }
 
 export async function fetchBrowserProxiesByGroup(groupName: string): Promise<BrowserProxy[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyListByGroup) {
-    return (await bindings.BrowserProxyListByGroup(groupName)) || []
-  }
+  const proxies = await tryDesktop(() => listBrowserProxiesByGroupFromDesktop(groupName))
+  if (proxies) return proxies
   return mockProxies.filter(p => p.groupName === groupName)
 }
 
@@ -708,82 +692,51 @@ export async function fetchClashImportFromURL(targetURL: string): Promise<ClashI
 }
 
 export async function saveBrowserProxies(proxies: BrowserProxy[]): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.SaveBrowserProxies) {
-    await bindings.SaveBrowserProxies(proxies)
-    return true
-  }
+  await tryDesktopVoid(() => saveBrowserProxiesFromDesktop(proxies))
   mockProxies = proxies
   return true
 }
 
 export async function validateProxyConfig(proxyConfig: string, proxyId: string): Promise<{ supported: boolean; errorMsg: string }> {
-  const bindings = await getBindings()
-  if (bindings?.ValidateProxyConfig) {
-    return (await bindings.ValidateProxyConfig(proxyConfig, proxyId)) || { supported: true, errorMsg: '' }
-  }
+  const result = await tryDesktop(() => validateProxyConfigFromDesktop(proxyConfig, proxyId))
+  if (result) return result
   return { supported: true, errorMsg: '' }
 }
 
 export async function testProxyConnectivity(proxyId: string, proxyConfig: string): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }> {
-  const bindings = await getBindings()
-  if (bindings?.TestProxyConnectivity) {
-    return (await bindings.TestProxyConnectivity(proxyId, proxyConfig)) || { proxyId, ok: false, latencyMs: 0, error: '调用失败' }
-  }
+  const result = await tryDesktop(() => testProxyConnectivityFromDesktop(proxyId, proxyConfig))
+  if (result) return result
   // mock: simulate latency
   await new Promise(r => setTimeout(r, 300 + Math.random() * 500))
   return { proxyId, ok: true, latencyMs: Math.floor(100 + Math.random() * 200), error: '' }
 }
 
 export async function testProxyRealConnectivity(proxyId: string): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }> {
-  const bindings = await getBindings()
-  if (bindings?.TestProxyRealConnectivity) {
-    return (await bindings.TestProxyRealConnectivity(proxyId)) || { proxyId, ok: false, latencyMs: 0, error: '调用失败' }
-  }
+  const result = await tryDesktop(() => testProxyRealConnectivityFromDesktop(proxyId))
+  if (result) return result
   // mock: simulate latency 300-800ms
   await new Promise(r => setTimeout(r, 300 + Math.random() * 500))
   return { proxyId, ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }
 }
 
 export async function browserProxyTestSpeed(proxyId: string): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyTestSpeed) {
-    return (await bindings.BrowserProxyTestSpeed(proxyId)) || { proxyId, ok: false, latencyMs: 0, error: '调用失败' }
-  }
+  const result = await tryDesktop(() => browserProxyTestSpeedFromDesktop(proxyId))
+  if (result) return result
   await new Promise(r => setTimeout(r, 300 + Math.random() * 500))
   return { proxyId, ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }
 }
 
 export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency: number = 20): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyBatchTestSpeed) {
-    return (await bindings.BrowserProxyBatchTestSpeed(proxyIds, concurrency)) || []
-  }
+  const result = await tryDesktop(() => browserProxyBatchTestSpeedFromDesktop(proxyIds, concurrency))
+  if (result) return result
   // mock
   await new Promise(r => setTimeout(r, 1000))
   return proxyIds.map(id => ({ proxyId: id, ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }))
 }
 
 export async function browserProxyCheckIPHealth(proxyId: string): Promise<ProxyIPHealthResult> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyCheckIPHealth) {
-    return (await bindings.BrowserProxyCheckIPHealth(proxyId)) || {
-      proxyId,
-      ok: false,
-      source: 'ippure',
-      error: '调用失败',
-      ip: '',
-      fraudScore: 0,
-      isResidential: false,
-      isBroadcast: false,
-      country: '',
-      region: '',
-      city: '',
-      asOrganization: '',
-      rawData: {},
-      updatedAt: new Date().toISOString(),
-    }
-  }
+  const result = await tryDesktop(() => browserProxyCheckIPHealthFromDesktop(proxyId))
+  if (result) return result
   await new Promise(r => setTimeout(r, 600))
   return {
     proxyId,
@@ -804,10 +757,8 @@ export async function browserProxyCheckIPHealth(proxyId: string): Promise<ProxyI
 }
 
 export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurrency: number = 10): Promise<ProxyIPHealthResult[]> {
-  const bindings = await getBindings()
-  if (bindings?.BrowserProxyBatchCheckIPHealth) {
-    return (await bindings.BrowserProxyBatchCheckIPHealth(proxyIds, concurrency)) || []
-  }
+  const result = await tryDesktop(() => browserProxyBatchCheckIPHealthFromDesktop(proxyIds, concurrency))
+  if (result) return result
   await new Promise(r => setTimeout(r, 1200))
   return proxyIds.map(proxyId => ({
     proxyId,
@@ -828,21 +779,11 @@ export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurr
 }
 
 export async function openUserDataDir(userDataDir: string): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.OpenUserDataDir) {
-    await bindings.OpenUserDataDir(userDataDir)
-    return true
-  }
-  return false
+  return await tryDesktopVoid(() => openUserDataDirFromDesktop(userDataDir))
 }
 
 export async function openCorePath(corePath: string): Promise<boolean> {
-  const bindings = await getBindings()
-  if (bindings?.OpenCorePath) {
-    await bindings.OpenCorePath(corePath)
-    return true
-  }
-  return false
+  return await tryDesktopVoid(() => openCorePathFromDesktop(corePath))
 }
 
 // ============================================================================

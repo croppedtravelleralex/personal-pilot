@@ -96,6 +96,15 @@ import type {
   DesktopValidationReportSummary,
   DesktopValidationProfileExport,
 } from "../types/desktop";
+import type {
+  BrowserCore,
+  BrowserCoreExtended,
+  BrowserCoreInput,
+  BrowserCoreValidateResult,
+  BrowserProxy,
+  BrowserSettings,
+  ProxyIPHealthResult,
+} from "../modules/browser/types";
 
 export type DesktopServiceErrorCode =
   | "desktop_command_not_ready"
@@ -725,6 +734,123 @@ export const fetchBrowserProxyClashFromDesktop = (
 
 export const readLaunchServerInfoFromDesktop = (): Promise<DesktopLaunchServerInfoResponse | null> =>
   desktopRpc<DesktopLaunchServerInfoResponse | null>("GetLaunchServerInfo");
+
+export const readBrowserSettingsFromDesktop = (): Promise<BrowserSettings | null> =>
+  desktopRpc<BrowserSettings | null>("GetBrowserSettings");
+
+export const saveBrowserSettingsFromDesktop = (settings: BrowserSettings): Promise<void> =>
+  desktopRpc<void>("SaveBrowserSettings", [settings]);
+
+export const listBrowserCoresFromDesktop = (): Promise<BrowserCore[]> =>
+  desktopRpc<BrowserCore[]>("BrowserCoreList");
+
+export const saveBrowserCoreFromDesktop = (input: BrowserCoreInput): Promise<void> =>
+  desktopRpc<void>("BrowserCoreSave", [input]);
+
+export const deleteBrowserCoreFromDesktop = (coreId: string): Promise<void> =>
+  desktopRpc<void>("BrowserCoreDelete", [coreId]);
+
+export const setDefaultBrowserCoreFromDesktop = (coreId: string): Promise<void> =>
+  desktopRpc<void>("BrowserCoreSetDefault", [coreId]);
+
+export const validateBrowserCoreForKindFromDesktop = (
+  corePath: string,
+  kind: BrowserCoreInput["kind"] = "chromium",
+): Promise<BrowserCoreValidateResult | null> =>
+  desktopRpc<BrowserCoreValidateResult | null>("BrowserCoreValidateForKind", [
+    corePath,
+    kind || "chromium",
+  ]);
+
+export const validateBrowserCoreFromDesktop = (
+  corePath: string,
+): Promise<BrowserCoreValidateResult | null> =>
+  desktopRpc<BrowserCoreValidateResult | null>("BrowserCoreValidate", [corePath]);
+
+export const listBrowserCoreExtendedInfoFromDesktop = (): Promise<BrowserCoreExtended[]> =>
+  desktopRpc<BrowserCoreExtended[]>("BrowserCoreExtendedInfo");
+
+export const scanBrowserCoresFromDesktop = (): Promise<BrowserCore[]> =>
+  desktopRpc<BrowserCore[]>("BrowserCoreScan");
+
+export const downloadBrowserCoreFromDesktop = (
+  coreName: string,
+  url: string,
+  proxyConfig = "",
+): Promise<void> =>
+  desktopRpc<void>("BrowserCoreDownload", [coreName, url, proxyConfig]);
+
+export const listBrowserProxiesFromDesktop = (): Promise<BrowserProxy[]> =>
+  desktopRpc<BrowserProxy[]>("BrowserProxyList");
+
+export const listBrowserProxyGroupsFromDesktop = (): Promise<string[]> =>
+  desktopRpc<string[]>("BrowserProxyListGroups");
+
+export const listBrowserProxiesByGroupFromDesktop = (groupName: string): Promise<BrowserProxy[]> =>
+  desktopRpc<BrowserProxy[]>("BrowserProxyListByGroup", [groupName]);
+
+export const saveBrowserProxiesFromDesktop = (proxies: BrowserProxy[]): Promise<void> =>
+  desktopRpc<void>("SaveBrowserProxies", [proxies]);
+
+export const validateProxyConfigFromDesktop = (
+  proxyConfig: string,
+  proxyId: string,
+): Promise<{ supported: boolean; errorMsg: string } | null> =>
+  desktopRpc<{ supported: boolean; errorMsg: string } | null>("ValidateProxyConfig", [
+    proxyConfig,
+    proxyId,
+  ]);
+
+export const testProxyConnectivityFromDesktop = (
+  proxyId: string,
+  proxyConfig: string,
+): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string } | null> =>
+  desktopRpc<{ proxyId: string; ok: boolean; latencyMs: number; error: string } | null>(
+    "TestProxyConnectivity",
+    [proxyId, proxyConfig],
+  );
+
+export const testProxyRealConnectivityFromDesktop = (
+  proxyId: string,
+): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string } | null> =>
+  desktopRpc<{ proxyId: string; ok: boolean; latencyMs: number; error: string } | null>(
+    "TestProxyRealConnectivity",
+    [proxyId],
+  );
+
+export const browserProxyTestSpeedFromDesktop = (
+  proxyId: string,
+): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string } | null> =>
+  desktopRpc<{ proxyId: string; ok: boolean; latencyMs: number; error: string } | null>(
+    "BrowserProxyTestSpeed",
+    [proxyId],
+  );
+
+export const browserProxyBatchTestSpeedFromDesktop = (
+  proxyIds: string[],
+  concurrency: number,
+): Promise<Array<{ proxyId: string; ok: boolean; latencyMs: number; error: string }>> =>
+  desktopRpc<Array<{ proxyId: string; ok: boolean; latencyMs: number; error: string }>>(
+    "BrowserProxyBatchTestSpeed",
+    [proxyIds, concurrency],
+  );
+
+export const browserProxyCheckIPHealthFromDesktop = (
+  proxyId: string,
+): Promise<ProxyIPHealthResult | null> =>
+  desktopRpc<ProxyIPHealthResult | null>("BrowserProxyCheckIPHealth", [proxyId]);
+
+export const browserProxyBatchCheckIPHealthFromDesktop = (
+  proxyIds: string[],
+  concurrency: number,
+): Promise<ProxyIPHealthResult[]> =>
+  desktopRpc<ProxyIPHealthResult[]>("BrowserProxyBatchCheckIPHealth", [proxyIds, concurrency]);
+
+export const openUserDataDirFromDesktop = (userDataDir: string): Promise<void> =>
+  desktopRpc<void>("OpenUserDataDir", [userDataDir]);
+
+export const openCorePathFromDesktop = (corePath: string): Promise<void> =>
+  desktopRpc<void>("OpenCorePath", [corePath]);
 
 export const getAppLogs = (): Promise<DesktopMemoryLogEntry[]> =>
   desktopRpc<DesktopMemoryLogEntry[]>("GetAppLogs");

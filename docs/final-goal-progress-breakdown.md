@@ -29,7 +29,7 @@ Updated: 2026-06-22 (Asia/Shanghai)
 - `SessionBundle` profile-scoped export、import preflight、dry-run 和 confirmed local restore write path 已落地；最新本机 restore smoke 为 `local_restore_verified`，M8 本机 restore gate 为 `passed_local_restore_verified`；跨机器 profile portability smoke 已按本机自用范围取消
 - Validation Board 已有 native DNS/transport reports、desktop WebView scoped probes、profile runtime probe contract、report history、profile-level export、P6 evidence metadata 和 P7 fingerprint observation audit；P5 已通过 WSL2 Lightpanda/CDP repeatable smoke，但 report 里的 WebRTC/audio warning 和 canvas failure 仍必须保留
 - 当前行为运行时只支持 `13` 个真实原语
-- `450` 指纹信号 taxonomy seed 和 `450` 事件 taxonomy seed 已落地；full observed coverage、full replay runtime、更强真实感、AdsPower 边界追赶仍是未来工作
+- `450` 指纹信号 taxonomy seed 和 `450` 事件 taxonomy seed 已落地；strict observed coverage 当前 `20 / 450` partial；本地 deterministic replay runtime `461 / 450` 已通过；full observed coverage、target-site/browser/provider replay、更强真实感、AdsPower 边界追赶仍是未来工作
 - P14 新增 provider preflight、taxonomy audit、本机 SessionBundle contract 等可重复 evidence 入口；release performance / external distribution / cross-machine portability 入口只保留历史诊断价值，最新 release performance 诊断为 warning / over budget：`3899ms / 433MB / 9 processes`
 - 外部浏览器研究已完成，但集成计划仍是计划，尚未转化为运行时深度
 

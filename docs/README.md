@@ -19,9 +19,10 @@
 
 - Mainline delivery：`100% / 0% / green`
 - Overall end-state：`40% / 60% / yellow`
-- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450` taxonomy seed / full observed coverage pending
-- Behavior：`13` shipped primitives / `8` page archetypes / `450` taxonomy seed / full replay runtime pending
+- Fingerprint：`80` declared controls / `26` runtime projected fields (`25` control-supported + derived `platform`) / `450` taxonomy seed / strict observed coverage `20 / 450` partial
+- Behavior：`13` shipped primitives / `8` page archetypes / `450` taxonomy seed / local deterministic replay `461 / 450` passed (`326` product-runtime-backed, `135` contract-only); target-site/browser/provider replay pending
 - Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已落地，可恢复 target profile 和 proxy session bindings；跨机器/第二机 portability 已按本机自用范围取消
+- Latest local gates：M4 v29 `passed=24` / `expectedBlocked=2` / `failed=0`；M10 stability/coherence `3/3` passed；M15 real browser process prewarm/CDP/RSS/cleanup proof passed
 
 历史 `77% / 23%` 或 `82% / 18%` 只能作为历史上下文，不作为 live truth。
 

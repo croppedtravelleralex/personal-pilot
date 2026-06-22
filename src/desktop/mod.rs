@@ -3062,6 +3062,9 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "m4-monitor-facade" => Some("m4_monitor_facade"),
         "m4-browser-runtime-facade" => Some("m4_browser_runtime_facade"),
         "m4-runtime-facade" => Some("m4_runtime_facade"),
+        "m4-browser-settings-core-proxy-facade" => Some("m4_browser_settings_core_proxy_facade"),
+        "observed-fingerprint-coverage" => Some("observed_fingerprint_coverage"),
+        "live-replay-runtime" => Some("live_replay_runtime"),
         "provider-acceptance" => Some("provider_acceptance"),
         "session-portability" => Some("session_portability"),
         "m8-session-handoff" => Some("m8_session_handoff"),
@@ -3072,7 +3075,9 @@ fn evidence_report_kind_from_dir(dir_name: &str) -> Option<&'static str> {
         "transport-binary-smoke" => Some("transport_binary_smoke"),
         "remote-proxy-tls" => Some("remote_proxy_tls"),
         "m10-headed-repeatability" => Some("m10_headed_repeatability"),
+        "m10-headed-stability" => Some("m10_headed_stability"),
         "m15-browser-pool" => Some("m15_browser_pool"),
+        "m15-browser-process" => Some("m15_browser_process"),
         "headed-external-smoke" => Some("headed_external_smoke"),
         "camoufox-binary-task" => Some("camoufox_binary_task"),
         "provider-manager" => Some("provider_manager"),
@@ -3288,7 +3293,9 @@ fn evidence_failure_reason_category(
             "local_session_restore_contract"
         }
         ("m8_session_handoff", "passed_cross_machine_evidence_attached")
-        | ("m8_session_handoff", "passed_handoff_package_ready") => "cancelled_cross_machine_legacy",
+        | ("m8_session_handoff", "passed_handoff_package_ready") => {
+            "cancelled_cross_machine_legacy"
+        }
         ("m8_session_handoff", "failed_local_restore_contract")
         | ("m8_session_handoff", "failed_handoff_package_contract") => {
             "session_restore_contract_incomplete"
@@ -3333,6 +3340,25 @@ fn evidence_failure_reason_category(
         ("m4_runtime_facade", "failed_runtime_facade_contract") => {
             "runtime_facade_contract_incomplete"
         }
+        (
+            "m4_browser_settings_core_proxy_facade",
+            "passed_browser_settings_core_proxy_facade_contract",
+        ) => "none",
+        (
+            "m4_browser_settings_core_proxy_facade",
+            "failed_browser_settings_core_proxy_facade_contract",
+        ) => "browser_settings_core_proxy_facade_contract_incomplete",
+        ("observed_fingerprint_coverage", "passed_full_observed_fingerprint_coverage") => "none",
+        ("observed_fingerprint_coverage", "partial_observed_fingerprint_coverage") => {
+            "observed_fingerprint_coverage_partial"
+        }
+        ("observed_fingerprint_coverage", "blocked_missing_observed_fingerprint_reports") => {
+            "observed_fingerprint_evidence_missing"
+        }
+        ("live_replay_runtime", "passed_local_replay_runtime") => "none",
+        ("live_replay_runtime", "partial_local_replay_runtime") => "local_replay_runtime_partial",
+        ("live_replay_runtime", "blocked_missing_behavior_taxonomy")
+        | ("live_replay_runtime", "failed_live_replay_runtime") => "local_replay_runtime_failed",
         ("runtime_adapter", "blocked_evidence_required") => "runtime_adapter_evidence_required",
         ("m10_headed_repeatability", "passed_repeatability_partial_coherence") => "none",
         ("m10_headed_repeatability", "blocked_missing_headed_report") => {
@@ -3348,10 +3374,31 @@ fn evidence_failure_reason_category(
             "headed_repeatability_unstable"
         }
         ("m10_headed_repeatability", "failed_repeatability") => "headed_repeatability_failed",
+        ("m10_headed_stability", "passed_long_task_stability_coherence") => "none",
+        ("m10_headed_stability", "partial_long_task_stability_matrix")
+        | ("m10_headed_stability", "partial_long_task_stability_or_coherence") => {
+            "headed_long_task_stability_partial"
+        }
+        ("m10_headed_stability", "blocked_missing_headed_report") => {
+            "headed_stability_report_missing"
+        }
+        ("m10_headed_stability", "failed_long_task_stability") => {
+            "headed_long_task_stability_failed"
+        }
         ("m15_browser_pool", "passed_pool_lifecycle_harness") => "none",
         ("m15_browser_pool", "failed_pool_tests") => "browser_pool_tests_failed",
         ("m15_browser_pool", "failed_pool_source_contract") => {
             "browser_pool_source_contract_incomplete"
+        }
+        ("m15_browser_process", "passed_real_browser_process_prewarm_cleanup") => "none",
+        ("m15_browser_process", "blocked_browser_binary_missing") => {
+            "browser_process_binary_missing"
+        }
+        ("m15_browser_process", "failed_browser_process_cleanup") => {
+            "browser_process_cleanup_failed"
+        }
+        ("m15_browser_process", "failed_browser_process_prewarm") => {
+            "browser_process_prewarm_failed"
         }
         ("external_distribution", "cancelled_local_only") => "none",
         ("external_distribution", item) if item.contains("blocked") => "cancelled_local_only",
@@ -3719,6 +3766,92 @@ fn evidence_report_summary_from_json(
                 "M4 runtime facade {status}: checksFailed={failed} runtimeFacadeUsage={runtime_facade_usage} directRuntimeImportsRemoved={direct_runtime_imports_removed} externalUrlWrapper={external_url_wrapper}"
             )
         }
+        "m4_browser_settings_core_proxy_facade" => {
+            let summary = value.get("summary");
+            let failed = summary
+                .and_then(|item| item.get("failed"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let desktop_wrappers = summary
+                .and_then(|item| value_text(item, "desktopWrappers"))
+                .unwrap_or_else(|| "missing".to_string());
+            let browser_api_facade = summary
+                .and_then(|item| value_text(item, "browserApiFacadeUsage"))
+                .unwrap_or_else(|| "missing".to_string());
+            let dynamic_bindings_removed = summary
+                .and_then(|item| value_text(item, "dynamicBindingsRemoved"))
+                .unwrap_or_else(|| "unknown".to_string());
+            let bridge_allowlist = summary
+                .and_then(|item| value_text(item, "bridgeAllowlist"))
+                .unwrap_or_else(|| "missing".to_string());
+            format!(
+                "M4 browser settings/core/proxy facade {status}: checksFailed={failed} desktopWrappers={desktop_wrappers} browserApiFacade={browser_api_facade} dynamicBindingsRemoved={dynamic_bindings_removed} bridgeAllowlist={bridge_allowlist}"
+            )
+        }
+        "observed_fingerprint_coverage" => {
+            let summary = value.get("summary");
+            let observed = summary
+                .and_then(|item| item.get("observedSignalCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("observedSignalCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let target = summary
+                .and_then(|item| item.get("targetSignalCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("targetSignalCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let covered = summary
+                .and_then(|item| item.get("coveredFamilyCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("coveredFamilyCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let partial = summary
+                .and_then(|item| item.get("partialFamilyCount"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let missing = summary
+                .and_then(|item| item.get("missingFamilyCount"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            format!(
+                "observed fingerprint coverage {status}: observed={observed}/{target} coveredFamilies={covered} partialFamilies={partial} missingFamilies={missing}"
+            )
+        }
+        "live_replay_runtime" => {
+            let summary = value.get("summary");
+            let replayed = summary
+                .and_then(|item| item.get("replayedEventCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("replayedEventCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let target = summary
+                .and_then(|item| item.get("targetEventCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("targetEventCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let runtime_backed = summary
+                .and_then(|item| item.get("runtimeBackedEventCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("runtimeBackedEventCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let product_backed = summary
+                .and_then(|item| item.get("productRuntimeBackedEventCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    value
+                        .get("productRuntimeBackedEventCount")
+                        .and_then(Value::as_i64)
+                })
+                .unwrap_or_default();
+            let contract_only = summary
+                .and_then(|item| item.get("contractOnlyEventCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("contractOnlyEventCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            format!(
+                "live replay runtime {status}: replayed={replayed}/{target} runtimeBacked={runtime_backed} productRuntimeBacked={product_backed} contractOnly={contract_only}"
+            )
+        }
         "taxonomy_audit" => format!(
             "taxonomy audit {status}: reports={}",
             value
@@ -3832,6 +3965,51 @@ fn evidence_report_summary_from_json(
             };
             format!("M10 headed repeatability {status}: repeatability={repeatability_status} attempts={passed}/{executed}/{requested} signals={signal_count} categories={categories}")
         }
+        "m10_headed_stability" => {
+            let summary = value.get("summary");
+            let requested = summary
+                .and_then(|item| item.get("requestedCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("requestedCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let executed = summary
+                .and_then(|item| item.get("executedCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("executedCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let passed = summary
+                .and_then(|item| item.get("passedCount"))
+                .and_then(Value::as_i64)
+                .or_else(|| value.get("passedCount").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let coherence = summary
+                .and_then(|item| item.get("coherenceScore"))
+                .and_then(Value::as_f64)
+                .or_else(|| {
+                    value
+                        .get("coherence")
+                        .and_then(|item| item.get("score"))
+                        .and_then(Value::as_f64)
+                })
+                .unwrap_or_default();
+            let stability = summary
+                .and_then(|item| item.get("stabilityScore"))
+                .and_then(Value::as_f64)
+                .or_else(|| {
+                    value
+                        .get("stability")
+                        .and_then(|item| item.get("score"))
+                        .and_then(Value::as_f64)
+                })
+                .unwrap_or_default();
+            let signal_count = summary
+                .and_then(|item| item.get("signalCount"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            format!(
+                "M10 headed stability {status}: attempts={passed}/{executed}/{requested} signals={signal_count} coherence={coherence:.2} stability={stability:.2}"
+            )
+        }
         "m15_browser_pool" => {
             let summary = value.get("summary");
             let failed = summary
@@ -3852,6 +4030,31 @@ fn evidence_report_summary_from_json(
                 .and_then(|item| value_text(item, "prewarmBudgetStepStatus"))
                 .unwrap_or_else(|| "missing".to_string());
             format!("M15 browser pool {status}: checksFailed={failed} goTests={go_test_status} cleanupProof={cleanup_status} resourceBudget={budget_status} prewarmBudgetStep={prewarm_budget_status}")
+        }
+        "m15_browser_process" => {
+            let summary = value.get("summary");
+            let process_state = summary
+                .and_then(|item| value_text(item, "browserProcess"))
+                .unwrap_or_else(|| "missing".to_string());
+            let cdp_ready = summary
+                .and_then(|item| item.get("cdpReady"))
+                .and_then(Value::as_bool)
+                .unwrap_or_default();
+            let process_count = summary
+                .and_then(|item| item.get("processCount"))
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let rss = summary
+                .and_then(|item| item.get("totalWorkingSetMb"))
+                .and_then(Value::as_f64)
+                .unwrap_or_default();
+            let cleanup = summary
+                .and_then(|item| item.get("cleanupComplete"))
+                .and_then(Value::as_bool)
+                .unwrap_or_default();
+            format!(
+                "M15 browser process {status}: process={process_state} cdpReady={cdp_ready} processCount={process_count} rssMb={rss:.1} cleanup={cleanup}"
+            )
         }
         "headed_external_smoke" => {
             let task = value.get("realBinaryTask");
@@ -4323,8 +4526,56 @@ fn evidence_level_from_report(kind: &str, status: &str, value: &Value) -> String
             "runtime_facade_contract_partial"
         }
         ("m4_runtime_facade", "failed_runtime_facade_contract") => "runtime_facade_contract_failed",
+        (
+            "m4_browser_settings_core_proxy_facade",
+            "passed_browser_settings_core_proxy_facade_contract",
+        ) => "browser_settings_core_proxy_facade_contract_partial",
+        (
+            "m4_browser_settings_core_proxy_facade",
+            "failed_browser_settings_core_proxy_facade_contract",
+        ) => "browser_settings_core_proxy_facade_contract_failed",
+        ("observed_fingerprint_coverage", "passed_full_observed_fingerprint_coverage") => {
+            "fingerprint_observed_full"
+        }
+        ("observed_fingerprint_coverage", "partial_observed_fingerprint_coverage") => {
+            "fingerprint_observed_partial"
+        }
+        ("observed_fingerprint_coverage", "blocked_missing_observed_fingerprint_reports") => {
+            "blocked_missing_observed_fingerprint_evidence"
+        }
+        ("live_replay_runtime", "passed_local_replay_runtime") => {
+            "behavior_replay_local_runtime_450_plus"
+        }
+        ("live_replay_runtime", "partial_local_replay_runtime") => {
+            "behavior_replay_local_runtime_partial"
+        }
+        ("live_replay_runtime", "blocked_missing_behavior_taxonomy")
+        | ("live_replay_runtime", "failed_live_replay_runtime") => "behavior_replay_runtime_failed",
         ("m15_browser_pool", "failed_pool_tests")
         | ("m15_browser_pool", "failed_pool_source_contract") => "browser_pool_harness_failed",
+        ("m10_headed_stability", "passed_long_task_stability_coherence") => {
+            "headed_long_task_stability_coherence_observed"
+        }
+        ("m10_headed_stability", "partial_long_task_stability_matrix")
+        | ("m10_headed_stability", "partial_long_task_stability_or_coherence") => {
+            "headed_long_task_stability_partial"
+        }
+        ("m10_headed_stability", "blocked_missing_headed_report") => {
+            "blocked_missing_headed_stability_evidence"
+        }
+        ("m10_headed_stability", "failed_long_task_stability") => {
+            "headed_long_task_stability_failed"
+        }
+        ("m15_browser_process", "passed_real_browser_process_prewarm_cleanup") => {
+            "real_browser_process_prewarm_cleanup_observed"
+        }
+        ("m15_browser_process", "blocked_browser_binary_missing") => {
+            "blocked_missing_browser_binary"
+        }
+        ("m15_browser_process", "failed_browser_process_cleanup")
+        | ("m15_browser_process", "failed_browser_process_prewarm") => {
+            "real_browser_process_prewarm_cleanup_failed"
+        }
         ("headed_external_smoke", "passed_real_binary_validation_probe") => {
             "profile_browser_observed"
         }
@@ -4536,6 +4787,48 @@ fn evidence_next_action(
                         .to_string(),
                 )
             }),
+        (
+            "m4_browser_settings_core_proxy_facade",
+            "passed_browser_settings_core_proxy_facade_contract",
+        )
+        | (
+            "m4_browser_settings_core_proxy_facade",
+            "failed_browser_settings_core_proxy_facade_contract",
+        ) => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/m4_browser_settings_core_proxy_facade_gate.ps1, then continue shrinking remaining browser/profile/session bridge calls in source-gated batches."
+                        .to_string(),
+                )
+            }),
+        ("observed_fingerprint_coverage", "passed_full_observed_fingerprint_coverage")
+        | ("observed_fingerprint_coverage", "partial_observed_fingerprint_coverage")
+        | (
+            "observed_fingerprint_coverage",
+            "blocked_missing_observed_fingerprint_reports",
+        ) => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/observed_fingerprint_coverage_gate.ps1 after collecting real observed validation signals; do not count taxonomy materialization as observed coverage."
+                        .to_string(),
+                )
+            }),
+        ("live_replay_runtime", "passed_local_replay_runtime")
+        | ("live_replay_runtime", "partial_local_replay_runtime")
+        | ("live_replay_runtime", "blocked_missing_behavior_taxonomy")
+        | ("live_replay_runtime", "failed_live_replay_runtime") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/live_replay_runtime_gate.ps1 and keep product/browser/provider replay closure as separate evidence."
+                        .to_string(),
+                )
+            }),
         ("m10_headed_repeatability", "blocked_missing_headed_report")
         | ("m10_headed_repeatability", "blocked_missing_headed_validation_probe")
         | ("m10_headed_repeatability", "partial_validation_probe_without_repeatability")
@@ -4564,6 +4857,31 @@ fn evidence_next_action(
                     )
                 })
         }
+        ("m10_headed_stability", "passed_long_task_stability_coherence")
+        | ("m10_headed_stability", "partial_long_task_stability_matrix")
+        | ("m10_headed_stability", "partial_long_task_stability_or_coherence")
+        | ("m10_headed_stability", "blocked_missing_headed_report")
+        | ("m10_headed_stability", "failed_long_task_stability") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/m10_headed_stability_gate.ps1 to refresh the headed_external long-task coherence matrix."
+                        .to_string(),
+                )
+            }),
+        ("m15_browser_process", "passed_real_browser_process_prewarm_cleanup")
+        | ("m15_browser_process", "blocked_browser_binary_missing")
+        | ("m15_browser_process", "failed_browser_process_cleanup")
+        | ("m15_browser_process", "failed_browser_process_prewarm") => value
+            .get("summary")
+            .and_then(|summary| value_text(summary, "nextAction"))
+            .or_else(|| {
+                Some(
+                    "Run scripts/m15_browser_process_gate.ps1 to refresh real browser process CDP/RSS/cleanup proof."
+                        .to_string(),
+                )
+            }),
         ("release_performance", item) if item.contains("warning") || item.contains("failed") => {
             Some(
                 "Keep this release smoke as local startup diagnostics; no release performance budget target is active."
@@ -4629,6 +4947,9 @@ pub fn list_desktop_evidence_reports(
         "m4-monitor-facade",
         "m4-browser-runtime-facade",
         "m4-runtime-facade",
+        "m4-browser-settings-core-proxy-facade",
+        "observed-fingerprint-coverage",
+        "live-replay-runtime",
         "m8-session-handoff",
         "release-smoke",
         "m5-release-health",
@@ -4641,7 +4962,9 @@ pub fn list_desktop_evidence_reports(
         "transport-binary-smoke",
         "remote-proxy-tls",
         "m10-headed-repeatability",
+        "m10-headed-stability",
         "m15-browser-pool",
+        "m15-browser-process",
         "headed-external-smoke",
         "camoufox-binary-task",
         "provider-manager",
@@ -11894,6 +12217,42 @@ mod tests {
                 "runtime_facade_contract_incomplete",
             ),
             (
+                "m4_browser_settings_core_proxy_facade",
+                "passed_browser_settings_core_proxy_facade_contract",
+                None,
+                "none",
+            ),
+            (
+                "m4_browser_settings_core_proxy_facade",
+                "failed_browser_settings_core_proxy_facade_contract",
+                None,
+                "browser_settings_core_proxy_facade_contract_incomplete",
+            ),
+            (
+                "observed_fingerprint_coverage",
+                "partial_observed_fingerprint_coverage",
+                None,
+                "observed_fingerprint_coverage_partial",
+            ),
+            (
+                "observed_fingerprint_coverage",
+                "blocked_missing_observed_fingerprint_reports",
+                None,
+                "observed_fingerprint_evidence_missing",
+            ),
+            (
+                "live_replay_runtime",
+                "passed_local_replay_runtime",
+                None,
+                "none",
+            ),
+            (
+                "live_replay_runtime",
+                "partial_local_replay_runtime",
+                None,
+                "local_replay_runtime_partial",
+            ),
+            (
                 "runtime_adapter",
                 "blocked_evidence_required",
                 None,
@@ -11936,6 +12295,18 @@ mod tests {
                 "headed_repeatability_failed",
             ),
             (
+                "m10_headed_stability",
+                "passed_long_task_stability_coherence",
+                None,
+                "none",
+            ),
+            (
+                "m10_headed_stability",
+                "partial_long_task_stability_or_coherence",
+                None,
+                "headed_long_task_stability_partial",
+            ),
+            (
                 "m15_browser_pool",
                 "passed_pool_lifecycle_harness",
                 None,
@@ -11952,6 +12323,18 @@ mod tests {
                 "failed_pool_source_contract",
                 None,
                 "browser_pool_source_contract_incomplete",
+            ),
+            (
+                "m15_browser_process",
+                "passed_real_browser_process_prewarm_cleanup",
+                None,
+                "none",
+            ),
+            (
+                "m15_browser_process",
+                "blocked_browser_binary_missing",
+                None,
+                "browser_process_binary_missing",
             ),
             (
                 "external_distribution",
@@ -12050,14 +12433,24 @@ mod tests {
             .expect("create m4 browser runtime facade reports dir");
         fs::create_dir_all(reports_root.join("m4-runtime-facade"))
             .expect("create m4 runtime facade reports dir");
+        fs::create_dir_all(reports_root.join("m4-browser-settings-core-proxy-facade"))
+            .expect("create m4 browser settings core proxy facade reports dir");
+        fs::create_dir_all(reports_root.join("observed-fingerprint-coverage"))
+            .expect("create observed fingerprint coverage reports dir");
+        fs::create_dir_all(reports_root.join("live-replay-runtime"))
+            .expect("create live replay runtime reports dir");
         fs::create_dir_all(reports_root.join("m8-session-handoff"))
             .expect("create m8 session handoff reports dir");
         fs::create_dir_all(reports_root.join("headed-external-smoke"))
             .expect("create headed external reports dir");
         fs::create_dir_all(reports_root.join("m10-headed-repeatability"))
             .expect("create m10 headed repeatability reports dir");
+        fs::create_dir_all(reports_root.join("m10-headed-stability"))
+            .expect("create m10 headed stability reports dir");
         fs::create_dir_all(reports_root.join("m15-browser-pool"))
             .expect("create m15 browser pool reports dir");
+        fs::create_dir_all(reports_root.join("m15-browser-process"))
+            .expect("create m15 browser process reports dir");
         fs::create_dir_all(reports_root.join("camoufox-binary-task"))
             .expect("create camoufox binary reports dir");
         fs::create_dir_all(reports_root.join("taxonomy-coverage"))
@@ -12128,6 +12521,46 @@ mod tests {
         .expect("write m10 repeatability report");
         fs::write(
             reports_root
+                .join("m10-headed-stability")
+                .join("m10-headed-stability-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m10_headed_stability_gate_v1",
+                "generatedAt": "2026-05-30T00:04:30Z",
+                "status": "passed_long_task_stability_coherence",
+                "failureReason": "",
+                "requestedCount": 3,
+                "executedCount": 3,
+                "passedCount": 3,
+                "coherence": {
+                    "score": 1.0,
+                    "stableCategories": true,
+                    "stableSignalIds": true,
+                    "stableSignalStatuses": true
+                },
+                "stability": {
+                    "score": 1.0,
+                    "durationStats": {
+                        "minMs": 4700,
+                        "maxMs": 5400,
+                        "averageMs": 5000
+                    }
+                },
+                "summary": {
+                    "failed": 0,
+                    "requestedCount": 3,
+                    "executedCount": 3,
+                    "passedCount": 3,
+                    "coherenceScore": 1.0,
+                    "stabilityScore": 1.0,
+                    "signalCount": 9,
+                    "nextAction": "Keep this M10 stability matrix attached; continue with remote proxy/TLS and product replay wiring as separate evidence."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m10 stability report");
+        fs::write(
+            reports_root
                 .join("m15-browser-pool")
                 .join("m15-browser-pool-gate-test.json"),
             serde_json::json!({
@@ -12151,6 +12584,40 @@ mod tests {
             .to_string(),
         )
         .expect("write m15 browser pool report");
+        fs::write(
+            reports_root
+                .join("m15-browser-process")
+                .join("m15-browser-process-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m15_browser_process_gate_v1",
+                "generatedAt": "2026-05-30T00:05:15Z",
+                "status": "passed_real_browser_process_prewarm_cleanup",
+                "failureReason": "",
+                "browserPath": "D:/SelfMadeTool/personal-pilot/chrome/fingerprint/chrome.exe",
+                "rootPid": 12345,
+                "cdpReady": true,
+                "processSummary": {
+                    "processCount": 4,
+                    "totalWorkingSetMb": 180.5
+                },
+                "cleanupProof": {
+                    "observedPids": [12345, 12346],
+                    "remainingPids": [],
+                    "cleanupComplete": true
+                },
+                "summary": {
+                    "failed": 0,
+                    "browserProcess": "started",
+                    "cdpReady": true,
+                    "processCount": 4,
+                    "totalWorkingSetMb": 180.5,
+                    "cleanupComplete": true,
+                    "nextAction": "Keep this M15 real process proof attached; integrate the same process/RSS cleanup checks into pool acquire/release before claiming full M15 complete."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m15 browser process report");
         fs::write(
             reports_root
                 .join("m4-browser-payload-schema")
@@ -12353,6 +12820,79 @@ mod tests {
         .expect("write m4 runtime facade report");
         fs::write(
             reports_root
+                .join("m4-browser-settings-core-proxy-facade")
+                .join("m4-browser-settings-core-proxy-facade-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "m4_browser_settings_core_proxy_facade_gate_v1",
+                "generatedAt": "2026-05-30T00:05:55Z",
+                "status": "passed_browser_settings_core_proxy_facade_contract",
+                "failureReason": "",
+                "summary": {
+                    "failed": 0,
+                    "desktopWrappers": "present",
+                    "browserApiFacadeUsage": "present",
+                    "dynamicBindingsRemoved": "yes",
+                    "bridgeAllowlist": "present",
+                    "nextAction": "Keep shrinking remaining browser/profile/session bridge calls in small source-gated batches."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write m4 browser settings core proxy facade report");
+        fs::write(
+            reports_root
+                .join("observed-fingerprint-coverage")
+                .join("observed-fingerprint-coverage-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "observed_fingerprint_coverage_gate_v1",
+                "generatedAt": "2026-05-30T00:05:56Z",
+                "status": "partial_observed_fingerprint_coverage",
+                "failureReason": "observed signal coverage is partial; taxonomy/materialized contracts were intentionally excluded",
+                "observedSignalCount": 9,
+                "targetSignalCount": 450,
+                "coveredFamilyCount": 0,
+                "summary": {
+                    "failed": 0,
+                    "observedSignalCount": 9,
+                    "targetSignalCount": 450,
+                    "coveredFamilyCount": 0,
+                    "partialFamilyCount": 8,
+                    "missingFamilyCount": 4,
+                    "nextAction": "Expand real collectors until every fingerprint taxonomy family reaches its target count with layer=observed metadata."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write observed fingerprint coverage report");
+        fs::write(
+            reports_root
+                .join("live-replay-runtime")
+                .join("live-replay-runtime-gate-test.json"),
+            serde_json::json!({
+                "schemaVersion": "live_replay_runtime_gate_v1",
+                "generatedAt": "2026-05-30T00:05:57Z",
+                "status": "passed_local_replay_runtime",
+                "failureReason": "",
+                "targetEventCount": 450,
+                "replayedEventCount": 461,
+                "runtimeBackedEventCount": 461,
+                "productRuntimeBackedEventCount": 276,
+                "contractOnlyEventCount": 185,
+                "summary": {
+                    "failed": 0,
+                    "targetEventCount": 450,
+                    "replayedEventCount": 461,
+                    "runtimeBackedEventCount": 461,
+                    "productRuntimeBackedEventCount": 276,
+                    "contractOnlyEventCount": 185,
+                    "nextAction": "Keep this 450+ local replay runtime report attached; product/browser/provider runtime wiring remains separate."
+                }
+            })
+            .to_string(),
+        )
+        .expect("write live replay runtime report");
+        fs::write(
+            reports_root
                 .join("m8-session-handoff")
                 .join("m8-session-handoff-gate-test.json"),
             serde_json::json!({
@@ -12409,7 +12949,7 @@ mod tests {
             temp_root.join("persona.db").to_string_lossy()
         );
         let history = list_desktop_evidence_reports(Some(&db_url)).expect("read history");
-        assert_eq!(history.report_count, 16);
+        assert_eq!(history.report_count, 21);
 
         let headed = history
             .reports
@@ -12442,6 +12982,20 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("long-task stability"));
+
+        let m10_stability = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m10_headed_stability")
+            .expect("m10 headed stability report");
+        assert_eq!(m10_stability.status, "passed_long_task_stability_coherence");
+        assert_eq!(
+            m10_stability.evidence_level,
+            "headed_long_task_stability_coherence_observed"
+        );
+        assert_eq!(m10_stability.failure_reason_category, "none");
+        assert!(m10_stability.summary.contains("attempts=3/3/3"));
+        assert!(m10_stability.summary.contains("coherence=1.00"));
 
         let m8 = history
             .reports
@@ -12686,6 +13240,60 @@ mod tests {
             .unwrap_or_default()
             .contains("tauriWailsBridge compatibility paths"));
 
+        let m4_browser_facade = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m4_browser_settings_core_proxy_facade")
+            .expect("m4 browser settings core proxy facade report");
+        assert_eq!(
+            m4_browser_facade.status,
+            "passed_browser_settings_core_proxy_facade_contract"
+        );
+        assert_eq!(
+            m4_browser_facade.evidence_level,
+            "browser_settings_core_proxy_facade_contract_partial"
+        );
+        assert_eq!(m4_browser_facade.failure_reason_category, "none");
+        assert!(m4_browser_facade
+            .summary
+            .contains("desktopWrappers=present"));
+        assert!(m4_browser_facade
+            .summary
+            .contains("dynamicBindingsRemoved=yes"));
+
+        let observed_coverage = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "observed_fingerprint_coverage")
+            .expect("observed fingerprint coverage report");
+        assert_eq!(
+            observed_coverage.status,
+            "partial_observed_fingerprint_coverage"
+        );
+        assert_eq!(
+            observed_coverage.evidence_level,
+            "fingerprint_observed_partial"
+        );
+        assert_eq!(
+            observed_coverage.failure_reason_category,
+            "observed_fingerprint_coverage_partial"
+        );
+        assert!(observed_coverage.summary.contains("observed=9/450"));
+
+        let replay_runtime = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "live_replay_runtime")
+            .expect("live replay runtime report");
+        assert_eq!(replay_runtime.status, "passed_local_replay_runtime");
+        assert_eq!(
+            replay_runtime.evidence_level,
+            "behavior_replay_local_runtime_450_plus"
+        );
+        assert_eq!(replay_runtime.failure_reason_category, "none");
+        assert!(replay_runtime.summary.contains("replayed=461/450"));
+        assert!(replay_runtime.summary.contains("contractOnly=185"));
+
         let m15 = history
             .reports
             .iter()
@@ -12703,6 +13311,23 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("real browser process prewarm"));
+
+        let m15_process = history
+            .reports
+            .iter()
+            .find(|report| report.kind == "m15_browser_process")
+            .expect("m15 browser process report");
+        assert_eq!(
+            m15_process.status,
+            "passed_real_browser_process_prewarm_cleanup"
+        );
+        assert_eq!(
+            m15_process.evidence_level,
+            "real_browser_process_prewarm_cleanup_observed"
+        );
+        assert_eq!(m15_process.failure_reason_category, "none");
+        assert!(m15_process.summary.contains("cdpReady=true"));
+        assert!(m15_process.summary.contains("cleanup=true"));
 
         let camoufox = history
             .reports

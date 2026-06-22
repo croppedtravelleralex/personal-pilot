@@ -664,7 +664,7 @@ Use score only for capability maturity and benchmark distance.
 
 `Current capability score = 40 / 100`
 
-P14 result: score moves from `34 / 100` to `40 / 100` because repeatable evidence entrypoints and machine-readable taxonomy seeds landed. AdsPower parity score is not raised; B1-B5 still need real provider, local restore/orchestration depth, runtime, and observed/replay evidence before AdsPower refresh.
+P14 result: score moves from `34 / 100` to `40 / 100` because repeatable evidence entrypoints and machine-readable taxonomy seeds landed. AdsPower parity score is not raised; B1-B5 still need real provider, local restore/orchestration depth, full observed coverage, production replay, remote proxy/TLS, and pool integration evidence before AdsPower refresh.
 
 | Dimension | Weight | Current evidence | Current score | Weighted score | Final target | AdsPower public boundary |
 | --- | ---: | --- | ---: | ---: | --- | --- |
@@ -690,8 +690,8 @@ Always report fingerprint and event quantities as multi-part numbers:
 
 Default wording:
 
-- fingerprint quantity: `80 declared / 26 runtime-projected / 450 taxonomy seed / full observed coverage pending`
-- event quantity: `13 shipped / 450 taxonomy seed / full replay runtime pending`
+- fingerprint quantity: `80 declared / 26 runtime-projected / 450 taxonomy seed / strict observed 20 / 450 partial`
+- event quantity: `13 shipped / 450 taxonomy seed / local deterministic replay 461 / 450 passed; target-site/browser/provider replay pending`
 - continuity: `restart continuity landed / SessionBundle contract landed / local restore verified / cross-machine smoke cancelled`
 
 ## AdsPower Benchmark Summary
