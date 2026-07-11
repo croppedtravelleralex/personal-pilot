@@ -152,4 +152,4 @@ Updated: 2026-04-16 (Asia/Shanghai)
 - 一致性评分和风险原因可解释。
 - 代理驻留、locale、timezone、屏幕和行为节奏能够互相对齐。
 
-下一层的 schema / consistency graph / runtime projection 见 [docs/16-first-family-schema-consistency-runtime.md](/D:/SelfMadeTool/persona-pilot/docs/16-first-family-schema-consistency-runtime.md)。
+下一层的 schema / consistency graph / runtime projection 见 [docs/16-first-family-schema-consistency-runtime.md](16-first-family-schema-consistency-runtime.md)。

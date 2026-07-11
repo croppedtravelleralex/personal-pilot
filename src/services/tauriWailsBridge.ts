@@ -96,6 +96,7 @@ const BRIDGE_RPC_METHOD_NAMES = new Set<string>([
   'BrowserProfileBatchSetTags',
   'BrowserProfileBatchRemoveTags',
   'BrowserRenameTag',
+  'BrowserProxyDelete',
   'ListGroups',
   'CreateGroup',
   'UpdateGroup',
@@ -105,14 +106,11 @@ const BRIDGE_RPC_METHOD_NAMES = new Set<string>([
   'BehaviorStopRecording',
   'BehaviorRecordingList',
   'BehaviorRecordingSummaryList',
-  'BehaviorRecordingMetaList',
   'BehaviorRecordingStatus',
   'ActiveRecordingStatus',
   'BehaviorRecordingDelete',
   'BehaviorGetRecording',
   'BehaviorGetRecordingDetail',
-  'BehaviorGetRecordingMeta',
-  'BehaviorGetRecordingEvents',
   'BehaviorPlayRecording',
   'BehaviorStopPlayback',
   'BehaviorQuickRecord',
@@ -133,8 +131,6 @@ const BRIDGE_RPC_METHOD_NAMES = new Set<string>([
   'AutomationRuleDelete',
   'AutomationRuleToggle',
   'AutomationRuleTestFire',
-  'LLMPlanOnly',
-  'LLMExecuteTask',
 ])
 
 function emitLocal(eventName: string, ...data: BridgeEventData) {

@@ -90,8 +90,9 @@ type WindowConfig struct {
 
 // RuntimeConfig 运行时配置
 type RuntimeConfig struct {
-	MaxMemoryMB int `yaml:"max_memory_mb"` // 最大内存软限制（MB），0 表示禁用
-	GCPercent   int `yaml:"gc_percent"`    // GC 触发百分比
+	MaxMemoryMB           int `yaml:"max_memory_mb"`            // 最大内存软限制（MB），0 表示禁用
+	MaxConcurrentInstances int `yaml:"max_concurrent_instances"` // 同时运行实例上限，0 表示不限制
+	GCPercent             int `yaml:"gc_percent"`               // GC 触发百分比
 }
 
 type BrowserBookmark struct {
@@ -105,8 +106,9 @@ type BrowserConfig struct {
 	DefaultLaunchArgs      []string               `yaml:"default_launch_args"`
 	DefaultProxy           string                 `yaml:"default_proxy"`
 	StartReadyTimeoutMs    int                    `yaml:"start_ready_timeout_ms,omitempty"`
-	StartStableWindowMs    int                    `yaml:"start_stable_window_ms,omitempty"`
-	DefaultBookmarks       []BrowserBookmark      `yaml:"default_bookmarks,omitempty"`
+	StartStableWindowMs     int                    `yaml:"start_stable_window_ms,omitempty"`
+	ShowMousePointerDefault bool                   `yaml:"show_mouse_pointer_default,omitempty"`
+	DefaultBookmarks        []BrowserBookmark      `yaml:"default_bookmarks,omitempty"`
 	Cores                  []BrowserCore          `yaml:"cores,omitempty"`
 	Proxies                []BrowserProxy         `yaml:"proxies,omitempty"`
 	Profiles               []BrowserProfileConfig `yaml:"profiles,omitempty"`

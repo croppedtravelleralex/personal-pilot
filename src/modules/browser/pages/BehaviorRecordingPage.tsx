@@ -3,7 +3,6 @@ import { Monitor } from 'lucide-react'
 import { Card, Select } from '../../../shared/components'
 import { RecordingPanel } from '../components/RecordingPanel'
 import { PresetOffsetViewer } from '../components/PresetOffsetViewer'
-import { NaturalLanguageTask } from '../components/NaturalLanguageTask'
 import { fetchBrowserProfiles } from '../api'
 import type { BrowserProfile } from '../types'
 
@@ -63,14 +62,6 @@ export function BehaviorRecordingPage() {
           />
         </Card>
       )}
-
-      {/* Natural language task input */}
-      <Card>
-        <NaturalLanguageTask
-          profileId={selectedProfileId || undefined}
-          isRunning={selectedProfile?.running ?? false}
-        />
-      </Card>
 
       {/* Behavior template offset viewer - always visible for inspection */}
       <Card>

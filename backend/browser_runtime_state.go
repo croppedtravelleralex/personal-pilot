@@ -58,6 +58,7 @@ func browserInstanceEventPayload(profile *BrowserProfile, reused bool) map[strin
 		"profileName":    profile.ProfileName,
 		"debugPort":      profile.DebugPort,
 		"debugReady":     profile.DebugReady,
+		"injectionReady": profile.InjectionReady,
 		"pid":            profile.Pid,
 		"reused":         reused,
 		"running":        profile.Running,
@@ -86,6 +87,7 @@ func (a *App) markProfileRunningLocked(profileId string, profile *BrowserProfile
 	profile.Running = true
 	profile.DebugPort = debugPort
 	profile.DebugReady = debugReady
+	profile.InjectionReady = false
 	profile.Pid = pid
 	profile.LastStartAt = time.Now().Format(time.RFC3339)
 	profile.RuntimeWarning = runtimeWarning

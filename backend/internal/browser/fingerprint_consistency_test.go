@@ -184,3 +184,85 @@ func TestAssessFingerprintConsistency_StatusInconsistent(t *testing.T) {
 		t.Fatalf("Status = %q, want 'inconsistent' with multiple hard mismatches. Score=%d", result.Status, result.CoherenceScore)
 	}
 }
+
+func TestEnforceFingerprintConsistency_WarnNeverBlocks(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{
+		Status:       "inconsistent",
+		HardFailures: 3,
+		RiskReasons:  []string{"[HARD] mismatch"},
+	}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceWarn); err != nil {
+		t.Fatalf("warn mode should not block: %v", err)
+	}
+}
+
+func TestEnforceFingerprintConsistency_BlockOnInconsistent(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{
+		Status:       "inconsistent",
+		HardFailures: 2,
+		RiskReasons:  []string{"[HARD] locale mismatch"},
+	}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceBlock); err == nil {
+		t.Fatal("block mode should reject inconsistent assessment")
+	}
+}
+
+func TestEnforceFingerprintConsistency_BlockOnHardFailures(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{
+		Status:       "suspicious",
+		HardFailures: 1,
+		RiskReasons:  []string{"[HARD] proxy region mismatch"},
+	}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceBlock); err == nil {
+		t.Fatal("block mode should reject hard failures even when status is suspicious")
+	}
+}
+
+func TestEnforceFingerprintConsistency_BlockAllowsCoherent(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{Status: "coherent", HardFailures: 0}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceBlock); err != nil {
+		t.Fatalf("coherent assessment should pass block mode: %v", err)
+	}
+}
+
+func TestBuildConsistencyInputFromArgs(t *testing.T) {
+	fp := []string{
+		"--timezone=America/New_York",
+		"--lang=en-US",
+		"--accept-lang=en-US,en;q=0.9",
+		"--fingerprint-platform=windows",
+		"--fingerprint-webgl-vendor=Intel Inc.",
+		"--fingerprint-webgl-renderer=Intel Iris",
+		"--fingerprint-hardware-concurrency=8",
+		"--window-size=1920,1080",
+	}
+	launch := []string{"--disable-sync"}
+	input := BuildConsistencyInputFromArgs(fp, launch, "US")
+	if input.Timezone != "America/New_York" || input.Locale != "en-US" {
+		t.Fatalf("locale/tz not parsed: %+v", input)
+	}
+	if input.AcceptLanguage != "en-US,en;q=0.9" || input.Platform != "Win32" {
+		t.Fatalf("accept/platform not parsed: %+v", input)
+	}
+	if input.GPUVendor != "Intel Inc." || input.HardwareConcurrency != 8 {
+		t.Fatalf("gpu/concurrency not parsed: %+v", input)
+	}
+	if input.ScreenWidth != 1920 || input.ScreenHeight != 1080 {
+		t.Fatalf("window size not parsed: %+v", input)
+	}
+	if input.ProxyRegion != "US" {
+		t.Fatalf("proxy region=%q want US", input.ProxyRegion)
+	}
+}
+
+func TestParseCoherenceEnforceMode(t *testing.T) {
+	if ParseCoherenceEnforceMode("block") != CoherenceBlock {
+		t.Fatal("expected block mode")
+	}
+	if ParseCoherenceEnforceMode("BLOCK") != CoherenceBlock {
+		t.Fatal("expected case-insensitive block")
+	}
+	if ParseCoherenceEnforceMode("") != CoherenceWarn {
+		t.Fatal("expected default warn")
+	}
+}

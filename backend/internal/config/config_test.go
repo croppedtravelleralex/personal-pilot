@@ -187,6 +187,29 @@ launch_server:
 	}
 }
 
+func TestLoadPreservesLaunchServerAPIKeyEnvReference(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	customConfig := `
+launch_server:
+  auth:
+    enabled: true
+    api_key: "${PERSONAL_PILOT_TEST_API_KEY}"
+`
+	if err := os.WriteFile(configPath, []byte(customConfig), 0o644); err != nil {
+		t.Fatalf("写入测试配置失败: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("加载配置失败: %v", err)
+	}
+
+	if cfg.LaunchServer.Auth.APIKey != "${PERSONAL_PILOT_TEST_API_KEY}" {
+		t.Fatalf("LaunchServer.Auth.APIKey 应保留环境变量引用，避免保存配置时写回真实 key: got=%q", cfg.LaunchServer.Auth.APIKey)
+	}
+}
+
 func TestLoadMigratesLegacyRootLogPath(t *testing.T) {
 	t.Parallel()
 

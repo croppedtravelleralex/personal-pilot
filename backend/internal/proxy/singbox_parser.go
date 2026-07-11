@@ -25,10 +25,38 @@ func IsSingBoxProtocol(proxyConfig string) bool {
 	return false
 }
 
+// NormalizeStandardProxyScheme maps common SOCKS aliases used by proxy
+// providers to the canonical scheme used by the app and browser bridge.
+func NormalizeStandardProxyScheme(proxyConfig string) string {
+	src := strings.TrimSpace(proxyConfig)
+	l := strings.ToLower(src)
+	for _, alias := range []string{"socks5h://", "socks://", "socket://"} {
+		if strings.HasPrefix(l, alias) {
+			return "socks5://" + src[len(alias):]
+		}
+	}
+	return src
+}
+
+// IsStandardAuthProxy reports whether a standard HTTP/SOCKS proxy needs a
+// local auth bridge before it can be consumed by Chromium.
+func IsStandardAuthProxy(proxyConfig string) bool {
+	u, ok := parseStandardProxyURL(proxyConfig)
+	if !ok || u.User == nil {
+		return false
+	}
+	password, hasPassword := u.User.Password()
+	return strings.TrimSpace(u.User.Username()) != "" || (hasPassword && password != "")
+}
+
 // BuildSingBoxOutbound 瑙ｆ瀽鑺傜偣閰嶇疆锛岃繑鍥?sing-box outbound map
 func BuildSingBoxOutbound(node string) (map[string]interface{}, error) {
-	src := strings.TrimSpace(node)
+	src := NormalizeStandardProxyScheme(node)
 	l := strings.ToLower(src)
+
+	if strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") || strings.HasPrefix(l, "socks5://") {
+		return parseStandardProxyOutbound(src)
+	}
 
 	if strings.HasPrefix(l, "hysteria2://") || strings.HasPrefix(l, "hysteria://") {
 		return parseHysteria2URI(src)
@@ -48,6 +76,67 @@ func BuildSingBoxOutbound(node string) (map[string]interface{}, error) {
 	}
 
 	return nil, fmt.Errorf("涓嶆敮鎸佺殑 sing-box 鑺傜偣鏍煎紡")
+}
+
+func parseStandardProxyURL(proxyConfig string) (*url.URL, bool) {
+	src := NormalizeStandardProxyScheme(proxyConfig)
+	if src == "" {
+		return nil, false
+	}
+	u, err := url.Parse(src)
+	if err != nil {
+		return nil, false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" && scheme != "socks5" {
+		return nil, false
+	}
+	if strings.TrimSpace(u.Hostname()) == "" || strings.TrimSpace(u.Port()) == "" {
+		return nil, false
+	}
+	return u, true
+}
+
+func parseStandardProxyOutbound(node string) (map[string]interface{}, error) {
+	u, ok := parseStandardProxyURL(node)
+	if !ok {
+		return nil, fmt.Errorf("标准代理配置不完整")
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil || port <= 0 || port > 65535 {
+		return nil, fmt.Errorf("标准代理端口无效: %s", u.Port())
+	}
+
+	out := map[string]interface{}{
+		"tag":         "proxy-out",
+		"server":      u.Hostname(),
+		"server_port": port,
+	}
+	scheme := strings.ToLower(u.Scheme)
+	switch scheme {
+	case "http", "https":
+		out["type"] = "http"
+		if scheme == "https" {
+			out["tls"] = map[string]interface{}{"enabled": true}
+		}
+	case "socks5":
+		out["type"] = "socks"
+		out["version"] = "5"
+	default:
+		return nil, fmt.Errorf("不支持的标准代理协议: %s", scheme)
+	}
+
+	if u.User != nil {
+		username := u.User.Username()
+		password, _ := u.User.Password()
+		if username != "" {
+			out["username"] = username
+		}
+		if password != "" {
+			out["password"] = password
+		}
+	}
+	return out, nil
 }
 
 // parseTUICURI parses tuic://uuid:password@host:port?sni=xxx&insecure=1.

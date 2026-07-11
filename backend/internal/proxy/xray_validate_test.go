@@ -43,3 +43,20 @@ func TestValidateProxyConfigStandardProxy(t *testing.T) {
 		t.Fatalf("expected standard proxy to pass: %s", msg)
 	}
 }
+
+func TestValidateProxyConfigSSHTunnelDirective(t *testing.T) {
+	ok, msg := ValidateProxyConfig("http://user:pass@example.com:8080?pp_via_ssh=panda", nil, "")
+	if !ok {
+		t.Fatalf("expected SSH tunnel directive proxy to pass: %s", msg)
+	}
+}
+
+func TestValidateProxyConfigRejectsUnsafeSSHTunnelTarget(t *testing.T) {
+	ok, msg := ValidateProxyConfig("http://user:pass@example.com:8080?pp_via_ssh=-oProxyCommand=bad", nil, "")
+	if ok {
+		t.Fatalf("expected unsafe SSH tunnel directive to fail validation")
+	}
+	if !strings.Contains(msg, "SSH") {
+		t.Fatalf("unexpected message: %s", msg)
+	}
+}

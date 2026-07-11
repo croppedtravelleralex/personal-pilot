@@ -294,6 +294,9 @@ func (a *App) runningProfileForWorkbench(profileID string) (*BrowserProfile, err
 	if err := a.validateProfileCDPOwnership(&snapshot); err != nil {
 		return nil, err
 	}
+	if err := profileInjectionNotReadyError(&snapshot); err != nil {
+		return nil, err
+	}
 	return &snapshot, nil
 }
 

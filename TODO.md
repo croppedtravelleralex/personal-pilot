@@ -1,7 +1,8 @@
 # TODO.md
 
 This root `TODO.md` stays as a thin execution checklist.
-Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-and-scorecard.md`.
+**指纹/反检测优化轨道**见 [`PLAN.md`](PLAN.md)（49–56 波次与门禁）。
+Canonical stage stack 见 `/docs/19-phase-plan-and-scorecard.md`（历史阶段上下文）。
 
 ## Closed In This Round
 
@@ -78,6 +79,40 @@ Canonical stage stack, task volume, and agent plan live in `/docs/19-phase-plan-
 - [x] Add machine-readable `450` behavior event taxonomy seed and expose taxonomy seed status in Automation behavior audit
 - [ ] Deepen headed realism and kernel strategy without breaking the Win11 / Tauri baseline
 - [ ] Land the highest-ROI parts of the external browser integration plan into maintainable main-repo assets
+
+## Active — Stealth / XHS (2026-06-29)
+
+- [ ] 重建 `personal-pilot-core` 并重启 XHS 实例，验证 explore 非 chrome-error
+- [ ] 收紧 `xhs_live_acceptance.ps1`（chrome-error / ERR_NO_SUPPORTED_PROXIES → FAIL）
+- [ ] live 验收加入 humanize + 鼠标 overlay
+- [ ] `xhs_phone_login_bootstrap.ps1` 去 script，对齐 humanize plan
+
+详见 `docs/45-stealth-platform-handoff.md`。
+
+## Active — PersonaPilot / BitBrowser Benchmark Prep (2026-07-07)
+
+- [x] Install AdsPower 8.6.3 under `D:\SelfMadeTool\ads\AdsPowerGlobal`
+- [x] Confirm BitBrowser directory `D:\SelfMadeTool\bitbrowser`, version `7.1.3`, and Local API `54345`
+- [x] Write benchmark matrix plan: `docs/48-three-browser-benchmark-matrix-plan.md`
+- [x] Preflight Clash airport nodes and panda->UDEAL-LA chain with redacted IP/ASN/Geo/hosting evidence
+- [x] Add `scripts/three_browser_benchmark_readiness.mjs` and run PersonaPilot + BitBrowser UDEAL-LA dry-run with CDP/close proof
+- [x] Mark AdsPower as API-paywalled/manual-only for this run; do not require `ADSPOWER_API_KEY` unless paid/trial API is enabled later
+- [x] Create/reuse Clash airport US / JP matrix profiles in PersonaPilot and BitBrowser
+- [x] Create/reuse formal UDEAL-LA matrix profiles in PersonaPilot and BitBrowser
+- [x] Run current Clash 40-launch submatrix: `matrix-1783480553485` is `40/40 ok`
+- [x] Run current UDEAL-LA 20-launch submatrix: `matrix-1783480223173` is `19/20 ok`; BitBrowser had 1 memory-protection open failure
+- [x] Add `scripts/two_browser_benchmark_deep_matrix.mjs` and run UDEAL smoke: `deep-1783482616216` is `2/2 ok`
+- [x] Run current executable deep matrix: `deep-1783482661915` is `6/6 ok`, country `6/6`, TLS/H2 `6/6`, behavior `5/6`, detector main run PersonaPilot `18/18`, BitBrowser `12/12`
+- [x] Retry BitBrowser Clash JP detector: `deep-1783490711021` is `1/1 ok`, detector `6/6`
+- [ ] Add or source a Germany same-class node before claiming full US/JP/DE IP-quality comparison
+- [x] Extend benchmark harness from readiness/dry-run into detector runner, HAR/CDP trace capture, screenshots, TLS/H2 probe, behavior probe, and redaction
+- [x] Analyze raw launch-loop/deep artifacts and update `docs/47-personal-pilot-adspower-bitbrowser-benchmark.md` with current evidence boundary
+- [x] Add detailed A/B/C comparison to `docs/47-personal-pilot-adspower-bitbrowser-benchmark.md` and matrix summary to `docs/48-three-browser-benchmark-matrix-plan.md`
+- [x] Add 100-point detailed scorecard for fingerprint/IP/behavior/proof/API, protocol/leak evidence, kernel/TLS/RPA/Chrome/CreepJS, static fingerprint leak items, and schema/materialize/geography/dual-engine maturity
+- [x] Add `scripts/two_browser_missing_probe_matrix.mjs` and run low-quota missing probe: PersonaPilot `missing-1783494756348`, BitBrowser `missing-1783495149879`
+- [x] Update scorecard after missing probe: PersonaPilot `73/100`, BitBrowser `71/100`, AdsPower `N/A`
+- [ ] Convert deep raw artifacts into PersonaPilot P0/P1 implementation issues and scorecard deltas
+- [ ] Wait for BitBrowser free-open quota refresh before running 10-run fingerprint drift / DNS-token matrix
 
 ## Notes
 

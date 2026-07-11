@@ -4,8 +4,8 @@ Updated: 2026-04-15 (Asia/Shanghai)
 
 ## 当前默认入口
 
-- [windows_local_verify.ps1](D:/SelfMadeTool/persona-pilot/scripts/windows_local_verify.ps1)
-- [validation_lightpanda_smoke.ps1](D:/SelfMadeTool/persona-pilot/scripts/validation_lightpanda_smoke.ps1)：P5 真实 Lightpanda/CDP validation smoke 入口
+- [windows_local_verify.ps1](windows_local_verify.ps1)
+- [validation_lightpanda_smoke.ps1](validation_lightpanda_smoke.ps1)：P5 真实 Lightpanda/CDP validation smoke 入口
 
 ## 当前原则
 

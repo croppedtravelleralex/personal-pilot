@@ -6,6 +6,7 @@ Canonical progress and reality tracking live in:
 - `/docs/02-current-state.md`
 - `/docs/final-goal-progress-breakdown.md`
 - `/docs/19-phase-plan-and-scorecard.md`
+- `/PLAN.md` — 指纹/反检测执行轨道（49–56）
 - `/docs/03-roadmap.md`
 - `/docs/17-full-app-audit-progress-reset.md`
 

@@ -14,6 +14,8 @@ import (
 
 	"personal-pilot/backend/internal/behavior"
 	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/detection"
 	"personal-pilot/backend/internal/launchcode"
 )
 
@@ -713,4 +715,112 @@ func sortedStringKeys(values map[string]struct{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// BehaviorRecordingAnalyze returns cadence/hotspot analysis for a saved recording.
+func (a *App) BehaviorRecordingAnalyze(recordingID string) (*behavior.RecordingAnalyzeReport, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := store.Get(recordingID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "recording not found", err)
+	}
+	return behavior.AnalyzeRecording(rec), nil
+}
+
+// BrowserRuntimeProjectionReport returns first-family runtime projection stats for a profile.
+func (a *App) BrowserRuntimeProjectionReport(profileID string) browser.RuntimeProjectionReport {
+	if a == nil || a.browserMgr == nil {
+		return browser.RuntimeProjectionReport{}
+	}
+	a.browserMgr.Mutex.Lock()
+	profile := a.browserMgr.Profiles[profileID]
+	a.browserMgr.Mutex.Unlock()
+	if profile == nil {
+		return browser.RuntimeProjectionReport{}
+	}
+	return browser.FullRuntimeProjectionReport(profile, a.config.Browser.DefaultFingerprintArgs, a.config.Browser.DefaultLaunchArgs)
+}
+
+// BehaviorShippedPrimitiveList returns runtime-backed behavior primitives.
+func (a *App) BehaviorShippedPrimitiveList() []string {
+	return append([]string(nil), behavior.ShippedPrimitives...)
+}
+
+func (a *App) BehaviorRecordingDiff(leftID, rightID string) (*behavior.RecordingDiffReport, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	left, err := store.Get(leftID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "left recording not found", err)
+	}
+	right, err := store.Get(rightID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "right recording not found", err)
+	}
+	return behavior.DiffRecordings(left, right), nil
+}
+
+func (a *App) BehaviorRecordingMerge(leftID, rightID, name string) (*behavior.Recording, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	left, err := store.Get(leftID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "left recording not found", err)
+	}
+	right, err := store.Get(rightID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "right recording not found", err)
+	}
+	merged := behavior.MergeRecordings(left, right, name)
+	if err := store.Save(merged); err != nil {
+		return nil, recordingError(http.StatusInternalServerError, "save merged recording failed", err)
+	}
+	return merged, nil
+}
+
+func (a *App) BehaviorRecordingToWorkflow(recordingID string) (map[string]interface{}, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := store.Get(recordingID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "recording not found", err)
+	}
+	wf := behavior.BridgeRecordingToWorkflowPlan(rec)
+	return map[string]interface{}{
+		"id":    wf.ID,
+		"name":  wf.Name,
+		"steps": len(wf.Steps),
+	}, nil
+}
+
+func (a *App) WorkbenchAutoDetectionScore(profileID string) (map[string]interface{}, error) {
+	fp, err := a.WorkbenchFingerprintProfile(profileID)
+	if err != nil {
+		return nil, err
+	}
+	report, _ := a.IdentityReportProfile(profileID)
+	trust := 80
+	if report != nil {
+		trust = report.Score
+	}
+	signals := a.collectLiveDetectionSignals(profileID, fp)
+	score := detection.EvaluateAutoScore(a.liveAutoScoreInput(profileID, fp, trust))
+	return map[string]interface{}{
+		"score":    score.Score,
+		"level":    score.Level,
+		"passed":   score.Passed,
+		"summary":  score.Summary,
+		"hints":    detection.RemediationHints(score),
+		"signals":  signals,
+		"confidenceNote": "Probabilistic local gate; confirm on browserleaks/pixelscan and with account outcomes.",
+	}, nil
 }

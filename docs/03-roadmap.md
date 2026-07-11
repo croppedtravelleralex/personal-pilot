@@ -31,6 +31,8 @@
 
 唯一未验：CAPTCHA / SMS / Email 服务商真实账号凭证 smoke。没有真实账号、余额、API key 和测试目标时，不得把 provider acceptance 写成 accepted。
 
+2026-07-10 本地工程更新：指纹/反检测 W0（49-A1/A3/C1/D1）已完成实现与本地测试/Chrome smoke；代理订阅和录制 API 已修正为诚实边界，CI 已补 Go tests + frontend build。外部凭证、节点、DNS-token、额度和付费 API 继续暂缓，不参与当前执行顺序。 同日已补 `ExecuteMutatedActionWithResult` 类型化 payload 与 unknown-type error。 同批已完成 durable proxy subscription store（migration 16、事务刷新、自动刷新、Clash 静态导入、token/credential 脱敏），订阅 API 不再返回临时 `501`。
+
 0. Single UI / exe convergence
    - 用户已确认唯一主线 UI 是截图所示 `personal-pilot` 1.1.0 / Wails v2 + React UI。
    - 唯一用户入口为 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`。
@@ -103,3 +105,42 @@
 
 - 只有用户明确重开外部分发、AdsPower 对比、release performance budget、第二机/跨机器或远程代理账号目标时，才重新建 gate。
 - `docs/24-external-distribution-readiness.md`、`docs/release-performance-mitigation-plan.md` 和 `docs/sessionbundle-cross-machine-portability-runbook.md` 只作历史上下文。
+
+## Reopened：AdsPower / BitBrowser / PersonaPilot 横评
+
+2026-07-07 用户明确重开 AdsPower 对比范围，并把 BitBrowser 纳入同一矩阵。该轨道只评估“商业闭源指纹浏览器横向 benchmark 与 PersonaPilot 补短板”，不改变 Mainline / Local self-use 已闭环口径。
+
+当前阶段：基础 launch-loop、当前可执行深度矩阵和低配额 missing probe 已完成；自动化实测范围收敛为 PersonaPilot + BitBrowser，AdsPower 因 Free 账号 API & MCP 付费墙只作安装/官方资料/手工观察项。当前 100 分评分为 PersonaPilot `73/100`、BitBrowser `71/100`、AdsPower `N/A`。
+
+已完成：
+
+1. AdsPower 官方 8.6.3 Windows x64 安装器已下载、校验签名和 SHA256，并静默安装到 `D:\SelfMadeTool\ads\AdsPowerGlobal`。
+2. BitBrowser 目录确认为 `D:\SelfMadeTool\bitbrowser`，版本 `7.1.3`，本地 API `54345` 可访问；UDEAL-LA dry-run profile 已创建并通过 open/CDP/close。
+3. 已新增 `docs/48-three-browser-benchmark-matrix-plan.md`，覆盖 PersonaPilot + BitBrowser 自动化 profiles、10 连启、CreepJS/BrowserLeaks/BrowserScan/Pixelscan、IP/DNS/WebRTC/TLS/H2、行为/RPA/API、raw artifact 和脱敏规则；AdsPower 只保留 manual-only 观察边界。
+4. 已完成代理预检并生成脱敏汇总：Clash 机场当前 US `3/3` ok、JP `9/15` ok、DE `0`，成功节点 ip-api `proxy=true`；UDEAL 经 panda/本机桥为 LA 单出口，`18082`/`18090` 可用，ip-api `proxy=false`、`hosting=false`。两者必须拆成 proxy submatrix。
+5. 已新增 `scripts/three_browser_benchmark_readiness.mjs`；`data/reports/three-browser-benchmark/readiness/readiness-1783473069728.json` 证明 PersonaPilot 与 BitBrowser 的 UDEAL-LA 1 profile / 1 launch dry-run 可创建、打开 CDP、关闭，且报告脱敏扫描通过。当前脚本已补 AdsPower v2 create/start/stop gated dry-run 分支，但用户截图确认 Free 账号 API & MCP 仅限付费套餐，所以 AdsPower 不进入本轮自动化矩阵。
+6. 已改为双产品自动化 smoke：`node scripts\three_browser_benchmark_readiness.mjs --dry-run --products=personal-pilot,bitbrowser` 生成 `data/reports/three-browser-benchmark/readiness/readiness-1783475270066.json`，PersonaPilot 与 BitBrowser 均打开 `https://browserleaks.com/ip`、CDP 可达、关闭成功，AdsPower 被显式 skipped。
+7. 已新增 `scripts/two_browser_benchmark_matrix.mjs`，输出 `config.redacted.json`、`profiles.redacted.json`、`raw/*.json`、`summary.json`、`scorecard.md`，并把 `ip-api` 页面探针替换为 HTTPS `ipwho.is`，原始 IP 只保留 SHA256 hash。
+8. 已跑当前可用基础 launch-loop 子矩阵：Clash 机场 US/JP `matrix-1783480553485` 为 `40/40 ok`，PersonaPilot `20/20`、BitBrowser `20/20`，国家匹配 `40/40`；UDEAL-LA `matrix-1783480223173` 为 `19/20 ok`，PersonaPilot `10/10`、BitBrowser `9/10`，唯一失败是 BitBrowser 内存保护阈值。敏感扫描只命中脚本自身脱敏正则。
+9. 已新增 `scripts/two_browser_benchmark_deep_matrix.mjs`，输出 `screenshots/`、`har-lite/`、`cdp-trace/`、`detector-reports/`、`transport/`、`behavior/`、raw 和 scorecard；当前完整可执行主跑 `deep-1783482661915` 为 `6/6 ok`，国家匹配 `6/6`、TLS/H2 `6/6`、行为 `5/6`、detector 主跑 PersonaPilot `18/18`、BitBrowser `12/12`。BitBrowser Clash JP detector 瞬时缺口已用 `deep-1783490711021` 补跑为 `6/6`。Clash 已恢复 `rule` 和原 GLOBAL hash。
+10. 已新增 `scripts/two_browser_missing_probe_matrix.mjs` 并按 BitBrowser 免费额度只跑 targeted probe：PersonaPilot `missing-1783494756348`、BitBrowser `missing-1783495149879` 均 `3/3 ok`；双方 country/timezone/TLS `3/3`、WebRTC candidate `0/3`、canvas in-session `3/3`、BrowserLeaks DNS observed `3/3`、UA/core major match `0/3`、CreepJS trust/lies parser `0/3`。
+
+下一阶段按“本地可落地优先、外部阻塞暂缓”推进：
+
+1. 基于 deep/missing raw artifact 继续本地 P1：workflow 历史/控制、workbench target binding、CreepJS structured parser；不把单次 detector 可达性误写成长期过检率。
+2. 指纹轨道从已完成 W0 转入 W1 本地项：Worker 注入、人格库/相干性硬门禁、行为 L5 接线、信任双栈统一。
+3. Germany 节点、AdsPower paid/trial API、受控 DNS-token 和 BitBrowser 额度属于外部条件；条件未变化前不重复执行、不刷新评分。
+
+## Reopened：指纹 / 反检测优化轨道（49–56）
+
+2026-07-08 起用户明确推进「追平 BitBrowser + 不对称支配」独立轨道。与 Mainline / 横评并列；执行以 **`PLAN.md`** 为准。
+
+| 波次 | 范围 | 关键产出 |
+| --- | --- | --- |
+| W0 | 49 A1/A3/D1/C1 | **已完成（2026-07-10）**：toString 原生化、UA/内核单一真相源、鼠标重试/往返压缩、DNS 假阳性修正 |
+| W1 | 50 B1/C1 + 52 DP1/2 + 53 L5 + 56 T1 | Worker 注入、相干性硬门禁、信任双栈 |
+| W2 | 50 A + 51 S + 54 CP + 56 E/F | uTLS、指纹面、并发预留、Graph 出站 |
+| W3 | 51/52/53/54/55 收敛 | 老化、纵向指标、成本不对称闭环 |
+| W4 | 56 P/T/B/R | Provider smoke、trust.yaml、CreepJS parser、RPA MVP |
+
+文档归档：`docs/archive/README.md`（2026-07-09 已移入 27+ 过程/专题文档 + 12 根目录历史文件）。

@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/logger"
+	transportpkg "personal-pilot/backend/internal/transport"
 )
 
 // ─── Clash 标准测速 URL ───
@@ -117,7 +120,7 @@ func httpClientDelayTest(
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, Error: err.Error()}
 	}
-	latency, statusCode, err := checkHTTPClientGET(ctx, client, testURL, "PersonalPilot/1.0")
+	latency, statusCode, err := checkHTTPClientGET(ctx, client, testURL, transportpkg.ProductUserAgent)
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, LatencyMs: latency, Error: err.Error()}
 	}
@@ -223,7 +226,7 @@ func urlToMeta(rawURL string) (C.Metadata, error) {
 // ─── 代理配置转换为 mihomo mapping ───
 
 func proxyConfigToMapping(src string) (map[string]any, error) {
-	src = strings.TrimSpace(src)
+	src = NormalizeStandardProxyScheme(src)
 	l := strings.ToLower(src)
 
 	// http/https 直连代理
@@ -245,25 +248,14 @@ func proxyConfigToMapping(src string) (map[string]any, error) {
 }
 
 func parseStandardProxy(src string, proxyType string) (map[string]any, error) {
-	rest := src[strings.Index(src, "://")+3:]
-
-	var username, password, hostport string
-	if atIdx := strings.LastIndex(rest, "@"); atIdx >= 0 {
-		userInfo := rest[:atIdx]
-		hostport = rest[atIdx+1:]
-		parts := strings.SplitN(userInfo, ":", 2)
-		username = parts[0]
-		if len(parts) > 1 {
-			password = parts[1]
-		}
-	} else {
-		hostport = rest
+	u, err := url.Parse(NormalizeStandardProxyScheme(src))
+	if err != nil {
+		return nil, fmt.Errorf("无法解析地址: %s", RedactProxyURL(src))
 	}
-	hostport = strings.SplitN(hostport, "/", 2)[0]
-
-	host, port := splitHostPort(hostport)
+	host := strings.TrimSpace(u.Hostname())
+	port, _ := strconv.Atoi(u.Port())
 	if host == "" || port == 0 {
-		return nil, fmt.Errorf("无法解析地址: %s", src)
+		return nil, fmt.Errorf("无法解析地址: %s", RedactProxyURL(src))
 	}
 
 	mapping := map[string]any{
@@ -272,7 +264,9 @@ func parseStandardProxy(src string, proxyType string) (map[string]any, error) {
 		"server": host,
 		"port":   port,
 	}
-	if username != "" {
+	if u.User != nil && strings.TrimSpace(u.User.Username()) != "" {
+		username := strings.TrimSpace(u.User.Username())
+		password, _ := u.User.Password()
 		mapping["username"] = username
 		mapping["password"] = password
 	}

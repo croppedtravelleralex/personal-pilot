@@ -54,12 +54,12 @@ func NewXrayManager(cfg *config.Config, appRoot string) *XrayManager {
 // ValidateProxyConfig 验证代理配置是否支持
 // 返回: supported bool, errorMsg string
 func ValidateProxyConfig(proxyConfig string, proxies []config.BrowserProxy, proxyId string) (bool, string) {
-	src := strings.TrimSpace(proxyConfig)
+	src := NormalizeStandardProxyScheme(proxyConfig)
 	found := false
 	if proxyId != "" {
 		for _, item := range proxies {
 			if strings.EqualFold(item.ProxyId, proxyId) {
-				src = strings.TrimSpace(item.ProxyConfig)
+				src = NormalizeStandardProxyScheme(item.ProxyConfig)
 				found = true
 				break
 			}
@@ -76,6 +76,11 @@ func ValidateProxyConfig(proxyConfig string, proxies []config.BrowserProxy, prox
 		return true, "" // 无代理配置，允许启动
 	}
 	if strings.EqualFold(src, "direct://") {
+		return true, ""
+	}
+	if _, ok, err := ParseSSHTunnelDirective(src); err != nil {
+		return false, fmt.Sprintf("代理 SSH 转发参数无效: %v", err)
+	} else if ok {
 		return true, ""
 	}
 	l := strings.ToLower(src)
@@ -106,11 +111,11 @@ func ValidateProxyConfig(proxyConfig string, proxies []config.BrowserProxy, prox
 // 注意: Xray 仅支持 vless/vmess/trojan/shadowsocks 等协议
 // hysteria2 不支持，需要使用 Hysteria 客户端或 sing-box
 func RequiresBridge(proxyConfig string, proxies []config.BrowserProxy, proxyId string) bool {
-	src := strings.TrimSpace(proxyConfig)
+	src := NormalizeStandardProxyScheme(proxyConfig)
 	if proxyId != "" {
 		for _, item := range proxies {
 			if strings.EqualFold(item.ProxyId, proxyId) {
-				src = strings.TrimSpace(item.ProxyConfig)
+				src = NormalizeStandardProxyScheme(item.ProxyConfig)
 				break
 			}
 		}
@@ -637,6 +642,12 @@ func (m *XrayManager) buildRuntimeConfig(key string, outbound map[string]interfa
 			"rules": []interface{}{
 				map[string]interface{}{
 					"type":        "field",
+					"network":     "udp",
+					"port":        53,
+					"outboundTag": "proxy-out",
+				},
+				map[string]interface{}{
+					"type":        "field",
 					"inboundTag":  []string{"socks-in"},
 					"outboundTag": "proxy-out",
 				},
@@ -744,30 +755,18 @@ func waitPortReady(host string, port int, timeout time.Duration) error {
 	return fmt.Errorf("端口 %d 不可用", port)
 }
 
-// nextAvailablePort 分配一个可用端口。
-// 采用二次验证策略：分配后立即再次绑定确认未被其他进程抢占，
-// 并在 EnsureBridge 层面加重试，彻底消除 TOCTOU 竞争窗口。
+// nextAvailablePort 分配一个可用端口（无 hold；适用于短生命周期探测）。
 func nextAvailablePort() (int, error) {
 	return nextAvailablePortWithRetry(10)
 }
 
 func nextAvailablePortWithRetry(maxRetries int) (int, error) {
 	for i := 0; i < maxRetries; i++ {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		port, release, err := reservePortNumber()
 		if err != nil {
 			continue
 		}
-		port := listener.Addr().(*net.TCPAddr).Port
-		listener.Close()
-		// 短暂等待确保 OS 释放端口
-		time.Sleep(10 * time.Millisecond)
-		// 二次验证端口确实可用（没有被其他进程抢占）
-		verifyListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-		if err != nil {
-			// 端口被抢占，重试
-			continue
-		}
-		verifyListener.Close()
+		release()
 		return port, nil
 	}
 	return 0, fmt.Errorf("无法分配可用端口，已重试 %d 次", maxRetries)

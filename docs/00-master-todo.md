@@ -2,6 +2,8 @@
 
 > 整合 docs/11-api-roadmap.md、docs/12-module-split-and-backlog.md、docs/13-tech-stack-and-effort.md 中所有待办。
 > 共 **190+ 项**，按优先级 P0→P4+ 排列。
+>
+> **维护口径（2026-07-10）**：本文件是历史聚合清单，不是 live truth；未勾选项可能已完成、部分实现或受外部条件阻塞。执行优先级以 `docs/02-current-state.md`、`docs/03-roadmap.md`、`docs/04-improvement-backlog.md` 和 `PLAN.md` 为准。改动前必须用代码与测试核验，不能仅按本文件复刻旧 TODO。
 
 ---
 
@@ -9,19 +11,21 @@
 
 ### 当前 Bug 修复
 
-- [ ] **补全 CDPExecutor 空实现** — `cdp_executor.go:ExecuteMutatedAction` switch 中 `MutatedScreenshot`(type 5)、`MutatedGetHtml`(type 6)、`MutatedGetText`(type 7) 落入 `default: return nil` 静默跳过，需补全执行逻辑
-- [ ] **`recording/play/stop` 端点仅在 `s.recording != nil` 时注册** — `server.go:L325-L327`，条件注册可能导致外部调用 404
+- [x] **为 `ExecuteMutatedAction` 补类型化结果通道** — 2026-07-10 已新增 `MutatedActionExecutionResult` 与 `ExecuteMutatedActionWithResult`，Screenshot/HTML/Text 使用独立可选字段返回；原 `ExecuteMutatedAction` 保持 error-only 兼容 wrapper；未知 action type 现在返回显式错误
+- [x] **稳定注册 `recording/play/stop` 路由** — 2026-07-10 已改为始终注册；Recorder 未注入时返回 `503`，不再因条件注册返回 `404`
 - [ ] **去掉 mihomo 依赖** — 唯一用途 `adapter.ParseProxy` 测速可走现有 fallback `httpClientDelayTest()`，移除后间接依赖从 80+ 降到 20
 
-### 代理订阅管理（API 缺失）
+### 代理订阅管理（durable API 已落地）
 
-- [ ] `POST /api/proxy/subscribe` — 添加代理订阅源（URL + 自动刷新）
-- [ ] `DELETE /api/proxy/subscribe/{id}` — 删除订阅源
-- [ ] `POST /api/proxy/subscribe/{id}/refresh` — 手动刷新订阅
-- [ ] `GET /api/proxy/subscribe/list` — 订阅源列表
-- [ ] `GET /api/proxy/subscribe/{id}/nodes` — 订阅源下的所有节点
-- [ ] `POST /api/proxy/subscribe/{id}/validate` — 验证订阅源可用性（预览不导入）
-- [ ] `POST /api/proxy/subscribe/{id}/import-clash` — 从 Clash 配置文件导入
+> 2026-07-10：SQLite migration 16、durable subscription store、稳定节点归属、事务式 refresh/replace、URL/Clash 解析、自动刷新循环和 API 脱敏均已落地；刷新拉取或 SQL 插入失败时旧节点保持不变。
+
+- [x] `POST /api/proxy/subscribe` — 添加 URL 订阅源并立即拉取/持久化节点，支持自动刷新设置
+- [x] `DELETE /api/proxy/subscribe/{id}` — 事务删除订阅及其所属节点
+- [x] `POST /api/proxy/subscribe/{id}/refresh` — 先拉取/解析，后在单事务内替换节点
+- [x] `GET /api/proxy/subscribe/list` — 返回脱敏 URL、节点数、刷新时间和 lastError
+- [x] `GET /api/proxy/subscribe/{id}/nodes` — 返回稳定 node ID 和脱敏配置
+- [x] `POST /api/proxy/subscribe/{id}/validate` — 预览解析结果，不修改已存节点
+- [x] `POST /api/proxy/subscribe/import-clash` — 静态导入 Clash YAML；静态源刷新时明确返回 `409 subscription_not_refreshable`
 
 ### 手动代理添加
 
@@ -419,4 +423,4 @@
 | **Phase6*** | 信任继承与环境一致性治理 | 10 | 待估 |
 | **总计** | | **~190+** | **~12-18 月** |
 
-> \* Phase6 详见 `docs/39-adversarial-trust-inheritance.md`，已纳入 `docs/99-implementation-roadmap.md` 作为 Phase 6
+> \* Phase6 详见 `docs/50-asymmetric-dominance-architecture.md`（原 `docs/39-adversarial-trust-inheritance.md` 已归档），已纳入 `docs/99-implementation-roadmap.md` 作为 Phase 6

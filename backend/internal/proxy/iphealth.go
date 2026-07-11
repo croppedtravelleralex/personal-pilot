@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/transport"
 )
 
 const (
@@ -71,7 +72,7 @@ func FetchProxyIPInfo(
 		metadataErrors[endpoint.source] = err.Error()
 	}
 
-	latency, statusCode, canaryErr := checkHTTPClientGET(ctx, client, defaultProxyHTTPSCanaryURL, "PersonalPilot/1.0")
+	latency, statusCode, canaryErr := checkHTTPClientGET(ctx, client, defaultProxyHTTPSCanaryURL, transport.ProductUserAgent)
 	canaryData := map[string]interface{}{
 		"source":              "https-canary",
 		"metadataErrors":      metadataErrors,
@@ -120,7 +121,7 @@ func findProxyConfig(proxyId string, proxies []config.BrowserProxy) (string, err
 func fetchProxyIPInfoEndpoint(client *http.Client, endpointURL string, source string) (map[string]interface{}, error) {
 	req, _ := http.NewRequest(http.MethodGet, endpointURL, nil)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "PersonalPilot/1.0")
+	req.Header.Set("User-Agent", transport.ProductUserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {

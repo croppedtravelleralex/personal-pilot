@@ -25,7 +25,6 @@ if (-not $resolvedRelease.StartsWith($ProjectRoot, [System.StringComparison]::Or
 Copy-Item -LiteralPath $resolvedRelease -Destination $rootExe -Force
 
 $duplicateEntries = @(
-  $releaseExe,
   (Join-Path $ProjectRoot "src-tauri\target\release\persona-pilot-desktop.exe"),
   (Join-Path $ProjectRoot "src-tauri\target\release\PersonaPilot.exe"),
   (Join-Path $ProjectRoot "portable.exe")
@@ -39,15 +38,6 @@ foreach ($entry in $duplicateEntries) {
   }
   if ($resolved -ieq (Resolve-Path -LiteralPath $rootExe).Path) { continue }
   Remove-Item -LiteralPath $resolved -Force
-}
-
-$releaseDir = Join-Path $ProjectRoot "src-tauri\target\release"
-if (Test-Path -LiteralPath $releaseDir) {
-  $resolvedReleaseDir = (Resolve-Path -LiteralPath $releaseDir).Path
-  if (-not $resolvedReleaseDir.StartsWith($ProjectRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to delete outside project: $resolvedReleaseDir"
-  }
-  Remove-Item -LiteralPath $resolvedReleaseDir -Recurse -Force
 }
 
 $item = Get-Item -LiteralPath $rootExe

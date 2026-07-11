@@ -636,6 +636,19 @@ fn validation_probe_expression() -> &'static str {
     }
   } catch (error) { signals.push(signal('camoufox-profile-browser-webrtc', 'webrtc', 'failed', 'Camoufox WebRTC runtime probe', 'Camoufox WebRTC probe failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0)); }
   const storageStarted = performance.now();
+  try {
+    if (!window.__personalPilotPointerOverlay) {
+      const dot = document.createElement('div');
+      dot.style.cssText = 'position:fixed;width:16px;height:16px;border-radius:999px;border:2px solid #fff;background:rgba(20,120,255,.85);z-index:2147483647;pointer-events:none;transform:translate(-9999px,-9999px)';
+      document.documentElement.appendChild(dot);
+      const move = (e) => { dot.style.transform = 'translate(' + (e.clientX - 8) + 'px,' + (e.clientY - 8) + 'px)'; };
+      window.addEventListener('mousemove', move, true);
+      window.__personalPilotPointerOverlay = { destroy: () => { window.removeEventListener('mousemove', move, true); dot.remove(); delete window.__personalPilotPointerOverlay; } };
+    }
+    signals.push(signal('camoufox-profile-browser-pointer', 'fingerprint', 'succeeded', 'Camoufox pointer overlay probe', 'Pointer overlay installed for automation visibility.', runtimeDetail, 0));
+  } catch (error) {
+    signals.push(signal('camoufox-profile-browser-pointer', 'fingerprint', 'warning', 'Camoufox pointer overlay probe', 'Pointer overlay install failed.', `${runtimeDetail}; error=${error && error.message ? error.message : String(error)}`, 0));
+  }
   let localStorageAvailable = false;
   let sessionStorageAvailable = false;
   try { localStorage.setItem('persona-pilot-camoufox-local', '1'); localStorageAvailable = localStorage.getItem('persona-pilot-camoufox-local') === '1'; localStorage.removeItem('persona-pilot-camoufox-local'); } catch (_) {}

@@ -1,0 +1,20 @@
+{
+  "schema": "behavior_primitive_plan_v1",
+  "name": "multi-page-scrape-generic",
+  "description": "通用多页抓取：example.com + httpbin — 不依赖平台登录",
+  "steps": [
+    { "primitive": "open_url", "params": { "url": "https://example.com" } },
+    { "primitive": "wait_for_content_stable", "params": { "timeoutMs": 8000 } },
+    { "primitive": "dom_snapshot", "params": { "label": "page_1" } },
+    { "primitive": "idle", "params": { "ms": 2000 } },
+    { "primitive": "get_page_html", "params": { "label": "html_1" } },
+    { "primitive": "open_url", "params": { "url": "https://httpbin.org/html" } },
+    { "primitive": "wait_for_content_stable", "params": { "timeoutMs": 8000 } },
+    { "primitive": "dom_snapshot", "params": { "label": "page_2" } },
+    { "primitive": "get_page_html", "params": { "label": "final_html" } }
+  ],
+  "passCriteria": {
+    "pagesCompletedMin": 2,
+    "totalBytesMin": 500
+  }
+}

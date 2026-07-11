@@ -203,7 +203,7 @@ RPA 层应优先支持：
 - 渲染层特征（canvas / webgl / audio / fonts）
 - 网络出口与代理地域一致性
 
-详细字段级清单见 [docs/15-first-family-core-controls.md](/D:/SelfMadeTool/persona-pilot/docs/15-first-family-core-controls.md)。
+详细字段级清单见 [docs/15-first-family-core-controls.md](15-first-family-core-controls.md)。
 
 代理驻留的默认建议：
 
@@ -292,9 +292,9 @@ RPA 层应优先支持：
 
 ## 相关本地文件
 
-- [src/network_identity/fingerprint_policy.rs](/D:/SelfMadeTool/persona-pilot/src/network_identity/fingerprint_policy.rs)
-- [src/network_identity/fingerprint_consistency.rs](/D:/SelfMadeTool/persona-pilot/src/network_identity/fingerprint_consistency.rs)
-- [src/network_identity/validator.rs](/D:/SelfMadeTool/persona-pilot/src/network_identity/validator.rs)
-- [src/services/desktop.ts](/D:/SelfMadeTool/persona-pilot/src/services/desktop.ts)
-- [src/features/proxies/model.ts](/D:/SelfMadeTool/persona-pilot/src/features/proxies/model.ts)
-- [src/features/automation/model.ts](/D:/SelfMadeTool/persona-pilot/src/features/automation/model.ts)
+- [src/network_identity/fingerprint_policy.rs](../src/network_identity/fingerprint_policy.rs)
+- [src/network_identity/fingerprint_consistency.rs](../src/network_identity/fingerprint_consistency.rs)
+- [src/network_identity/validator.rs](../src/network_identity/validator.rs)
+- [src/services/desktop.ts](../src/services/desktop.ts)
+- [src/modules/browser/types.ts](../src/modules/browser/types.ts)
+- [src/modules/browser/api.ts](../src/modules/browser/api.ts)

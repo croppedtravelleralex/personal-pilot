@@ -1,0 +1,10 @@
+id: platform-console-readonly-v1
+version: 1
+description: 创作者/控制台只读巡检
+steps:
+  - type: navigate
+    url: "{{platform.urls.creatorCenter}}"
+  - type: wait-for-selector
+    selector: "{{platform.selectors.creator.dashboardTitle}}"
+    waitTimeoutMs: 20000
+  - type: screenshot

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -24,14 +25,19 @@ type TestResult struct {
 
 // proxyEndpoint 从代理配置中提取 server:port，用于 TCP ping
 func proxyEndpoint(src string) (string, error) {
-	src = strings.TrimSpace(src)
+	src = NormalizeStandardProxyScheme(src)
 	l := strings.ToLower(src)
 
 	// 标准 URL 格式: socks5://host:port, http://host:port
 	if strings.HasPrefix(l, "socks5://") || strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") {
-		hostport := src[strings.Index(src, "//")+2:]
-		hostport = strings.SplitN(hostport, "/", 2)[0]
-		return hostport, nil
+		u, err := url.Parse(src)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(u.Hostname()) == "" || strings.TrimSpace(u.Port()) == "" {
+			return "", fmt.Errorf("标准代理地址缺少 host 或 port")
+		}
+		return net.JoinHostPort(u.Hostname(), u.Port()), nil
 	}
 
 	// vmess:// URL (base64 encoded JSON)
@@ -216,9 +222,6 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
-
-
-
 
 // isUnsupportedProtocol 判断是否为不支持的协议（hysteria/hysteria2）
 func isUnsupportedProtocol(src string) bool {

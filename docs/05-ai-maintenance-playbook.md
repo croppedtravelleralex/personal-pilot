@@ -8,8 +8,11 @@
 4. 读 `docs/19-phase-plan-and-scorecard.md`。
 5. 读 `docs/03-roadmap.md` 和 `docs/04-improvement-backlog.md`。
 6. 如任务涉及 M4-M20 执行、harness、commit 切片或验收边界，读 `docs/40-m4-m20-execution-board.md`。
-7. 如任务明确重新开启外部分发、发布说明或 release performance，再读 `docs/24-external-distribution-readiness.md` 和 `docs/release-performance-mitigation-plan.md`；默认本机自用范围下这两份只作历史上下文。
-8. 需要执行任务时，再按范围读相关代码和测试。
+7. **Stealth / 平台 live（XHS 等）**：读 `docs/45-stealth-platform-handoff.md` → `docs/44-dual-track-99plus-spec.md`。
+8. 如任务明确重新开启外部分发、发布说明或 release performance，再读 `docs/24-external-distribution-readiness.md` 和 `docs/release-performance-mitigation-plan.md`；默认本机自用范围下这两份只作历史上下文。
+9. 如任务明确涉及 AdsPower / BitBrowser / PersonaPilot 横评、指纹浏览器商业竞品评分或三方 benchmark，读 `docs/47-personal-pilot-adspower-bitbrowser-benchmark.md` 和 `docs/48-three-browser-benchmark-matrix-plan.md`；该轨道独立于本机自用完成度。
+10. **指纹 / 反检测优化（49–56）**：先读 **`PLAN.md`**，再按波次读 `docs/49`–`docs/56` 对应 Task；改代码后跑 `PLAN.md` §3 门禁。
+11. 需要执行任务时，再按范围读相关代码和测试。
 
 ## 默认事实
 
@@ -17,14 +20,18 @@
 - Local self-use：`100% / 0% / green`
 - 唯一未验：CAPTCHA / SMS / Email 真实账号凭证 smoke
 - Fingerprint：`80` declared controls / `26` runtime projected fields / `450` taxonomy seed / strict observed coverage `450 / 450`，`passed_full_observed_fingerprint_coverage`
-- Behavior：`13` shipped primitives / `8` page archetypes / P10 audit contract / `450` taxonomy seed / local deterministic replay `461 / 450`，`passed_full_local_replay_runtime`，`contractOnly=0`
+- Behavior：`35` declared primitives；Go `30` 个 `ExecutePrimitive` shipped 分支；Rust `13` 个 active-runner-backed primitives / `8` page archetypes / `450` taxonomy seed / local deterministic replay `461 / 450`，最新状态 `passed_full_local_replay_runtime`，`contractOnly=0`。
 - Session：cookie / localStorage / sessionStorage restart continuity 已落地；profile-scoped `SessionBundle` export、import preflight、dry-run、confirmed local restore write path 已 verified；跨机器/第二机 profile portability 已取消
+- Benchmark：2026-07-07 用户已明确重开 AdsPower / BitBrowser / PersonaPilot 横评。AdsPower 8.6.3 已安装到 `D:\SelfMadeTool\ads\AdsPowerGlobal`，但用户截图确认 Free 账号 API & MCP 仅限付费套餐；本轮 AdsPower 只作 API-paywalled/manual-only 观察。BitBrowser 7.1.3 位于 `D:\SelfMadeTool\bitbrowser` 且 Local API `54345` 可访问。2026-07-08 代理预检已完成：Clash 机场 US/JP 可用但 DE 缺，成功节点 ip-api `proxy=true`；UDEAL 经 panda/本机桥为 LA 单出口，ip-api `proxy=false`、`hosting=false`。`scripts/three_browser_benchmark_readiness.mjs --dry-run --products=personal-pilot,bitbrowser` 已跑通双产品 UDEAL-LA 创建/打开/CDP/tab/关闭，报告 `data/reports/three-browser-benchmark/readiness/readiness-1783475270066.json`。`scripts/two_browser_benchmark_matrix.mjs` 已跑基础 launch-loop：Clash `matrix-1783480553485` 为 `40/40 ok`，UDEAL-LA `matrix-1783480223173` 为 `19/20 ok`（BitBrowser 一次内存保护失败）。`scripts/two_browser_benchmark_deep_matrix.mjs` 已跑当前可执行深度矩阵：`deep-1783482661915` 为 `6/6 ok`，国家匹配 `6/6`、TLS/H2 `6/6`、行为 `5/6`、detector 主跑 PersonaPilot `18/18`、BitBrowser `12/12`；BitBrowser Clash JP detector 瞬时缺口已用 `deep-1783490711021` 补跑 `6/6`。低配额 missing probe 已跑：PersonaPilot `missing-1783494756348`、BitBrowser `missing-1783495149879` 均 `3/3 ok`，双方 WebRTC candidate `0/3`、canvas in-session `3/3`、UA/core match `0/3`、CreepJS trust/lies parser `0/3`；当前评分 PersonaPilot `73/100`、BitBrowser `71/100`、AdsPower `N/A`。剩余缺口是 DE 同类节点、AdsPower paid/trial API、受控 DNS-token proof、CreepJS structured trust/lies 和 10-run cross-session drift；BitBrowser 免费额度刷新前不要跑高消耗矩阵。
 
 ## 汇报规则
 
 - 先说明当前结论，再给证据。
 - Mainline 和 Local self-use 都按 `100% / 0% / green` 写。
 - 不把历史 Overall `40% / 60% / yellow`、AdsPower catch-up、外部分发、release performance 或第二机目标写成当前待办。
+- 用户明确重开 AdsPower/BitBrowser 横评时，必须把它写成独立 benchmark track；不得反向污染 Mainline / Local self-use `100% / 0% / green`。
+- 涉及 benchmark 代理时，先查 `data/reports/three-browser-benchmark/proxy-preflight/proxy-preflight-summary-*.json`；Clash 机场和 UDEAL-LA 必须拆成子矩阵，不得追问已可本机确认的 Clash controller 或 panda SSH 可达性。
+- 涉及当前 benchmark 执行时，先确认是否真的有新增条件：DE 同类节点、AdsPower paid/trial API、受控 DNS-token 域名、BitBrowser 免费打开额度是否刷新，或需要重跑的 detector 变更。基础 launch-loop 用 `scripts/two_browser_benchmark_matrix.mjs`，深度矩阵用 `scripts/two_browser_benchmark_deep_matrix.mjs`，低配额缺口补测用 `scripts/two_browser_missing_probe_matrix.mjs`；Clash 和 UDEAL 保持分子矩阵。没有 AdsPower 付费/试用 API 时，不再反复要求用户找 key，直接标记 AdsPower 为 API-paywalled/manual-only。若未来启用 AdsPower API，必须直连 `127.0.0.1:50325`，当前 `local.adspower.com` 会被 Clash fake-ip 解析到 `198.18.*`。
 - 不复活 `77% / 23%` 或 `82% / 18%` 作为 live truth。
 - 本机自用范围下，不再把外部分发 smoke、release performance budget、干净 Win11/第二机或跨机器 SessionBundle 写成阻塞项。
 - 报告尽量短，优先列 landed result、当前阻塞、下一步。
@@ -35,6 +42,7 @@
 - 路线变化：更新 `03-roadmap.md`。
 - 风险、债务、后续项：更新 `04-improvement-backlog.md`。
 - 接手顺序、验证纪律变化：更新 `05-ai-maintenance-playbook.md`。
+- AdsPower / BitBrowser / PersonaPilot 三方横评变化：更新 `02-current-state.md`、`03-roadmap.md`、`04-improvement-backlog.md`、`47` 横评报告和 `48` 矩阵计划；实测前不得刷新最终评分。
 - 只有用户明确重启外部分发、发布说明、人工 smoke 或 release performance 目标时，才更新 `24-external-distribution-readiness.md` / `release-performance-mitigation-plan.md`；默认只更新当前本机 docs。
 - 根目录入口保持薄；除非用户要求，不改根目录文档。
 
@@ -72,5 +80,6 @@
 - 涉及 M15 browser pool 时，`scripts/m15_browser_pool_gate.ps1` 的 `passed_real_pool_process_integration` 代表本机 pool lifecycle、process attach/release cleanup、proxy/session binding cleanup 和最新真实 browser process proof 已组合通过。
 - 涉及 observed fingerprint coverage 时，`scripts/observed_fingerprint_coverage_gate.ps1` 只统计 `layer=observed` 且 metadata 完整的 signals；当前 full proof 是 `passed_full_observed_fingerprint_coverage`，`450 / 450`，来源是本机真实浏览器/CDP 采集。
 - 涉及 live replay runtime 时，`scripts/live_replay_runtime_gate.ps1` 当前应为 `passed_full_local_replay_runtime`，`461 / 450`，`contractOnly=0`。
+- 涉及 **Stealth / 平台 live** 时：`scripts/platform_99_gate.ps1` PGS 离线通过 ≠ XHS 页面可达；`scripts/capability_scenario_suite.ps1` 雷达通过 ≠ 目标站 live；workbench navigate 必须校验 `pageUrl` 非 `chrome-error`；`ERR_NO_SUPPORTED_PROXIES` 表示 Chrome 代理参数错误（常见 `socks5h://`）；UDEAL 等代理 live 常需 `?pp_via_ssh=panda`；详见 `docs/45-stealth-platform-handoff.md`。
 - 涉及 M10 headed stability 时，`scripts/m10_headed_stability_gate.ps1` 的 `passed_long_task_stability_coherence` 代表本机 headed_external validation_probe 的 3-run stability/coherence matrix 通过。
 - 涉及 M15 browser process 时，`scripts/m15_browser_process_gate.ps1` 的 `passed_real_browser_process_prewarm_cleanup` 代表脚本启动自有本机 browser process、CDP ready、记录 process/RSS snapshot 并清理自有 PID tree。

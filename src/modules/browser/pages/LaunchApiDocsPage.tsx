@@ -276,6 +276,9 @@ const DOC_API_INDEX = `# 接口总览
 |------|------|------|------|
 | 健康检查 | GET | \`/api/health\` | 检查 Launch 服务是否可用 |
 | 实例配置管理 | GET / POST | \`/api/profiles\` | 查询实例列表，或创建包含代理/标签/关键字/分组的实例配置 |
+| 代理订阅管理 | POST / GET / DELETE | \`/api/proxy/subscribe\`、\`/api/proxy/subscribe/list\`、\`/api/proxy/subscribe/{id}\` | SQLite 持久化订阅源与所属代理节点 |
+| 订阅刷新与预览 | POST / GET | \`/api/proxy/subscribe/{id}/refresh\`、\`/validate\`、\`/nodes\` | 事务刷新、只读预览和脱敏节点列表 |
+| Clash 静态导入 | POST | \`/api/proxy/subscribe/import-clash\` | 从 Clash YAML 创建不可自动刷新的静态订阅 |
 | 单实例配置管理 | GET / PUT / DELETE | \`/api/profiles/{profileId}\` | 查询、更新、删除指定实例配置 |
 | 按 Code 启动 | GET | \`/api/launch/{code}\` | 兼容旧版、最快捷的唤起方式 |
 | 选择器启动 | POST | \`/api/launch\` | 支持 code / profileId / 名称 / 关键字 / 标签 / 分组 |

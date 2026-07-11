@@ -67,6 +67,31 @@ func ConnectPageCDP(debugPort int) (*websocket.Conn, error) {
 	return conn, err
 }
 
+// ConnectPageCDPForTarget connects to a specific tab target when tabID is non-empty.
+func ConnectPageCDPForTarget(debugPort int, tabID string) (*websocket.Conn, error) {
+	tabID = strings.TrimSpace(tabID)
+	if tabID == "" {
+		return ConnectPageCDP(debugPort)
+	}
+	targets, err := listCDPTargets(debugPort)
+	if err != nil {
+		return nil, err
+	}
+	for _, target := range targets {
+		if target.ID == tabID {
+			if target.WebSocketDebuggerURL == "" {
+				return nil, fmt.Errorf("tab %q has no debugger url", tabID)
+			}
+			ws, _, err := behaviorWSDialer.Dial(target.WebSocketDebuggerURL, nil)
+			if err != nil {
+				return nil, fmt.Errorf("ws dial tab %q: %w", tabID, err)
+			}
+			return ws, nil
+		}
+	}
+	return nil, fmt.Errorf("tab target %q not found on port %d", tabID, debugPort)
+}
+
 // ListCDPTargets returns all CDP targets for the given debug port.
 func ListCDPTargets(debugPort int) ([]cdpTarget, error) {
 	return listCDPTargets(debugPort)

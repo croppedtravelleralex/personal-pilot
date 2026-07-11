@@ -2707,6 +2707,22 @@ pub fn read_local_runtime_status(
     build_runtime_status(&state)
 }
 
+fn terminate_orphan_personal_pilot_cores() {
+    // 清理孤儿 core（上次崩溃残留、仍持有单实例互斥量的进程）。
+    // 非致命：失败仅记录，不阻断本次 core 启动。用 taskkill + 隐藏窗口 + 空 stdio，
+    // 避免 GUI 子系统下继承空句柄导致子进程初始化失败或阻塞。
+    let result = Command::new("taskkill")
+        .args(["/F", "/IM", "personal-pilot-core.exe"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+    if let Err(error) = result {
+        eprintln!("terminate orphan personal-pilot-core skipped: {error}");
+    }
+}
+
 #[tauri::command]
 pub fn start_personal_pilot_core(
     state: State<'_, DesktopState>,
@@ -2744,6 +2760,7 @@ pub fn start_personal_pilot_core(
 
     let snapshot = read_desktop_settings(Some(&state.database_url));
     let project_root = PathBuf::from(&snapshot.project_root);
+    terminate_orphan_personal_pilot_cores();
     let binary_path = resolve_core_bridge_binary(&project_root)?;
     let (log_dir, stdout_path, stderr_path) = core_bridge_log_paths(&snapshot);
     fs::create_dir_all(&log_dir).map_err(|error| {

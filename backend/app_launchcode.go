@@ -74,7 +74,25 @@ func (a *App) CopyProfile(profileId string, newName string) (*browser.Profile, e
 }
 
 func (a *App) WorkbenchNavigateProfile(profileId string, rawURL string) error {
-	return a.SynchronizerNavigateProfile(profileId, rawURL)
+	results, err := a.WorkbenchExecuteActions(profileId, []launchcode.ActionRequest{{
+		Type:              "navigate",
+		URL:               rawURL,
+		PostWaitMs:        2500,
+		HumanizationLevel: "high",
+	}})
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		return fmt.Errorf("navigate returned no results")
+	}
+	if !results[0].OK {
+		if results[0].Error != "" {
+			return fmt.Errorf("%s", results[0].Error)
+		}
+		return fmt.Errorf("navigate failed")
+	}
+	return nil
 }
 
 func (a *App) WorkbenchRefreshProfile(profileId string) error {
@@ -166,6 +184,129 @@ func (a *App) WorkbenchScrollPage(profileID string, distance uint32) error {
 	}
 	defer executor.Close()
 	return executor.ExecuteHumanizedScroll(distance)
+}
+
+func (a *App) WorkbenchCaptureFullReport(profileID string) (*launchcode.WorkbenchFullReport, error) {
+	profile, err := a.runningProfileForWorkbench(profileID)
+	if err != nil {
+		return nil, err
+	}
+	executor, err := connectCDPExecutor(profile.DebugPort)
+	if err != nil {
+		return nil, err
+	}
+	defer executor.Close()
+
+	now := time.Now()
+	report := &launchcode.WorkbenchFullReport{
+		ProfileID:      profileID,
+		Tabs:           []browser.Tab{},
+		Cookies:        []map[string]interface{}{},
+		LocalStorage:   map[string]string{},
+		SessionStorage: map[string]string{},
+		Failures:       []launchcode.WorkbenchReportFailure{},
+		CapturedAt:     now.UTC().Format(time.RFC3339Nano),
+		Source:         "local-cdp",
+	}
+	addFailure := func(step string, err error) {
+		if err == nil {
+			return
+		}
+		report.Failures = append(report.Failures, launchcode.WorkbenchReportFailure{
+			Step:  step,
+			Error: err.Error(),
+		})
+	}
+
+	url, err := executor.GetPageURL()
+	if err != nil {
+		return nil, fmt.Errorf("get page url: %w", err)
+	}
+	report.URL = url
+	title, err := executor.GetPageTitle()
+	if err != nil {
+		return nil, fmt.Errorf("get page title: %w", err)
+	}
+	report.Title = title
+	html, err := executor.EvaluateJS("document.documentElement ? document.documentElement.outerHTML : ''")
+	if err != nil {
+		return nil, fmt.Errorf("get page html: %w", err)
+	}
+	report.HTML = html
+	text, err := executor.EvaluateJS("document.body ? document.body.innerText : ''")
+	if err != nil {
+		return nil, fmt.Errorf("get page text: %w", err)
+	}
+	report.Text = text
+
+	if screenshot, err := executor.CaptureScreenshot(); err != nil {
+		addFailure("screenshot", err)
+	} else {
+		report.Screenshot = screenshot
+	}
+	if tabs, err := a.WorkbenchListTabs(profileID); err != nil {
+		addFailure("tabs", err)
+	} else if tabs != nil {
+		report.Tabs = tabs
+	}
+	if cookies, err := a.WorkbenchGetCookies(profileID); err != nil {
+		addFailure("cookies", err)
+	} else if cookies != nil {
+		report.Cookies = cookies
+	}
+	if localStorage, err := a.WorkbenchGetLocalStorage(profileID); err != nil {
+		addFailure("localStorage", err)
+	} else if localStorage != nil {
+		report.LocalStorage = localStorage
+	}
+	if sessionStorage, err := a.WorkbenchGetSessionStorage(profileID); err != nil {
+		addFailure("sessionStorage", err)
+	} else if sessionStorage != nil {
+		report.SessionStorage = sessionStorage
+	}
+	if fingerprint, err := a.WorkbenchFingerprintProfile(profileID); err != nil {
+		addFailure("fingerprint", err)
+	} else {
+		report.Fingerprint = fingerprint
+	}
+	if health, err := a.WorkbenchFingerprintHealthProfile(profileID); err != nil {
+		addFailure("fingerprintHealth", err)
+	} else {
+		report.FingerprintHealth = health
+	}
+	if identity, err := a.IdentityReportProfile(profileID); err != nil {
+		addFailure("identityReport", err)
+	} else {
+		report.IdentityReport = identity
+	}
+
+	return report, nil
+}
+
+func (a *App) WorkbenchShowMousePointer(profileID string) error {
+	profile, err := a.runningProfileForWorkbench(profileID)
+	if err != nil {
+		return err
+	}
+	executor, err := connectCDPExecutor(profile.DebugPort)
+	if err != nil {
+		return err
+	}
+	defer executor.Close()
+	return executor.ShowMousePointerOverlay()
+}
+
+func (a *App) WorkbenchHideMousePointer(profileID string) error {
+	profile, err := a.runningProfileForWorkbench(profileID)
+	if err != nil {
+		return err
+	}
+	executor, err := connectCDPExecutor(profile.DebugPort)
+	if err != nil {
+		return err
+	}
+	defer executor.Close()
+	return executor.HideMousePointerOverlay()
 }
 
 func (a *App) WorkbenchArrangeProfiles(profileIds []string, layout string) ([]launchcode.WorkbenchWindowPlacement, error) {
@@ -319,7 +460,11 @@ func (a *App) WorkbenchSwitchTab(profileID string, tabID string) error {
 	_, err = behavior.ExecuteCDP(conn, "Target.activateTarget", map[string]interface{}{
 		"targetId": tabID,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	resetCDPExecutorsForPort(profile.DebugPort)
+	return nil
 }
 
 func (a *App) WorkbenchCloseTab(profileID string, tabID string) error {
@@ -371,6 +516,26 @@ func (a *App) WorkbenchNewTab(profileID string, url string) (string, error) {
 // ─── Storage Operations ──────────────────────────────────────────────────────
 
 func (a *App) WorkbenchGetLocalStorage(profileID string) (map[string]string, error) {
+	return a.workbenchGetWebStorage(profileID, "localStorage")
+}
+
+func (a *App) WorkbenchSetLocalStorage(profileID string, items map[string]string) error {
+	return a.workbenchSetWebStorage(profileID, "localStorage", items)
+}
+
+func (a *App) WorkbenchGetSessionStorage(profileID string) (map[string]string, error) {
+	return a.workbenchGetWebStorage(profileID, "sessionStorage")
+}
+
+func (a *App) WorkbenchSetSessionStorage(profileID string, items map[string]string) error {
+	return a.workbenchSetWebStorage(profileID, "sessionStorage", items)
+}
+
+func (a *App) workbenchGetWebStorage(profileID string, storageName string) (map[string]string, error) {
+	storageName = strings.TrimSpace(storageName)
+	if storageName != "localStorage" && storageName != "sessionStorage" {
+		return nil, fmt.Errorf("unsupported storage %q", storageName)
+	}
 	profile, err := a.runningProfileForWorkbench(profileID)
 	if err != nil {
 		return nil, err
@@ -381,31 +546,34 @@ func (a *App) WorkbenchGetLocalStorage(profileID string) (map[string]string, err
 	}
 	defer conn.Close()
 
+	expression := fmt.Sprintf(`JSON.stringify(Object.assign({}, window.%s || {}))`, storageName)
 	raw, err := behavior.ExecuteCDP(conn, "Runtime.evaluate", map[string]interface{}{
-		"expression":    "JSON.stringify(window.localStorage)",
+		"expression":    expression,
 		"returnByValue": true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get localStorage: %w", err)
+		return nil, fmt.Errorf("get %s: %w", storageName, err)
 	}
 
-	var resp struct {
-		Result struct {
-			Value string `json:"value"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(raw, &resp); err != nil || resp.Result.Value == "" {
+	value := runtimeEvaluateStringValue(raw)
+	if strings.TrimSpace(value) == "" {
 		return map[string]string{}, nil
 	}
-
 	var items map[string]string
-	if err := json.Unmarshal([]byte(resp.Result.Value), &items); err != nil {
-		return nil, fmt.Errorf("parse localStorage: %w", err)
+	if err := json.Unmarshal([]byte(value), &items); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", storageName, err)
+	}
+	if items == nil {
+		items = map[string]string{}
 	}
 	return items, nil
 }
 
-func (a *App) WorkbenchSetLocalStorage(profileID string, items map[string]string) error {
+func (a *App) workbenchSetWebStorage(profileID string, storageName string, items map[string]string) error {
+	storageName = strings.TrimSpace(storageName)
+	if storageName != "localStorage" && storageName != "sessionStorage" {
+		return fmt.Errorf("unsupported storage %q", storageName)
+	}
 	profile, err := a.runningProfileForWorkbench(profileID)
 	if err != nil {
 		return err
@@ -416,21 +584,47 @@ func (a *App) WorkbenchSetLocalStorage(profileID string, items map[string]string
 	}
 	defer conn.Close()
 
-	for key, value := range items {
-		escapedKey := strings.ReplaceAll(key, `\`, `\\`)
-		escapedKey = strings.ReplaceAll(escapedKey, `"`, `\"`)
-		escapedVal := strings.ReplaceAll(value, `\`, `\\`)
-		escapedVal = strings.ReplaceAll(escapedVal, `"`, `\"`)
-		js := fmt.Sprintf(`localStorage.setItem("%s","%s")`, escapedKey, escapedVal)
-		_, err := behavior.ExecuteCDP(conn, "Runtime.evaluate", map[string]interface{}{
-			"expression":    js,
-			"returnByValue": true,
-		})
-		if err != nil {
-			return fmt.Errorf("set localStorage %s: %w", key, err)
-		}
+	payload, err := json.Marshal(items)
+	if err != nil {
+		return fmt.Errorf("marshal %s items: %w", storageName, err)
+	}
+	js := fmt.Sprintf(`(function(items){
+		var store = window.%s;
+		if (!store) return false;
+		Object.keys(items || {}).forEach(function(key) {
+			store.setItem(String(key), String(items[key]));
+		});
+		return true;
+	})(%s)`, storageName, string(payload))
+	raw, err := behavior.ExecuteCDP(conn, "Runtime.evaluate", map[string]interface{}{
+		"expression":    js,
+		"returnByValue": true,
+	})
+	if err != nil {
+		return fmt.Errorf("set %s: %w", storageName, err)
+	}
+	if strings.TrimSpace(runtimeEvaluateStringValue(raw)) == "false" {
+		return fmt.Errorf("%s is not available", storageName)
 	}
 	return nil
+}
+
+func runtimeEvaluateStringValue(raw json.RawMessage) string {
+	var direct struct {
+		Value interface{} `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &direct); err == nil && direct.Value != nil {
+		return fmt.Sprint(direct.Value)
+	}
+	var nested struct {
+		Result struct {
+			Value interface{} `json:"value"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &nested); err == nil && nested.Result.Value != nil {
+		return fmt.Sprint(nested.Result.Value)
+	}
+	return ""
 }
 
 // ─── Behavior Engine Operations ──────────────────────────────────────────────
@@ -657,6 +851,25 @@ func parseHumanizationLevel(level string) humanize.HumanizationLevel {
 	return humanize.LevelHigh
 }
 
+func (a *App) validateWorkbenchScriptPolicy(profile *BrowserProfile, actions []launchcode.ActionRequest) error {
+	if profileHasTag(profile, "allow-script-bypass") {
+		return nil
+	}
+	for _, action := range actions {
+		if !strings.EqualFold(strings.TrimSpace(action.Type), "script") {
+			continue
+		}
+		level := parseHumanizationLevel(action.HumanizationLevel)
+		if len(actions) > 0 && action.HumanizationLevel == "" {
+			level = parseHumanizationLevel(actions[0].HumanizationLevel)
+		}
+		if level <= humanize.LevelHigh {
+			return fmt.Errorf("script actions forbidden (tier≤T3): use humanized type/click; add profile tag allow-script-bypass to override")
+		}
+	}
+	return nil
+}
+
 // startCDPPoolCleanup starts a background goroutine that periodically removes
 // stale entries from the connection pool.
 func startCDPPoolCleanup() {
@@ -682,8 +895,34 @@ func startCDPPoolCleanup() {
 	})
 }
 
-func acquireCDPExecutor(debugPort int, humanizationLevel string) (*behavior.CDPExecutor, error) {
-	entryI, _ := cdpExecutorPool.LoadOrStore(debugPort, &cdpExecutorEntry{})
+func cdpPoolKey(debugPort int, tabID string) string {
+	tabID = strings.TrimSpace(tabID)
+	if tabID == "" {
+		return fmt.Sprintf("%d", debugPort)
+	}
+	return fmt.Sprintf("%d:%s", debugPort, tabID)
+}
+
+func resetCDPExecutorsForPort(debugPort int) {
+	prefix := fmt.Sprintf("%d", debugPort)
+	cdpExecutorPool.Range(func(key, value interface{}) bool {
+		keyStr, _ := key.(string)
+		if keyStr == prefix || strings.HasPrefix(keyStr, prefix+":") {
+			entry := value.(*cdpExecutorEntry)
+			entry.mu.Lock()
+			if entry.executor != nil {
+				_ = entry.executor.Close()
+			}
+			entry.mu.Unlock()
+			cdpExecutorPool.Delete(key)
+		}
+		return true
+	})
+}
+
+func acquireCDPExecutor(debugPort int, tabID string, humanizationLevel string, pid int) (*behavior.CDPExecutor, error) {
+	key := cdpPoolKey(debugPort, tabID)
+	entryI, _ := cdpExecutorPool.LoadOrStore(key, &cdpExecutorEntry{})
 	entry := entryI.(*cdpExecutorEntry)
 
 	entry.mu.Lock()
@@ -691,14 +930,19 @@ func acquireCDPExecutor(debugPort int, humanizationLevel string) (*behavior.CDPE
 
 	level := parseHumanizationLevel(humanizationLevel)
 	if entry.executor == nil || !entry.executor.IsConnected() {
-		ws, err := behavior.ConnectPageCDP(debugPort)
+		ws, err := behavior.ConnectPageCDPForTarget(debugPort, tabID)
 		if err != nil {
 			return nil, fmt.Errorf("connect CDP on port %d: %w", debugPort, err)
 		}
 		cfg := humanize.ConfigForLevel(level)
 		entry.executor = behavior.NewCDPExecutor(ws, cfg)
+		bindOSClickFallback(entry.executor, pid)
+		if err := entry.executor.EnableMinimalSession(); err != nil {
+			_ = entry.executor.Close()
+			entry.executor = nil
+			return nil, fmt.Errorf("cdp minimal session on port %d: %w", debugPort, err)
+		}
 	} else {
-		// Update middleware config if level differs
 		currentLevel := entry.executor.HumanizationLevel()
 		if currentLevel != level {
 			cfg := humanize.ConfigForLevel(level)
@@ -710,8 +954,9 @@ func acquireCDPExecutor(debugPort int, humanizationLevel string) (*behavior.CDPE
 	return entry.executor, nil
 }
 
-func releaseCDPExecutor(debugPort int) {
-	entryI, ok := cdpExecutorPool.Load(debugPort)
+func releaseCDPExecutor(debugPort int, tabID string) {
+	key := cdpPoolKey(debugPort, tabID)
+	entryI, ok := cdpExecutorPool.Load(key)
 	if !ok {
 		return
 	}
@@ -726,13 +971,13 @@ func releaseCDPExecutor(debugPort int) {
 		if entry.executor != nil {
 			_ = entry.executor.Close()
 		}
-		cdpExecutorPool.Delete(debugPort)
+		cdpExecutorPool.Delete(key)
 	}
 }
 
 // cdpPoolEntryForTest returns the entry for the given port, for testing only.
 func cdpPoolEntryForTest(debugPort int) *cdpExecutorEntry {
-	entryI, ok := cdpExecutorPool.Load(debugPort)
+	entryI, ok := cdpExecutorPool.Load(cdpPoolKey(debugPort, ""))
 	if !ok {
 		return nil
 	}
@@ -745,23 +990,21 @@ func (a *App) WorkbenchExecuteActions(profileID string, actions []launchcode.Act
 	if err != nil {
 		return nil, err
 	}
-	log := logger.New("WorkbenchActions")
-
-	// Start pool cleanup on first use
-	startCDPPoolCleanup()
-
-	// Extract humanization level from the first action (all actions share one executor)
-	humanizationLevel := ""
-	if len(actions) > 0 {
-		humanizationLevel = actions[0].HumanizationLevel
-	}
-
-	executor, err := acquireCDPExecutor(profile.DebugPort, humanizationLevel)
-	if err != nil {
+	if err := a.validateWorkbenchScriptPolicy(profile, actions); err != nil {
 		return nil, err
 	}
+	log := logger.New("WorkbenchActions")
 
-	// Leak protection: always release on exit, even on panic
+	startCDPPoolCleanup()
+
+	defaultLevel := ""
+	if len(actions) > 0 {
+		defaultLevel = actions[0].HumanizationLevel
+	}
+
+	var currentTabID string
+	var executor *behavior.CDPExecutor
+
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("panic in WorkbenchExecuteActions", logger.F("recover", fmt.Sprintf("%v", r)))
@@ -770,11 +1013,31 @@ func (a *App) WorkbenchExecuteActions(profileID string, actions []launchcode.Act
 			}
 			err = fmt.Errorf("internal panic: %v", r)
 		}
-		releaseCDPExecutor(profile.DebugPort)
+		if executor != nil {
+			releaseCDPExecutor(profile.DebugPort, currentTabID)
+		}
 	}()
 
 	results = make([]launchcode.ActionResult, 0, len(actions))
 	for _, action := range actions {
+		tabID := strings.TrimSpace(action.TabID)
+		level := strings.TrimSpace(action.HumanizationLevel)
+		if level == "" {
+			level = defaultLevel
+		}
+		if executor != nil && tabID != currentTabID {
+			releaseCDPExecutor(profile.DebugPort, currentTabID)
+			executor = nil
+		}
+		if executor == nil {
+			ex, acquireErr := acquireCDPExecutor(profile.DebugPort, tabID, level, profile.Pid)
+			if acquireErr != nil {
+				return results, acquireErr
+			}
+			executor = ex
+			currentTabID = tabID
+		}
+
 		result := launchcode.ActionResult{Type: action.Type}
 
 		// pre-wait
@@ -804,7 +1067,7 @@ func (a *App) WorkbenchExecuteActions(profileID string, actions []launchcode.Act
 		}
 
 		// dispatch by type
-		if err := a.dispatchAction(executor, &action, &result); err != nil {
+		if err := a.dispatchAction(executor, profile, &action, &result); err != nil {
 			result.OK = false
 			result.Error = err.Error()
 			result.ErrorCode = string(launchcode.ErrActionFailed)
@@ -819,6 +1082,11 @@ func (a *App) WorkbenchExecuteActions(profileID string, actions []launchcode.Act
 			}
 			if title, err := executor.GetPageTitle(); err == nil {
 				result.PageTitle = title
+			}
+			if browser.IsNavigationErrorPage(result.PageURL) {
+				result.OK = false
+				result.Error = "navigation landed on browser error page: " + result.PageURL
+				result.ErrorCode = "navigation_error_page"
 			}
 		}
 
@@ -841,33 +1109,17 @@ func (a *App) WorkbenchExecuteActions(profileID string, actions []launchcode.Act
 	return results, nil
 }
 
-func (a *App) dispatchAction(executor *behavior.CDPExecutor, action *launchcode.ActionRequest, result *launchcode.ActionResult) error {
+func (a *App) dispatchAction(executor *behavior.CDPExecutor, profile *BrowserProfile, action *launchcode.ActionRequest, result *launchcode.ActionResult) error {
 	if action == nil {
 		return fmt.Errorf("nil action")
 	}
 
 	switch strings.ToLower(strings.TrimSpace(action.Type)) {
 	case "click":
-		if action.Selector == "" {
-			return fmt.Errorf("selector is required for click")
-		}
-		if action.Frame != "" {
-			return executor.ExecuteHumanizedClickInFrame(action.Frame, action.Selector)
-		}
-		return executor.ExecuteHumanizedClick(action.Selector)
+		return a.dispatchClickAction(executor, profile, action, result)
 
 	case "type", "text":
-		if action.Selector == "" {
-			return fmt.Errorf("selector is required for type")
-		}
-		clearFirst := true
-		if action.ClearFirst != nil {
-			clearFirst = *action.ClearFirst
-		}
-		if action.Frame != "" {
-			return executor.ExecuteHumanizedTypeInFrame(action.Frame, action.Selector, action.Text, clearFirst, action.SubmitOnEnter)
-		}
-		return executor.ExecuteHumanizedTypeEx(action.Selector, action.Text, clearFirst, action.SubmitOnEnter)
+		return a.dispatchTypeAction(executor, profile, action, result)
 
 	case "scroll":
 		distance := action.Distance
@@ -890,22 +1142,10 @@ func (a *App) dispatchAction(executor *behavior.CDPExecutor, action *launchcode.
 		return executor.HoverElement(action.Selector)
 
 	case "double-click":
-		if action.Selector == "" {
-			return fmt.Errorf("selector is required for double-click")
-		}
-		if action.Frame != "" {
-			return executor.DoubleClickElementInFrame(action.Frame, action.Selector)
-		}
-		return executor.DoubleClickElement(action.Selector)
+		return a.dispatchDoubleClickAction(executor, profile, action, result)
 
 	case "right-click":
-		if action.Selector == "" {
-			return fmt.Errorf("selector is required for right-click")
-		}
-		if action.Frame != "" {
-			return executor.RightClickElementInFrame(action.Frame, action.Selector)
-		}
-		return executor.RightClickElement(action.Selector)
+		return a.dispatchRightClickAction(executor, profile, action, result)
 
 	case "screenshot":
 		val, err := executor.CaptureScreenshot()
@@ -940,21 +1180,7 @@ func (a *App) dispatchAction(executor *behavior.CDPExecutor, action *launchcode.
 		return nil
 
 	case "click-offset":
-		if action.Selector == "" {
-			return fmt.Errorf("selector is required for click-offset")
-		}
-		offsetX := 0
-		offsetY := 0
-		if action.OffsetX != nil {
-			offsetX = *action.OffsetX
-		}
-		if action.OffsetY != nil {
-			offsetY = *action.OffsetY
-		}
-		if action.Frame != "" {
-			return executor.ClickWithOffsetInFrame(action.Frame, action.Selector, offsetX, offsetY)
-		}
-		return executor.ClickWithOffset(action.Selector, offsetX, offsetY)
+		return a.dispatchClickOffsetAction(executor, profile, action, result)
 
 	case "wait-for-selector":
 		if action.Selector == "" {

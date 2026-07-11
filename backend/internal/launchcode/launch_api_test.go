@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,10 +45,13 @@ type mockStarter struct {
 	clickErr      error
 	typeErr       error
 	scrollErr     error
+	mouseErr      error
 
 	screenshotData string
 	createdName    string
 	updatedID      string
+	localStorage   map[string]string
+	sessionStorage map[string]string
 }
 
 func (m *mockStarter) StartInstance(profileId string) (*browser.Profile, error) {
@@ -138,6 +142,27 @@ func (m *mockStarter) WorkbenchCaptureScreenshot(_ string) (string, error) {
 	return "data:image/png;base64,dGVzdA==", nil
 }
 
+func (m *mockStarter) WorkbenchCaptureFullReport(profileID string) (*WorkbenchFullReport, error) {
+	if m.screenshotErr != nil {
+		return nil, m.screenshotErr
+	}
+	return &WorkbenchFullReport{
+		ProfileID:      profileID,
+		URL:            "https://example.com",
+		Title:          "Example",
+		HTML:           "<html><body>Example</body></html>",
+		Text:           "Example",
+		Screenshot:     "data:image/png;base64,dGVzdA==",
+		Tabs:           []browser.Tab{},
+		Cookies:        []map[string]interface{}{},
+		LocalStorage:   map[string]string{"local": "value"},
+		SessionStorage: map[string]string{"session": "value"},
+		Failures:       []WorkbenchReportFailure{},
+		CapturedAt:     time.Now().UTC().Format(time.RFC3339Nano),
+		Source:         "test",
+	}, nil
+}
+
 func (m *mockStarter) WorkbenchFingerprintProfile(_ string) (*browser.FingerprintSnapshot, error) {
 	if m.fingerprintErr != nil {
 		return nil, m.fingerprintErr
@@ -168,10 +193,25 @@ func (m *mockStarter) WorkbenchScrollPage(_ string, _ uint32) error {
 	return m.scrollErr
 }
 
+func (m *mockStarter) WorkbenchShowMousePointer(_ string) error {
+	return m.mouseErr
+}
+
+func (m *mockStarter) WorkbenchHideMousePointer(_ string) error {
+	return m.mouseErr
+}
+
 func (m *mockStarter) WorkbenchExecuteActions(_ string, actions []ActionRequest) ([]ActionResult, error) {
 	results := make([]ActionResult, 0, len(actions))
 	for _, a := range actions {
 		res := ActionResult{Type: a.Type, OK: true}
+		if strings.EqualFold(a.Type, "navigate") && m.navigateErr != nil {
+			return results, m.navigateErr
+		}
+		if strings.EqualFold(a.Type, "navigate") {
+			res.PageURL = a.URL
+			res.PageTitle = "Example"
+		}
 		if a.Type == "hover" || a.Type == "double-click" || a.Type == "right-click" || a.Type == "wait" {
 			res.PageURL = "https://example.com"
 			res.PageTitle = "Example"
@@ -205,8 +245,26 @@ func (m *mockStarter) WorkbenchListTabs(_ string) ([]browser.Tab, error) { retur
 func (m *mockStarter) WorkbenchSwitchTab(_ string, _ string) error { return nil }
 func (m *mockStarter) WorkbenchCloseTab(_ string, _ string) error { return nil }
 func (m *mockStarter) WorkbenchNewTab(_ string, _ string) (string, error) { return "new-tab-id", nil }
-func (m *mockStarter) WorkbenchGetLocalStorage(_ string) (map[string]string, error) { return map[string]string{}, nil }
-func (m *mockStarter) WorkbenchSetLocalStorage(_ string, _ map[string]string) error { return nil }
+func (m *mockStarter) WorkbenchGetLocalStorage(_ string) (map[string]string, error) {
+	if m.localStorage != nil {
+		return m.localStorage, nil
+	}
+	return map[string]string{}, nil
+}
+func (m *mockStarter) WorkbenchSetLocalStorage(_ string, items map[string]string) error {
+	m.localStorage = items
+	return nil
+}
+func (m *mockStarter) WorkbenchGetSessionStorage(_ string) (map[string]string, error) {
+	if m.sessionStorage != nil {
+		return m.sessionStorage, nil
+	}
+	return map[string]string{}, nil
+}
+func (m *mockStarter) WorkbenchSetSessionStorage(_ string, items map[string]string) error {
+	m.sessionStorage = items
+	return nil
+}
 func (m *mockStarter) WorkbenchBehaviorStart(_ string, _ string) error { return nil }
 func (m *mockStarter) WorkbenchBehaviorStop(_ string) error { return nil }
 func (m *mockStarter) WorkbenchBehaviorConfig(_ string, _ float64) error { return nil }
@@ -802,6 +860,38 @@ func TestWorkbench_Screenshot_Success(t *testing.T) {
 	}
 }
 
+func TestWorkbench_FullReport_Success(t *testing.T) {
+	srv := newTestServer(t)
+	body := map[string]string{"profileId": "prof-1"}
+	resp := serve(srv, http.MethodPost, "/api/workbench/report/full", body)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var p struct {
+		OK     bool `json:"ok"`
+		Report struct {
+			ProfileID      string            `json:"profileId"`
+			URL            string            `json:"url"`
+			Title          string            `json:"title"`
+			HTML           string            `json:"html"`
+			Text           string            `json:"text"`
+			LocalStorage   map[string]string `json:"localStorage"`
+			SessionStorage map[string]string `json:"sessionStorage"`
+		} `json:"report"`
+		Failures []WorkbenchReportFailure `json:"failures"`
+	}
+	decodeJSON(t, resp, &p)
+	if !p.OK || p.Report.ProfileID != "prof-1" || p.Report.URL == "" || p.Report.HTML == "" || p.Report.Text == "" {
+		t.Fatalf("unexpected payload: %+v", p)
+	}
+	if p.Report.LocalStorage["local"] != "value" || p.Report.SessionStorage["session"] != "value" {
+		t.Fatalf("storage not included in report: %+v", p.Report)
+	}
+	if len(p.Failures) != 0 {
+		t.Fatalf("unexpected failures: %+v", p.Failures)
+	}
+}
+
 func TestWorkbench_Fingerprint_Success(t *testing.T) {
 	srv := newTestServer(t)
 	body := map[string]string{"profileId": "prof-1"}
@@ -1263,6 +1353,68 @@ func TestWorkbench_Scroll_MissingProfileID_400(t *testing.T) {
 	}
 }
 
+func TestWorkbench_SessionStorage_GetSet_Success(t *testing.T) {
+	starter := &mockStarter{}
+	svc := NewLaunchCodeService(NewMemoryLaunchCodeDAO())
+	mgr := &browser.Manager{
+		Config:   &config.Config{Browser: config.BrowserConfig{UserDataRoot: "data"}},
+		Profiles: make(map[string]*browser.Profile),
+	}
+	srv := NewLaunchServer(svc, starter, nil, mgr, 0)
+
+	setResp := serve(srv, http.MethodPost, "/api/workbench/storage/set-session-storage", map[string]interface{}{
+		"profileId": "prof-1",
+		"items":     map[string]string{"token": "abc", "step": "1"},
+	})
+	if setResp.Code != http.StatusOK {
+		t.Fatalf("expected set 200, got %d: %s", setResp.Code, setResp.Body.String())
+	}
+
+	getResp := serve(srv, http.MethodPost, "/api/workbench/storage/session-storage", map[string]string{"profileId": "prof-1"})
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("expected get 200, got %d: %s", getResp.Code, getResp.Body.String())
+	}
+	var p struct {
+		OK    bool              `json:"ok"`
+		Count int               `json:"count"`
+		Items map[string]string `json:"items"`
+	}
+	decodeJSON(t, getResp, &p)
+	if !p.OK || p.Count != 2 || p.Items["token"] != "abc" || p.Items["step"] != "1" {
+		t.Fatalf("unexpected payload: %+v", p)
+	}
+}
+
+func TestWorkbench_MouseOverlay_ShowHide_Success(t *testing.T) {
+	srv := newTestServer(t)
+
+	showResp := serve(srv, http.MethodPost, "/api/workbench/mouse/show", map[string]string{"profileId": "prof-1"})
+	if showResp.Code != http.StatusOK {
+		t.Fatalf("expected show 200, got %d: %s", showResp.Code, showResp.Body.String())
+	}
+	var show struct {
+		OK      bool `json:"ok"`
+		Visible bool `json:"visible"`
+	}
+	decodeJSON(t, showResp, &show)
+	if !show.OK || !show.Visible {
+		t.Fatalf("unexpected show payload: %+v", show)
+	}
+
+	hideResp := serve(srv, http.MethodPost, "/api/workbench/mouse/hide", map[string]string{"profileId": "prof-1"})
+	if hideResp.Code != http.StatusOK {
+		t.Fatalf("expected hide 200, got %d: %s", hideResp.Code, hideResp.Body.String())
+	}
+	var hide struct {
+		OK      bool `json:"ok"`
+		Visible bool `json:"visible"`
+	}
+	decodeJSON(t, hideResp, &hide)
+	if !hide.OK || hide.Visible {
+		t.Fatalf("unexpected hide payload: %+v", hide)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // 6. Recording endpoints
 // ---------------------------------------------------------------------------
@@ -1555,6 +1707,51 @@ func TestAuth_InvalidKey_401(t *testing.T) {
 	srv.buildHandler(false).ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAuth_EnvKeyReference_PassesWithResolvedEnvValue(t *testing.T) {
+	t.Setenv("PERSONAL_PILOT_TEST_AUTH_KEY", "resolved-key")
+	srv := newTestServer(t, func(s *LaunchServer) {
+		s.SetAPIAuthConfig(APIAuthConfig{Enabled: true, APIKey: "${PERSONAL_PILOT_TEST_AUTH_KEY}", Header: "X-Key"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	req.Header.Set("X-Key", "resolved-key")
+	w := httptest.NewRecorder()
+	srv.buildHandler(false).ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 with resolved env key, got %d: %s", w.Code, w.Body.String())
+	}
+
+	reqLiteral := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	reqLiteral.Header.Set("X-Key", "${PERSONAL_PILOT_TEST_AUTH_KEY}")
+	wLiteral := httptest.NewRecorder()
+	srv.buildHandler(false).ServeHTTP(wLiteral, reqLiteral)
+	if wLiteral.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for literal env placeholder, got %d: %s", wLiteral.Code, wLiteral.Body.String())
+	}
+}
+
+func TestAuth_MissingEnvKeyReference_DisablesAuth(t *testing.T) {
+	envName := "PERSONAL_PILOT_TEST_MISSING_AUTH_KEY"
+	if old, ok := os.LookupEnv(envName); ok {
+		t.Cleanup(func() {
+			_ = os.Setenv(envName, old)
+		})
+	} else {
+		t.Cleanup(func() {
+			_ = os.Unsetenv(envName)
+		})
+	}
+	_ = os.Unsetenv(envName)
+
+	cfg := normalizeAPIAuthConfig(APIAuthConfig{Enabled: true, APIKey: "${PERSONAL_PILOT_TEST_MISSING_AUTH_KEY}", Header: "X-Key"})
+	if cfg.Configured() {
+		t.Fatalf("missing env key should not configure auth")
+	}
+	if cfg.Active() {
+		t.Fatalf("missing env key should not activate auth")
 	}
 }
 

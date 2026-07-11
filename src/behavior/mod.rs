@@ -43,6 +43,25 @@ pub const PAGE_ARCHETYPES: &[&str] = &[
     "generic",
 ];
 
+// RUNTIME_BACKED_PRIMITIVES is the behavior set with active runner evidence.
+// Keep this separate from SUPPORTED_PRIMITIVES so control-plane declarations
+// cannot silently inflate the shipped runtime count.
+pub const RUNTIME_BACKED_PRIMITIVES: &[&str] = &[
+    "idle",
+    "wait_for_readiness",
+    "wait_for_content_stable",
+    "scroll_progressive",
+    "scroll_to_ratio",
+    "pause_on_content",
+    "focus_element",
+    "blur_element",
+    "hover_candidate",
+    "type_with_rhythm",
+    "clear_with_corrections",
+    "persist_session_state",
+    "soft_abort_if_budget_exceeded",
+];
+
 pub const SUPPORTED_PRIMITIVES: &[&str] = &[
     "idle",
     "wait_for_readiness",
@@ -57,6 +76,28 @@ pub const SUPPORTED_PRIMITIVES: &[&str] = &[
     "clear_with_corrections",
     "persist_session_state",
     "soft_abort_if_budget_exceeded",
+    "click_element",
+    "double_click_element",
+    "right_click_element",
+    "drag_to_element",
+    "select_option",
+    "press_key",
+    "press_key_combo",
+    "scroll_into_view",
+    "wait_for_selector",
+    "wait_for_navigation",
+    "capture_screenshot",
+    "get_page_html",
+    "get_element_text",
+    "fill_form_field",
+    "switch_tab",
+    "close_tab",
+    "open_url",
+    "simulate_natural_browsing",
+    "show_mouse_pointer",
+    "hide_mouse_pointer",
+    "evaluate_script",
+    "dom_snapshot",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -841,9 +882,13 @@ fn default_plan_steps(page_archetype: &str, seed: &str) -> Vec<Value> {
         ],
         "form" | "auth" => vec![
             json!({"phase": "readiness", "primitive": "wait_for_readiness"}),
+            json!({"phase": "readiness", "primitive": "wait_for_selector", "selector": "body"}),
+            json!({"phase": "settle", "primitive": "simulate_natural_browsing", "duration_ms": deterministic_i64(seed, "auth:browse", 2500, 6000)}),
             json!({"phase": "focus", "primitive": "focus_element", "target": "primary-form-field"}),
             json!({"phase": "input", "primitive": "type_with_rhythm", "profile": "human_rhythm"}),
             json!({"phase": "input", "primitive": "clear_with_corrections", "max_corrections": deterministic_i64(seed, "form:corrections", 1, 3)}),
+            json!({"phase": "input", "primitive": "click_element", "target": "primary-form-field"}),
+            json!({"phase": "settle", "primitive": "wait_for_navigation", "timeout_ms": deterministic_i64(seed, "auth:nav", 8000, 20000)}),
             json!({"phase": "settle", "primitive": "blur_element", "target": "primary-form-field"}),
             json!({"phase": "settle", "primitive": "wait_for_content_stable", "stable_window_ms": deterministic_i64(seed, "form:stable", 350, 900)}),
             json!({"phase": "persist", "primitive": "persist_session_state"}),

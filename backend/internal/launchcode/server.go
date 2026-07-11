@@ -18,12 +18,18 @@ import (
 	"personal-pilot/backend/internal/captcha"
 	"personal-pilot/backend/internal/email"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/proxy"
 	"personal-pilot/backend/internal/sms"
 )
 
 // BrowserStarter 浏览器启动接口（由 App 层实现并注入）
 type BrowserStarter interface {
 	StartInstance(profileId string) (*browser.Profile, error)
+}
+
+// ProxyBridgeProvider exposes sing-box/xray bridge managers for LaunchServer proxy tests.
+type ProxyBridgeProvider interface {
+	ProxyBridgeManagers() []proxy.BridgeManager
 }
 
 // BrowserStopper is an optional capability exposed by the app layer for safe
@@ -74,12 +80,37 @@ type WorkbenchWindowPlacement struct {
 	Error       string `json:"error,omitempty"`
 }
 
+type WorkbenchReportFailure struct {
+	Step  string `json:"step"`
+	Error string `json:"error"`
+}
+
+type WorkbenchFullReport struct {
+	ProfileID         string                            `json:"profileId"`
+	URL               string                            `json:"url"`
+	Title             string                            `json:"title"`
+	HTML              string                            `json:"html"`
+	Text              string                            `json:"text"`
+	Screenshot        string                            `json:"screenshot,omitempty"`
+	Tabs              []browser.Tab                     `json:"tabs"`
+	Cookies           []map[string]interface{}          `json:"cookies"`
+	LocalStorage      map[string]string                 `json:"localStorage"`
+	SessionStorage    map[string]string                 `json:"sessionStorage"`
+	Fingerprint       *browser.FingerprintSnapshot      `json:"fingerprint,omitempty"`
+	FingerprintHealth *browser.FingerprintHealthProfile `json:"fingerprintHealth,omitempty"`
+	IdentityReport    *browser.IdentityStrengthReport   `json:"identityReport,omitempty"`
+	Failures          []WorkbenchReportFailure          `json:"failures"`
+	CapturedAt        string                            `json:"capturedAt"`
+	Source            string                            `json:"source"`
+}
+
 // WorkbenchOperator is an optional bridge to the non-embedded instance
 // workbench. It keeps HTTP automation on the same backend methods used by UI.
 type WorkbenchOperator interface {
 	WorkbenchNavigateProfile(profileId string, rawURL string) error
 	WorkbenchRefreshProfile(profileId string) error
 	WorkbenchCaptureScreenshot(profileId string) (string, error)
+	WorkbenchCaptureFullReport(profileId string) (*WorkbenchFullReport, error)
 	WorkbenchFingerprintProfile(profileId string) (*browser.FingerprintSnapshot, error)
 	WorkbenchFingerprintHealthProfile(profileId string) (*browser.FingerprintHealthProfile, error)
 	WorkbenchActivateProfile(profileId string) error
@@ -88,6 +119,8 @@ type WorkbenchOperator interface {
 	WorkbenchTypeText(profileId string, selector string, text string) error
 	WorkbenchScrollPage(profileId string, distance uint32) error
 	WorkbenchExecuteActions(profileId string, actions []ActionRequest) ([]ActionResult, error)
+	WorkbenchShowMousePointer(profileId string) error
+	WorkbenchHideMousePointer(profileId string) error
 
 	// Extended workbench capabilities
 	IdentityReportProfile(profileId string) (*browser.IdentityStrengthReport, error)
@@ -100,6 +133,8 @@ type WorkbenchOperator interface {
 	WorkbenchNewTab(profileId string, url string) (string, error)
 	WorkbenchGetLocalStorage(profileId string) (map[string]string, error)
 	WorkbenchSetLocalStorage(profileId string, items map[string]string) error
+	WorkbenchGetSessionStorage(profileId string) (map[string]string, error)
+	WorkbenchSetSessionStorage(profileId string, items map[string]string) error
 	WorkbenchBehaviorStart(profileId string, presetID string) error
 	WorkbenchBehaviorStop(profileId string) error
 	WorkbenchBehaviorConfig(profileId string, intensity float64) error
@@ -107,6 +142,11 @@ type WorkbenchOperator interface {
 	WorkbenchNurtureStop(profileId string) error
 	WorkbenchCheckProxy(profileId string) (*browser.FingerprintHealthProfile, error)
 	WorkbenchProxySpeedtest(profileId string) (map[string]interface{}, error)
+}
+
+// StealthProbeOperator runs live stealth probe suites (CreepJS / WebRTC).
+type StealthProbeOperator interface {
+	WorkbenchRunStealthProbeSuite(profileId string) (map[string]interface{}, error)
 }
 
 // InstanceOperator provides instance lifecycle operations.
@@ -165,23 +205,27 @@ type ActionRequest struct {
 	URL               string `json:"url,omitempty"`
 	Script            string `json:"script,omitempty"`
 	HumanizationLevel string `json:"humanizationLevel,omitempty"`
+	TabID             string `json:"tabId,omitempty"`
+	InputMode         string `json:"inputMode,omitempty"` // auto | os | cdp
 }
 
 // ActionResult 单个动作的执行结果
 type ActionResult struct {
-	Type      string      `json:"type"`
-	OK        bool        `json:"ok"`
-	Error     string      `json:"error,omitempty"`
-	ErrorCode string      `json:"errorCode,omitempty"`
-	Bounds    *BoundsInfo `json:"bounds,omitempty"`
-	PageURL   string      `json:"pageUrl,omitempty"`
-	PageTitle string      `json:"pageTitle,omitempty"`
-	Value     string      `json:"value,omitempty"`
+	Type       string      `json:"type"`
+	OK         bool        `json:"ok"`
+	Error      string      `json:"error,omitempty"`
+	ErrorCode  string      `json:"errorCode,omitempty"`
+	Bounds     *BoundsInfo `json:"bounds,omitempty"`
+	PageURL    string      `json:"pageUrl,omitempty"`
+	PageTitle  string      `json:"pageTitle,omitempty"`
+	Value      string      `json:"value,omitempty"`
+	InputPlane string      `json:"inputPlane,omitempty"` // os | cdp — audit field for G0 input routing
 }
 
 // LaunchCallRecord 接口调用记录
 type LaunchCallRecord struct {
 	Timestamp   string              `json:"timestamp"`
+	Category    string              `json:"category,omitempty"`
 	Method      string              `json:"method"`
 	Path        string              `json:"path"`
 	ClientIP    string              `json:"clientIp"`
@@ -198,38 +242,44 @@ type LaunchCallRecord struct {
 
 // LaunchServer 本地 HTTP 唤起服务
 type LaunchServer struct {
-	service        *LaunchCodeService
-	starter        BrowserStarter
-	recording      RecordingAPI
-	browserMgr     *browser.Manager
-	port           int
-	server         *http.Server
-	mu             sync.Mutex
-	authMu         sync.RWMutex
-	logMu          sync.Mutex
-	callLogs       []LaunchCallRecord
-	activeMu       sync.RWMutex
-	activePort     int
-	activeID       string
-	activeName     string
-	activeAudit    *browser.LaunchAuditSnapshot
-	apiAuth        APIAuthConfig
-	rateLimiter    *RateLimiter
-	captchaManager *captcha.Manager
-	emailService   *email.EmailService
-	smsManager     *sms.Manager
-	workflow       *workflowRuntime
+	service                *LaunchCodeService
+	starter                BrowserStarter
+	recording              RecordingAPI
+	browserMgr             *browser.Manager
+	port                   int
+	server                 *http.Server
+	mu                     sync.Mutex
+	authMu                 sync.RWMutex
+	logMu                  sync.Mutex
+	callLogs               []LaunchCallRecord
+	activeMu               sync.RWMutex
+	activePort             int
+	activeID               string
+	activeName             string
+	activeAudit            *browser.LaunchAuditSnapshot
+	apiAuth                APIAuthConfig
+	rateLimiter            *RateLimiter
+	captchaManager         *captcha.Manager
+	emailService           *email.EmailService
+	smsManager             *sms.Manager
+	workflow               *workflowRuntime
+	subscriptionStore      ProxySubscriptionStore
+	subscriptionFetcher    SubscriptionFetcher
+	subscriptionRefreshMu  sync.Mutex
+	subscriptionLoopMu     sync.Mutex
+	subscriptionLoopCancel context.CancelFunc
 }
 
 // NewLaunchServer 创建 LaunchServer
 func NewLaunchServer(service *LaunchCodeService, starter BrowserStarter, recording RecordingAPI, mgr *browser.Manager, port int) *LaunchServer {
 	srv := &LaunchServer{
-		service:    service,
-		starter:    starter,
-		recording:  recording,
-		browserMgr: mgr,
-		port:       port,
-		workflow:   newWorkflowRuntime(),
+		service:             service,
+		starter:             starter,
+		recording:           recording,
+		browserMgr:          mgr,
+		port:                port,
+		workflow:            newWorkflowRuntime(),
+		subscriptionFetcher: NewHTTPSubscriptionFetcher(nil),
 	}
 	srv.SetAPIAuthConfig(APIAuthConfig{})
 	return srv
@@ -272,6 +322,7 @@ func (s *LaunchServer) Start() error {
 			log.Error("LaunchServer 异常退出", logger.F("error", serveErr.Error()))
 		}
 	}()
+	s.startSubscriptionRefreshLoop()
 
 	return nil
 }
@@ -290,12 +341,15 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/instances/", s.handleInstanceByID)
 	mux.HandleFunc("/api/launch", s.handleLaunchWithBody)
 	mux.HandleFunc("/api/launch/logs", s.handleLaunchLogs)
+	mux.HandleFunc("/api/audit/logs", s.handleAuditLogs)
 	mux.HandleFunc("/api/launch/", s.handleLaunch)
 	mux.HandleFunc("/api/workbench/navigate", s.handleWorkbenchNavigate)
 	mux.HandleFunc("/api/workbench/refresh", s.handleWorkbenchRefresh)
 	mux.HandleFunc("/api/workbench/screenshot", s.handleWorkbenchScreenshot)
+	mux.HandleFunc("/api/workbench/report/full", s.handleWorkbenchFullReport)
 	mux.HandleFunc("/api/workbench/fingerprint", s.handleWorkbenchFingerprint)
 	mux.HandleFunc("/api/workbench/fingerprint-health", s.handleWorkbenchFingerprintHealth)
+	mux.HandleFunc("/api/workbench/stealth-probe", s.handleWorkbenchStealthProbe)
 	mux.HandleFunc("/api/workbench/identity/report", s.handleWorkbenchIdentityReport)
 	mux.HandleFunc("/api/workbench/identity/consistency", s.handleWorkbenchIdentityConsistency)
 	mux.HandleFunc("/api/workbench/cookies/get", s.handleWorkbenchCookiesGet)
@@ -307,6 +361,8 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/workbench/tabs/new", s.handleWorkbenchTabsNew)
 	mux.HandleFunc("/api/workbench/storage/local-storage", s.handleWorkbenchStorageGet)
 	mux.HandleFunc("/api/workbench/storage/set-local-storage", s.handleWorkbenchStorageSet)
+	mux.HandleFunc("/api/workbench/storage/session-storage", s.handleWorkbenchSessionStorageGet)
+	mux.HandleFunc("/api/workbench/storage/set-session-storage", s.handleWorkbenchSessionStorageSet)
 	mux.HandleFunc("/api/workbench/behavior/start", s.handleWorkbenchBehaviorStart)
 	mux.HandleFunc("/api/workbench/behavior/stop", s.handleWorkbenchBehaviorStop)
 	mux.HandleFunc("/api/workbench/behavior/config", s.handleWorkbenchBehaviorConfig)
@@ -323,6 +379,8 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/workbench/double-click", s.handleWorkbenchDoubleClick)
 	mux.HandleFunc("/api/workbench/right-click", s.handleWorkbenchRightClick)
 	mux.HandleFunc("/api/workbench/wait", s.handleWorkbenchWait)
+	mux.HandleFunc("/api/workbench/mouse/show", s.handleWorkbenchMouseShow)
+	mux.HandleFunc("/api/workbench/mouse/hide", s.handleWorkbenchMouseHide)
 	mux.HandleFunc("/api/workbench/actions", s.handleWorkbenchActions)
 	// Workflow endpoints
 	mux.HandleFunc("/api/workflow", s.handleWorkflowCreate)
@@ -334,9 +392,7 @@ func (s *LaunchServer) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/recording/list", s.handleRecordingList)
 	mux.HandleFunc("/api/recording/status", s.handleRecordingStatus)
 	mux.HandleFunc("/api/recording/play", s.handleRecordingPlay)
-	if s.recording != nil {
-		mux.HandleFunc("/api/recording/play/stop", s.handleRecordingStopPlay)
-	}
+	mux.HandleFunc("/api/recording/play/stop", s.handleRecordingStopPlay)
 	mux.HandleFunc("/api/recording/quick", s.handleRecordingQuick)
 	mux.HandleFunc("/api/recording/sessions/cleanup", s.handleRecordingCleanup)
 	mux.HandleFunc("/api/recording/", s.handleRecordingByID)
@@ -377,6 +433,7 @@ func (s *LaunchServer) buildHandler(includeLocalhost bool) http.Handler {
 	if s.rateLimiter != nil {
 		handler = s.rateLimiter.Middleware(handler)
 	}
+	handler = s.apiAuditMiddleware(handler)
 	handler = s.apiAuthMiddleware(handler)
 	if includeLocalhost {
 		handler = s.localhostMiddleware(handler)
@@ -427,6 +484,7 @@ func listenerPort(ln net.Listener) (int, error) {
 
 // Stop 优雅关闭（5 秒超时）
 func (s *LaunchServer) Stop() error {
+	s.stopSubscriptionRefreshLoop()
 	s.mu.Lock()
 	srv := s.server
 	s.mu.Unlock()
@@ -977,6 +1035,7 @@ func normalizeStringSlice(items []string) []string {
 func (s *LaunchServer) appendLaunchLog(method, path, clientIP, code string, selector LaunchSelector, params LaunchRequestParams, ok bool, status int, errMsg, profileID, profileName string, startAt time.Time) {
 	entry := LaunchCallRecord{
 		Timestamp:   time.Now().Format(time.RFC3339),
+		Category:    "launch",
 		Method:      method,
 		Path:        path,
 		ClientIP:    clientIP,

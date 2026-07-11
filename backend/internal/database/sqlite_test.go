@@ -103,3 +103,36 @@ func TestMigrateRepairsSchedulerTaskRuntimeColumnsWhenVersionAlreadyAdvanced(t *
 		}
 	}
 }
+
+func TestMigrateCreatesProxySubscriptionStore(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	db, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if err := db.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{
+		"subscription_id", "name", "source_type", "source_url", "group_name",
+		"auto_refresh", "refresh_interval_m", "last_refresh_at", "last_error",
+		"created_at", "updated_at",
+	} {
+		hasColumn, err := db.tableHasColumn("proxy_subscriptions", column)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !hasColumn {
+			t.Fatalf("expected proxy_subscriptions.%s", column)
+		}
+	}
+	var indexCount int
+	if err := db.conn.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_proxy_subscriptions_source_url'`).Scan(&indexCount); err != nil {
+		t.Fatal(err)
+	}
+	if indexCount != 1 {
+		t.Fatalf("subscription source index count = %d", indexCount)
+	}
+}

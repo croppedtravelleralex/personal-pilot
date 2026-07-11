@@ -1,0 +1,29 @@
+{
+  "schema": "behavior_primitive_plan_v1",
+  "name": "xhs-feed-scrape",
+  "description": "小红书发现页：稳定加载 → DOM 快照 → 渐进滚动 → 文本抽取",
+  "profileTagsRecommended": ["xhs", "scrape"],
+  "cadence": {
+    "minStepGapMs": 2000,
+    "maxPagesPerSession": 1,
+    "respectIPBudget": true
+  },
+  "steps": [
+    { "primitive": "open_url", "params": { "url": "https://www.xiaohongshu.com/explore" } },
+    { "primitive": "wait_for_readiness", "params": { "timeoutMs": 20000 } },
+    { "primitive": "wait_for_content_stable", "params": { "timeoutMs": 8000 } },
+    { "primitive": "dom_snapshot", "params": { "label": "feed_initial" } },
+    { "primitive": "scroll_progressive", "params": { "ratio": 0.25, "pauseMs": 1500 } },
+    { "primitive": "pause_on_content", "params": { "minMs": 2500, "maxMs": 5000 } },
+    { "primitive": "get_page_html", "params": { "label": "feed_html_1" } },
+    { "primitive": "scroll_progressive", "params": { "ratio": 0.35, "pauseMs": 1800 } },
+    { "primitive": "dom_snapshot", "params": { "label": "feed_after_scroll" } },
+    { "primitive": "get_element_text", "params": { "selector": "body", "label": "visible_text" } },
+    { "primitive": "idle", "params": { "ms": 1200 } }
+  ],
+  "passCriteria": {
+    "domSnapshotBytesMin": 5000,
+    "noRateLimitEvent": true,
+    "scrollEventsHumanLike": true
+  }
+}

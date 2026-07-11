@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"personal-pilot/backend"
 	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/singleinstance"
 	"reflect"
 	"strconv"
 	"strings"
@@ -119,6 +120,32 @@ var allowedRPCMethods = map[string]struct{}{
 	"BehaviorRecordingStatus":              {},
 	"BehaviorRecordingSummaryList":         {},
 	"BehaviorRecordingTrim":                {},
+	"BehaviorRecordingAnalyze":           {},
+	"BehaviorRecordingDiff":            {},
+	"BehaviorRecordingMerge":           {},
+	"BehaviorRecordingToWorkflow":      {},
+	"BrowserRuntimeProjectionReport":     {},
+	"BehaviorExecutePrimitive":           {},
+	"BehaviorExecutePrimitivePlan":       {},
+	"WorkbenchProbeWebRTC":               {},
+	"WorkbenchRecordAccountOutcome":      {},
+	"WorkbenchListAccountOutcomes":       {},
+	"AsymmetricAutoReach99Plus":          {},
+	"AsymmetricStealthReport":            {},
+	"AsymmetricStealthReportV2":          {},
+	"AsymmetricBootstrapGaps":            {},
+	"AsymmetricApplyFeedbackAuto":      {},
+	"WorkbenchRunStealthProbeSuite":    {},
+	"AsymmetricShouldExecute":            {},
+	"AsymmetricRecordChallenge":          {},
+	"ProfileTrustBundleSave":             {},
+	"ProfileTrustBundleGet":              {},
+	"ProfileTrustBundleImportFromJSON":   {},
+	"ProfileRotateFingerprintSeed":       {},
+	"GraphAPIMailList":                   {},
+	"WorkbenchAutoDetectionScore":      {},
+	"WorkbenchAccountHealthReport":     {},
+	"WorkbenchRunDetectionBundle":      {},
 	"BehaviorStartRecording":               {},
 	"BehaviorStopPlayback":                 {},
 	"BehaviorStopRecording":                {},
@@ -162,6 +189,7 @@ var allowedRPCMethods = map[string]struct{}{
 	"BrowserProxyBatchCheckIPHealth":       {},
 	"BrowserProxyBatchTestSpeed":           {},
 	"BrowserProxyCheckIPHealth":            {},
+	"BrowserProxyDelete":                   {},
 	"BrowserProxyFetchClashByURL":          {},
 	"BrowserProxyFixNames":                 {},
 	"BrowserProxyImportSubscriptionByURL":  {},
@@ -249,13 +277,17 @@ var allowedRPCMethods = map[string]struct{}{
 	"WorkbenchActivateProfile":             {},
 	"WorkbenchArrangeProfiles":             {},
 	"WorkbenchClickElement":                {},
+	"WorkbenchCaptureFullReport":           {},
 	"WorkbenchExecuteActions":              {},
 	"WorkbenchTypeText":                    {},
 	"WorkbenchScrollPage":                  {},
 	"WorkbenchCaptureScreenshot":           {},
 	"WorkbenchFingerprintHealthProfile":    {},
 	"WorkbenchFingerprintProfile":          {},
+	"WorkbenchGetLocalStorage":             {},
+	"WorkbenchGetSessionStorage":           {},
 	"WorkbenchGetUiState":                  {},
+	"WorkbenchHideMousePointer":            {},
 	"WorkbenchListDetectionResults":        {},
 	"WorkbenchListDetectorSites":           {},
 	"WorkbenchNavigateProfile":             {},
@@ -263,6 +295,9 @@ var allowedRPCMethods = map[string]struct{}{
 	"WorkbenchRunDetectorSite":             {},
 	"WorkbenchSaveDetectionResult":         {},
 	"WorkbenchSaveUiState":                 {},
+	"WorkbenchSetLocalStorage":             {},
+	"WorkbenchSetSessionStorage":           {},
+	"WorkbenchShowMousePointer":            {},
 }
 
 func main() {
@@ -282,6 +317,12 @@ func main() {
 	if err := backend.EnsureRuntimeLayout(root); err != nil {
 		log.Printf("ensure runtime layout: %v", err)
 	}
+
+	release, err := singleinstance.Acquire(root)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	defer release()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

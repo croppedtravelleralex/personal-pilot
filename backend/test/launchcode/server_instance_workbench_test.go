@@ -85,6 +85,26 @@ func (s *instanceWorkbenchStarter) WorkbenchCaptureScreenshot(profileId string) 
 	return s.screenshotData, nil
 }
 
+func (s *instanceWorkbenchStarter) WorkbenchCaptureFullReport(profileId string) (*launchcode.WorkbenchFullReport, error) {
+	if s.workbenchErr != nil {
+		return nil, s.workbenchErr
+	}
+	return &launchcode.WorkbenchFullReport{
+		ProfileID:      profileId,
+		URL:            "https://example.test",
+		Title:          "Example",
+		HTML:           "<html><body>Example</body></html>",
+		Text:           "Example",
+		Tabs:           []browser.Tab{},
+		Cookies:        []map[string]interface{}{},
+		LocalStorage:   map[string]string{},
+		SessionStorage: map[string]string{},
+		Failures:       []launchcode.WorkbenchReportFailure{},
+		CapturedAt:     time.Now().UTC().Format(time.RFC3339Nano),
+		Source:         "test",
+	}, nil
+}
+
 func (s *instanceWorkbenchStarter) WorkbenchFingerprintProfile(profileId string) (*browser.FingerprintSnapshot, error) {
 	if s.workbenchErr != nil {
 		return nil, s.workbenchErr
@@ -148,58 +168,107 @@ func (s *instanceWorkbenchStarter) WorkbenchScrollPage(_ string, _ uint32) error
 	return nil
 }
 
-func (s *instanceWorkbenchStarter) WorkbenchExecuteActions(_ string, actions []launchcode.ActionRequest) ([]launchcode.ActionResult, error) {
-		if s.workbenchErr != nil {
-			return nil, s.workbenchErr
-		}
-		results := make([]launchcode.ActionResult, 0, len(actions))
-		for _, a := range actions {
-			results = append(results, launchcode.ActionResult{Type: a.Type, OK: true})
-		}
-		return results, nil
-	}
+func (s *instanceWorkbenchStarter) WorkbenchShowMousePointer(_ string) error {
+	return s.workbenchErr
+}
 
-	func (s *instanceWorkbenchStarter) WorkbenchArrangeProfiles(profileIds []string, layout string) ([]launchcode.WorkbenchWindowPlacement, error) {
-		if s.workbenchErr != nil {
-			return nil, s.workbenchErr
-		}
-		s.arranged = append(s.arranged, profileIds...)
-		s.arrangeLayout = layout
-		placements := make([]launchcode.WorkbenchWindowPlacement, 0, len(profileIds))
-		for i, profileID := range profileIds {
-			placements = append(placements, launchcode.WorkbenchWindowPlacement{
-				ProfileID: profileID,
-				Pid:       9000 + i,
-				Found:     true,
-				X:         i * 100,
-				Y:         0,
-				Width:     100,
-				Height:    100,
-			})
-		}
-		return placements, nil
-	}
+func (s *instanceWorkbenchStarter) WorkbenchHideMousePointer(_ string) error {
+	return s.workbenchErr
+}
 
-	// Extended WorkbenchOperator methods
-	func (s *instanceWorkbenchStarter) IdentityReportProfile(_ string) (*browser.IdentityStrengthReport, error) {
-		return &browser.IdentityStrengthReport{Score: 90, Level: "strong"}, nil
+func (s *instanceWorkbenchStarter) WorkbenchExecuteActions(profileID string, actions []launchcode.ActionRequest) ([]launchcode.ActionResult, error) {
+	if s.workbenchErr != nil {
+		return nil, s.workbenchErr
 	}
-	func (s *instanceWorkbenchStarter) WorkbenchGetCookies(_ string) ([]map[string]interface{}, error) { return nil, nil }
-	func (s *instanceWorkbenchStarter) WorkbenchSetCookie(_ string, _ map[string]interface{}) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchClearCookies(_ string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchListTabs(_ string) ([]browser.Tab, error) { return []browser.Tab{}, nil }
-	func (s *instanceWorkbenchStarter) WorkbenchSwitchTab(_ string, _ string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchCloseTab(_ string, _ string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchNewTab(_ string, _ string) (string, error) { return "new-tab-id", nil }
-	func (s *instanceWorkbenchStarter) WorkbenchGetLocalStorage(_ string) (map[string]string, error) { return map[string]string{}, nil }
-	func (s *instanceWorkbenchStarter) WorkbenchSetLocalStorage(_ string, _ map[string]string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchBehaviorStart(_ string, _ string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchBehaviorStop(_ string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchBehaviorConfig(_ string, _ float64) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchNurtureStart(_ string, _ string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchNurtureStop(_ string) error { return nil }
-	func (s *instanceWorkbenchStarter) WorkbenchCheckProxy(_ string) (*browser.FingerprintHealthProfile, error) { return nil, nil }
-	func (s *instanceWorkbenchStarter) WorkbenchProxySpeedtest(_ string) (map[string]interface{}, error) { return map[string]interface{}{}, nil }
+	results := make([]launchcode.ActionResult, 0, len(actions))
+	for _, action := range actions {
+		result := launchcode.ActionResult{Type: action.Type, OK: true}
+		switch action.Type {
+		case "navigate":
+			if err := s.WorkbenchNavigateProfile(profileID, action.URL); err != nil {
+				return nil, err
+			}
+			result.PageURL = action.URL
+			result.PageTitle = "Test Page"
+		case "refresh":
+			if err := s.WorkbenchRefreshProfile(profileID); err != nil {
+				return nil, err
+			}
+		case "screenshot":
+			value, err := s.WorkbenchCaptureScreenshot(profileID)
+			if err != nil {
+				return nil, err
+			}
+			result.Value = value
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func (s *instanceWorkbenchStarter) WorkbenchArrangeProfiles(profileIds []string, layout string) ([]launchcode.WorkbenchWindowPlacement, error) {
+	if s.workbenchErr != nil {
+		return nil, s.workbenchErr
+	}
+	s.arranged = append(s.arranged, profileIds...)
+	s.arrangeLayout = layout
+	placements := make([]launchcode.WorkbenchWindowPlacement, 0, len(profileIds))
+	for i, profileID := range profileIds {
+		placements = append(placements, launchcode.WorkbenchWindowPlacement{
+			ProfileID: profileID,
+			Pid:       9000 + i,
+			Found:     true,
+			X:         i * 100,
+			Y:         0,
+			Width:     100,
+			Height:    100,
+		})
+	}
+	return placements, nil
+}
+
+// Extended WorkbenchOperator methods
+func (s *instanceWorkbenchStarter) IdentityReportProfile(_ string) (*browser.IdentityStrengthReport, error) {
+	return &browser.IdentityStrengthReport{Score: 90, Level: "strong"}, nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchGetCookies(_ string) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchSetCookie(_ string, _ map[string]interface{}) error {
+	return nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchClearCookies(_ string) error { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchListTabs(_ string) ([]browser.Tab, error) {
+	return []browser.Tab{}, nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchSwitchTab(_ string, _ string) error { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchCloseTab(_ string, _ string) error  { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchNewTab(_ string, _ string) (string, error) {
+	return "new-tab-id", nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchGetLocalStorage(_ string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchSetLocalStorage(_ string, _ map[string]string) error {
+	return nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchGetSessionStorage(_ string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchSetSessionStorage(_ string, _ map[string]string) error {
+	return nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchBehaviorStart(_ string, _ string) error   { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchBehaviorStop(_ string) error              { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchBehaviorConfig(_ string, _ float64) error { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchNurtureStart(_ string, _ string) error    { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchNurtureStop(_ string) error               { return nil }
+func (s *instanceWorkbenchStarter) WorkbenchCheckProxy(_ string) (*browser.FingerprintHealthProfile, error) {
+	return nil, nil
+}
+func (s *instanceWorkbenchStarter) WorkbenchProxySpeedtest(_ string) (map[string]interface{}, error) {
+	return map[string]interface{}{}, nil
+}
 
 func TestInstanceStopAPI(t *testing.T) {
 	t.Run("success", func(t *testing.T) {

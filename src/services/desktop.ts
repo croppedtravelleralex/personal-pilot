@@ -24,6 +24,7 @@ import type {
   DesktopCoreWorkbenchDetectorSite,
   DesktopCoreWorkbenchFingerprintHealthProfile,
   DesktopCoreWorkbenchFingerprintSnapshot,
+  DesktopCoreWorkbenchFullReport,
   DesktopCoreWorkbenchIdentityStrengthReport,
   DesktopCoreWorkbenchTask,
   DesktopCoreWorkbenchUiState,
@@ -792,6 +793,9 @@ export const listBrowserProxiesByGroupFromDesktop = (groupName: string): Promise
 export const saveBrowserProxiesFromDesktop = (proxies: BrowserProxy[]): Promise<void> =>
   desktopRpc<void>("SaveBrowserProxies", [proxies]);
 
+export const deleteBrowserProxyFromDesktop = (proxyId: string): Promise<void> =>
+  desktopRpc<void>("BrowserProxyDelete", [proxyId]);
+
 export const validateProxyConfigFromDesktop = (
   proxyConfig: string,
   proxyId: string,
@@ -912,10 +916,45 @@ export const workbenchFingerprintProfile = (
 ): Promise<DesktopCoreWorkbenchFingerprintSnapshot> =>
   desktopRpc<DesktopCoreWorkbenchFingerprintSnapshot>("WorkbenchFingerprintProfile", [profileId]);
 
+export const workbenchCaptureFullReport = (
+  profileId: string,
+): Promise<DesktopCoreWorkbenchFullReport> =>
+  desktopRpc<DesktopCoreWorkbenchFullReport>("WorkbenchCaptureFullReport", [profileId], {
+    timeoutMs: 120000,
+  });
+
 export const identityReportProfile = (
   profileId: string,
 ): Promise<DesktopCoreWorkbenchIdentityStrengthReport> =>
   desktopRpc<DesktopCoreWorkbenchIdentityStrengthReport>("IdentityReportProfile", [profileId]);
+
+export const workbenchGetLocalStorage = (
+  profileId: string,
+): Promise<Record<string, string>> =>
+  desktopRpc<Record<string, string>>("WorkbenchGetLocalStorage", [profileId]);
+
+export const workbenchSetLocalStorage = (
+  profileId: string,
+  items: Record<string, string>,
+): Promise<void> =>
+  desktopRpc<void>("WorkbenchSetLocalStorage", [profileId, items]);
+
+export const workbenchGetSessionStorage = (
+  profileId: string,
+): Promise<Record<string, string>> =>
+  desktopRpc<Record<string, string>>("WorkbenchGetSessionStorage", [profileId]);
+
+export const workbenchSetSessionStorage = (
+  profileId: string,
+  items: Record<string, string>,
+): Promise<void> =>
+  desktopRpc<void>("WorkbenchSetSessionStorage", [profileId, items]);
+
+export const workbenchShowMousePointer = (profileId: string): Promise<void> =>
+  desktopRpc<void>("WorkbenchShowMousePointer", [profileId]);
+
+export const workbenchHideMousePointer = (profileId: string): Promise<void> =>
+  desktopRpc<void>("WorkbenchHideMousePointer", [profileId]);
 
 export const synchronizerArrangeProfiles = (
   profileIds: string[],

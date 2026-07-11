@@ -212,7 +212,7 @@ Codex 过程中建议按这个口径汇报：
 
 最推荐的实际用法是：
 
-1. 先从 [09-local-claimable-slice-board.md](D:/SelfMadeTool/persona-pilot/docs/09-local-claimable-slice-board.md) 选一个 `Slice ID`
+1. 先从 [09-local-claimable-slice-board.md](09-local-claimable-slice-board.md) 选一个 `Slice ID`
 2. 按本文件模板开一个新 Codex 对话
 3. 一个对话只做一个 slice
 4. 做完后在下一个对话认领下一个 slice

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -16,64 +17,64 @@ import (
 )
 
 const (
-	subscriptionURL             = "https://ly513.nb666666.com/6/4f5de92a86fee60497d895db0e970127"
-	subscriptionFetchTimeout    = 30 * time.Second
-	subscriptionGroupName       = "订阅代理"
-	subscriptionSourceID        = "subscription-main"
-	subscriptionSourcePrefix    = "SUB"
+	proxySubscriptionURLEnv  = "PERSONAL_PILOT_PROXY_SUBSCRIPTION_URL"
+	subscriptionFetchTimeout = 30 * time.Second
+	subscriptionGroupName    = "订阅代理"
+	subscriptionSourceID     = "subscription-main"
+	subscriptionSourcePrefix = "SUB"
 )
 
-// ImportSubscriptionProxies 从订阅 URL 拉取代理列表并导入代理池。
+func configuredSubscriptionURL() (string, error) {
+	rawURL := strings.TrimSpace(os.Getenv(proxySubscriptionURLEnv))
+	if rawURL == "" {
+		return "", fmt.Errorf("%s is not configured", proxySubscriptionURLEnv)
+	}
+	parsed, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid proxy subscription URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("proxy subscription URL must use http or https")
+	}
+	if strings.TrimSpace(parsed.Hostname()) == "" {
+		return "", fmt.Errorf("proxy subscription URL host is empty")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("proxy subscription URL must not embed credentials")
+	}
+	return parsed.String(), nil
+}
+
+// ImportSubscriptionProxies imports the configured local subscription source.
+// The source URL is supplied through an environment variable and is never
+// hard-coded into the repository.
 func (a *App) ImportSubscriptionProxies() {
 	log := logger.New("ProxySubscription")
-
-	ctx, cancel := context.WithTimeout(context.Background(), subscriptionFetchTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, subscriptionURL, nil)
+	sourceURL, err := configuredSubscriptionURL()
 	if err != nil {
-		log.Warn("创建订阅请求失败", logger.F("error", err.Error()))
+		log.Warn("订阅 URL 未配置", logger.F("error", err.Error()))
 		return
 	}
-	req.Header.Set("User-Agent", "personal-pilot/1.0")
-	req.Header.Set("Accept", "text/plain,*/*")
-
-	client := &http.Client{Timeout: subscriptionFetchTimeout}
-	resp, err := client.Do(req)
+	proxyURLs, err := fetchSubscriptionProxyURLs(sourceURL)
 	if err != nil {
 		log.Warn("订阅 URL 拉取失败", logger.F("error", err.Error()))
 		return
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Warn("订阅 URL 返回非成功状态码", logger.F("status", resp.StatusCode))
-		return
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
-	if err != nil {
-		log.Warn("读取订阅响应失败", logger.F("error", err.Error()))
-		return
-	}
-
-	rawText := decodeSubscriptionBody(body)
-	proxyURLs := parseSubscriptionProxyURLs(rawText)
-	if len(proxyURLs) == 0 {
-		log.Warn("订阅内容未解析到代理")
-		return
-	}
-
-	log.Info("订阅代理拉取成功", logger.F("total", len(proxyURLs)))
-
-	imported := a.mergeSubscriptionProxies(proxyURLs)
-	log.Info("订阅代理导入完成", logger.F("imported", imported))
+	imported := a.mergeSubscriptionProxies(proxyURLs, sourceURL)
+	log.Info("订阅代理导入完成", logger.F("total", len(proxyURLs)), logger.F("imported", imported))
 }
 
-// RefreshSubscriptionProxies 清除旧订阅代理并重新拉取。
+// RefreshSubscriptionProxies fetches and validates the replacement payload
+// before deleting the previous subscription nodes.
 func (a *App) RefreshSubscriptionProxies() error {
-	log := logger.New("ProxySubscription")
-	log.Info("手动刷新订阅代理...")
+	sourceURL, err := configuredSubscriptionURL()
+	if err != nil {
+		return err
+	}
+	proxyURLs, err := fetchSubscriptionProxyURLs(sourceURL)
+	if err != nil {
+		return err
+	}
 
 	existing := a.getLatestProxies()
 	kept := make([]browser.Proxy, 0, len(existing))
@@ -86,9 +87,41 @@ func (a *App) RefreshSubscriptionProxies() error {
 	if err := a.SaveBrowserProxies(kept); err != nil {
 		return fmt.Errorf("清理旧订阅代理失败: %w", err)
 	}
-
-	a.ImportSubscriptionProxies()
+	if imported := a.mergeSubscriptionProxies(proxyURLs, sourceURL); imported == 0 {
+		return fmt.Errorf("订阅内容未导入任何新代理")
+	}
 	return nil
+}
+
+func fetchSubscriptionProxyURLs(sourceURL string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), subscriptionFetchTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建订阅请求失败: %w", err)
+	}
+	req.Header.Set("User-Agent", "personal-pilot/1.1")
+	req.Header.Set("Accept", "text/plain,*/*")
+
+	client := &http.Client{Timeout: subscriptionFetchTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("拉取订阅失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("订阅返回 HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("读取订阅响应失败: %w", err)
+	}
+	proxyURLs := parseSubscriptionProxyURLs(decodeSubscriptionBody(body))
+	if len(proxyURLs) == 0 {
+		return nil, fmt.Errorf("订阅内容未解析到代理")
+	}
+	return proxyURLs, nil
 }
 
 func decodeSubscriptionBody(body []byte) string {
@@ -247,7 +280,7 @@ func proxyNameFromURL(rawURL string) string {
 	return subscriptionSourcePrefix + "-" + scheme
 }
 
-func (a *App) mergeSubscriptionProxies(proxyURLs []string) int {
+func (a *App) mergeSubscriptionProxies(proxyURLs []string, sourceURL string) int {
 	existing := a.getLatestProxies()
 	existingByConfig := make(map[string]struct{}, len(existing))
 	for _, item := range existing {
@@ -273,7 +306,7 @@ func (a *App) mergeSubscriptionProxies(proxyURLs []string) int {
 			ProxyConfig:      proxyURL,
 			GroupName:        subscriptionGroupName,
 			SourceID:         subscriptionSourceID,
-			SourceURL:        subscriptionURL,
+			SourceURL:        sourceURL,
 			SourceNamePrefix: subscriptionSourcePrefix,
 		}
 

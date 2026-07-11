@@ -37,8 +37,30 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 	}
 	defer releaseStartLock()
 
+	if limit := 0; a.config != nil {
+		limit = a.config.Runtime.MaxConcurrentInstances
+		if limit > 0 {
+			running := 0
+			a.browserMgr.Mutex.Lock()
+			for _, p := range a.browserMgr.Profiles {
+				if p != nil && p.Running && p.ProfileId != profileId {
+					running++
+				}
+			}
+			a.browserMgr.Mutex.Unlock()
+			if running >= limit {
+				return nil, fmt.Errorf("实例启动失败：已达并发上限 %d（docs/54 CP2）", limit)
+			}
+		}
+	}
+
 	a.browserMgr.Mutex.Lock()
-	defer a.browserMgr.Mutex.Unlock()
+	mutexHeld := true
+	defer func() {
+		if mutexHeld {
+			a.browserMgr.Mutex.Unlock()
+		}
+	}()
 
 	normalizedExtraLaunchArgs := normalizeNonEmptyStrings(extraLaunchArgs)
 	normalizedStartURLs := normalizeNonEmptyStrings(startURLs)
@@ -185,8 +207,8 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 	log.Info("代理配置检查",
 		logger.F("profile_id", profileId),
 		logger.F("proxy_id", profile.ProxyId),
-		logger.F("profile_proxy_config", profile.ProxyConfig),
-		logger.F("resolved_proxy_config", resolvedProxyConfig),
+		logger.F("profile_proxy_config", proxy.RedactProxyURL(profile.ProxyConfig)),
+		logger.F("resolved_proxy_config", proxy.RedactProxyURL(resolvedProxyConfig)),
 	)
 	if supported, errorMsg := proxy.ValidateProxyConfig(resolvedProxyConfig, proxies, profile.ProxyId); !supported {
 		startErr := fmt.Errorf("实例启动失败：%s", errorMsg)
@@ -195,8 +217,15 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		return profile, startErr
 	}
 
-	if proxy.IsSingBoxProtocol(resolvedProxyConfig) {
-		// hysteria2 / tuic → sing-box 桥接
+	requiresSingBoxBridge := proxy.IsSingBoxProtocol(resolvedProxyConfig) || proxy.IsStandardAuthProxy(resolvedProxyConfig) || proxy.HasSSHTunnelDirective(resolvedProxyConfig)
+	if requiresSingBoxBridge {
+		if a.singboxMgr == nil {
+			startErr := fmt.Errorf("实例启动失败：代理桥接启动失败（sing-box）。原因：sing-box 管理器未初始化。")
+			log.Error("代理桥接失败(sing-box)", logger.F("reason", startErr.Error()))
+			profile.LastError = startErr.Error()
+			return profile, startErr
+		}
+		// hysteria2 / tuic / 标准认证代理 → sing-box 本机无认证 SOCKS 入口
 		socksURL, bridgeKey, bridgeErr := a.singboxMgr.AcquireBridge(resolvedProxyConfig, proxies, profile.ProxyId)
 		if bridgeErr != nil {
 			startErr := fmt.Errorf("实例启动失败：代理桥接启动失败（sing-box）。原因：%v。请检查代理节点配置、sing-box 可执行文件是否存在，以及本地端口是否被占用。", bridgeErr)
@@ -251,33 +280,73 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 
 	args := browser.BuildCoreLaunchArgs(selectedCore.Kind, assignedDebugPort, userDataDir)
 
-	hasFingerprint := false
-	for _, arg := range profile.FingerprintArgs {
-		if strings.HasPrefix(arg, "--fingerprint=") {
-			hasFingerprint = true
-			break
+	materializedFP, materializedLaunch := browser.MaterializeRuntimeArgsForCoreBinary(
+		selectedCore.Kind, chromeBinaryPath, profile, a.config.Browser.DefaultFingerprintArgs, a.config.Browser.DefaultLaunchArgs,
+	)
+	proxyRegion := ""
+	if strings.TrimSpace(profile.ProxyId) != "" {
+		if health := a.BrowserProxyCheckIPHealth(profile.ProxyId); health.Ok && strings.TrimSpace(health.Country) != "" {
+			proxyRegion = strings.TrimSpace(health.Country)
+			materializedFP, materializedLaunch = browser.ApplyGeoLocale(health.Country, materializedFP, materializedLaunch)
 		}
 	}
-	if !hasFingerprint {
-		seed := 0
-		for _, char := range profile.ProfileId {
-			seed = (seed << 5) - seed + int(char)
+	profile.FingerprintArgs = materializedFP
+	profile.LaunchArgs = materializedLaunch
+
+	coherenceMode := browser.ParseCoherenceEnforceMode(os.Getenv("PERSONAL_PILOT_COHERENCE_MODE"))
+	consistencyInput := browser.BuildConsistencyInputFromArgs(materializedFP, materializedLaunch, proxyRegion)
+	coherenceAssessment := browser.AssessFingerprintConsistency(&consistencyInput)
+	if enforceErr := browser.EnforceFingerprintConsistency(coherenceAssessment, coherenceMode); enforceErr != nil {
+		startErr := fmt.Errorf("实例启动失败：指纹一致性硬门禁未通过（mode=block，score=%d，status=%s）。原因：%v",
+			coherenceAssessment.CoherenceScore, coherenceAssessment.Status, enforceErr)
+		log.Error("指纹一致性硬门禁拦截启动",
+			logger.F("profile_id", profileId),
+			logger.F("coherence_score", coherenceAssessment.CoherenceScore),
+			logger.F("coherence_status", coherenceAssessment.Status),
+			logger.F("hard_failures", coherenceAssessment.HardFailures),
+			logger.F("reason", startErr.Error()),
+		)
+		profile.LastError = startErr.Error()
+		return profile, startErr
+	}
+	if coherenceMode == browser.CoherenceWarn && (coherenceAssessment.Status != "coherent" || coherenceAssessment.HardFailures > 0) {
+		log.Warn("指纹一致性评估存在风险（warn 模式，不阻断启动）",
+			logger.F("profile_id", profileId),
+			logger.F("coherence_score", coherenceAssessment.CoherenceScore),
+			logger.F("coherence_status", coherenceAssessment.Status),
+			logger.F("hard_failures", coherenceAssessment.HardFailures),
+		)
+	}
+
+	hasFingerprint := false
+	if !browser.IsCamoufoxKind(selectedCore.Kind) {
+		for _, arg := range profile.FingerprintArgs {
+			if strings.HasPrefix(arg, "--fingerprint=") {
+				hasFingerprint = true
+				break
+			}
 		}
-		if seed < 0 {
-			seed = -seed
+		if !hasFingerprint {
+			seed := 0
+			for _, char := range profile.ProfileId {
+				seed = (seed << 5) - seed + int(char)
+			}
+			if seed < 0 {
+				seed = -seed
+			}
+			args = append(args, fmt.Sprintf("--fingerprint=%d", seed))
 		}
-		args = append(args, fmt.Sprintf("--fingerprint=%d", seed))
 	}
 
 	if effectiveProxy == "direct://" {
 		// 强制直连，覆盖系统全局代理
 		args = append(args, "--proxy-server=direct://")
 	} else if effectiveProxy != "" {
+		effectiveProxy = browser.NormalizeProxyServerForBrowser(effectiveProxy)
 		args = append(args, fmt.Sprintf("--proxy-server=%s", effectiveProxy))
 	}
-	args = append(args, profile.FingerprintArgs...)
-	args = append(args, sanitizedProfileLaunchArgs...)
-	args = append(args, sanitizedExtraLaunchArgs...)
+	args = browser.MergeCoreLaunchArgs(selectedCore.Kind, args, profile.FingerprintArgs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs)
+	args = browser.AppendProxyHardeningArgsForCore(selectedCore.Kind, args, effectiveProxy)
 	args = appendLaunchTargets(args, profile, normalizedStartURLs, skipDefaultStartURLs)
 
 	cmd := exec.Command(chromeBinaryPath, args...)
@@ -308,8 +377,20 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		AppMode:         browser.ProcessAppMode(),
 	})
 
+	// Release the manager lock while waiting for the debug port so status APIs stay responsive.
+	a.browserMgr.Mutex.Unlock()
+	mutexHeld = false
+
 	for attempt := 1; attempt <= maxStartAttempts; attempt++ {
 		stableDebugPort, readyErr := waitBrowserDebugPortStable(assignedDebugPort, userDataDir, startReadyTimeout, startStableWindow, monitor)
+
+		a.browserMgr.Mutex.Lock()
+		mutexHeld = true
+		profile, exists = a.browserMgr.Profiles[profileId]
+		if !exists {
+			return nil, fmt.Errorf("实例启动失败：未找到实例配置（ID=%s）。", profileId)
+		}
+
 		if readyErr == nil {
 			launchAudit.DebugPort = stableDebugPort
 			profile.LaunchAudit = launchAudit
@@ -327,17 +408,21 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 				logger.F("profile_id", profileId),
 				logger.F("debug_port", stableDebugPort),
 				logger.F("pid", profile.Pid),
-				logger.F("proxy", effectiveProxy),
+				logger.F("proxy", proxy.RedactProxyURL(effectiveProxy)),
 				logger.F("attempt", attempt),
 				logger.F("max_attempts", maxStartAttempts),
-				logger.F("args", strings.Join(args, " ")),
+				logger.F("args", redactLaunchArgsForLog(args)),
 			)
 			a.emitBrowserInstanceStarted(profile, false)
 
 			go a.waitBrowserProcess(profileId, monitor)
 			go a.applyProfileEnvironmentInjectionAsync(profileId, stableDebugPort)
-			// Phase 1: 启动后异步验证指纹 + 检测时区-IP 地理不匹配
 			go a.verifyFingerprintAndGeo(profileId, profile, stableDebugPort)
+			go a.maybeShowMousePointerAsync(profileId, stableDebugPort)
+			if profileWantsStealthAutopilot(profile) {
+				go a.runStealthAutopilotAsync(profileId)
+			}
+			a.touchProfileLifecycle(profileId)
 			// Phase 3: 启动行为模拟引擎
 			if profile.BehaviorProfileID != "" {
 				go a.startBehaviorEngine(profileId, profile.BehaviorProfileID, stableDebugPort)
@@ -366,6 +451,8 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 				logger.F("max_attempts", maxStartAttempts),
 				logger.F("timeout_ms", startReadyTimeout.Milliseconds()),
 			)
+			a.browserMgr.Mutex.Unlock()
+			mutexHeld = false
 			continue
 		}
 
@@ -603,7 +690,10 @@ func (a *App) BrowserInstanceStatus(profileId string) (*BrowserProfile, error) {
 	if !exists {
 		return nil, fmt.Errorf("profile not found")
 	}
-	return profile, nil
+	if profile.Running && !isBrowserProfileLive(profile, a.browserMgr.BrowserProcesses[profileId]) {
+		a.markProfileStoppedLocked(profileId, profile)
+	}
+	return copyBrowserProfileSnapshot(profile), nil
 }
 
 func (a *App) BrowserInstanceOpenUrl(profileId string, targetUrl string) bool {
@@ -801,6 +891,22 @@ func normalizeNonEmptyStrings(items []string) []string {
 	return out
 }
 
+func redactLaunchArgsForLog(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	safe := make([]string, 0, len(args))
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--proxy-server=") {
+			raw := strings.TrimPrefix(arg, "--proxy-server=")
+			safe = append(safe, "--proxy-server="+proxy.RedactProxyURL(raw))
+			continue
+		}
+		safe = append(safe, arg)
+	}
+	return strings.Join(safe, " ")
+}
+
 func ensureNewWindowLaunchArg(args []string) []string {
 	for _, arg := range args {
 		if strings.EqualFold(strings.TrimSpace(arg), "--new-window") {
@@ -824,8 +930,10 @@ func (a *App) markProfileStoppedLocked(profileId string, profile *BrowserProfile
 	if profile == nil {
 		return
 	}
+	releaseDebugPortReservation(profile.DebugPort)
 	profile.Running = false
 	profile.DebugReady = false
+	profile.InjectionReady = false
 	profile.Pid = 0
 	profile.DebugPort = 0
 	profile.RuntimeWarning = ""

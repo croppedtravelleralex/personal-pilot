@@ -65,7 +65,7 @@
 
 ## Phase 2: 交互行为引擎增强
 
-**来源：** `docs/30-behavioral-fidelity-layer.md`
+**来源：** `docs/53-behavior-biometrics-l5-execution-bridge.md`（原 `docs/30-behavioral-fidelity-layer.md` 已归档）
 **估时：** 8d
 
 ### P0
@@ -231,7 +231,7 @@
 
 ## Phase 6: 信任继承与环境一致性治理架构 **（P0 已接入，P1/P2 本机证据待补）**
 
-**来源：** `docs/39-adversarial-trust-inheritance.md`
+**来源：** `docs/50-asymmetric-dominance-architecture.md`（原 `docs/39-adversarial-trust-inheritance.md` 已归档至 `docs/archive/`）
 **估时：** 待估算
 
 > 本 Phase 的核心理念详见设计文档。以下仅列出实现项，不做详细展开。

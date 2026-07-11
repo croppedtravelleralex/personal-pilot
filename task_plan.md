@@ -1,5 +1,18 @@
 # Task Plan
 
+> **归档说明（2026-06-29）**：本文件描述的是 **agent.alexstudio.top 外部 API 网关** 的独立任务，与 Personal Pilot 主线无关。请勿当作本仓库当前任务。
+
+Canonical Personal Pilot 规划见：
+
+- [`PLAN.md`](PLAN.md) — 指纹/反检测执行枢纽（49–56）
+- [`docs/03-roadmap.md`](docs/03-roadmap.md)
+- [`docs/04-improvement-backlog.md`](docs/04-improvement-backlog.md)
+- [`docs/45-stealth-platform-handoff.md`](docs/45-stealth-platform-handoff.md)
+
+---
+
+# Task Plan（历史：外部 Gateway）
+
 ## Goal
 为 `agent.alexstudio.top` 设计并落一版**风险可控、仅供本人测试**的 API 中转站最小方案，重点先把边界、网关职责、鉴权与日志/限流约束收清楚，再决定如何把上游额度链接进来。
 
@@ -8,6 +21,8 @@
 - Phase 2 — 最小网关架构设计: pending
 - Phase 3 — 本人测试版安全边界与运维约束: pending
 - Phase 4 — 落地清单与下一步实施路径: pending
+
+（以下内容保留供历史参考，不再同步更新。）
 
 ## Phases
 

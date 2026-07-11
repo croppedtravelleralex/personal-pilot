@@ -1,0 +1,12 @@
+id: account-nurture-conservative-v1
+version: 1
+description: 保守养号（滚动 + 随机停留，无 script）
+steps:
+  - type: navigate
+    url: "{{platform.urls.home}}"
+  - type: scroll
+    direction: down
+    distance: 600
+    humanizationLevel: high
+  - type: wait
+    distance: 2000

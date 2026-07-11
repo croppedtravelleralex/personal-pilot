@@ -1,38 +1,7 @@
 # EXECUTION_CHECKLIST.md
 
-每轮执行必须检查的最小清单。
+**兼容入口** — 已归档至 [`docs/archive/root/EXECUTION_CHECKLIST.md`](docs/archive/root/EXECUTION_CHECKLIST.md)。
 
-## 轮前检查
+现行执行清单见 [`PLAN.md`](PLAN.md) §3 门禁、[`TODO.md`](TODO.md)、[`docs/40-m4-m20-execution-board.md`](docs/40-m4-m20-execution-board.md)。
 
-- [ ] 已确认本轮类型（plan/build/verify/summarize）
-- [ ] 已读取必需文件
-- [ ] 已确认当前主目标只有一个
-- [ ] 已确认本轮不越界到多个方向
-
-## 轮中检查
-
-- [ ] 已产生实际动作（不是只口头说明）
-- [ ] 已更新相关项目文件
-- [ ] 已避免无意义重复改动
-
-## 轮后检查
-
-- [ ] 已更新 `EXECUTION_LOG.md`
-- [ ] 已更新 `RUN_STATE.json`
-- [ ] 已记录本轮结果
-- [ ] 已判断 success / failed / blocked
-
-## build 轮附加
-
-- [ ] 至少改动 1 个项目文件
-- [ ] 至少有 1 项真实产出
-
-## verify 轮附加
-
-- [ ] 至少完成 1 项验证动作
-- [ ] 已记录验证结论
-
-## summarize 轮附加
-
-- [ ] 已汇总最近 4 轮
-- [ ] 已形成阶段总结
+Updated: 2026-07-09

@@ -933,6 +933,7 @@ export interface DesktopCoreWorkbenchIdentitySubscores {
   fingerprintVisible: number;
   consistency: number;
   profilePersistence: number;
+  longTermCoherence: number;
   proxyNetwork: number;
   behaviorNaturalness: number;
   automationSafety: number;
@@ -960,6 +961,35 @@ export interface DesktopCoreWorkbenchIdentityStrengthReport {
   capturedAt: string;
   source: string;
   summary: string[];
+}
+
+export interface DesktopCoreWorkbenchReportFailure {
+  step: string;
+  error: string;
+}
+
+export interface DesktopCoreWorkbenchFullReport {
+  profileId: string;
+  url: string;
+  title: string;
+  html: string;
+  text: string;
+  screenshot?: string;
+  tabs: Array<{
+    tabId: string;
+    title: string;
+    url: string;
+    active: boolean;
+  }>;
+  cookies: Array<Record<string, unknown>>;
+  localStorage: Record<string, string>;
+  sessionStorage: Record<string, string>;
+  fingerprint?: DesktopCoreWorkbenchFingerprintSnapshot;
+  fingerprintHealth?: DesktopCoreWorkbenchFingerprintHealthProfile;
+  identityReport?: DesktopCoreWorkbenchIdentityStrengthReport;
+  failures: DesktopCoreWorkbenchReportFailure[];
+  capturedAt: string;
+  source: string;
 }
 
 export type DesktopProfileStatus = "active" | "draft" | "disabled" | string;

@@ -12,7 +12,7 @@
 |------|---------|
 | 外部配置源 (Provider Endpoint) | 提供网络出口节点列表的远程 HTTP 端点 |
 | 路由节点 (Route) | 一个可用的网络出口，含地址、协议、端口和认证信息 |
-| 配置订阅 (Endpoint Subscription) | 对外部配置源的定期轮询和增量同步机制 |
+| 配置订阅 (Endpoint Subscription) | 对外部配置源的定期轮询和事务式全量替换机制 |
 | 批量导入 (Bulk Import) | 从 Clash/YAML/URI 等格式批量解析路由节点配置 |
 | 健康探针 (Health Probe) | 对路由节点进行 TCP/HTTP 连接测试以验证可用性 |
 | 绑定 (Binding) | 将特定路由节点分配给特定浏览器配置实例 |
@@ -65,7 +65,7 @@
 ### 2.1 外部配置源 CRUD
 
 ```go
-// backend/app_proxy_subscription.go (291行)
+// backend/internal/launchcode/subscription_store.go + subscription_api.go + subscription_fetcher.go
 ```
 
 **API 端点：**
@@ -78,7 +78,9 @@
 | `GET /api/proxy/subscribe/list` | GET | 配置源列表 | "订阅源列表" |
 | `GET /api/proxy/subscribe/{id}/nodes` | GET | 查看路由节点列表 | "所有节点" |
 | `POST /api/proxy/subscribe/{id}/validate` | POST | 验证配置源可用性 | "验证订阅源可用性" |
-| `POST /api/proxy/subscribe/{id}/import-clash` | POST | 导入 Clash 格式配置 | "从 Clash 配置文件导入" |
+| `POST /api/proxy/subscribe/import-clash` | POST | 静态导入 Clash YAML | "从 Clash 配置文件导入" |
+
+实现边界（2026-07-10）：元数据持久化到 `proxy_subscriptions`，节点写入 `browser_proxies` 并以 `source_id` 归属；URL 源支持手动/自动刷新，Clash 静态源不可刷新；失败不删除旧节点。
 
 ### 2.2 配置源数据结构
 
@@ -98,20 +100,34 @@ type EndpointSubscription struct {
 
 ### 2.3 手动配置
 
+`backend/internal/launchcode/manual_proxy_api.go` 现在已经接上真实代理池 CRUD：手动添加、列表、更新、删除和测试都会写入/读取 `browser_proxies`，并把 `SourceID=manual` 作为来源标记。响应里继续只回显脱敏后的 `proxyConfig`，避免把账号密码撒到接口输出里。
+
+手动 API 和代理核心都会把 provider 常见别名 `socks://`、`socks5h://`、`socket://` 归一为 `socks5://`，避免 UDEAL 这类二维码格式只在前端能导入、后端测试或浏览器桥接不认。
+
+如果某个上游代理只允许从 VPS 出口访问，可以在标准代理 URL 上追加 PersonalPilot 本机元参数：
+
+```text
+http://proxy.example.com:30000?pp_via_ssh=panda   # credentials stay in local secret/config
+socks5://proxy.example.com:1080?pp_via_ssh=panda  # credentials stay in local secret/config
+```
+
+该参数只在本机应用内生效，不传给上游代理。应用会自动启动本机 `ssh -N -L`，把链路变成 `Chrome -> 本机 sing-box 无认证 SOCKS -> 本机 SSH local forward -> panda VPS -> 上游代理`。不带 `pp_via_ssh` 的普通代理仍走原逻辑。
+
 ```go
 // backend/internal/launchcode/manual_proxy_api.go
-type ManualRouteEntry struct {
-    ID       string `json:"id"`
-    Host     string `json:"host"`
-    Port     int    `json:"port"`
-    Protocol string `json:"protocol"`  // socks5 / http / https / ss
-    Username string `json:"username,omitempty"`
-    Password string `json:"password,omitempty"`
-    Country  string `json:"country,omitempty"` // 手动标注
+type ManualProxyRequest struct {
+    Name       string `json:"name"`
+    Protocol   string `json:"protocol"`
+    Domain     string `json:"domain"`
+    Port       int    `json:"port"`
+    Username   string `json:"username,omitempty"`
+    Password   string `json:"password,omitempty"`
+    GroupName  string `json:"groupName,omitempty"`
+    DNSServers string `json:"dnsServers,omitempty"`
 }
 
-type BulkRouteRequest struct {
-    Entries []ManualRouteEntry `json:"entries"`
+type ManualProxyBatchRequest struct {
+    Proxies []ManualProxyBatchItem `json:"proxies"`
 }
 ```
 
@@ -171,8 +187,10 @@ func ParseClashConfig(data []byte) ([]Route, error) {
 
 ```go
 // 支持的标准 URI 格式:
-//   socks5://user:pass@host:port
-//   http://user:pass@host:port
+//   socks://USER_PASS_AT_host:port      // 归一为 socks5://
+//   socks5h://USER_PASS_AT_host:port    // 归一为 socks5://
+//   socks5://USER_PASS_AT_host:port
+//   http://USER_PASS_AT_host:port
 //   ss://method:password@host:port
 //   trojan://password@host:port
 ```
@@ -255,6 +273,26 @@ type BatchVerificationConfig struct {
     → 节点失效 → 自动重新选择 → 热切换
 ```
 
+2026-06-28 真实代理复核结论：UDEAL 节点从本机直连时端口可达，但 HTTP/SOCKS 握手被上游断开；经 `panda` VPS 出口后 HTTP 与 SOCKS 都可用，出口定位美国洛杉矶，`ip-api` 显示 `proxy=false`、`hosting=false`。本机通过 `ssh -L` 先把 UDEAL 端口经 `panda` 带回，再由 `sing-box` 转成本机无认证 SOCKS 入口的 smoke 已通过；当前代码已把这个手工方案产品化为 `?pp_via_ssh=panda`，启动、测速和 IP 健康检测都会通过同一 bridge manager 自动走 VPS 转发。这证明应用的“认证代理桥接层 + VPS 转发层”可用；如果上游只放行 VPS 出口，本机应使用该 URL 元参数。
+
+2026-07-08 三方 benchmark 代理预检复核：`ssh panda` BatchMode 探测可用；本机现有 `sing-box` 桥 `127.0.0.1:18082` 与 `127.0.0.1:18090` 均可被 HTTP/SOCKS 本地消费方式使用，出口仍为美国洛杉矶，`ip-api` 显示 `proxy=false`、`hosting=false`，ASN 名称 `COGENT-174`。该链路只作为 UDEAL-LA 单地区子矩阵，不和 Clash 机场 US/JP 子矩阵混进同一个 IP 质量分。脱敏报告见 `data/reports/three-browser-benchmark/proxy-preflight/proxy-preflight-summary-1783442692772.json`。
+
+### 5.3 浏览器启动约束（Chromium）
+
+**代理 scheme（2026-06-29）**
+
+- Chromium `--proxy-server` 只接受 `socks5://`、`http://`、`https://`。
+- `socks5h://` 是 curl 约定，传给 Chrome 会导致 **`ERR_NO_SUPPORTED_PROXIES`**。
+- sing-box 桥地址在写入启动参数前须经 `NormalizeProxyServerForBrowser()`（`backend/internal/browser/proxy_launch.go`）转为 `socks5://127.0.0.1:<port>`。
+- 远程 DNS 不由 Chrome 的 `socks5h` 完成，而由 **sing-box 出站解析** + 下方 resolver rules 共同保证。
+
+**`--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1`**
+
+- 来源：`AppendProxyHardeningArgs` / `runtime_materialize.go`（有桥接代理时注入）。
+- 含义：除 `127.0.0.1` 外，禁止本机 DNS 解析，逼页面 DNS 走代理链，降低 DNS 泄漏。
+- 副作用：Chromium 顶部黄条「不受支持的命令行标记」；存在被指纹/自动化扫描识别的理论风险（与反泄漏权衡，见 `docs/42-asymmetric-stealth-architecture.md`）。
+- 运维：若用户反馈「无法访问任何网站」，先查桥接是否存活、再查是否误用 `socks5h`；live 交接见 `docs/45-stealth-platform-handoff.md`。
+
 ### 5.2 绑定协调器 (Reconciliation)
 
 当绑定的路由节点失效时自动切换：
@@ -289,49 +327,29 @@ func ReconcileProfileRouting(profileID string) error {
 ## 六、数据持久化
 
 ```sql
--- 配置源表
+-- migration 16：订阅元数据
 CREATE TABLE IF NOT EXISTS proxy_subscriptions (
-    id              TEXT PRIMARY KEY,
-    name            TEXT NOT NULL,
-    url             TEXT NOT NULL,
-    auto_refresh    INTEGER DEFAULT 1,
-    interval_min    INTEGER DEFAULT 60,
-    last_sync_at    DATETIME,
-    status          TEXT DEFAULT 'active',
-    error_msg       TEXT,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+    subscription_id    TEXT PRIMARY KEY,
+    name               TEXT NOT NULL,
+    source_type        TEXT NOT NULL DEFAULT 'url',
+    source_url         TEXT NOT NULL DEFAULT '',
+    group_name         TEXT NOT NULL DEFAULT '',
+    auto_refresh       INTEGER NOT NULL DEFAULT 0,
+    refresh_interval_m INTEGER NOT NULL DEFAULT 0,
+    last_refresh_at    TEXT NOT NULL DEFAULT '',
+    last_error         TEXT NOT NULL DEFAULT '',
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL
 );
 
--- 路由节点表
-CREATE TABLE IF NOT EXISTS proxy_nodes (
-    id              TEXT PRIMARY KEY,
-    subscription_id TEXT REFERENCES proxy_subscriptions(id),
-    host            TEXT NOT NULL,
-    port            INTEGER NOT NULL,
-    protocol        TEXT NOT NULL,
-    username        TEXT,
-    password        TEXT,
-    country         TEXT,
-    health_score    REAL DEFAULT 0.0,
-    latency_ms      INTEGER,
-    last_check_at   DATETIME,
-    is_available    INTEGER DEFAULT 0,
-    fail_count      INTEGER DEFAULT 0,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_proxy_subscriptions_source_url
+    ON proxy_subscriptions(source_url) WHERE source_url != '';
 
--- 绑定记录表
-CREATE TABLE IF NOT EXISTS proxy_bindings (
-    id              TEXT PRIMARY KEY,
-    profile_id      TEXT NOT NULL,
-    node_id         TEXT NOT NULL REFERENCES proxy_nodes(id),
-    bind_type       TEXT DEFAULT 'auto',   -- auto / manual
-    status          TEXT DEFAULT 'active',
-    bound_at        DATETIME,
-    released_at     DATETIME,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+-- 订阅节点不另建 proxy_nodes 表；复用 browser_proxies。
+-- browser_proxies.source_id = proxy_subscriptions.subscription_id
+-- refresh 在单事务内删除旧 source_id 节点并插入新节点；失败自动 rollback。
+CREATE INDEX IF NOT EXISTS idx_browser_proxies_source_id
+    ON browser_proxies(source_id);
 ```
 
 ---
@@ -340,11 +358,11 @@ CREATE TABLE IF NOT EXISTS proxy_bindings (
 
 | 模块 | 代码位置 | 行数 | 状态 |
 |------|---------|------|------|
-| 配置源管理 | `backend/app_proxy_subscription.go` | 291 | 代码已实现 |
-| 手动路由管理 | `backend/internal/launchcode/manual_proxy_api.go` | — | 代码已实现 |
+| 配置源管理 | `backend/internal/launchcode/subscription_store.go`, `subscription_api.go`, `subscription_fetcher.go` | — | migration 16 + durable CRUD/validate/refresh/auto-refresh/Clash import 已实现 |
+| 手动路由管理 | `backend/internal/launchcode/manual_proxy_api.go` | — | 已接入真实代理池 CRUD，响应脱敏 |
 | Clash 导入 | `backend/app_proxy_import.go` | 657 | 代码已实现 |
 | 健康验证 | `backend/internal/browser/proxy_speed.go`, `proxy_dao.go` | — | 代码已实现 |
-| 批量验证 API | `backend/internal/launchcode/manual_proxy_api.go` | — | 代码已实现 |
+| 批量导入 API | `backend/internal/launchcode/manual_proxy_api.go` | — | 已接入真实批量写库，单条失败会在 results 中返回错误 |
 | Profile 绑定 | `backend/app_proxy_binding.go` | 51 | 代码已实现 |
 | 绑定协调 | `backend/internal/browser/proxy_binding.go` | — | 代码已实现 |
 | 路由选择 | `backend/internal/proxy/selector.go` | 299 | 代码已实现 |

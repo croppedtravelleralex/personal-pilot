@@ -1,0 +1,23 @@
+id: account-login-v1
+version: 1
+description: 通用账号登录范式（humanize type/click，禁止 script）
+steps:
+  - type: navigate
+    url: "{{platform.urls.login}}"
+  - type: wait-for-selector
+    selector: "{{platform.selectors.login.phoneInput}}"
+    waitTimeoutMs: 15000
+  - type: click
+    selector: "{{platform.selectors.login.phoneInput}}"
+    inputMode: auto
+  - type: type
+    selector: "{{platform.selectors.login.phoneInput}}"
+    text: "{{vars.phone}}"
+    humanizationLevel: high
+    inputMode: auto
+  - type: click
+    selector: "{{platform.selectors.login.submitButton}}"
+    inputMode: auto
+  - type: wait-for-selector
+    selector: "{{platform.selectors.login.otpInput}}"
+    waitTimeoutMs: "{{platform.cadence.login.otpWaitSeconds}}000"

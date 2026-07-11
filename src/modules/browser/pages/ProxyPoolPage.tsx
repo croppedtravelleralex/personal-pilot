@@ -3,8 +3,10 @@ import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Switch, Tab
 import type { SortOrder, TableColumn } from '../../../shared/components/Table'
 import { messageFromUnknownError } from '../../../shared/errors'
 import type { BrowserProxy, ProxyIPHealthResult } from '../types'
-import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, fetchSubscriptionImportFromURL, fixBrowserProxyNames } from '../api'
+import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, deleteBrowserProxy, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, fetchSubscriptionImportFromURL, fixBrowserProxyNames } from '../api'
 import { desktopRuntimeListen } from '../../../services/desktop'
+import { buildDirectImportCandidate, parseDirectProxyLine } from '../directProxyImport'
+import type { DirectImportForm, ImportCandidate } from '../directProxyImport'
 import yaml from 'js-yaml'
 
 // 内置代理 ID，不可删除、不可编辑
@@ -42,15 +44,6 @@ interface ClashProxy {
 
 type ProxyImportMode = 'clash' | 'subscription' | 'direct'
 
-interface DirectImportForm {
-  proxyName: string
-  protocol: 'http' | 'https' | 'socks5'
-  server: string
-  port: string
-  username: string
-  password: string
-}
-
 const DIRECT_PROXY_PROTOCOL_OPTIONS = [
   { value: 'http', label: 'HTTP' },
   { value: 'https', label: 'HTTPS' },
@@ -64,11 +57,6 @@ const INITIAL_DIRECT_IMPORT_FORM: DirectImportForm = {
   port: '',
   username: '',
   password: '',
-}
-
-interface ImportCandidate {
-  proxyName: string
-  proxyConfig: string
 }
 
 interface ProxyDisplayInfo {
@@ -262,89 +250,6 @@ function parseClashImportText(raw: string): ClashProxy[] {
     throw new Error(String((lastError as { message?: string }).message || '解析失败'))
   }
   throw new Error('无效的 YAML 格式，需要包含 proxies 数组')
-}
-
-function normalizeDirectProxyConfig(raw: string): string {
-  const trimmed = raw.trim()
-  if (!trimmed) return ''
-  if (/^socket:\/\//i.test(trimmed)) {
-    return trimmed.replace(/^socket:\/\//i, 'socks5://')
-  }
-  if (/^socks:\/\//i.test(trimmed)) {
-    return trimmed.replace(/^socks:\/\//i, 'socks5://')
-  }
-  return trimmed
-}
-
-function resolveDirectProxyName(rawName: string, scheme: string, server: string, port: number, index: number, prefix: string): string {
-  const name = rawName.trim()
-  const fallbackName = server
-    ? `${scheme.toUpperCase()}-${server}${port > 0 ? `:${port}` : ''}`
-    : `导入代理 ${index + 1}`
-  const finalName = name || fallbackName
-  return prefix ? `${prefix}-${finalName}` : finalName
-}
-
-function formatDirectProxyHost(raw: string): string {
-  const host = raw.trim()
-  if (!host) return ''
-  if (host.startsWith('[') && host.endsWith(']')) {
-    return host
-  }
-  return host.includes(':') ? `[${host}]` : host
-}
-
-function buildDirectImportCandidate(form: DirectImportForm): ImportCandidate {
-  const serverInput = form.server.trim()
-  if (!serverInput) {
-    throw new Error('请输入代理地址')
-  }
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(serverInput)) {
-    throw new Error('代理地址只需要填写主机名或 IP，不需要协议头')
-  }
-
-  const portInput = form.port.trim()
-  if (!portInput) {
-    throw new Error('请输入代理端口')
-  }
-  if (!/^\d+$/.test(portInput)) {
-    throw new Error('代理端口必须为数字')
-  }
-
-  const port = Number(portInput)
-  if (port < 1 || port > 65535) {
-    throw new Error('代理端口必须在 1-65535 之间')
-  }
-
-  const username = form.username.trim()
-  const password = form.password
-  if (password && !username) {
-    throw new Error('填写密码时请同时填写账号')
-  }
-
-  const auth = username
-    ? `${encodeURIComponent(username)}${password ? `:${encodeURIComponent(password)}` : ''}@`
-    : ''
-  const rawConfig = `${form.protocol}://${auth}${formatDirectProxyHost(serverInput)}:${port}`
-
-  let parsedURL: URL
-  try {
-    parsedURL = new URL(rawConfig)
-  } catch {
-    throw new Error('请输入有效的代理地址')
-  }
-
-  if (!parsedURL.hostname) {
-    throw new Error('请输入有效的代理地址')
-  }
-
-  const normalizedConfig = normalizeDirectProxyConfig(parsedURL.toString()).replace(/\/$/, '')
-  const normalizedServer = parsedURL.hostname.replace(/^\[(.*)\]$/, '$1')
-
-  return {
-    proxyName: resolveDirectProxyName(form.proxyName, form.protocol, normalizedServer, port, 0, ''),
-    proxyConfig: normalizedConfig,
-  }
 }
 
 function buildImportCandidatesFromClash(parsedProxies: ClashProxy[], prefix: string): ImportCandidate[] {
@@ -1159,9 +1064,12 @@ export function ProxyPoolPage() {
 
   const handleBatchDeleteConfirm = async () => {
     try {
-      const newProxies = proxies.filter(p => !selectedIds.has(p.proxyId))
-      await saveProxies(newProxies)
-      toast.success(`已删除 ${selectedIds.size} 个代理`)
+      const deleteIds = Array.from(selectedIds).filter(proxyId => !BUILTIN_PROXY_IDS.has(proxyId))
+      for (const proxyId of deleteIds) {
+        await deleteBrowserProxy(proxyId)
+      }
+      await loadProxies()
+      toast.success(`已删除 ${deleteIds.length} 个代理`)
       setSelectedIds(new Set())
     } catch (error: unknown) {
       toast.error(messageFromUnknownError(error, '删除失败'))
@@ -1492,8 +1400,8 @@ export function ProxyPoolPage() {
   const handleDeleteConfirm = async () => {
     if (!deletingId) return
     try {
-      const newProxies = proxies.filter(p => p.proxyId !== deletingId)
-      await saveProxies(newProxies)
+      await deleteBrowserProxy(deletingId)
+      await loadProxies()
       setSelectedIds(prev => { const next = new Set(prev); next.delete(deletingId); return next })
       toast.success('代理已删除')
     } catch (error: unknown) {
@@ -1653,15 +1561,16 @@ export function ProxyPoolPage() {
     }
     setImporting(true)
     try {
+      const currentProxies = ensureBuiltinProxies(await fetchBrowserProxies())
       const sourceURL = importMode === 'clash' ? importResolvedUrl.trim() : ''
       const isURLImport = !!sourceURL
       const sourceNamePrefix = importMode === 'clash' ? importNamePrefix.trim() : ''
-      const sourceID = isURLImport ? resolveImportSourceID(proxies, sourceURL, sourceNamePrefix) : ''
+      const sourceID = isURLImport ? resolveImportSourceID(currentProxies, sourceURL, sourceNamePrefix) : ''
       const sourceAutoRefresh = isURLImport ? globalAutoRefreshEnabled : false
       const sourceRefreshIntervalM = sourceAutoRefresh ? globalRefreshInterval : 0
       const sourceLastRefreshAt = isURLImport ? new Date().toISOString() : ''
       const oldSourceProxies = isURLImport
-        ? proxies.filter(item => (item.sourceId || '').trim() === sourceID)
+        ? currentProxies.filter(item => (item.sourceId || '').trim() === sourceID)
         : []
       const pickExistingID = createExistingProxyIDPicker(oldSourceProxies)
 
@@ -1679,8 +1588,8 @@ export function ProxyPoolPage() {
         sourceLastRefreshAt: sourceLastRefreshAt || undefined,
       }))
       const allProxies = isURLImport
-        ? proxies.filter(item => (item.sourceId || '').trim() !== sourceID).concat(newProxies)
-        : [...proxies, ...newProxies]
+        ? currentProxies.filter(item => (item.sourceId || '').trim() !== sourceID).concat(newProxies)
+        : [...currentProxies, ...newProxies]
       await saveProxies(allProxies)
       if (isURLImport && removedPreviewProxyNames.length > 0) {
         appendSourceIgnoredProxyNames(sourceID, removedPreviewProxyNames)
@@ -1721,11 +1630,12 @@ export function ProxyPoolPage() {
   }
 
   const selectedCount = selectedIds.size
+  const directImportLineParts = parseDirectProxyLine(directImportForm.server)
   const canParseImport = importMode === 'clash'
     ? !!importText.trim()
     : importMode === 'subscription'
       ? !!importUrl.trim()
-      : !!directImportForm.server.trim() && !!directImportForm.port.trim()
+      : !!directImportForm.server.trim() && (!!directImportForm.port.trim() || !!directImportLineParts)
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1964,14 +1874,14 @@ export function ProxyPoolPage() {
                   placeholder="例如：香港节点"
                 />
               </FormItem>
-              <FormItem label="代理地址" required>
+              <FormItem label="代理地址或代理行" required>
                 <Input
                   value={directImportForm.server}
                   onChange={e => setDirectImportForm(prev => ({ ...prev, server: e.target.value }))}
-                  placeholder="例如：127.0.0.1 或 hk.example.com"
+                  placeholder="例如：服务器:端口:账号:密码 或 账号:密码@服务器:端口"
                 />
               </FormItem>
-              <FormItem label="代理端口" required>
+              <FormItem label="代理端口（分栏填写时必填）">
                 <Input
                   type="number"
                   min={1}

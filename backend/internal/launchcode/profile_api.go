@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/proxy"
 )
 
 // ProfileWriteRequest 用于创建/更新实例配置。
@@ -233,12 +235,38 @@ func (s *LaunchServer) handleProfileProxySwitch(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	proxy := browser.Proxy{
+	proxies := []config.BrowserProxy{}
+	if s.browserMgr != nil && s.browserMgr.Config != nil {
+		proxies = s.browserMgr.Config.Browser.Proxies
+	}
+	allowDirectFallback := false
+	for _, tag := range profile.Tags {
+		if strings.EqualFold(strings.TrimSpace(tag), proxy.DirectProxyTagAllowFallback) {
+			allowDirectFallback = true
+			break
+		}
+	}
+	if err := proxy.ValidateDirectFallbackSwitch(
+		profile.ProxyConfig,
+		proxies,
+		profile.ProxyId,
+		req.ProxyID,
+		req.ProxyConfig,
+		allowDirectFallback,
+	); err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	proxyItem := browser.Proxy{
 		ProxyId:     req.ProxyID,
 		ProxyConfig: req.ProxyConfig,
 	}
 
-	changed := browser.BindProfileToProxy(profile, proxy, true)
+	changed := browser.BindProfileToProxy(profile, proxyItem, true)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":            true,

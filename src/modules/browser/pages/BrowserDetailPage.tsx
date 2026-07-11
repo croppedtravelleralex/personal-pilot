@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Copy, Globe, Play, RefreshCw, RotateCcw, Square } from 'lucide-react'
+import { Copy, Globe, MousePointer2, Play, RefreshCw, RotateCcw, Square } from 'lucide-react'
 import { Badge, Button, Card, Input, Table, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserProfile, BrowserTab } from '../types'
@@ -17,6 +17,7 @@ import {
 import { CookieManagerCard } from '../components/CookieManagerCard'
 import { SnapshotTab } from '../components/SnapshotTab'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
+import { workbenchHideMousePointer, workbenchShowMousePointer } from '../../../services/desktop'
 
 const resolveRuntimeStatus = (running: boolean, debugReady: boolean) => {
   if (!running) return { variant: 'warning' as const, label: '已停止' }
@@ -45,6 +46,8 @@ export function BrowserDetailPage() {
   const [targetUrl, setTargetUrl] = useState('https://example.com')
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
   const [pendingAction, setPendingAction] = useState<'starting' | 'stopping' | 'restarting' | null>(null)
+  const [mousePointerVisible, setMousePointerVisible] = useState(false)
+  const [mousePointerPending, setMousePointerPending] = useState(false)
 
   const loadProfile = async () => {
     const list = await fetchBrowserProfiles()
@@ -83,6 +86,12 @@ export function BrowserDetailPage() {
       offLifecycle()
     }
   }, [id])
+
+  useEffect(() => {
+    if (!profile?.running) {
+      setMousePointerVisible(false)
+    }
+  }, [profile?.running])
 
   if (!profile) {
     return (
@@ -156,6 +165,29 @@ export function BrowserDetailPage() {
     } finally {
       await loadProfile()
       setPendingAction(null)
+    }
+  }
+
+  const handleToggleMousePointer = async () => {
+    if (!profile.running || !profile.debugReady) {
+      toast.warning('实例需运行且 CDP 就绪后才能显示鼠标指针')
+      return
+    }
+    setMousePointerPending(true)
+    try {
+      if (mousePointerVisible) {
+        await workbenchHideMousePointer(profile.profileId)
+        setMousePointerVisible(false)
+        toast.success('已隐藏鼠标指针')
+      } else {
+        await workbenchShowMousePointer(profile.profileId)
+        setMousePointerVisible(true)
+        toast.success('已显示鼠标指针（含自动化轨迹）')
+      }
+    } catch (error: unknown) {
+      toast.error(resolveActionErrorMessage(error, '鼠标指针开关失败'))
+    } finally {
+      setMousePointerPending(false)
     }
   }
 
@@ -323,6 +355,18 @@ export function BrowserDetailPage() {
                 {!isRestarting && <RotateCcw className="w-4 h-4" />}
                 {isRestarting ? '重启中' : '重启'}
               </Button>
+              {profile.running && profile.debugReady && (
+                <Button
+                  size="sm"
+                  variant={mousePointerVisible ? 'primary' : 'secondary'}
+                  onClick={handleToggleMousePointer}
+                  loading={mousePointerPending}
+                  disabled={mousePointerPending}
+                >
+                  {!mousePointerPending && <MousePointer2 className="w-4 h-4" />}
+                  {mousePointerVisible ? '隐藏鼠标' : '显示鼠标'}
+                </Button>
+              )}
             </div>
           </Card>
 

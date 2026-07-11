@@ -147,6 +147,8 @@ export function BrowserProxyBatchTestSpeed(arg1:Array<string>,arg2:number):Promi
 
 export function BrowserProxyCheckIPHealth(arg1:string):Promise<backend.ProxyIPHealthResult>;
 
+export function BrowserProxyDelete(arg1:string):Promise<void>;
+
 export function BrowserProxyFetchClashByURL(arg1:string):Promise<Record<string, any>>;
 
 export function BrowserProxyFixNames():Promise<Record<string, any>>;
@@ -225,17 +227,7 @@ export function GetRecordingDetail(arg1:string,arg2:number,arg3:number):Promise<
 
 export function GetRunningInstances():Promise<Array<browser.Profile>>;
 
-export function IdentityReportProfile(arg1:string):Promise<any>;
-
-export function InitLLMClient():Promise<void>;
-
-export function LLMExecuteTask(arg1:string,arg2:string):Promise<void>;
-
-export function LLMGetOffsetLibrary():Promise<Array<Record<string, any>>>;
-
-export function LLMHasKey():Promise<boolean>;
-
-export function LLMPlanOnly(arg1:string):Promise<Array<Record<string, any>>>;
+export function IdentityReportProfile(arg1:string):Promise<browser.IdentityStrengthReport>;
 
 export function ListGroups():Promise<Array<browser.GroupWithCount>>;
 

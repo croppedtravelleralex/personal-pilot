@@ -14,6 +14,7 @@ pub fn run() {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
+            eprintln!("personal-pilot 已在运行，已切换到现有窗口");
         }))
         .setup(|app| {
             let desktop_state = state::build_desktop_state().map_err(|error| {

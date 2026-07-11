@@ -1,6 +1,121 @@
 package browser
 
-import "strings"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+// CoherenceEnforceMode controls whether inconsistent fingerprint assessments block launch.
+type CoherenceEnforceMode string
+
+const (
+	CoherenceWarn  CoherenceEnforceMode = "warn"
+	CoherenceBlock CoherenceEnforceMode = "block"
+)
+
+// ParseCoherenceEnforceMode maps env/config values to a known enforce mode (default warn).
+func ParseCoherenceEnforceMode(raw string) CoherenceEnforceMode {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case string(CoherenceBlock):
+		return CoherenceBlock
+	default:
+		return CoherenceWarn
+	}
+}
+
+// EnforceFingerprintConsistency returns an error in block mode when Status=="inconsistent"
+// or HardFailures > 0. In warn mode always returns nil (caller may still log assessment).
+func EnforceFingerprintConsistency(assessment FingerprintConsistencyAssessment, mode CoherenceEnforceMode) error {
+	if mode != CoherenceBlock {
+		return nil
+	}
+	if assessment.Status == "inconsistent" || assessment.HardFailures > 0 {
+		reason := strings.Join(assessment.RiskReasons, "; ")
+		if reason == "" {
+			reason = fmt.Sprintf("status=%s hard_failures=%d score=%d", assessment.Status, assessment.HardFailures, assessment.CoherenceScore)
+		}
+		return fmt.Errorf("fingerprint coherence blocked: %s", reason)
+	}
+	return nil
+}
+
+// BuildConsistencyInputFromArgs best-effort extracts assessment fields from launch args.
+func BuildConsistencyInputFromArgs(fingerprintArgs, launchArgs []string, proxyRegion string) FingerprintConsistencyInput {
+	input := FingerprintConsistencyInput{
+		TargetRegion: strings.TrimSpace(proxyRegion),
+		ProxyRegion:  strings.TrimSpace(proxyRegion),
+	}
+	args := append(append([]string{}, fingerprintArgs...), launchArgs...)
+	for _, arg := range args {
+		key, val, ok := splitFlag(arg)
+		if !ok || val == "" {
+			continue
+		}
+		switch key {
+		case "--timezone":
+			input.Timezone = val
+		case "--lang":
+			if input.Locale == "" {
+				input.Locale = val
+			}
+		case "--accept-lang", "--accept-language":
+			input.AcceptLanguage = val
+		case "--fingerprint-platform":
+			input.Platform = fingerprintPlatformToNavigator(val)
+		case "--fingerprint-webgl-vendor":
+			input.GPUVendor = val
+			if input.WebGLVendor == "" {
+				input.WebGLVendor = val
+			}
+		case "--fingerprint-webgl-renderer":
+			input.WebGLRenderer = val
+		case "--fingerprint-hardware-concurrency":
+			if n, err := strconv.Atoi(val); err == nil {
+				input.HardwareConcurrency = n
+			}
+		case "--window-size":
+			if w, h, ok := parseWindowSize(val); ok {
+				input.ScreenWidth = w
+				input.ScreenHeight = h
+				input.AvailWidth = w
+				input.AvailHeight = h
+			}
+		}
+	}
+	if input.AcceptLanguage == "" && input.Locale != "" {
+		input.AcceptLanguage = input.Locale
+	}
+	return input
+}
+
+func fingerprintPlatformToNavigator(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "windows", "win":
+		return "Win32"
+	case "mac", "macos", "darwin":
+		return "MacIntel"
+	case "linux":
+		return "Linux x86_64"
+	case "android":
+		return "Linux armv8l"
+	default:
+		return raw
+	}
+}
+
+func parseWindowSize(raw string) (int, int, bool) {
+	parts := strings.Split(strings.TrimSpace(raw), ",")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	w, errW := strconv.Atoi(strings.TrimSpace(parts[0]))
+	h, errH := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errW != nil || errH != nil || w <= 0 || h <= 0 {
+		return 0, 0, false
+	}
+	return w, h, true
+}
 
 // ConsistencyCheckSeverity indicates how severe a consistency mismatch is.
 type ConsistencyCheckSeverity int

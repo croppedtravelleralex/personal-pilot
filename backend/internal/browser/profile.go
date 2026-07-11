@@ -53,6 +53,30 @@ func ValidateFingerprintArgs(args []string) []string {
 	return warnings
 }
 
+// DropIneffectiveFingerprintFlags removes args whose key (before "=") is listed in
+// KnownIneffectiveFingerprintFlags. ValidateFingerprintArgs remains for warnings on
+// profile storage paths; materialization should call this to strip dead flags.
+func DropIneffectiveFingerprintFlags(args []string) (kept []string, dropped []string) {
+	ineffectiveSet := make(map[string]bool, len(KnownIneffectiveFingerprintFlags))
+	for _, f := range KnownIneffectiveFingerprintFlags {
+		ineffectiveSet[f] = true
+	}
+	for _, arg := range args {
+		eqIdx := strings.Index(arg, "=")
+		if eqIdx == -1 {
+			kept = append(kept, arg)
+			continue
+		}
+		key := arg[:eqIdx]
+		if ineffectiveSet[key] {
+			dropped = append(dropped, arg)
+			continue
+		}
+		kept = append(kept, arg)
+	}
+	return kept, dropped
+}
+
 // InitData 初始化浏览器数据
 const humanizeSeedSalt = "personal-pilot-humanize-seed-v1:"
 
@@ -363,6 +387,7 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		return nil, err
 	}
 	ensureProfileHumanizeSeed(profile)
+	ensureProfilePersonaID(profile)
 	m.Profiles[profileId] = profile
 	if warnings := ValidateFingerprintArgs(profile.FingerprintArgs); len(warnings) > 0 {
 		log.Warn("实例包含无效指纹标志",

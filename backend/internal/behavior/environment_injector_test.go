@@ -33,20 +33,27 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 		t.Fatalf("compile environment injection: %v", err)
 	}
 	needles := []string{
-		"Navigator.prototype, 'webdriver'",
-		"Navigator.prototype, 'languages'",
-		"HTMLCanvasElement.prototype.toDataURL",
-		"CanvasRenderingContext2D.prototype.getImageData",
-		"Intl.DateTimeFormat.prototype.resolvedOptions",
-		"Date.prototype.getTimezoneOffset",
+		"defineGetter(navProto, 'webdriver', undefined)",
+		"defineGetter(navProto, 'languages'",
+		"root.chrome = {",
+		"replaceMethod(root.navigator.permissions, 'query'",
+		"replaceMethod(HTMLCanvasElement.prototype, 'toDataURL'",
+		"replaceMethod(CanvasRenderingContext2D.prototype, 'getImageData'",
+		"replaceMethod(Intl.DateTimeFormat.prototype, 'resolvedOptions'",
+		"replaceMethod(Date.prototype, 'getTimezoneOffset'",
 		"getSupportedExtensions",
-		"AnalyserNode.prototype.getFloatFrequencyData",
-		"AudioBuffer.prototype.copyFromChannel",
+		"replaceMethod(AnalyserNode.prototype, 'getFloatFrequencyData'",
+		"replaceMethod(AudioBuffer.prototype, 'copyFromChannel'",
 		"Document.prototype, 'fonts'",
 		"enumerateDevices",
 		"getUserMedia",
 		"RTCPeerConnection",
 		"a=candidate:",
+		"function installEnvironment(profile)",
+		"WorkerNavigator",
+		"OffscreenCanvas",
+		"wrapClassicWorker(Worker, 'Worker')",
+		"importScripts(",
 	}
 	for _, needle := range needles {
 		if !strings.Contains(plan.Script, needle) {
@@ -58,6 +65,16 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 	}
 	if len(plan.AppliedFamilies) < 8 {
 		t.Fatalf("applied families = %v", plan.AppliedFamilies)
+	}
+	foundWorker := false
+	for _, family := range plan.AppliedFamilies {
+		if family == "worker_scope" {
+			foundWorker = true
+			break
+		}
+	}
+	if !foundWorker {
+		t.Fatalf("applied families missing worker_scope: %v", plan.AppliedFamilies)
 	}
 	if len(plan.Warnings) != 0 {
 		t.Fatalf("warnings = %v", plan.Warnings)
@@ -95,5 +112,156 @@ func TestStableProfileSeedDeterministic(t *testing.T) {
 	}
 	if stableProfileSeed("profile") == stableProfileSeed("other") {
 		t.Fatal("stableProfileSeed should differ for distinct input")
+	}
+}
+
+func TestCompileEnvironmentInjectionScriptNativeizesReplacedFunctions(t *testing.T) {
+	plan, err := CompileEnvironmentInjectionScript(EnvironmentInjectionProfile{
+		Seed:            "native-test",
+		Timezone:        "Asia/Shanghai",
+		FontAllowlist:   []string{"Segoe UI"},
+		MediaPermission: "prompt",
+		MediaDevices:    []MediaDeviceSpec{{Kind: "audioinput", ID: "mic"}},
+		WebRTCPolicy:    WebRTCPolicy{Mode: "block_private_candidates"},
+	})
+	if err != nil {
+		t.Fatalf("compile environment injection: %v", err)
+	}
+	needles := []string{
+		"const nativeFunctionMap = new WeakMap()",
+		"nativeFunctionMap.set(patchedFunctionToString, originalFunctionToString)",
+		"Object.defineProperty(Function.prototype, 'toString'",
+		"makeNative(getter, originalGetter || originalFunctionToString)",
+		"replaceMethod(Intl.DateTimeFormat.prototype, 'resolvedOptions'",
+		"replaceMethod(HTMLCanvasElement.prototype, 'toDataURL'",
+		"replaceMethod(proto, 'getParameter'",
+		"replaceMethod(AnalyserNode.prototype, 'getFloatFrequencyData'",
+		"replaceMethod(nav.mediaDevices, 'enumerateDevices'",
+		"root.RTCPeerConnection = makeNative(",
+		"wrapClassicWorker(Worker, 'Worker')",
+	}
+	for _, needle := range needles {
+		if !strings.Contains(plan.Script, needle) {
+			t.Errorf("script missing nativeization marker %q", needle)
+		}
+	}
+}
+
+func TestShouldPatchCurrentDocument(t *testing.T) {
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"", true},
+		{"about:blank", true},
+		{"chrome://newtab", true},
+		{"https://example.com", false},
+		{"http://localhost:8080", false},
+	}
+	for _, tc := range cases {
+		if got := shouldPatchCurrentDocument(tc.url); got != tc.want {
+			t.Fatalf("shouldPatchCurrentDocument(%q) = %v, want %v", tc.url, got, tc.want)
+		}
+	}
+}
+
+func TestApplyEnvironmentInjectionSkipsCurrentPageOnHTTPS(t *testing.T) {
+	var methods []string
+	executor := &CDPExecutor{
+		sendCommandHook: func(method string, params interface{}) ([]byte, error) {
+			methods = append(methods, method)
+			switch method {
+			case "Runtime.evaluate":
+				expr := ""
+				if m, ok := params.(map[string]interface{}); ok {
+					if v, ok := m["expression"].(string); ok {
+						expr = v
+					}
+				}
+				if expr == `location.href` {
+					return []byte(`{"result":{"value":"https://example.com/"}}`), nil
+				}
+				return []byte(`{}`), nil
+			default:
+				return []byte(`{}`), nil
+			}
+		},
+	}
+	plan, err := executor.ApplyEnvironmentInjection(EnvironmentInjectionProfile{
+		Seed:          "skip-test",
+		Timezone:      "Asia/Shanghai",
+		Platform:      "Win32",
+		Vendor:        "Google Inc.",
+		UserAgent:     "Mozilla/5.0 test",
+		WebGLVendor:   "Intel Inc.",
+		WebGLRenderer: "Intel Iris",
+	})
+	if err != nil {
+		t.Fatalf("ApplyEnvironmentInjection: %v", err)
+	}
+	scriptEvalCount := 0
+	for _, method := range methods {
+		if method != "Runtime.evaluate" {
+			continue
+		}
+		scriptEvalCount++
+	}
+	if scriptEvalCount != 1 {
+		t.Fatalf("expected only location.href Runtime.evaluate, methods=%v", methods)
+	}
+	foundDeferred := false
+	for _, warning := range plan.Warnings {
+		if warning == "current_page_environment_patch_deferred_to_navigation" {
+			foundDeferred = true
+			break
+		}
+	}
+	if !foundDeferred {
+		t.Fatalf("expected deferred warning, got %v", plan.Warnings)
+	}
+}
+
+func TestApplyEnvironmentInjectionPatchesAboutBlank(t *testing.T) {
+	var methods []string
+	executor := &CDPExecutor{
+		sendCommandHook: func(method string, params interface{}) ([]byte, error) {
+			methods = append(methods, method)
+			switch method {
+			case "Runtime.evaluate":
+				expr := ""
+				if m, ok := params.(map[string]interface{}); ok {
+					if v, ok := m["expression"].(string); ok {
+						expr = v
+					}
+				}
+				if expr == `location.href` {
+					return []byte(`{"result":{"value":"about:blank"}}`), nil
+				}
+				return []byte(`{}`), nil
+			default:
+				return []byte(`{}`), nil
+			}
+		},
+	}
+	_, err := executor.ApplyEnvironmentInjection(EnvironmentInjectionProfile{
+		Seed:        "blank-test",
+		Timezone:    "Asia/Shanghai",
+		Platform:    "Win32",
+		Vendor:      "Google Inc.",
+		UserAgent:   "Mozilla/5.0 test",
+		WebGLVendor: "Intel Inc.",
+		WebGLRenderer: "Intel Iris",
+	})
+	if err != nil {
+		t.Fatalf("ApplyEnvironmentInjection: %v", err)
+	}
+	evalCount := 0
+	for _, method := range methods {
+		if method == "Runtime.evaluate" {
+			evalCount++
+		}
+	}
+	if evalCount < 2 {
+		t.Fatalf("expected URL probe + script evaluate on about:blank, methods=%v", methods)
 	}
 }

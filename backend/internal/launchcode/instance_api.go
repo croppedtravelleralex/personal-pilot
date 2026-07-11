@@ -70,6 +70,7 @@ func (s *LaunchServer) handleInstanceStatus(w http.ResponseWriter, r *http.Reque
 			"ok": true, "profileId": profileID,
 			"running": profile.Running, "pid": profile.Pid,
 			"debugPort": profile.DebugPort, "debugReady": profile.DebugReady,
+			"injectionReady": profile.InjectionReady,
 			"profile": profile,
 		})
 		return
@@ -372,8 +373,12 @@ func mapInstanceOperationErrorStatus(err error) int {
 		strings.Contains(msg, "cdp ownership rejected"),
 		strings.Contains(msg, "not ready"),
 		strings.Contains(msg, "未运行"),
-		strings.Contains(msg, "未就绪"):
+		strings.Contains(msg, "未就绪"),
+		strings.Contains(msg, "环境注入未就绪"):
 		return http.StatusConflict
+	case strings.Contains(msg, "forbidden"),
+		strings.Contains(msg, "禁止"):
+		return http.StatusForbidden
 	case strings.Contains(msg, strings.ToLower(strings.TrimSpace(http.ErrNotSupported.Error()))):
 		return http.StatusServiceUnavailable
 	default:

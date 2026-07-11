@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"strings"
 
+	"personal-pilot/backend/internal/asymmetric"
 	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/detection"
 )
 
 type workbenchProfileRequest struct {
@@ -61,11 +63,37 @@ func (s *LaunchServer) handleWorkbenchNavigate(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and url are required"})
 		return
 	}
-	if err := operator.WorkbenchNavigateProfile(profileID, targetURL); err != nil {
+	results, err := operator.WorkbenchExecuteActions(profileID, []ActionRequest{{
+		Type:              "navigate",
+		URL:               targetURL,
+		PostWaitMs:        2500,
+		HumanizationLevel: "high",
+	}})
+	if err != nil {
 		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "url": targetURL})
+	pageURL := ""
+	pageTitle := ""
+	okNav := false
+	errMsg := ""
+	if len(results) > 0 {
+		okNav = results[0].OK
+		pageURL = results[0].PageURL
+		pageTitle = results[0].PageTitle
+		errMsg = results[0].Error
+	}
+	if !okNav {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"ok": false, "profileId": profileID, "url": targetURL,
+			"pageUrl": pageURL, "pageTitle": pageTitle, "error": errMsg,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "profileId": profileID, "url": targetURL,
+		"pageUrl": pageURL, "pageTitle": pageTitle,
+	})
 }
 
 func (s *LaunchServer) handleWorkbenchRefresh(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +135,36 @@ func (s *LaunchServer) handleWorkbenchScreenshot(w http.ResponseWriter, r *http.
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "screenshot": dataURL})
+}
+
+func (s *LaunchServer) handleWorkbenchFullReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	report, err := operator.WorkbenchCaptureFullReport(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	if report == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "profileId": profileID, "error": "full report is empty"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":        true,
+		"profileId": profileID,
+		"report":    report,
+		"failures":  report.Failures,
+	})
 }
 
 func (s *LaunchServer) handleWorkbenchFingerprint(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +220,59 @@ func (s *LaunchServer) handleWorkbenchFingerprintHealth(w http.ResponseWriter, r
 		"capturedAt":  health.CapturedAt,
 		"source":      health.Source,
 	})
+}
+
+func (s *LaunchServer) handleWorkbenchStealthProbe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	probeOp, ok := operator.(StealthProbeOperator)
+	if !ok {
+		writeJSON(w, http.StatusNotImplemented, map[string]interface{}{"ok": false, "error": "stealth probe not supported"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	report, err := probeOp.WorkbenchRunStealthProbeSuite(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	creepTrust := extractCreepJSTrust(report)
+	target99 := creepTrust >= asymmetric.TargetCreepJSTrust99Plus
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":           true,
+		"profileId":    profileID,
+		"report":       report,
+		"creepTrust":   creepTrust,
+		"target99Plus": target99,
+	})
+}
+
+func extractCreepJSTrust(report map[string]interface{}) float64 {
+	if report == nil {
+		return 0
+	}
+	raw, ok := report["creepjs"]
+	if !ok {
+		return 0
+	}
+	switch v := raw.(type) {
+	case detection.SiteProbeResult:
+		return v.TrustScore
+	case map[string]interface{}:
+		if f, ok := v["trustScore"].(float64); ok {
+			return f
+		}
+	}
+	return 0
 }
 
 func (s *LaunchServer) handleWorkbenchActivate(w http.ResponseWriter, r *http.Request) {
@@ -410,6 +521,46 @@ func (s *LaunchServer) handleWorkbenchWait(w http.ResponseWriter, r *http.Reques
 		"ok": true, "profileId": res["profileId"], "action": res["action"],
 		"waited": true, "pageUrl": res["pageUrl"], "pageTitle": res["pageTitle"],
 	})
+}
+
+func (s *LaunchServer) handleWorkbenchMouseShow(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	if err := operator.WorkbenchShowMousePointer(profileID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "visible": true})
+}
+
+func (s *LaunchServer) handleWorkbenchMouseHide(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	if err := operator.WorkbenchHideMousePointer(profileID); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "visible": false})
 }
 
 func (s *LaunchServer) handleWorkbenchActions(w http.ResponseWriter, r *http.Request) {
@@ -889,6 +1040,56 @@ func (s *LaunchServer) handleWorkbenchStorageSet(w http.ResponseWriter, r *http.
 		return
 	}
 	if err := operator.WorkbenchSetLocalStorage(profileID, req.Items); err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "set": len(req.Items)})
+}
+
+func (s *LaunchServer) handleWorkbenchSessionStorageGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	profileID, ok := decodeWorkbenchProfileID(w, r)
+	if !ok {
+		return
+	}
+	operator, ok2 := s.workbenchOperator(w)
+	if !ok2 {
+		return
+	}
+	items, err := operator.WorkbenchGetSessionStorage(profileID)
+	if err != nil {
+		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
+		return
+	}
+	if items == nil {
+		items = map[string]string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "count": len(items), "items": items})
+}
+
+func (s *LaunchServer) handleWorkbenchSessionStorageSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"ok": false, "error": "method not allowed"})
+		return
+	}
+	operator, ok := s.workbenchOperator(w)
+	if !ok {
+		return
+	}
+	var req storageSetRequest
+	if status, errMsg := decodeLimitedJSONBody(r, &req); errMsg != "" {
+		writeJSON(w, status, map[string]interface{}{"ok": false, "error": errMsg})
+		return
+	}
+	profileID := strings.TrimSpace(req.ProfileID)
+	if profileID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId is required"})
+		return
+	}
+	if err := operator.WorkbenchSetSessionStorage(profileID, req.Items); err != nil {
 		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
 		return
 	}

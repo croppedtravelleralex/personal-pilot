@@ -4,6 +4,7 @@ import {
   browserProxyCheckIPHealthFromDesktop,
   browserProxyTestSpeedFromDesktop,
   deleteBrowserCoreFromDesktop,
+  deleteBrowserProxyFromDesktop,
   downloadBrowserCoreFromDesktop,
   desktopRuntimeListen,
   fetchBrowserProxyClashFromDesktop,
@@ -29,14 +30,14 @@ import {
   validateBrowserCoreFromDesktop,
   validateProxyConfigFromDesktop,
   DesktopServiceError,
+  hasDesktopRuntime,
 } from '../../services/desktop'
 import type {
   BehaviorExecutionPermissionMode, BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings,
   BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended,
   CookieInfo, SnapshotInfo, BrowserBookmark, BrowserGroup, BrowserGroupInput, BrowserGroupWithCount,
   ProxyIPHealthResult, ActiveRecordingStatus, Recording, RecordingDetailPage, RecordingEventStats,
-  RecordingSummary, RecordedEvent, NaturalLanguageAction, NaturalLanguageTaskEvent,
-  PlaybackEventPayload, PlaybackProgressPayload, RecordingExportBundle, VariationConfig,
+  RecordingSummary, RecordedEvent, PlaybackEventPayload, PlaybackProgressPayload, RecordingExportBundle, VariationConfig,
   BrowserInstanceRuntimeEvent,
   BrowserInstanceRuntimeEventName,
   BrowserRuntimeEventPayload,
@@ -45,15 +46,6 @@ import { DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE } from './types'
 
 type Unsubscribe = () => void
 type BrowserInstanceRuntimeEventHandler = (event: BrowserInstanceRuntimeEvent) => void
-type RecordingEventPagePayload = {
-  events?: RecordedEvent[]
-  eventTotal?: number
-  eventOffset?: number
-  eventLimit?: number
-  offset?: number
-  limit?: number
-  total?: number
-}
 type AutomationActionParams = Record<string, unknown>
 
 export interface SchedulerTaskTrigger {
@@ -162,14 +154,11 @@ type BrowserNativeBindings = Partial<{
   BehaviorStopRecording: (profileId: string, name: string) => Promise<Recording>
   BehaviorRecordingList: () => Promise<Recording[]>
   BehaviorRecordingSummaryList: () => Promise<RecordingSummary[]>
-  BehaviorRecordingMetaList: () => Promise<RecordingSummary[]>
   BehaviorRecordingStatus: () => Promise<Partial<ActiveRecordingStatus>>
   ActiveRecordingStatus: () => Promise<Partial<ActiveRecordingStatus>>
   BehaviorRecordingDelete: (id: string) => Promise<void>
   BehaviorGetRecording: (id: string) => Promise<Recording | null>
   BehaviorGetRecordingDetail: (id: string, eventOffset: number, eventLimit: number) => Promise<RecordingDetailPage | null>
-  BehaviorGetRecordingMeta: (id: string) => Promise<RecordingSummary | null>
-  BehaviorGetRecordingEvents: (id: string, eventOffset: number, eventLimit: number) => Promise<RecordingEventPagePayload>
   BehaviorPlayRecording: (profileId: string, recordingId: string, variation: VariationConfig) => Promise<void>
   BehaviorStopPlayback: (profileId: string) => Promise<void>
   BehaviorQuickRecord: (profileId: string) => Promise<Recording>
@@ -190,8 +179,6 @@ type BrowserNativeBindings = Partial<{
   AutomationRuleDelete: (ruleId: string) => Promise<void>
   AutomationRuleToggle: (ruleId: string, enabled: boolean) => Promise<void>
   AutomationRuleTestFire: (ruleId: string) => Promise<void>
-  LLMPlanOnly: (taskDescription: string) => Promise<Array<Record<string, unknown>>>
-  LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>
 }>
 
 const BROWSER_INSTANCE_RUNTIME_EVENT_NAMES: BrowserInstanceRuntimeEventName[] = [
@@ -697,6 +684,24 @@ export async function saveBrowserProxies(proxies: BrowserProxy[]): Promise<boole
   return true
 }
 
+export async function deleteBrowserProxy(proxyId: string): Promise<boolean> {
+  try {
+    await deleteBrowserProxyFromDesktop(proxyId)
+  } catch (error) {
+    if (hasDesktopRuntime()) {
+      throw error
+    }
+    if (
+      !(error instanceof DesktopServiceError) ||
+      (error.code !== 'desktop_invoke_unavailable' && error.code !== 'desktop_command_not_ready')
+    ) {
+      throw error
+    }
+  }
+  mockProxies = mockProxies.filter(p => p.proxyId !== proxyId)
+  return true
+}
+
 export async function validateProxyConfig(proxyConfig: string, proxyId: string): Promise<{ supported: boolean; errorMsg: string }> {
   const result = await tryDesktop(() => validateProxyConfigFromDesktop(proxyConfig, proxyId))
   if (result) return result
@@ -1180,23 +1185,6 @@ function normalizeRecordingDetail(payload: unknown, fallbackOffset: number, fall
   }
 }
 
-function normalizeNaturalLanguageAction(action: Record<string, unknown>): NaturalLanguageAction {
-  const rawType = String(action.type || 'wait')
-  const allowedTypes = new Set<NaturalLanguageAction['type']>(['goto', 'click', 'scroll', 'type', 'wait'])
-  const type = allowedTypes.has(rawType as NaturalLanguageAction['type'])
-    ? rawType as NaturalLanguageAction['type']
-    : 'wait'
-
-  return {
-    type,
-    description: typeof action.description === 'string' ? action.description : undefined,
-    selector: typeof action.selector === 'string' ? action.selector : undefined,
-    url: typeof action.url === 'string' ? action.url : undefined,
-    text: typeof action.text === 'string' ? action.text : undefined,
-    durationMs: typeof action.durationMs === 'number' ? action.durationMs : undefined,
-  }
-}
-
 export async function startRecording(profileId: string): Promise<boolean> {
   const bindings = await getBindings()
   if (!bindings?.BehaviorStartRecording) {
@@ -1226,10 +1214,6 @@ export async function fetchRecordingSummaries(): Promise<RecordingSummary[]> {
   const bindings = await getBindings()
   if (bindings?.BehaviorRecordingSummaryList) {
     const list = await bindings.BehaviorRecordingSummaryList()
-    return (list || []).map(normalizeRecordingSummary)
-  }
-  if (bindings?.BehaviorRecordingMetaList) {
-    const list = await bindings.BehaviorRecordingMetaList()
     return (list || []).map(normalizeRecordingSummary)
   }
   if (bindings?.BehaviorRecordingList) {
@@ -1279,14 +1263,6 @@ export async function fetchRecordingDetail(
 
   if (bindings?.BehaviorGetRecordingDetail) {
     return normalizeRecordingDetail(await bindings.BehaviorGetRecordingDetail(id, eventOffset, eventLimit), eventOffset, eventLimit)
-  }
-
-  if (bindings?.BehaviorGetRecordingMeta && bindings?.BehaviorGetRecordingEvents) {
-    const [summary, eventPage] = await Promise.all([
-      bindings.BehaviorGetRecordingMeta(id),
-      bindings.BehaviorGetRecordingEvents(id, eventOffset, eventLimit),
-    ])
-    return normalizeRecordingDetail({ recording: summary, ...eventPage }, eventOffset, eventLimit)
   }
 
   const recording = await getRecording(id)
@@ -1498,46 +1474,6 @@ export function onPlaybackEvents(callbacks: {
   }
   if (callbacks.onFailed) {
     offs.push(onRuntimeEvent('automation:playback:failed', callbacks.onFailed))
-  }
-  return combineUnsubscribes(offs)
-}
-export async function planNaturalLanguageTask(taskDescription: string): Promise<NaturalLanguageAction[]> {
-  const bindings = await getBindings()
-  if (!bindings?.LLMPlanOnly) {
-    throw new Error('Wails bindings are not available')
-  }
-  const actions = await bindings.LLMPlanOnly(taskDescription)
-  return (actions || []).map((action: Record<string, unknown>) => normalizeNaturalLanguageAction(action))
-}
-
-export async function executeNaturalLanguageTask(profileId: string, taskDescription: string): Promise<boolean> {
-  const bindings = await getBindings()
-  if (!bindings?.LLMExecuteTask) {
-    throw new Error('Wails bindings are not available')
-  }
-  await bindings.LLMExecuteTask(profileId, taskDescription)
-  return true
-}
-
-export function onNaturalLanguageTaskEvents(callbacks: {
-  onPlanning?: (payload: NaturalLanguageTaskEvent) => void
-  onPlanReady?: (payload: NaturalLanguageTaskEvent) => void
-  onExecuting?: (payload: NaturalLanguageTaskEvent) => void
-  onStepDone?: (payload: NaturalLanguageTaskEvent) => void
-  onComplete?: (payload: NaturalLanguageTaskEvent) => void
-  onFailed?: (payload: NaturalLanguageTaskEvent) => void
-  onCancelled?: (payload: NaturalLanguageTaskEvent) => void
-}): Unsubscribe {
-  const offs: Unsubscribe[] = []
-  if (callbacks.onPlanning) offs.push(onRuntimeEvent('llm:task:planning', callbacks.onPlanning))
-  if (callbacks.onPlanReady) offs.push(onRuntimeEvent('llm:task:plan-ready', callbacks.onPlanReady))
-  if (callbacks.onExecuting) offs.push(onRuntimeEvent('llm:task:executing', callbacks.onExecuting))
-  if (callbacks.onStepDone) offs.push(onRuntimeEvent('llm:task:step-done', callbacks.onStepDone))
-  if (callbacks.onComplete) offs.push(onRuntimeEvent('llm:task:complete', callbacks.onComplete))
-  if (callbacks.onFailed) offs.push(onRuntimeEvent('llm:task:failed', callbacks.onFailed))
-  if (callbacks.onCancelled) {
-    offs.push(onRuntimeEvent('llm:task:cancelled', callbacks.onCancelled))
-    offs.push(onRuntimeEvent('llm:task:canceled', callbacks.onCancelled))
   }
   return combineUnsubscribes(offs)
 }

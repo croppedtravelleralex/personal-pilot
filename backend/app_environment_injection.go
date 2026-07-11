@@ -9,6 +9,7 @@ import (
 	"personal-pilot/backend/internal/behavior"
 	"personal-pilot/backend/internal/browser"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/events"
 )
 
 func (a *App) applyProfileEnvironmentInjectionAsync(profileID string, debugPort int) {
@@ -28,16 +29,38 @@ func (a *App) applyProfileEnvironmentInjectionAsync(profileID string, debugPort 
 	if snapshot == nil {
 		return
 	}
-	if err := a.validateProfileCDPOwnership(snapshot); err != nil {
-		logger.New("Browser").Warn("Skip environment injection because CDP ownership is not proven",
-			logger.F("profile_id", profileID),
-			logger.F("debug_port", debugPort),
-			logger.F("error", err.Error()),
-		)
+
+	ownershipReady := false
+	for attempt := 1; attempt <= 40; attempt++ {
+		if err := a.validateProfileCDPOwnership(snapshot); err == nil {
+			ownershipReady = true
+			break
+		}
+		if attempt == 40 {
+			logger.New("Browser").Warn("Skip environment injection because CDP ownership is not proven after retries",
+				logger.F("profile_id", profileID),
+				logger.F("debug_port", debugPort),
+			)
+			a.markProfileInjectionReady(profileID)
+			return
+		}
+		time.Sleep(time.Duration(150*attempt) * time.Millisecond)
+		a.browserMgr.Mutex.Lock()
+		profile := a.browserMgr.Profiles[profileID]
+		if profile == nil || !profile.Running {
+			a.browserMgr.Mutex.Unlock()
+			return
+		}
+		copied := *profile
+		snapshot = &copied
+		a.browserMgr.Mutex.Unlock()
+	}
+	if !ownershipReady {
 		return
 	}
 	injectionKey := profileEnvironmentInjectionKey(snapshot, debugPort)
 	if !a.claimProfileEnvironmentInjection(injectionKey) {
+		a.markProfileInjectionReady(profileID)
 		return
 	}
 	succeeded := false
@@ -48,8 +71,11 @@ func (a *App) applyProfileEnvironmentInjectionAsync(profileID string, debugPort 
 	}()
 
 	profileForInjection := buildEnvironmentInjectionProfile(snapshot)
+	if exitIP := a.lookupProfileProxyExitIP(snapshot); exitIP != "" {
+		profileForInjection.WebRTCPolicy.AllowHosts = []string{exitIP}
+	}
 	var lastErr error
-	for attempt := 1; attempt <= 8; attempt++ {
+	for attempt := 1; attempt <= 20; attempt++ {
 		executor, err := connectCDPExecutor(debugPort)
 		if err == nil {
 			plan, applyErr := executor.ApplyEnvironmentInjection(profileForInjection)
@@ -61,6 +87,9 @@ func (a *App) applyProfileEnvironmentInjectionAsync(profileID string, debugPort 
 					logger.F("families", strings.Join(plan.AppliedFamilies, ",")),
 				)
 				succeeded = true
+				a.markProfileInjectionReady(profileID)
+				go a.probeWebRTCAfterInjection(profileID, debugPort)
+				go a.injectTrustCookiesAsync(profileID, debugPort)
 				return
 			}
 			lastErr = applyErr
@@ -70,12 +99,27 @@ func (a *App) applyProfileEnvironmentInjectionAsync(profileID string, debugPort 
 		time.Sleep(time.Duration(150*attempt) * time.Millisecond)
 	}
 	if lastErr != nil {
-		logger.New("Browser").Warn("环境注入失败，实例继续运行但当前页面可能缺少 JS hook",
+		logger.New("Browser").Error("环境注入失败，实例可能缺少反泄漏 JS hook",
 			logger.F("profile_id", profileID),
 			logger.F("debug_port", debugPort),
 			logger.F("error", lastErr.Error()),
 		)
+		if a.ctx != nil {
+			a.emit(events.EventRiskWebRTCLeak, map[string]interface{}{
+				"profileId": profileID,
+				"reason":    "environment_injection_failed",
+				"error":     lastErr.Error(),
+			})
+		}
+		a.markProfileInjectionReady(profileID)
 	}
+}
+
+func (a *App) lookupProfileProxyExitIP(profile *BrowserProfile) string {
+	if a == nil || profile == nil || strings.TrimSpace(profile.ProxyId) == "" {
+		return ""
+	}
+	return strings.TrimSpace(a.lookupProxyStoredExitIP(profile.ProxyId))
 }
 
 func profileEnvironmentInjectionKey(profile *BrowserProfile, debugPort int) string {
@@ -128,6 +172,31 @@ func (a *App) clearProfileEnvironmentInjections(profileID string) {
 	}
 }
 
+func profileInjectionNotReadyError(profile *BrowserProfile) error {
+	if profile == nil || profile.InjectionReady {
+		return nil
+	}
+	return fmt.Errorf("环境注入未就绪: %s", profile.ProfileName)
+}
+
+func (a *App) markProfileInjectionReady(profileID string) {
+	if a == nil || a.browserMgr == nil || strings.TrimSpace(profileID) == "" {
+		return
+	}
+	a.browserMgr.Mutex.Lock()
+	profile, ok := a.browserMgr.Profiles[profileID]
+	if ok && profile != nil && !profile.InjectionReady {
+		profile.InjectionReady = true
+		snapshot := copyBrowserProfileSnapshot(profile)
+		a.browserMgr.Mutex.Unlock()
+		if snapshot != nil && a.ctx != nil {
+			a.emit(events.EventBrowserInstanceUpdated, browserInstanceEventPayload(snapshot, false))
+		}
+		return
+	}
+	a.browserMgr.Mutex.Unlock()
+}
+
 func buildEnvironmentInjectionProfile(profile *BrowserProfile) behavior.EnvironmentInjectionProfile {
 	seed := strings.TrimSpace(profile.HumanizeSeed)
 	if seed == "" {
@@ -171,6 +240,18 @@ func buildEnvironmentInjectionProfile(profile *BrowserProfile) behavior.Environm
 			injection.AudioNoise = parseAudioNoise(value)
 		case "--fingerprint-fonts":
 			injection.FontAllowlist = splitCSV(value)
+		case "--webrtc-ip-handling-policy":
+			injection.WebRTCPolicy = mapWebRTCPolicy(value)
+		case "--fingerprint-touch-points":
+			injection.MaxTouchPoints = parsePositiveInt(value)
+		case "--fingerprint-color-depth":
+			injection.ColorDepth = parsePositiveInt(value)
+		case "--fingerprint-do-not-track":
+			injection.DoNotTrack = strings.EqualFold(value, "true") || value == "1"
+		case "--force-device-scale-factor":
+			injection.DevicePixelRatio = value
+		case "--window-size":
+			injection.WindowSize = value
 		}
 	}
 
@@ -204,6 +285,17 @@ func buildEnvironmentInjectionProfile(profile *BrowserProfile) behavior.Environm
 		}
 	}
 	return injection
+}
+
+func mapWebRTCPolicy(value string) behavior.WebRTCPolicy {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "disable_non_proxied_udp", "default_public_interface_only", "default_public_and_private_interfaces":
+		return behavior.WebRTCPolicy{Mode: "block_private_candidates"}
+	case "allow_all":
+		return behavior.WebRTCPolicy{Mode: "allow_all"}
+	default:
+		return behavior.WebRTCPolicy{Mode: "block_private_candidates"}
+	}
 }
 
 func splitLaunchFlag(arg string) (string, string, bool) {

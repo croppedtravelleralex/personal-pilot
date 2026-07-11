@@ -263,6 +263,73 @@ var migrations = []migration{
 			`ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`,
 		},
 	},
+	{
+		version: 14,
+		desc:    "profile trust bundles and asymmetric challenge log",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS profile_trust_bundles (
+				profile_id   TEXT PRIMARY KEY,
+				provider     TEXT NOT NULL DEFAULT 'generic',
+				payload      TEXT NOT NULL DEFAULT '{}',
+				updated_at   TEXT NOT NULL
+			)`,
+			`CREATE TABLE IF NOT EXISTS asymmetric_challenges (
+				id           TEXT PRIMARY KEY,
+				profile_id   TEXT NOT NULL,
+				site         TEXT NOT NULL DEFAULT '',
+				challenge_type TEXT NOT NULL DEFAULT '',
+				payload      TEXT NOT NULL DEFAULT '{}',
+				created_at   TEXT NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_asymmetric_challenges_profile_time
+				ON asymmetric_challenges(profile_id, created_at DESC)`,
+		},
+	},
+	{
+		version: 15,
+		desc:    "stealth state ip budget and probe scores",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS profile_stealth_state (
+				profile_id    TEXT PRIMARY KEY,
+				paused_until  TEXT NOT NULL DEFAULT '',
+				prefer_api    INTEGER NOT NULL DEFAULT 0,
+				creepjs_score REAL NOT NULL DEFAULT 0,
+				last_probe_at TEXT NOT NULL DEFAULT '',
+				cookies_ok    INTEGER NOT NULL DEFAULT 0,
+				updated_at    TEXT NOT NULL
+			)`,
+			`CREATE TABLE IF NOT EXISTS profile_ip_visits (
+				profile_id TEXT NOT NULL,
+				exit_ip    TEXT NOT NULL,
+				day_key    TEXT NOT NULL,
+				visit_count INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (profile_id, exit_ip, day_key)
+			)`,
+		},
+	},
+	{
+		version: 16,
+		desc:    "durable proxy subscription store",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS proxy_subscriptions (
+				subscription_id   TEXT PRIMARY KEY,
+				name              TEXT NOT NULL,
+				source_type       TEXT NOT NULL DEFAULT 'url',
+				source_url        TEXT NOT NULL DEFAULT '',
+				group_name        TEXT NOT NULL DEFAULT '',
+				auto_refresh      INTEGER NOT NULL DEFAULT 0,
+				refresh_interval_m INTEGER NOT NULL DEFAULT 0,
+				last_refresh_at   TEXT NOT NULL DEFAULT '',
+				last_error        TEXT NOT NULL DEFAULT '',
+				created_at        TEXT NOT NULL,
+				updated_at        TEXT NOT NULL
+			)`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_proxy_subscriptions_source_url
+				ON proxy_subscriptions(source_url) WHERE source_url != ''`,
+			`CREATE INDEX IF NOT EXISTS idx_proxy_subscriptions_auto_refresh
+				ON proxy_subscriptions(auto_refresh, last_refresh_at)`,
+		},
+	},
 }
 
 // NewDB 创建新的数据库连接
@@ -342,6 +409,9 @@ func (db *DB) Migrate() error {
 	if err := db.ensureSchedulerTaskRuntimeColumns(); err != nil {
 		return err
 	}
+	if err := db.ensureProxySubscriptionSchema(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -373,6 +443,43 @@ func (db *DB) applyMigration(m migration) error {
 	}
 
 	return tx.Commit()
+}
+
+func (db *DB) ensureProxySubscriptionSchema() error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS proxy_subscriptions (
+			subscription_id   TEXT PRIMARY KEY,
+			name              TEXT NOT NULL,
+			source_type       TEXT NOT NULL DEFAULT 'url',
+			source_url        TEXT NOT NULL DEFAULT '',
+			group_name        TEXT NOT NULL DEFAULT '',
+			auto_refresh      INTEGER NOT NULL DEFAULT 0,
+			refresh_interval_m INTEGER NOT NULL DEFAULT 0,
+			last_refresh_at   TEXT NOT NULL DEFAULT '',
+			last_error        TEXT NOT NULL DEFAULT '',
+			created_at        TEXT NOT NULL,
+			updated_at        TEXT NOT NULL
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_proxy_subscriptions_source_url
+			ON proxy_subscriptions(source_url) WHERE source_url != ''`,
+		`CREATE INDEX IF NOT EXISTS idx_proxy_subscriptions_auto_refresh
+			ON proxy_subscriptions(auto_refresh, last_refresh_at)`,
+	}
+	for _, statement := range statements {
+		if _, err := db.conn.Exec(statement); err != nil {
+			return fmt.Errorf("修复代理订阅 schema 失败: %w", err)
+		}
+	}
+	hasSourceID, err := db.tableHasColumn("browser_proxies", "source_id")
+	if err != nil {
+		return fmt.Errorf("检查 browser_proxies.source_id 失败: %w", err)
+	}
+	if hasSourceID {
+		if _, err := db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_browser_proxies_source_id ON browser_proxies(source_id)`); err != nil {
+			return fmt.Errorf("修复 browser_proxies.source_id 索引失败: %w", err)
+		}
+	}
+	return nil
 }
 
 func (db *DB) ensureBrowserCoreKindColumn() error {
@@ -447,6 +554,15 @@ func (db *DB) ensureSchedulerTaskRuntimeColumns() error {
 		13, "scheduler tasks persist runtime state",
 	); err != nil {
 		return fmt.Errorf("记录 scheduler_tasks runtime state 修复版本失败: %w", err)
+	}
+	if _, err := db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_tasks_profile_enabled ON scheduler_tasks(profile_id, enabled)`); err != nil {
+		return fmt.Errorf("创建 scheduler_tasks 复合索引失败: %w", err)
+	}
+	if _, err := db.conn.Exec(
+		`INSERT OR IGNORE INTO schema_migrations (version, desc) VALUES (?, ?)`,
+		14, "scheduler tasks profile enabled index",
+	); err != nil {
+		return fmt.Errorf("记录 scheduler_tasks 索引迁移失败: %w", err)
 	}
 	return nil
 }

@@ -237,6 +237,7 @@ function normalizeIdentityReport(
       fingerprintVisible: clampScore(readNumber(rawSubscores, ['fingerprintVisible'], 0)),
       consistency: clampScore(readNumber(rawSubscores, ['consistency'], 0)),
       profilePersistence: clampScore(readNumber(rawSubscores, ['profilePersistence'], 0)),
+      longTermCoherence: clampScore(readNumber(rawSubscores, ['longTermCoherence'], 0)),
       proxyNetwork: clampScore(readNumber(rawSubscores, ['proxyNetwork'], 0)),
       behaviorNaturalness: clampScore(readNumber(rawSubscores, ['behaviorNaturalness'], 0)),
       automationSafety: clampScore(readNumber(rawSubscores, ['automationSafety'], 0)),

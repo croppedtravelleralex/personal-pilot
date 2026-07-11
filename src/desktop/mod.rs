@@ -12,7 +12,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
-    behavior::{PAGE_ARCHETYPES, SUPPORTED_PRIMITIVES},
+    behavior::{PAGE_ARCHETYPES, RUNTIME_BACKED_PRIMITIVES, SUPPORTED_PRIMITIVES},
     db::init::DbPool,
     network_identity::{
         fingerprint_consistency::assess_fingerprint_profile_consistency,
@@ -5084,7 +5084,7 @@ pub fn list_desktop_evidence_reports(
 }
 
 pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
-    let supported_primitives = SUPPORTED_PRIMITIVES
+    let supported_primitives = RUNTIME_BACKED_PRIMITIVES
         .iter()
         .map(|item| item.to_string())
         .collect();
@@ -5183,18 +5183,22 @@ pub fn read_desktop_behavior_audit_contract() -> DesktopBehaviorAuditContract {
         },
     ];
     let warnings = vec![
-        "13 shipped primitives are not the 450+ target taxonomy".to_string(),
+        format!(
+            "{} shipped primitives are not the 450+ target taxonomy",
+            RUNTIME_BACKED_PRIMITIVES.len()
+        ),
         "workflow/debug deterministic replay evidence exists for shipped primitives, but manual-gate/recovery coverage is not full 450+ replay taxonomy closure".to_string(),
     ];
     let summary = format!(
-        "Behavior audit: {} shipped primitives across {} page archetypes; 450+ event taxonomy remains target-only.",
+        "Behavior audit: {} runtime-backed primitives ({} declared) across {} page archetypes; 450+ event taxonomy remains target-only.",
+        RUNTIME_BACKED_PRIMITIVES.len(),
         SUPPORTED_PRIMITIVES.len(),
         PAGE_ARCHETYPES.len()
     );
 
     DesktopBehaviorAuditContract {
         generated_at: now_ts_string(),
-        shipped_primitive_count: SUPPORTED_PRIMITIVES.len(),
+        shipped_primitive_count: RUNTIME_BACKED_PRIMITIVES.len(),
         target_event_taxonomy_label: "450+".to_string(),
         target_event_taxonomy_status: "taxonomy_seed_not_full_replay_runtime".to_string(),
         target_event_family_count,

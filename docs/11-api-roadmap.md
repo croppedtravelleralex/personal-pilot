@@ -52,10 +52,10 @@ Launch Server 端口 `127.0.0.1:19876`，提供 ~45 个 API 端点，覆盖度�
 | `GET /api/profiles` | 列出全部配置（支持 ?tag=&keyword= 过滤） | P0 |
 | `GET /api/profiles/{id}` | 获取单个配置详情 | P0 |
 | `PUT /api/profiles/{id}/proxy` | 切换指定配置的代理 | P0 |
-| `POST /api/proxy/subscribe` | 添加代理订阅源 | P0 |
-| `POST /api/proxy/subscribe/{id}/refresh` | 手动刷新订阅 | P0 |
-| `DELETE /api/proxy/subscribe/{id}` | 删除订阅源 | P0 |
-| `GET /api/proxy/subscribe/list` | 查看全部订阅源 | P0 |
+| `POST /api/proxy/subscribe` | 添加并持久化 URL 订阅源（已落地） | P0 |
+| `POST /api/proxy/subscribe/{id}/refresh` | 事务式手动刷新（已落地） | P0 |
+| `DELETE /api/proxy/subscribe/{id}` | 删除订阅及所属节点（已落地） | P0 |
+| `GET /api/proxy/subscribe/list` | 查看脱敏订阅源状态（已落地） | P0 |
 | `GET /api/proxy/list` | 查看全部代理节点 | P0 |
 | `PUT /api/proxy/{id}` | 编辑代理节点 | P0 |
 | `POST /api/proxy/{id}/speedtest` | 手动触发单节点测速 | P0 |
@@ -422,7 +422,7 @@ curl -X POST http://127.0.0.1:19876/api/integration/telegram \
 
 ### 3.20 手动代理添加（域名/端口/认证）
 
-支持通过 Domain Name、Port、Username、Password 手动添加代理，适用于没有标准订阅链路的自建代理或私有代理：
+这一段现在已经接上真正的代理池落库、更新、删除和批量写库；接口仍然保留“单行代理配置输入”的兼容方式，但它已经是完整 CRUD，不是壳：
 
 | 端点 | 功能 |
 |------|------|
@@ -434,7 +434,7 @@ curl -X POST http://127.0.0.1:19876/api/integration/telegram \
 | `POST /api/proxy/manual/{id}/test` | 测试手动代理连通性 |
 
 ```json
-// 请求体示例 —— socks5 带认证
+// 请求体示例 —— socks5 带认证；protocol 也兼容 socks / socks5h / socket，落库时统一为 socks5
 {
   "name": "我的香港服务器",
   "protocol": "socks5",
@@ -456,12 +456,7 @@ curl -X POST http://127.0.0.1:19876/api/integration/telegram \
   "port": 8080
 }
 
-// 返回
-{
-  "ok": true,
-  "proxyId": "manual-hk-001",
-  "proxyConfig": "socks5://proxyuser:proxypass@hk-proxy.example.com:1080"
-}
+// 现在的返回仍然脱敏，但已经写库并可列表/更新/删除
 ```
 
 ### 3.21 代理快捷导入（智能格式识别）
@@ -479,15 +474,19 @@ curl -X POST http://127.0.0.1:19876/api/proxy/quick-add \
 # 粘贴标准代理 URL
 curl -X POST http://127.0.0.1:19876/api/proxy/quick-add \
   -d '{"raw": "socks5://user:pass@1.2.3.4:1080", "name": "我的代理"}'
+
+# socks:// / socks5h:// / socket:// 会按 SOCKS5 归一
+curl -X POST http://127.0.0.1:19876/api/proxy/quick-add \
+  -d '{"raw": "socks://user:pass@1.2.3.4:1080", "name": "我的代理"}'
 ```
 
 ### 3.22 订阅源验证与预览
 
 | 端点 | 功能 |
 |------|------|
-| `POST /api/proxy/subscribe/{id}/validate` | 验证订阅源可用性（返回节点数量/协议分布预览，不实际导入） |
-| `POST /api/proxy/subscribe/{id}/import-clash` | 从 Clash 配置文件导入订阅 |
-| `GET /api/proxy/subscribe/{id}/nodes` | 查看订阅源下的所有节点详情 |
+| `POST /api/proxy/subscribe/{id}/validate` | 验证订阅源可用性（返回节点预览，不实际导入；已落地） |
+| `POST /api/proxy/subscribe/import-clash` | 从 Clash YAML 创建静态订阅（已落地） |
+| `GET /api/proxy/subscribe/{id}/nodes` | 查看订阅源下的脱敏节点详情（已落地） |
 
 ### 3.23 操作日志审计
 
