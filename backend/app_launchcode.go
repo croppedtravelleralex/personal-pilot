@@ -920,7 +920,7 @@ func resetCDPExecutorsForPort(debugPort int) {
 	})
 }
 
-func acquireCDPExecutor(debugPort int, tabID string, humanizationLevel string, pid int) (*behavior.CDPExecutor, error) {
+func acquireCDPExecutor(debugPort int, tabID string, humanizationLevel string, pid int, humanizeSeed string) (*behavior.CDPExecutor, error) {
 	key := cdpPoolKey(debugPort, tabID)
 	entryI, _ := cdpExecutorPool.LoadOrStore(key, &cdpExecutorEntry{})
 	entry := entryI.(*cdpExecutorEntry)
@@ -936,7 +936,7 @@ func acquireCDPExecutor(debugPort int, tabID string, humanizationLevel string, p
 		}
 		cfg := humanize.ConfigForLevel(level)
 		entry.executor = behavior.NewCDPExecutor(ws, cfg)
-		bindOSClickFallback(entry.executor, pid)
+		bindOSClickFallback(entry.executor, pid, humanizeSeed)
 		if err := entry.executor.EnableMinimalSession(); err != nil {
 			_ = entry.executor.Close()
 			entry.executor = nil
@@ -1030,7 +1030,7 @@ func (a *App) WorkbenchExecuteActions(profileID string, actions []launchcode.Act
 			executor = nil
 		}
 		if executor == nil {
-			ex, acquireErr := acquireCDPExecutor(profile.DebugPort, tabID, level, profile.Pid)
+			ex, acquireErr := acquireCDPExecutor(profile.DebugPort, tabID, level, profile.Pid, profile.HumanizeSeed)
 			if acquireErr != nil {
 				return results, acquireErr
 			}

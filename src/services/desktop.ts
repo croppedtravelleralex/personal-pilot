@@ -151,6 +151,12 @@ export interface DesktopDashboardStatsResponse {
   coreCount?: number;
   memUsedMB?: number;
   appVersion?: string;
+  budget?: {
+    maxConcurrentInstances?: number;
+    runningInstances?: number;
+    remainingSlots?: number;
+    maxMemoryMB?: number;
+  };
 }
 
 export interface DesktopLicenseStatusResponse {

@@ -145,6 +145,8 @@ var allowedRPCMethods = map[string]struct{}{
 	"GraphAPIMailList":                   {},
 	"WorkbenchAutoDetectionScore":      {},
 	"WorkbenchAccountHealthReport":     {},
+	"AccountHealthTrend":               {},
+	"ChallengeAttributionReport":       {},
 	"WorkbenchRunDetectionBundle":      {},
 	"BehaviorStartRecording":               {},
 	"BehaviorStopPlayback":                 {},

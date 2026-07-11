@@ -53,7 +53,7 @@ func (a *App) dispatchClickAction(
 			} else {
 				return err
 			}
-		} else if err := inputplane.ExecuteClick(plane, executor, profile.Pid, action.Selector, 0, 0); err != nil {
+		} else if err := inputplane.ExecuteClickWithSeed(plane, executor, profile.Pid, action.Selector, 0, 0, profile.HumanizeSeed); err != nil {
 			if inputplane.ParseMode(action.InputMode) == inputplane.ModeAuto {
 				plane = inputplane.PlaneCDP
 			} else {
@@ -94,7 +94,7 @@ func (a *App) dispatchTypeAction(
 			} else {
 				return err
 			}
-		} else if err := inputplane.ExecuteType(plane, executor, profile.Pid, action.Selector, action.Text, clearFirst, action.SubmitOnEnter); err != nil {
+		} else if err := inputplane.ExecuteTypeWithSeed(plane, executor, profile.Pid, action.Selector, action.Text, clearFirst, action.SubmitOnEnter, profile.HumanizeSeed); err != nil {
 			if inputplane.ParseMode(action.InputMode) == inputplane.ModeAuto {
 				plane = inputplane.PlaneCDP
 			} else {
@@ -130,7 +130,7 @@ func (a *App) dispatchDoubleClickAction(
 				return err
 			}
 			plane = inputplane.PlaneCDP
-		} else if err := inputplane.ExecuteDoubleClick(plane, executor, profile.Pid, action.Selector); err != nil {
+		} else if err := inputplane.ExecuteDoubleClickWithSeed(plane, executor, profile.Pid, action.Selector, profile.HumanizeSeed); err != nil {
 			if inputplane.ParseMode(action.InputMode) != inputplane.ModeAuto {
 				return err
 			}
@@ -165,7 +165,7 @@ func (a *App) dispatchRightClickAction(
 				return err
 			}
 			plane = inputplane.PlaneCDP
-		} else if err := inputplane.ExecuteRightClick(plane, executor, profile.Pid, action.Selector); err != nil {
+		} else if err := inputplane.ExecuteRightClickWithSeed(plane, executor, profile.Pid, action.Selector, profile.HumanizeSeed); err != nil {
 			if inputplane.ParseMode(action.InputMode) != inputplane.ModeAuto {
 				return err
 			}
@@ -207,7 +207,7 @@ func (a *App) dispatchClickOffsetAction(
 				return err
 			}
 			plane = inputplane.PlaneCDP
-		} else if err := inputplane.ExecuteClick(plane, executor, profile.Pid, action.Selector, offsetX, offsetY); err != nil {
+		} else if err := inputplane.ExecuteClickWithSeed(plane, executor, profile.Pid, action.Selector, offsetX, offsetY, profile.HumanizeSeed); err != nil {
 			if inputplane.ParseMode(action.InputMode) != inputplane.ModeAuto {
 				return err
 			}

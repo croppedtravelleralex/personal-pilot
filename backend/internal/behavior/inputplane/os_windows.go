@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/behavior/humanize"
 	"personal-pilot/backend/internal/wininput"
 
 	"golang.org/x/sys/windows"
@@ -17,15 +18,20 @@ func OSAvailable() bool { return true }
 
 // ExecuteClickAt performs a headed OS click at viewport coordinates without a selector.
 func ExecuteClickAt(executor *behavior.CDPExecutor, pid int, x, y float64) error {
-	mouse, _, err := newOSMouse(executor, pid)
+	return ExecuteClickAtWithSeed(executor, pid, x, y, "")
+}
+
+// ExecuteClickAtWithSeed applies BioNoise-derived mouse trajectory from humanize seed.
+func ExecuteClickAtWithSeed(executor *behavior.CDPExecutor, pid int, x, y float64, seed string) error {
+	mouse, _, err := newOSMouse(executor, pid, seed)
 	if err != nil {
 		return err
 	}
-	return mouse.ClickAt(x, y)
+	return mouse.ClickAtWithSeed(x, y, seed)
 }
 
-func osClick(executor *behavior.CDPExecutor, pid int, selector string, offsetX, offsetY int) error {
-	mouse, _, err := newOSMouse(executor, pid)
+func osClick(executor *behavior.CDPExecutor, pid int, selector string, offsetX, offsetY int, seed string) error {
+	mouse, _, err := newOSMouse(executor, pid, seed)
 	if err != nil {
 		return err
 	}
@@ -33,11 +39,11 @@ func osClick(executor *behavior.CDPExecutor, pid int, selector string, offsetX, 
 	if err != nil {
 		return err
 	}
-	return mouse.ClickAt(x, y)
+	return mouse.ClickAtWithSeed(x, y, seed)
 }
 
-func osDoubleClick(executor *behavior.CDPExecutor, pid int, selector string) error {
-	mouse, _, err := newOSMouse(executor, pid)
+func osDoubleClick(executor *behavior.CDPExecutor, pid int, selector, seed string) error {
+	mouse, _, err := newOSMouse(executor, pid, seed)
 	if err != nil {
 		return err
 	}
@@ -45,10 +51,10 @@ func osDoubleClick(executor *behavior.CDPExecutor, pid int, selector string) err
 	if err != nil {
 		return err
 	}
-	if err := mouse.MoveToHumanized(x, y); err != nil {
+	if err := mouse.MoveToHumanizedWithSeed(x, y, seed); err != nil {
 		return err
 	}
-	time.Sleep(80 * time.Millisecond)
+	humanize.NaturalDelay(humanize.BioNoiseConfigFromSeed(seed + "|dblclick"))
 	if err := mouse.Click(); err != nil {
 		return err
 	}
@@ -56,8 +62,8 @@ func osDoubleClick(executor *behavior.CDPExecutor, pid int, selector string) err
 	return mouse.Click()
 }
 
-func osRightClick(executor *behavior.CDPExecutor, pid int, selector string) error {
-	mouse, _, err := newOSMouse(executor, pid)
+func osRightClick(executor *behavior.CDPExecutor, pid int, selector, seed string) error {
+	mouse, _, err := newOSMouse(executor, pid, seed)
 	if err != nil {
 		return err
 	}
@@ -65,15 +71,15 @@ func osRightClick(executor *behavior.CDPExecutor, pid int, selector string) erro
 	if err != nil {
 		return err
 	}
-	if err := mouse.MoveToHumanized(x, y); err != nil {
+	if err := mouse.MoveToHumanizedWithSeed(x, y, seed); err != nil {
 		return err
 	}
-	time.Sleep(80 * time.Millisecond)
+	humanize.NaturalDelay(humanize.BioNoiseConfigFromSeed(seed + "|rclick"))
 	return mouse.RightClick()
 }
 
-func osType(executor *behavior.CDPExecutor, pid int, selector, text string, clearFirst, submitOnEnter bool) error {
-	mouse, kbd, err := newOSMouse(executor, pid)
+func osType(executor *behavior.CDPExecutor, pid int, selector, text string, clearFirst, submitOnEnter bool, seed string) error {
+	mouse, kbd, err := newOSMouse(executor, pid, seed)
 	if err != nil {
 		return err
 	}
@@ -81,10 +87,10 @@ func osType(executor *behavior.CDPExecutor, pid int, selector, text string, clea
 	if err != nil {
 		return err
 	}
-	if err := mouse.ClickAt(x, y); err != nil {
+	if err := mouse.ClickAtWithSeed(x, y, seed); err != nil {
 		return fmt.Errorf("focus click: %w", err)
 	}
-	time.Sleep(200 * time.Millisecond)
+	humanize.NaturalDelay(humanize.BioNoiseConfigFromSeed(seed + "|type-focus"))
 
 	if clearFirst {
 		if err := kbd.Combo(wininput.VK_CTRL, uint16('A')); err != nil {
@@ -111,7 +117,7 @@ func osType(executor *behavior.CDPExecutor, pid int, selector, text string, clea
 	return nil
 }
 
-func newOSMouse(executor *behavior.CDPExecutor, pid int) (*wininput.MouseSender, *wininput.KeyboardSender, error) {
+func newOSMouse(executor *behavior.CDPExecutor, pid int, seed string) (*wininput.MouseSender, *wininput.KeyboardSender, error) {
 	if pid <= 0 {
 		return nil, nil, fmt.Errorf("os input: invalid pid %d", pid)
 	}
@@ -128,6 +134,7 @@ func newOSMouse(executor *behavior.CDPExecutor, pid int) (*wininput.MouseSender,
 		return nil, nil, fmt.Errorf("measure geometry: %w", err)
 	}
 	mouse := wininput.NewMouseSender(hwnd, geo.ToolbarHeight, geo.DPIScale)
+	_ = seed // trajectory seed applied at MoveToHumanizedWithSeed call sites
 	kbd := wininput.NewKeyboardSender(45)
 	return mouse, kbd, nil
 }

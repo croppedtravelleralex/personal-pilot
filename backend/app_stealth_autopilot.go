@@ -349,6 +349,12 @@ func (a *App) autopilotHarvestBrowserTrust(profileID string) asymmetric.Autopilo
 		return step
 	}
 	bundle := trust.BundleFromHarvest(profileID, trust.ProviderMicrosoft, trustCookies, harvest, exitIP, profile.ProxyId)
+	if ls, err := a.WorkbenchGetLocalStorage(profileID); err == nil && len(ls) > 0 {
+		bundle.LocalStorage = ls
+	}
+	if ss, err := a.WorkbenchGetSessionStorage(profileID); err == nil && len(ss) > 0 {
+		bundle.SessionStorage = ss
+	}
 	if existing, err := a.ProfileTrustBundleGet(profileID, false); err == nil && existing != nil {
 		if bundle.RefreshToken == "" {
 			bundle.RefreshToken = existing.RefreshToken

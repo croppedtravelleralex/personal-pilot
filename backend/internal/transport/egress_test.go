@@ -20,9 +20,25 @@ func TestChromeHelloPreset(t *testing.T) {
 	}
 }
 
-func TestEgressFromUserAgent(t *testing.T) {
-	id := EgressFromUserAgent("Mozilla/5.0 Chrome/131.0.0.0", "en-US")
-	if id.UAMajor != 131 || id.ClientHello != "Chrome_131" || id.AcceptLang != "en-US" {
-		t.Fatalf("%+v", id)
+func TestChromeMajorTLSBaseline(t *testing.T) {
+	cfg := ChromeMajorTLSBaseline(139)
+	if cfg.TLS.JA3 != "Chrome_133" {
+		t.Fatalf("JA3=%q", cfg.TLS.JA3)
+	}
+	if len(cfg.TLS.ALPN) == 0 || cfg.TLS.ALPN[0] != "h2" {
+		t.Fatalf("ALPN=%v", cfg.TLS.ALPN)
+	}
+	if cfg.RouteTag != "chrome-139" {
+		t.Fatalf("RouteTag=%q", cfg.RouteTag)
+	}
+}
+
+func TestTLSUACoherent(t *testing.T) {
+	ua := "Mozilla/5.0 Chrome/139.0.0.0 Safari/537.36"
+	if !TLSUACoherent(ua, "Chrome_133") {
+		t.Fatal("expected coherent")
+	}
+	if TLSUACoherent(ua, "Chrome_120") {
+		t.Fatal("expected incoherent for mismatched template")
 	}
 }

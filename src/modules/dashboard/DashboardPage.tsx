@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings, Activity, AlertTriangle, CheckCircle2, Clock, ScanSearch } from 'lucide-react'
+import { Monitor, Play, Shield, Cpu, ArrowRight, Settings, Activity, AlertTriangle, CheckCircle2, Clock, ScanSearch } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button, Card, toast } from '../../shared/components'
 import { messageFromUnknownError } from '../../shared/errors'
-import { collectDesktopWebViewEvidence, fetchDashboardStats, fetchEvidenceReportHistory, fetchReleaseSmokeContract, reloadConfig } from './api'
-import type { DashboardStats } from './types'
+import { collectDesktopWebViewEvidence, fetchAccountHealthTrend, fetchDashboardStats, fetchEvidenceReportHistory, fetchReleaseSmokeContract, reloadConfig } from './api'
+import type { AccountHealthDailyRow, DashboardStats } from './types'
 import type {
   DesktopEvidenceReportHistory,
   DesktopEvidenceReportSummary,
@@ -447,7 +447,11 @@ export function DashboardPage() {
     memUsedMB: 0,
     maxProfileLimit: UNLIMITED,
     appVersion: 'unknown',
+    maxConcurrentInstances: 0,
+    remainingSlots: -1,
   })
+  const [healthTrend, setHealthTrend] = useState<AccountHealthDailyRow[]>([])
+  const [healthProfileId, setHealthProfileId] = useState('')
   const [loading, setLoading] = useState(true)
   const [collectingEvidence, setCollectingEvidence] = useState(false)
   const [evidenceHistory, setEvidenceHistory] = useState<DesktopEvidenceReportHistory>({
@@ -474,6 +478,9 @@ export function DashboardPage() {
       setStats(nextStats)
       setEvidenceHistory(nextEvidenceHistory)
       setReleaseContract(nextReleaseContract)
+      if (healthProfileId.trim()) {
+        setHealthTrend(await fetchAccountHealthTrend(healthProfileId.trim(), 7))
+      }
     } finally {
       setLoading(false)
     }
@@ -517,10 +524,16 @@ export function DashboardPage() {
           color="bg-green-50 dark:bg-green-900/20"
         />
         <StatCard
-          title="代理节点"
-          value={v(stats.proxyCount)}
-          icon={<Globe className="h-4 w-4 text-purple-500" />}
-          color="bg-purple-50 dark:bg-purple-900/20"
+          title="并发预算剩余"
+          value={
+            loading
+              ? '-'
+              : stats.maxConcurrentInstances <= 0
+                ? '不限'
+                : String(stats.remainingSlots)
+          }
+          icon={<Activity className="h-4 w-4 text-teal-500" />}
+          color="bg-teal-50 dark:bg-teal-900/20"
         />
         <StatCard
           title="内核版本"
@@ -529,6 +542,60 @@ export function DashboardPage() {
           color="bg-orange-50 dark:bg-orange-900/20"
         />
       </div>
+
+      <Card title="账号健康趋势 (AH5)">
+        <div className="mb-3 flex flex-wrap items-end gap-2">
+          <label className="text-sm text-[var(--color-text-muted)]">
+            Profile ID
+            <input
+              className="mt-1 block w-72 rounded border border-[var(--color-border-default)] bg-transparent px-2 py-1 text-sm"
+              value={healthProfileId}
+              onChange={(e) => setHealthProfileId(e.target.value)}
+              placeholder="输入 profileId 查询 7 日趋势"
+            />
+          </label>
+          <Button
+            size="sm"
+            onClick={async () => {
+              if (!healthProfileId.trim()) {
+                toast.error('请先输入 profileId')
+                return
+              }
+              setHealthTrend(await fetchAccountHealthTrend(healthProfileId.trim(), 7))
+            }}
+          >
+            查询趋势
+          </Button>
+        </div>
+        {healthTrend.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)]">尚无趋势数据；样本不足时会标注 insufficient_data。</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-[var(--color-text-muted)]">
+                  <th className="py-1 pr-3">日</th>
+                  <th className="py-1 pr-3">挑战率</th>
+                  <th className="py-1 pr-3">成功率</th>
+                  <th className="py-1 pr-3">样本</th>
+                  <th className="py-1">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {healthTrend.map((row) => (
+                  <tr key={`${row.day}-${row.site ?? ''}`} className="border-t border-[var(--color-border-default)]">
+                    <td className="py-1 pr-3">{row.day}</td>
+                    <td className="py-1 pr-3">{(row.challengeRate * 100).toFixed(1)}%</td>
+                    <td className="py-1 pr-3">{(row.successRate * 100).toFixed(1)}%</td>
+                    <td className="py-1 pr-3">{row.sampleN}</td>
+                    <td className="py-1">{row.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="快捷操作">

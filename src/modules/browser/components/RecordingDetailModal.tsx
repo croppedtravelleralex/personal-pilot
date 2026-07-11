@@ -267,6 +267,27 @@ export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged
           </div>
         )}
 
+        {/* R1 timeline MVP — first steps overview */}
+        {pageEvents.length > 0 && (
+          <div className="mb-4">
+            <h5 className="text-xs font-semibold text-[var(--color-text)] mb-2">步骤时间线（本页前 12 步）</h5>
+            <ol className="space-y-1 max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg p-2">
+              {pageEvents.slice(0, 12).map((ev, i) => (
+                <li key={`tl-${pageEventOffset + i}-${ev.t}`} className="flex items-start gap-2 text-[11px] text-[var(--color-text-muted)]">
+                  <span className="tabular-nums w-10 shrink-0 text-right text-[var(--color-text)]">{(ev.t / 1000).toFixed(2)}s</span>
+                  <span className="font-medium text-[var(--color-text)] w-14 shrink-0">{ev.type}</span>
+                  <span className="truncate">
+                    {ev.type === 'key' ? (ev.key || ev.text || '') :
+                      ev.type === 'scroll' ? `dx=${ev.dx ?? 0} dy=${ev.dy ?? 0}` :
+                      (ev.x != null || ev.y != null) ? `(${ev.x?.toFixed?.(0) ?? ev.x},${ev.y?.toFixed?.(0) ?? ev.y})` :
+                      `#${pageEventOffset + i + 1}`}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
         {/* Event list */}
         <div>
           <div className="flex items-center justify-between gap-2 mb-2">

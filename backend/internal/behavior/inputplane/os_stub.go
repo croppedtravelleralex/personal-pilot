@@ -16,18 +16,23 @@ func ExecuteClickAt(*behavior.CDPExecutor, int, float64, float64) error {
 	return fmt.Errorf("os input: platform unsupported")
 }
 
-func osClick(*behavior.CDPExecutor, int, string, int, int) error {
+// ExecuteClickAtWithSeed is unsupported on non-Windows platforms.
+func ExecuteClickAtWithSeed(*behavior.CDPExecutor, int, float64, float64, string) error {
 	return fmt.Errorf("os input: platform unsupported")
 }
 
-func osDoubleClick(*behavior.CDPExecutor, int, string) error {
+func osClick(*behavior.CDPExecutor, int, string, int, int, string) error {
 	return fmt.Errorf("os input: platform unsupported")
 }
 
-func osRightClick(*behavior.CDPExecutor, int, string) error {
+func osDoubleClick(*behavior.CDPExecutor, int, string, string) error {
 	return fmt.Errorf("os input: platform unsupported")
 }
 
-func osType(*behavior.CDPExecutor, int, string, string, bool, bool) error {
+func osRightClick(*behavior.CDPExecutor, int, string, string) error {
+	return fmt.Errorf("os input: platform unsupported")
+}
+
+func osType(*behavior.CDPExecutor, int, string, string, bool, bool, string) error {
 	return fmt.Errorf("os input: platform unsupported")
 }

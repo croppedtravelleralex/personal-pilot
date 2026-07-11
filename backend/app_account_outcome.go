@@ -99,6 +99,13 @@ func (a *App) WorkbenchRecordAccountOutcome(outcome WorkbenchAccountOutcome) (*W
 	if err := a.WorkbenchSaveDetectionResult(result); err != nil {
 		return nil, err
 	}
+	successDelta, failDelta := 0, 0
+	if outcome.Success {
+		successDelta = 1
+	} else {
+		failDelta = 1
+	}
+	a.NoteAccountHealthObservation(outcome.ProfileID, outcome.Site, 0, successDelta, failDelta, 0, 0)
 	return &outcome, nil
 }
 

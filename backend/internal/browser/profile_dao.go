@@ -29,7 +29,7 @@ func NewSQLiteProfileDAO(db *sql.DB) *SQLiteProfileDAO {
 
 // List 查询所有实例配置，按创建时间升序
 func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
-	if err := d.ensureHumanizeSeedColumn(); err != nil {
+	if err := d.ensureProfileIdentityColumns(); err != nil {
 		return nil, err
 	}
 	rows, err := d.db.Query(`
@@ -39,7 +39,7 @@ func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
 		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
-		       COALESCE(humanize_seed, ''), created_at, updated_at
+		       COALESCE(humanize_seed, ''), COALESCE(persona_id, ''), created_at, updated_at
 		FROM browser_profiles ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("查询实例列表失败: %w", err)
@@ -59,7 +59,7 @@ func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
 
 // GetById 根据 profileId 查询单个实例
 func (d *SQLiteProfileDAO) GetById(profileId string) (*Profile, error) {
-	if err := d.ensureHumanizeSeedColumn(); err != nil {
+	if err := d.ensureProfileIdentityColumns(); err != nil {
 		return nil, err
 	}
 	row := d.db.QueryRow(`
@@ -69,7 +69,7 @@ func (d *SQLiteProfileDAO) GetById(profileId string) (*Profile, error) {
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
 		       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
-		       COALESCE(humanize_seed, ''), created_at, updated_at
+		       COALESCE(humanize_seed, ''), COALESCE(persona_id, ''), created_at, updated_at
 		FROM browser_profiles WHERE profile_id = ?`, profileId)
 	p, err := scanProfile(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -83,10 +83,13 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 	if profile == nil {
 		return fmt.Errorf("profile is nil")
 	}
-	if err := d.ensureHumanizeSeedColumn(); err != nil {
+	if err := d.ensureProfileIdentityColumns(); err != nil {
 		return err
 	}
 	if err := d.prepareHumanizeSeedForUpsert(profile); err != nil {
+		return err
+	}
+	if err := d.preparePersonaIDForUpsert(profile); err != nil {
 		return err
 	}
 	fingerprintArgs, _ := json.Marshal(profile.FingerprintArgs)
@@ -106,8 +109,8 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		INSERT INTO browser_profiles
 		  (profile_id, profile_name, user_data_dir, core_id, fingerprint_args,
 		   proxy_id, proxy_config, proxy_bind_source_id, proxy_bind_source_url, proxy_bind_name, proxy_bind_updated_at,
-		   launch_args, tags, keywords, group_id, behavior_profile_id, humanize_seed, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   launch_args, tags, keywords, group_id, behavior_profile_id, humanize_seed, persona_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(profile_id) DO UPDATE SET
 		  profile_name     = excluded.profile_name,
 		  user_data_dir    = excluded.user_data_dir,
@@ -125,12 +128,13 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		  group_id         = excluded.group_id,
 		  behavior_profile_id = excluded.behavior_profile_id,
 		  humanize_seed    = excluded.humanize_seed,
+		  persona_id       = excluded.persona_id,
 		  updated_at       = excluded.updated_at`,
 		profile.ProfileId, profile.ProfileName, profile.UserDataDir, profile.CoreId,
 		string(fingerprintArgs), profile.ProxyId, profile.ProxyConfig,
 		profile.ProxyBindSourceID, profile.ProxyBindSourceURL, profile.ProxyBindName, profile.ProxyBindUpdatedAt,
 		string(launchArgs), string(tags), string(keywords), profile.GroupId,
-		profile.BehaviorProfileID, profile.HumanizeSeed,
+		profile.BehaviorProfileID, profile.HumanizeSeed, profile.PersonaID,
 		profile.CreatedAt, profile.UpdatedAt,
 	)
 	if err != nil {
@@ -173,6 +177,44 @@ func (d *SQLiteProfileDAO) getExistingHumanizeSeed(profileId string) (string, er
 	return strings.TrimSpace(seed), nil
 }
 
+func (d *SQLiteProfileDAO) preparePersonaIDForUpsert(profile *Profile) error {
+	id := strings.TrimSpace(profile.PersonaID)
+	if id != "" {
+		profile.PersonaID = id
+		return nil
+	}
+	existing, err := d.getExistingPersonaID(profile.ProfileId)
+	if err != nil {
+		return err
+	}
+	if existing != "" {
+		profile.PersonaID = existing
+		return nil
+	}
+	ensureProfilePersonaID(profile)
+	return nil
+}
+
+func (d *SQLiteProfileDAO) getExistingPersonaID(profileId string) (string, error) {
+	if strings.TrimSpace(profileId) == "" {
+		return "", nil
+	}
+	var id string
+	err := d.db.QueryRow(`SELECT COALESCE(persona_id, '') FROM browser_profiles WHERE profile_id = ?`, profileId).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		// Column may not exist yet on very old DBs before ensure runs.
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "no such column") {
+			return "", nil
+		}
+		return "", fmt.Errorf("read existing persona id: %w", err)
+	}
+	return strings.TrimSpace(id), nil
+}
+
 func (d *SQLiteProfileDAO) Delete(profileId string) error {
 	_, err := d.db.Exec(`DELETE FROM browser_profiles WHERE profile_id = ?`, profileId)
 	if err != nil {
@@ -181,9 +223,50 @@ func (d *SQLiteProfileDAO) Delete(profileId string) error {
 	return nil
 }
 
-// ListByGroup 按分组筛选实例
-// groupId 为空字符串时返回未分组的实例
-// includeChildren=true 时同时包含 childGroupIds 中的子分组实例
+func (d *SQLiteProfileDAO) ensureProfileIdentityColumns() error {
+	if err := d.ensureHumanizeSeedColumn(); err != nil {
+		return err
+	}
+	return d.ensurePersonaIDColumn()
+}
+
+func (d *SQLiteProfileDAO) ensurePersonaIDColumn() error {
+	rows, err := d.db.Query(`PRAGMA table_info(browser_profiles)`)
+	if err != nil {
+		return fmt.Errorf("inspect browser_profiles schema: %w", err)
+	}
+	defer rows.Close()
+
+	hasColumn := false
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, pk int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return fmt.Errorf("scan browser_profiles schema: %w", err)
+		}
+		if strings.EqualFold(name, "persona_id") {
+			hasColumn = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("inspect browser_profiles schema rows: %w", err)
+	}
+	if hasColumn {
+		return nil
+	}
+	if _, err := d.db.Exec(`ALTER TABLE browser_profiles ADD COLUMN persona_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "duplicate column") || strings.Contains(msg, "already exists") {
+			return nil
+		}
+		return fmt.Errorf("add browser_profiles.persona_id: %w", err)
+	}
+	return nil
+}
+
 func (d *SQLiteProfileDAO) ensureHumanizeSeedColumn() error {
 	rows, err := d.db.Query(`PRAGMA table_info(browser_profiles)`)
 	if err != nil {
@@ -222,14 +305,13 @@ func (d *SQLiteProfileDAO) ensureHumanizeSeedColumn() error {
 }
 
 func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, childGroupIds []string) ([]*Profile, error) {
-	if err := d.ensureHumanizeSeedColumn(); err != nil {
+	if err := d.ensureProfileIdentityColumns(); err != nil {
 		return nil, err
 	}
 	var rows *sql.Rows
 	var err error
 
 	if includeChildren && len(childGroupIds) > 0 {
-		// 构建 IN 子句，包含当前分组和所有子分组
 		allIds := append([]string{groupId}, childGroupIds...)
 		inClause := ""
 		args := make([]interface{}, len(allIds))
@@ -247,10 +329,9 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 			       launch_args,
 			       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
-			       COALESCE(humanize_seed, ''), created_at, updated_at
+			       COALESCE(humanize_seed, ''), COALESCE(persona_id, ''), created_at, updated_at
 			FROM browser_profiles WHERE group_id IN (%s) ORDER BY created_at ASC`, inClause), args...)
 	} else {
-		// 仅查询指定分组
 		rows, err = d.db.Query(`
 			SELECT profile_id, profile_name, user_data_dir, core_id,
 			       fingerprint_args, proxy_id, proxy_config,
@@ -258,7 +339,7 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 			       launch_args,
 			       tags, keywords, group_id, COALESCE(behavior_profile_id, ''),
-			       COALESCE(humanize_seed, ''), created_at, updated_at
+			       COALESCE(humanize_seed, ''), COALESCE(persona_id, ''), created_at, updated_at
 			FROM browser_profiles WHERE group_id = ? ORDER BY created_at ASC`, groupId)
 	}
 
@@ -317,6 +398,7 @@ func scanProfile(s scanner) (*Profile, error) {
 		&launchArgsJSON, &tagsJSON, &keywordsJSON, &p.GroupId,
 		&p.BehaviorProfileID,
 		&p.HumanizeSeed,
+		&p.PersonaID,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -339,5 +421,6 @@ func scanProfile(s scanner) (*Profile, error) {
 		p.Keywords = []string{}
 	}
 	ensureProfileHumanizeSeed(&p)
+	ensureProfilePersonaID(&p)
 	return &p, nil
 }

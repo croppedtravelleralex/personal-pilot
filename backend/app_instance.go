@@ -403,6 +403,9 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 				a.bindProfileSingBoxBridge(profileId, acquiredSingBoxBridgeKey)
 				releaseSingBoxBridge = false
 			}
+			if strings.TrimSpace(profile.ProxyId) != "" {
+				a.runVerifyV2Bootstrap(profile.ProxyId)
+			}
 
 			log.Info("实例启动",
 				logger.F("profile_id", profileId),
@@ -825,7 +828,31 @@ func (a *App) waitDetachedBrowser(profileId string, debugPort int) {
 
 	log := logger.New("Browser")
 	misses := 0
+	deadline := time.Now().Add(detachedBrowserMaxAge)
 	for {
+		if time.Now().After(deadline) {
+			profileName := profileId
+			a.browserMgr.Mutex.Lock()
+			profile, exists := a.browserMgr.Profiles[profileId]
+			if exists && profile.Running && profile.DebugPort == debugPort {
+				profileName = profile.ProfileName
+				a.markProfileStoppedLocked(profileId, profile)
+				a.browserMgr.Mutex.Unlock()
+				log.Warn("detached browser exceeded max age, force stopped",
+					logger.F("profile_id", profileId),
+					logger.F("profile_name", profileName),
+					logger.F("debug_port", debugPort),
+					logger.F("max_age", detachedBrowserMaxAge.String()),
+				)
+				if a.ctx != nil {
+					a.emit(events.EventBrowserInstanceStopped, profileId)
+					events.EmitSystemRecoveryOrphanCleanup(a.ctx, events.SystemRecoveryOrphanCleanupPayload{Count: 1})
+				}
+			} else {
+				a.browserMgr.Mutex.Unlock()
+			}
+			return
+		}
 		if canConnectDebugPort(debugPort, 250*time.Millisecond) {
 			misses = 0
 			time.Sleep(pollInterval)

@@ -23,10 +23,10 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 		AudioNoise:          0.001,
 		FontAllowlist:       []string{"Segoe UI", "Arial"},
 		MediaPermission:     "allow",
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		BrandVersion:        "120.0.0.0",
 		WebRTCPolicy:        WebRTCPolicy{Mode: "filtered", AllowHosts: []string{"203.0.113.1"}},
-		Plugins: []PluginInjection{{
-			Name: "Chrome PDF Plugin", Filename: "internal-pdf-viewer", MimeType: "application/pdf",
-		}},
 		MediaDevices: []MediaDeviceSpec{{Kind: "audioinput", Label: "Microphone", ID: "mic-1", GroupID: "grp"}},
 	})
 	if err != nil {
@@ -42,8 +42,20 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 		"replaceMethod(Intl.DateTimeFormat.prototype, 'resolvedOptions'",
 		"replaceMethod(Date.prototype, 'getTimezoneOffset'",
 		"getSupportedExtensions",
+		"replaceMethod(proto, 'getShaderPrecisionFormat'",
+		"replaceMethod(proto, 'readPixels'",
 		"replaceMethod(AnalyserNode.prototype, 'getFloatFrequencyData'",
 		"replaceMethod(AudioBuffer.prototype, 'copyFromChannel'",
+		"replaceMethod(speechSynthesis, 'getVoices'",
+		"replaceMethod(nav, 'getBattery'",
+		"defineGetter(conn, 'effectiveType'",
+		"replaceMethod(root, 'matchMedia'",
+		"replaceMethod(Element.prototype, 'getBoundingClientRect'",
+		"replaceMethod(Element.prototype, 'getClientRects'",
+		"replaceMethod(nav.userAgentData, 'getHighEntropyValues'",
+		"replaceMethod(CanvasRenderingContext2D.prototype, 'measureText'",
+		"defineGetter(root.screen, 'width'",
+		"replaceMethod(nav.storage, 'estimate'",
 		"Document.prototype, 'fonts'",
 		"enumerateDevices",
 		"getUserMedia",
@@ -54,6 +66,10 @@ func TestCompileEnvironmentInjectionScriptBuildsSingleBatchScript(t *testing.T) 
 		"OffscreenCanvas",
 		"wrapClassicWorker(Worker, 'Worker')",
 		"importScripts(",
+		"import ' + JSON.stringify",
+		"navigator.serviceWorker.register = async function register",
+		"PDF Viewer",
+		"WebKit built-in PDF",
 	}
 	for _, needle := range needles {
 		if !strings.Contains(plan.Script, needle) {

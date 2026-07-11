@@ -19,10 +19,11 @@ type TrustSurface struct {
 // FromBundle maps an existing Bundle into TrustSurface best-effort.
 func FromBundle(b Bundle) TrustSurface {
 	s := TrustSurface{
-		LocalStorage: b.LocalStorage,
-		RefreshToken: strings.TrimSpace(b.RefreshToken),
-		HarvestedAt:  b.UpdatedAt,
-		Source:       "bundle",
+		LocalStorage:   b.LocalStorage,
+		SessionStorage: b.SessionStorage,
+		RefreshToken:   strings.TrimSpace(b.RefreshToken),
+		HarvestedAt:    b.UpdatedAt,
+		Source:         "bundle",
 	}
 	if cookies, err := ParseCookiesJSON(b.CookiesJSON); err == nil && len(cookies) > 0 {
 		s.Cookies = cookieEntriesToMaps(cookies)

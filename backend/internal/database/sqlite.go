@@ -330,6 +330,27 @@ var migrations = []migration{
 				ON proxy_subscriptions(auto_refresh, last_refresh_at)`,
 		},
 	},
+	{
+		version: 17,
+		desc:    "persona_id on browser_profiles + account_health_daily rollup",
+		stmts: []string{
+			`ALTER TABLE browser_profiles ADD COLUMN persona_id TEXT NOT NULL DEFAULT ''`,
+			`CREATE TABLE IF NOT EXISTS account_health_daily (
+				profile_id   TEXT NOT NULL,
+				day_key      TEXT NOT NULL,
+				site         TEXT NOT NULL DEFAULT '',
+				challenges   INTEGER NOT NULL DEFAULT 0,
+				successes    INTEGER NOT NULL DEFAULT 0,
+				failures     INTEGER NOT NULL DEFAULT 0,
+				detector_ok  INTEGER NOT NULL DEFAULT 0,
+				detector_n   INTEGER NOT NULL DEFAULT 0,
+				updated_at   TEXT NOT NULL DEFAULT '',
+				PRIMARY KEY (profile_id, day_key, site)
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_account_health_daily_profile_day
+				ON account_health_daily(profile_id, day_key DESC)`,
+		},
+	},
 }
 
 // NewDB 创建新的数据库连接

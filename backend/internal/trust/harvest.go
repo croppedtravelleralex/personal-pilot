@@ -138,14 +138,28 @@ func (b *Bundle) HasValidTrust(now time.Time) bool {
 
 // BundleFromHarvest builds a trust bundle from harvested session data.
 func BundleFromHarvest(profileID string, provider Provider, cookies []CookieEntry, harvest TokenHarvest, exitIP, proxyID string) Bundle {
+	return BundleFromHarvestWithStorage(profileID, provider, cookies, harvest, exitIP, proxyID, nil, nil)
+}
+
+// BundleFromHarvestWithStorage includes local/session storage maps for CDP hydrate.
+func BundleFromHarvestWithStorage(
+	profileID string,
+	provider Provider,
+	cookies []CookieEntry,
+	harvest TokenHarvest,
+	exitIP, proxyID string,
+	localStorage, sessionStorage map[string]string,
+) Bundle {
 	raw, _ := json.Marshal(cookies)
 	b := Bundle{
-		ProfileID:   profileID,
-		Provider:    provider,
-		CookiesJSON: string(raw),
-		ProxyID:     proxyID,
-		ExitIP:      exitIP,
-		UpdatedAt:   time.Now().UTC(),
+		ProfileID:      profileID,
+		Provider:       provider,
+		CookiesJSON:    string(raw),
+		LocalStorage:   localStorage,
+		SessionStorage: sessionStorage,
+		ProxyID:        proxyID,
+		ExitIP:         exitIP,
+		UpdatedAt:      time.Now().UTC(),
 	}
 	if harvest.RefreshToken != "" {
 		b.RefreshToken = harvest.RefreshToken

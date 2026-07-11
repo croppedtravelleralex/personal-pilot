@@ -1,6 +1,10 @@
 package lifecycle
 
-import "time"
+import (
+	"time"
+
+	"personal-pilot/backend/internal/platformpack"
+)
 
 type PageType string
 
@@ -28,30 +32,61 @@ type State struct {
 }
 
 type SessionStrategy struct {
-	MinDuration time.Duration
-	MaxDuration time.Duration
-	PageBudget  uint32
-	Cadence     string
+	MinDuration    time.Duration
+	MaxDuration    time.Duration
+	PageBudget     uint32
+	Cadence        string
+	ScrollPauseMin int
+	ScrollPauseMax int
+	CadenceSource  string
 }
 
 type Engine struct {
-	Now func() time.Time
+	Now     func() time.Time
+	Cadence platformpack.CadenceConfig
 }
 
 func NewEngine() Engine {
 	return Engine{Now: time.Now}
 }
 
+// WithCadence attaches a loaded platform-pack cadence budget.
+func (e Engine) WithCadence(cfg platformpack.CadenceConfig) Engine {
+	e.Cadence = cfg
+	return e
+}
+
 func (e Engine) PlanDailySession(state State) SessionStrategy {
 	now := e.now()
 	ageDays := now.Sub(state.CreatedAt).Hours() / 24
+	var strategy SessionStrategy
 	if ageDays < 1 {
-		return SessionStrategy{MinDuration: 90 * time.Second, MaxDuration: 4 * time.Minute, PageBudget: 3, Cadence: "new_account"}
+		strategy = SessionStrategy{MinDuration: 90 * time.Second, MaxDuration: 4 * time.Minute, PageBudget: 3, Cadence: "new_account"}
+	} else if state.RiskScore >= 0.7 {
+		strategy = SessionStrategy{MinDuration: 45 * time.Second, MaxDuration: 2 * time.Minute, PageBudget: 2, Cadence: "risk_reduced"}
+	} else {
+		strategy = SessionStrategy{MinDuration: 3 * time.Minute, MaxDuration: 12 * time.Minute, PageBudget: 8, Cadence: "steady"}
 	}
-	if state.RiskScore >= 0.7 {
-		return SessionStrategy{MinDuration: 45 * time.Second, MaxDuration: 2 * time.Minute, PageBudget: 2, Cadence: "risk_reduced"}
+	if e.Cadence.Source != "" || e.Cadence.Nurture.MaxActionsPerSession > 0 {
+		budget, minDur, maxDur := e.Cadence.ApplyToBudget(
+			strategy.PageBudget, strategy.MinDuration, strategy.MaxDuration,
+		)
+		strategy.PageBudget = budget
+		strategy.ScrollPauseMin, strategy.ScrollPauseMax = e.Cadence.ScrollPauseRange()
+		strategy.CadenceSource = e.Cadence.Source
+		// Only steady cadence inherits yaml session window; new/risk keep tighter windows.
+		if strategy.Cadence == "steady" {
+			strategy.MinDuration = minDur
+			strategy.MaxDuration = maxDur
+		}
+		if strategy.Cadence == "new_account" && strategy.PageBudget > 3 {
+			strategy.PageBudget = 3
+		}
+		if strategy.Cadence == "risk_reduced" && strategy.PageBudget > 2 {
+			strategy.PageBudget = 2
+		}
 	}
-	return SessionStrategy{MinDuration: 3 * time.Minute, MaxDuration: 12 * time.Minute, PageBudget: 8, Cadence: "steady"}
+	return strategy
 }
 
 func (e Engine) EvolveInterest(state State, topic string, weight float64) State {

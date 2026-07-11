@@ -1,7 +1,8 @@
-import type { DashboardStats } from './types'
+import type { AccountHealthDailyRow, DashboardStats } from './types'
 import { messageFromUnknownError } from '../../shared/errors'
 import {
   collectValidationReport,
+  desktopRpc,
   generateDesktopCdKeys,
   listEvidenceReports,
   readDashboardStats,
@@ -26,6 +27,7 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     ])
     const rawLimit = Number(licenseStatus?.maxLimit ?? 0)
     const maxProfileLimit = rawLimit > 0 ? rawLimit : DEFAULT_UNLIMITED
+    const budget = data?.budget
 
     return {
       totalInstances: data?.totalInstances ?? 0,
@@ -35,6 +37,8 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
       memUsedMB: data?.memUsedMB ?? 0,
       maxProfileLimit,
       appVersion: data?.appVersion ?? 'unknown',
+      maxConcurrentInstances: budget?.maxConcurrentInstances ?? 0,
+      remainingSlots: budget?.remainingSlots ?? -1,
     }
   } catch (error: unknown) {
     console.error('fetchDashboardStats error:', error)
@@ -48,6 +52,28 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     memUsedMB: 0,
     maxProfileLimit: DEFAULT_UNLIMITED,
     appVersion: 'unknown',
+    maxConcurrentInstances: 0,
+    remainingSlots: -1,
+  }
+}
+
+export async function fetchAccountHealthTrend(profileId: string, windowDays = 7): Promise<AccountHealthDailyRow[]> {
+  if (!profileId.trim()) {
+    return []
+  }
+  try {
+    const rows = await desktopRpc<AccountHealthDailyRow[]>('AccountHealthTrend', [profileId, 'challenge_rate', windowDays])
+    return Array.isArray(rows) ? rows : []
+  } catch (error: unknown) {
+    console.error('fetchAccountHealthTrend error:', error)
+    return [{
+      day: new Date().toISOString().slice(0, 10),
+      challengeRate: 0,
+      successRate: 0,
+      detectorPassRate: 0,
+      sampleN: 0,
+      status: 'insufficient_data',
+    }]
   }
 }
 

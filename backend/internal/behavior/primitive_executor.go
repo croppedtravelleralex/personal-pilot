@@ -75,7 +75,9 @@ func (e *CDPExecutor) ExecutePrimitive(step PrimitiveStep) (map[string]interface
 		if d <= 0 {
 			d = 500
 		}
-		humanize.NaturalDelay(humanize.DefaultBioNoiseConfig())
+		cfg := humanize.BioNoiseConfigFromSeed(fmt.Sprintf("level-%d", e.level))
+		humanize.NaturalDelay(cfg)
+		time.Sleep(humanize.DwellFromSeed(fmt.Sprintf("level-%d", e.level), name))
 		return result, e.Wait(time.Duration(d) * time.Millisecond)
 	case "wait_for_readiness":
 		if err := e.WaitForSelector("body", step.timeout(20000)); err != nil {

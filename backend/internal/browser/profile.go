@@ -387,7 +387,15 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		return nil, err
 	}
 	ensureProfileHumanizeSeed(profile)
-	ensureProfilePersonaID(profile)
+	if strings.TrimSpace(profile.PersonaID) == "" {
+		existing := make([]*Profile, 0, len(m.Profiles))
+		for _, p := range m.Profiles {
+			existing = append(existing, p)
+		}
+		profile.PersonaID = AssignPersonaIDWithPool(profile.HumanizeSeed, existing)
+	} else {
+		ensureProfilePersonaID(profile)
+	}
 	m.Profiles[profileId] = profile
 	if warnings := ValidateFingerprintArgs(profile.FingerprintArgs); len(warnings) > 0 {
 		log.Warn("实例包含无效指纹标志",

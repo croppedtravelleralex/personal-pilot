@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"personal-pilot/backend/internal/browser/persona"
 )
@@ -60,6 +61,9 @@ func materializeRuntimeArgs(binaryPath string, profile *Profile, globalFingerpri
 
 	ua := ChromiumUserAgent(version)
 	if device := persona.ResolveOrAssign(profile.PersonaID, seed); device != nil {
+		bornAt, _ := time.Parse(time.RFC3339, strings.TrimSpace(profile.CreatedAt))
+		evolved := persona.EvolvePersona(*device, bornAt, time.Now().UTC())
+		device = &evolved
 		if built := device.ChromiumUA(version.Full); built != "" {
 			ua = built
 		}
@@ -118,6 +122,24 @@ func ensureProfilePersonaID(profile *Profile) {
 		seed = strings.TrimSpace(profile.ProfileId)
 	}
 	profile.PersonaID = persona.AssignPersonaID(seed)
+}
+
+// AssignPersonaIDWithPool prefers diversity against currently loaded profiles.
+func AssignPersonaIDWithPool(seed string, existing []*Profile) string {
+	used := map[string]int{}
+	for _, p := range existing {
+		if p == nil {
+			continue
+		}
+		id := strings.TrimSpace(p.PersonaID)
+		if id == "" {
+			continue
+		}
+		if dp := persona.Resolve(id); dp != nil {
+			used[persona.FeatureKey(*dp)]++
+		}
+	}
+	return persona.AssignPersonaIDDiverse(seed, used, 3)
 }
 
 func profileHasTag(profile *Profile, tag string) bool {

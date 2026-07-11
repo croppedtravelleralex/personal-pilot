@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -36,6 +37,13 @@ type EnvironmentInjectionProfile struct {
 	DoNotTrack          bool              `json:"doNotTrack"`
 	DevicePixelRatio    string            `json:"devicePixelRatio"`
 	WindowSize          string            `json:"windowSize"`
+	ScreenWidth         int               `json:"screenWidth"`
+	ScreenHeight        int               `json:"screenHeight"`
+	BrandVersion        string            `json:"brandVersion"`
+	PrefersColorScheme  string            `json:"prefersColorScheme"`
+	NetworkEffectiveType string           `json:"networkEffectiveType"`
+	NetworkRTT          int               `json:"networkRtt"`
+	NetworkDownlink     float64           `json:"networkDownlink"`
 }
 
 type WebRTCPolicy struct {
@@ -236,6 +244,13 @@ func CompileEnvironmentInjectionScript(profile EnvironmentInjectionProfile) (Env
         if (!allowed.size) return actual;
         return actual.filter((name) => allowed.has(name));
       });
+      replaceMethod(proto, 'getShaderPrecisionFormat', (originalGetShaderPrecisionFormat) => function getShaderPrecisionFormat(...args) {
+        return originalGetShaderPrecisionFormat.apply(this, args);
+      });
+      replaceMethod(proto, 'readPixels', (originalReadPixels) => function readPixels(x, y, width, height, format, type, pixels, ...rest) {
+        originalReadPixels.call(this, x, y, width, height, format, type, pixels, ...rest);
+        if (pixels && pixels.length) canvasNoise(pixels, 'readPixels');
+      });
     };
     webglPatch(typeof WebGLRenderingContext !== 'undefined' && WebGLRenderingContext.prototype);
     webglPatch(typeof WebGL2RenderingContext !== 'undefined' && WebGL2RenderingContext.prototype);
@@ -277,6 +292,112 @@ func CompileEnvironmentInjectionScript(profile EnvironmentInjectionProfile) (Env
       } catch (_) {}
     }
 
+    const nav = root.navigator;
+
+    // docs/51 S4 — speechSynthesis voices match primary locale.
+    if (typeof speechSynthesis !== 'undefined' && speechSynthesis.getVoices) {
+      replaceMethod(speechSynthesis, 'getVoices', (originalGetVoices) => function getVoices() {
+        const voices = originalGetVoices.call(this) || [];
+        const lang = (profile.languages && profile.languages[0]) || 'zh-CN';
+        const alt = lang.startsWith('zh') ? 'zh-CN' : 'en-US';
+        const hasMatch = voices.some((v) => v && v.lang && (v.lang === lang || v.lang === alt || v.lang.startsWith(String(lang).split('-')[0])));
+        if (hasMatch) return voices;
+        const seedVoice = voices[0] || { name: 'Google US English', lang: 'en-US', default: true, localService: true, voiceURI: 'Google US English' };
+        return voices.concat([Object.assign({}, seedVoice, { lang, name: lang + ' Voice', voiceURI: lang + ' Voice', default: false })]);
+      });
+    }
+
+    // docs/51 S5 — desktop battery persona (always charging, full).
+    if (nav && nav.getBattery) {
+      replaceMethod(nav, 'getBattery', () => function getBattery() {
+        const battery = { charging: true, level: 1, chargingTime: 0, dischargingTime: Infinity };
+        battery.addEventListener = makeNative(function addEventListener() {});
+        battery.removeEventListener = makeNative(function removeEventListener() {});
+        battery.dispatchEvent = makeNative(function dispatchEvent() { return true; });
+        return Promise.resolve(battery);
+      });
+    }
+
+    // docs/51 S6 — NetworkInformation stable desktop values.
+    if (nav && nav.connection) {
+      const conn = nav.connection;
+      defineGetter(conn, 'effectiveType', profile.networkEffectiveType || '4g');
+      defineGetter(conn, 'rtt', profile.networkRtt > 0 ? profile.networkRtt : 50);
+      defineGetter(conn, 'downlink', profile.networkDownlink > 0 ? profile.networkDownlink : 10);
+    }
+
+    // docs/51 S7 — matchMedia prefers-color-scheme / reduced-motion stability.
+    if (typeof root.matchMedia === 'function') {
+      replaceMethod(root, 'matchMedia', (originalMatchMedia) => function matchMedia(query) {
+        const q = String(query || '').toLowerCase();
+        const mql = originalMatchMedia.call(this, query);
+        if (q.includes('prefers-color-scheme')) {
+          const scheme = String(profile.prefersColorScheme || 'light').toLowerCase();
+          return Object.assign({}, mql, { matches: q.includes(scheme) });
+        }
+        if (q.includes('prefers-reduced-motion')) {
+          return Object.assign({}, mql, { matches: q.includes('no-preference') });
+        }
+        return mql;
+      });
+    }
+
+    // docs/51 S8 — ClientRects subpixel noise (seed-stable).
+    const rectNoise = (rect, salt) => {
+      const n = stableNoise(salt);
+      return {
+        x: rect.x + n, y: rect.y + n, width: rect.width, height: rect.height,
+        top: rect.top + n, right: rect.right + n, bottom: rect.bottom + n, left: rect.left + n,
+        toJSON: rect.toJSON ? rect.toJSON.bind(rect) : undefined
+      };
+    };
+    if (typeof Element !== 'undefined' && Element.prototype) {
+      replaceMethod(Element.prototype, 'getBoundingClientRect', (originalGetBoundingClientRect) => function getBoundingClientRect() {
+        return rectNoise(originalGetBoundingClientRect.call(this), 'getBoundingClientRect');
+      });
+      replaceMethod(Element.prototype, 'getClientRects', (originalGetClientRects) => function getClientRects() {
+        const list = originalGetClientRects.call(this);
+        const noisy = [];
+        for (let i = 0; i < list.length; i++) noisy.push(rectNoise(list[i], 'getClientRects:' + i));
+        noisy.item = (i) => noisy[i] || null;
+        return noisy;
+      });
+    }
+
+    // docs/51 S9 — userAgentData high-entropy brands from profile.
+    if (nav && nav.userAgentData && nav.userAgentData.getHighEntropyValues) {
+      replaceMethod(nav.userAgentData, 'getHighEntropyValues', (originalGetHighEntropyValues) => async function getHighEntropyValues(hints) {
+        const values = await originalGetHighEntropyValues.call(this, hints);
+        if (!profile.brandVersion) return values;
+        const version = String(profile.brandVersion);
+        const brands = [
+          { brand: 'Google Chrome', version },
+          { brand: 'Chromium', version },
+          { brand: 'Not_A Brand', version: '24' }
+        ];
+        return Object.assign({}, values, { brands, fullVersionList: brands });
+      });
+    }
+
+    // docs/51 S13 — screen / devicePixelRatio geometry from profile.
+    if (profile.screenWidth > 0 && root.screen) {
+      defineGetter(root.screen, 'width', profile.screenWidth);
+      defineGetter(root.screen, 'height', profile.screenHeight);
+      defineGetter(root.screen, 'availWidth', profile.screenWidth);
+      defineGetter(root.screen, 'availHeight', profile.screenHeight > 40 ? profile.screenHeight - 40 : profile.screenHeight);
+    }
+    if (profile.devicePixelRatio) {
+      const dpr = parseFloat(profile.devicePixelRatio);
+      if (Number.isFinite(dpr) && dpr > 0) defineGetter(root, 'devicePixelRatio', dpr);
+    }
+
+    // docs/51 S14 — storage.estimate quota/usage persona.
+    if (nav && nav.storage && nav.storage.estimate) {
+      replaceMethod(nav.storage, 'estimate', () => async function estimate() {
+        return { quota: 1e10, usage: Math.floor(stableNoise('storage-usage') * 1e8) };
+      });
+    }
+
     if (typeof document !== 'undefined' && document.fonts && profile.fontAllowlist && profile.fontAllowlist.length && typeof Document !== 'undefined') {
       const allowedFonts = Object.freeze(profile.fontAllowlist.slice());
       const originalFontCheck = document.fonts.check && document.fonts.check.bind(document.fonts);
@@ -292,9 +413,19 @@ func CompileEnvironmentInjectionScript(profile EnvironmentInjectionProfile) (Env
         }
       }));
       root.__personaPilotAllowedFonts = allowedFonts;
+      // docs/51 S12 — measureText width drift for fonts outside allowlist.
+      if (typeof CanvasRenderingContext2D !== 'undefined' && CanvasRenderingContext2D.prototype) {
+        replaceMethod(CanvasRenderingContext2D.prototype, 'measureText', (originalMeasureText) => function measureText(text) {
+          const result = originalMeasureText.call(this, text);
+          const font = String(this.font || '');
+          if (!allowedFonts.some((f) => font.includes(f))) {
+            return Object.assign({}, result, { width: result.width + stableNoise('measureText:' + String(text)) * 2 });
+          }
+          return result;
+        });
+      }
     }
 
-    const nav = root.navigator;
     if (nav && nav.mediaDevices && nav.mediaDevices.enumerateDevices) {
       replaceMethod(nav.mediaDevices, 'enumerateDevices', () => async function enumerateDevices() {
         return (profile.mediaDevices || []).map((d) => ({
@@ -359,7 +490,9 @@ func CompileEnvironmentInjectionScript(profile EnvironmentInjectionProfile) (Env
       const Wrapped = function WorkerProxy(scriptURL, options) {
         try {
           if (options && options.type === 'module') {
-            return new NativeCtor(scriptURL, options);
+            const code = bootstrap + '\nimport ' + JSON.stringify(String(scriptURL)) + ';';
+            const blobURL = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+            return new NativeCtor(blobURL, options);
           }
           const code = bootstrap + '\nimportScripts(' + JSON.stringify(String(scriptURL)) + ');';
           const blobURL = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
@@ -374,15 +507,47 @@ func CompileEnvironmentInjectionScript(profile EnvironmentInjectionProfile) (Env
     };
     if (typeof Worker !== 'undefined') wrapClassicWorker(Worker, 'Worker');
     if (typeof SharedWorker !== 'undefined') wrapClassicWorker(SharedWorker, 'SharedWorker');
+    if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.register) {
+      const originalRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+      navigator.serviceWorker.register = async function register(scriptURL, options) {
+        try {
+          if (typeof scriptURL === 'string') {
+            const code = bootstrap + '\nimportScripts(' + JSON.stringify(scriptURL) + ');';
+            const blobURL = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+            return await originalRegister(blobURL, options);
+          }
+        } catch (_) {}
+        return originalRegister(scriptURL, options);
+      };
+    }
   }
 })();`, encoded))
 
 	return EnvironmentInjectionPlan{
 		Script:          script,
 		HeaderOverrides: normalized.Headers,
-		AppliedFamilies: []string{"browser_api_surface", "canvas_rendering", "timezone_locale", "webgl_gpu", "audio_stack", "fonts_text_metrics", "media_devices", "webrtc_ip_leak", "worker_scope"},
+		AppliedFamilies: []string{"browser_api_surface", "canvas_rendering", "timezone_locale", "webgl_gpu", "audio_stack", "speech_battery_network", "client_rects_match_media", "fonts_text_metrics", "screen_geometry", "storage_estimate", "media_devices", "webrtc_ip_leak", "worker_scope", "service_worker_scope"},
 		Warnings:        warnings,
 	}, nil
+}
+
+// SetGeolocationOverride applies CDP Emulation.setGeolocationOverride (docs/52 DP3).
+func (e *CDPExecutor) SetGeolocationOverride(lat, lon, accuracy float64) error {
+	if e == nil {
+		return fmt.Errorf("cdp executor nil")
+	}
+	if accuracy <= 0 {
+		accuracy = 100
+	}
+	_, err := e.sendCommand("Emulation.setGeolocationOverride", map[string]interface{}{
+		"latitude":  lat,
+		"longitude": lon,
+		"accuracy":  accuracy,
+	})
+	if err != nil {
+		return fmt.Errorf("set geolocation override: %w", err)
+	}
+	return nil
 }
 
 func (e *CDPExecutor) ApplyEnvironmentInjection(profile EnvironmentInjectionProfile) (EnvironmentInjectionPlan, error) {
@@ -488,7 +653,47 @@ func normalizeEnvironmentProfile(profile EnvironmentInjectionProfile) Environmen
 	if profile.MediaPermission == "" {
 		profile.MediaPermission = "prompt"
 	}
+	if len(profile.Plugins) == 0 {
+		profile.Plugins = defaultChromePDFPlugins()
+	}
+	if profile.ScreenWidth == 0 && strings.TrimSpace(profile.WindowSize) != "" {
+		parts := strings.Split(profile.WindowSize, ",")
+		if len(parts) == 2 {
+			profile.ScreenWidth = parseEnvPositiveInt(parts[0])
+			profile.ScreenHeight = parseEnvPositiveInt(parts[1])
+		}
+	}
+	if profile.PrefersColorScheme == "" {
+		profile.PrefersColorScheme = "light"
+	}
+	if profile.NetworkEffectiveType == "" {
+		profile.NetworkEffectiveType = "4g"
+	}
+	if profile.NetworkRTT <= 0 {
+		profile.NetworkRTT = 50
+	}
+	if profile.NetworkDownlink <= 0 {
+		profile.NetworkDownlink = 10
+	}
 	return profile
+}
+
+func parseEnvPositiveInt(value string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+func defaultChromePDFPlugins() []PluginInjection {
+	return []PluginInjection{
+		{Name: "PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "Chrome PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "Chromium PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "Microsoft Edge PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "WebKit built-in PDF", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+	}
 }
 
 func environmentInjectionWarnings(profile EnvironmentInjectionProfile) []string {

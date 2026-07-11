@@ -4,7 +4,9 @@ package wininput
 
 import (
 	"fmt"
+	"hash/fnv"
 	"math"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -62,6 +64,11 @@ func (m *MouseSender) MoveTo(viewportX, viewportY float64) error {
 
 // MoveToHumanized moves the mouse along a Bezier trajectory with human-like timing.
 func (m *MouseSender) MoveToHumanized(viewportX, viewportY float64) error {
+	return m.MoveToHumanizedWithSeed(viewportX, viewportY, "")
+}
+
+// MoveToHumanizedWithSeed applies BioNoise-derived jitter from a stable humanize seed (docs/53 L5).
+func (m *MouseSender) MoveToHumanizedWithSeed(viewportX, viewportY float64, seed string) error {
 	targetX := int32(viewportX * m.dpiScale)
 	targetY := m.chromeY + int32(viewportY*m.dpiScale)
 	fromX := float64(m.curX)
@@ -78,10 +85,12 @@ func (m *MouseSender) MoveToHumanized(viewportX, viewportY float64) error {
 		steps = 3
 	}
 
-	cp1x := fromX + (toX-fromX)*0.3
-	cp1y := fromY - 40
-	cp2x := fromX + (toX-fromX)*0.7
-	cp2y := toY + 40
+	// Seed-stable control-point jitter (same seed → same arc family).
+	j1, j2, speedMul := bioNoiseMouseParams(seed)
+	cp1x := fromX + (toX-fromX)*0.3 + j1
+	cp1y := fromY - 40 + j2
+	cp2x := fromX + (toX-fromX)*0.7 - j2
+	cp2y := toY + 40 + j1
 
 	for i := 0; i <= steps; i++ {
 		t := float64(i) / float64(steps)
@@ -93,13 +102,27 @@ func (m *MouseSender) MoveToHumanized(viewportX, viewportY float64) error {
 			return err
 		}
 
-		delay := time.Duration(1000.0/400.0*(1.0+math.Sin(math.Pi*t)*0.5)) * time.Millisecond
+		delay := time.Duration(1000.0/400.0*(1.0+math.Sin(math.Pi*t)*0.5)*speedMul) * time.Millisecond
 		time.Sleep(delay)
 	}
 
 	m.curX = targetX
 	m.curY = targetY
 	return nil
+}
+
+func bioNoiseMouseParams(seed string) (j1, j2, speedMul float64) {
+	speedMul = 1.0
+	if strings.TrimSpace(seed) == "" {
+		return 0, 0, speedMul
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(seed + "|os-mouse"))
+	v := h.Sum32()
+	j1 = float64(int(v%61) - 30)
+	j2 = float64(int((v>>8)%61) - 30)
+	speedMul = 0.85 + float64((v>>16)%30)/100.0
+	return j1, j2, speedMul
 }
 
 // Click performs a left mouse click at the current position.
@@ -113,7 +136,12 @@ func (m *MouseSender) Click() error {
 
 // ClickAt moves to viewport coordinates and clicks.
 func (m *MouseSender) ClickAt(viewportX, viewportY float64) error {
-	if err := m.MoveToHumanized(viewportX, viewportY); err != nil {
+	return m.ClickAtWithSeed(viewportX, viewportY, "")
+}
+
+// ClickAtWithSeed moves with seed-stable BioNoise trajectory then clicks.
+func (m *MouseSender) ClickAtWithSeed(viewportX, viewportY float64, seed string) error {
+	if err := m.MoveToHumanizedWithSeed(viewportX, viewportY, seed); err != nil {
 		return err
 	}
 	time.Sleep(100 * time.Millisecond)

@@ -26,6 +26,7 @@ type Bundle struct {
 	Scopes       []string          `json:"scopes,omitempty"`
 	CookiesJSON  string            `json:"cookiesJson,omitempty"`
 	LocalStorage map[string]string `json:"localStorage,omitempty"`
+	SessionStorage map[string]string `json:"sessionStorage,omitempty"`
 	ProxyID      string            `json:"proxyId,omitempty"`
 	ExitIP       string            `json:"exitIp,omitempty"`
 	Notes        string            `json:"notes,omitempty"`

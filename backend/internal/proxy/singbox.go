@@ -692,7 +692,8 @@ func (m *SingBoxManager) buildConfig(key string, outbound map[string]interface{}
 		return "", err
 	}
 
-	transportProfile := transport.RuntimeProfile(transport.RuntimeFamilyChrome)
+	// 49-C4: bind TLS template to product Chrome major (not fixed chrome-stable).
+	transportProfile := transport.ChromeMajorTLSBaseline(transport.DefaultChromeMajor)
 	outbound = applySingBoxTransportProfile(outbound, transportProfile)
 	cfg := map[string]interface{}{
 		"log": map[string]interface{}{
@@ -838,6 +839,22 @@ func applySingBoxTransportProfile(outbound map[string]interface{}, profile trans
 		tls, _ := outbound["tls"].(map[string]interface{})
 		if tls != nil {
 			tls["alpn"] = append([]string{}, profile.TLS.ALPN...)
+			outbound["tls"] = tls
+		}
+	}
+	// Attach utls fingerprint metadata when TLS is present (template label, not observed JA3).
+	if ja3 := strings.TrimSpace(profile.TLS.JA3); ja3 != "" {
+		tls, _ := outbound["tls"].(map[string]interface{})
+		if tls != nil {
+			fp := strings.ToLower(strings.TrimPrefix(ja3, "Chrome_"))
+			if fp == "" || strings.EqualFold(fp, "auto") {
+				fp = "chrome"
+			}
+			tls["utls"] = map[string]any{
+				"enabled":         true,
+				"fingerprint":     fp,
+				"fingerprint_tag": ja3,
+			}
 			outbound["tls"] = tls
 		}
 	}

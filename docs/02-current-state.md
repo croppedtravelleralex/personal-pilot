@@ -1,16 +1,18 @@
 # Current State
 
-Updated: 2026-07-11 (Asia/Shanghai)
+Updated: 2026-07-11 (Asia/Shanghai) — 指纹轨道本地小残余已收口
 
 ## 当前 live truth
 
 - Mainline delivery：`100% / 0% / green` (3 P0 items closed)
 - Local self-use：`100% / 0% / green`
+- 指纹优化轨道（49–56）：本地可做项（含 C4/CP6/AH3–AH5/cadence/OS BioNoise）已落地；仍外部阻塞：横评刷分、DNS-token、DE、AdsPower API、CAPTCHA/SMS/Email live。C4 AC2（tls.browserleaks live）与 Persona 真机采样为非阻塞残余。
 - 唯一未验：CAPTCHA / SMS / Email 服务商真实账号凭证 smoke。没有真实账号、余额和密钥时，只能保留为 `blocked_missing_credentials`，不能伪造 accepted。
 - 当前用户确认的唯一主线 UI 是截图所示 `personal-pilot` 1.1.0 壳，唯一用户入口为 `D:\SelfMadeTool\personal-pilot\personal-pilot-tauri.exe`。
 - 后续所有更新、新增功能和修复都必须集成到 `personal-pilot-tauri.exe` 对应 UI；`PersonaPilot.exe`、`portable.exe`、`src-tauri/target/release/persona-pilot-desktop.exe`、`src-tauri/target/release/personal-pilot-tauri.exe`、安装包 exe 和第二套 UI 都不得作为持久入口。
 - 当前仓库只保留一份用户可打开 GUI exe：根目录 `personal-pilot-tauri.exe`。`bin/` 下 sidecar、代理工具和 `chrome/` 下浏览器引擎 exe 是运行时依赖，不属于用户入口。
 - 2026-06-22 范围重置：项目只服务本机自用；release performance 预算达标、外部分发 smoke、干净 Win11/第二机验收、跨机器 SessionBundle portability 全部取消，不再作为阻塞项、未完成项或下一步目标。
+- 统一执行入口：`PLAN.md`。
 - 2026-06-28 已复测 app API 面：Go/Wails App 方法、`personal-pilot-core` sidecar RPC、LaunchServer 本地 HTTP API、Rust control-plane API、Tauri commands、TS desktop bridge 均有最新自动化或真实本机 smoke 证据；`tauriWailsBridge` 仍作为过渡兼容层存在，但已移除 5 个不存在的旧方法暴露，当前前端 `desktopRpc` 和旧桥 allowlist 均不再指向 sidecar 未放行方法。本轮还把 LaunchServer `/api/proxy/parse` 补齐到支持前端直接导入已有的四种认证代理格式，并继续对响应中的密码脱敏。
 - 2026-06-28 API full workflow smoke 已真实跑通：配置/解析代理、手动代理 CRUD、预设指纹创建 profile、`autoLaunch` 启动本机 fingerprint Chromium、实例状态检查、workbench 导航、输入、点击、抓取页面、截图、指纹快照、fingerprint health、identity report、localStorage/cookie、tab 创建关闭、behavior start/stop、代理检测、日志读取和清理均通过。此次 smoke 同时修复了 `parseBoundsResult` 不匹配真实 CDP `Runtime.evaluate` 返回结构的问题，并支持小数坐标 round 后继续执行 click/hover。
 - 2026-06-29 已修复 LaunchServer API key 环境变量引用：`launch_server.auth.api_key` 支持 `${VAR}`、`$VAR`、`%VAR%` 这类完整环境变量引用，鉴权运行时使用展开后的真实值；配置加载仍保留占位符，避免后续保存配置时把真实 key 写回 `config.yaml`。真实 sidecar smoke 已确认：缺 key 返回 `401`，`${LAUNCH_SERVER_API_KEY}` 字面量返回 `401`，环境变量真实值返回 `200`。
@@ -187,14 +189,10 @@ Updated: 2026-07-11 (Asia/Shanghai)
 
 ## 当前下一步
 
-**本批（2026-07-11 续推）已落地**：uTLS Graph 出站、profile 同代理出口、TrustSurface CDP hydrate、DP1 人格库（≥12）、A5 噪声、S3 WebGPU 对齐、L5-3 惯性 wheel、CP2 并发预算。详见 `PLAN.md`。
+**本批（2026-07-11 第二轮）已落地**：PersonaID SQLite、DP3–DP5、S4–S14、module/SW、harvest storage、L5 dwell、CP3–CP5、AH1/AH2、R1 时间线、C2/C3、Ops 同出口。详见 `PLAN.md`。
 
-**仍可本地推进：**
+**本地小残余：** 49-C4 TLS↔UA 深度绑定、CP6 smoke 强化、AH3–AH5 Dashboard/归因、cadence.yaml 深加载。
 
-1. PersonaID SQLite 列持久化；DP3 geo 活体
-2. docs/51 S4–S14；docs/54 CP3–6；docs/55 纵向指标
-3. RPA 可视化 MVP；有额度时复跑 missing/deep **刷分**
-
-**暂缓（外部条件）：** CAPTCHA/SMS/Email 真实凭证 live、Germany 节点、DNS-token、BitBrowser 额度、AdsPower 付费 API。
+**暂缓（外部条件）：** 横评刷分、DNS-token、DE、AdsPower API、CAPTCHA/SMS/Email live。
 
 **执行入口**：`PLAN.md`。

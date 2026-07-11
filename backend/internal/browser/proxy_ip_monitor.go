@@ -88,12 +88,23 @@ func (m *ProxyIPMonitor) runOnce(listRunning func() []RunningProfileProxy) {
 	if listRunning == nil {
 		return
 	}
-	for _, item := range listRunning() {
+	items := listRunning()
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	for _, item := range items {
 		if item.ProxyID == "" || item.ProfileID == "" {
 			continue
 		}
-		m.checkFn(item.ProfileID, item.ProxyID)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(profileID, proxyID string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			m.checkFn(profileID, proxyID)
+		}(item.ProfileID, item.ProxyID)
 	}
+	wg.Wait()
 }
 
 // NoteExitIP records the latest exit IP for drift detection on subsequent checks.

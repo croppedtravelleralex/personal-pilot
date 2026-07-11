@@ -9,6 +9,13 @@ type GeoLocale struct {
 	Timezone string
 }
 
+// GeoCoordinate is a city-level lat/lon used for Emulation.setGeolocationOverride.
+type GeoCoordinate struct {
+	Lat      float64
+	Lon      float64
+	Accuracy float64
+}
+
 var geoLocaleTable = map[string]GeoLocale{
 	"US": {Lang: "en-US", Accept: "en-US,en;q=0.9", Timezone: "America/New_York"},
 	"CA": {Lang: "en-CA", Accept: "en-CA,en;q=0.9", Timezone: "America/Toronto"},
@@ -19,6 +26,45 @@ var geoLocaleTable = map[string]GeoLocale{
 	"JP": {Lang: "ja-JP", Accept: "ja-JP,ja;q=0.9,en;q=0.8", Timezone: "Asia/Tokyo"},
 	"CN": {Lang: "zh-CN", Accept: "zh-CN,zh;q=0.9,en;q=0.8", Timezone: "Asia/Shanghai"},
 	"AU": {Lang: "en-AU", Accept: "en-AU,en;q=0.9", Timezone: "Australia/Sydney"},
+}
+
+// City coordinates are public city-center references (not spoofed street addresses).
+var geoCoordinateTable = map[string]GeoCoordinate{
+	"US|NEW YORK":    {40.7128, -74.0060, 100},
+	"US|LOS ANGELES": {34.0522, -118.2437, 100},
+	"US|":            {40.7128, -74.0060, 5000},
+	"CA|TORONTO":     {43.6532, -79.3832, 100},
+	"CA|":            {43.6532, -79.3832, 5000},
+	"GB|LONDON":      {51.5074, -0.1278, 100},
+	"UK|LONDON":      {51.5074, -0.1278, 100},
+	"GB|":            {51.5074, -0.1278, 5000},
+	"DE|BERLIN":      {52.5200, 13.4050, 100},
+	"DE|":            {52.5200, 13.4050, 5000},
+	"FR|PARIS":       {48.8566, 2.3522, 100},
+	"FR|":            {48.8566, 2.3522, 5000},
+	"JP|TOKYO":       {35.6762, 139.6503, 100},
+	"JP|":            {35.6762, 139.6503, 5000},
+	"CN|SHANGHAI":    {31.2304, 121.4737, 100},
+	"CN|BEIJING":     {39.9042, 116.4074, 100},
+	"CN|":            {31.2304, 121.4737, 5000},
+	"AU|SYDNEY":      {-33.8688, 151.2093, 100},
+	"AU|":            {-33.8688, 151.2093, 5000},
+}
+
+// LookupGeoCoordinate resolves country/city to a coordinate; falls back to country default.
+func LookupGeoCoordinate(country, city string) (GeoCoordinate, bool) {
+	country = strings.ToUpper(strings.TrimSpace(country))
+	city = strings.ToUpper(strings.TrimSpace(city))
+	if country == "" {
+		return GeoCoordinate{}, false
+	}
+	if c, ok := geoCoordinateTable[country+"|"+city]; ok {
+		return c, true
+	}
+	if c, ok := geoCoordinateTable[country+"|"]; ok {
+		return c, true
+	}
+	return GeoCoordinate{}, false
 }
 
 // ApplyGeoLocale overrides locale/timezone args to match proxy geography (anti timezone drift).

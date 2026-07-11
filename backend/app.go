@@ -211,6 +211,7 @@ func (a *App) startup(ctx context.Context) {
 		log.Error("数据库迁移失败", logger.F("error", err))
 	}
 	a.startTrustTokenRefreshLoop(ctx)
+	a.startOrphanReconcileLoop(ctx)
 
 	a.browserMgr = browser.NewManager(cfg, a.appRoot)
 	a.xrayMgr = proxy.NewXrayManager(cfg, a.appRoot)

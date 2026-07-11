@@ -12,6 +12,7 @@ import (
 	"personal-pilot/backend/internal/browser"
 	"personal-pilot/backend/internal/detection"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/transport"
 	"personal-pilot/backend/internal/trust"
 )
 
@@ -143,12 +144,7 @@ func (a *App) buildStealthMatrixInput(profileID string) asymmetric.StealthMatrix
 		}
 	}
 	challenges := a.listRecentChallenges(profileID, 50)
-	if len(challenges) > 0 {
-		in.ChallengeRatePct = float64(len(challenges)) * 2
-		if in.ChallengeRatePct > 100 {
-			in.ChallengeRatePct = 100
-		}
-	}
+	in.ChallengeRatePct = a.observedChallengeRatePct(profileID, challenges)
 	entropy := asymmetric.AssessEntropy(a.profileActivityEntropy(profileID))
 	in.EntropyHumanLike = entropy.Level == "human_like"
 
@@ -229,7 +225,27 @@ func (a *App) AsymmetricBootstrapGaps(profileID string) []string {
 	if !in.IPBudgetHeadroom {
 		gaps = append(gaps, "reduce daily visits per exit IP (max 5/day)")
 	}
+	if profile := a.getProfileSnapshot(profileID); profile != nil {
+		ua := extractUserAgentFromArgs(profile.FingerprintArgs)
+		if ua == "" {
+			ua = fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%d.0.0.0 Safari/537.36", transport.DefaultChromeMajor)
+		}
+		bridgeHello := transport.ChromeMajorTLSBaseline(transport.DefaultChromeMajor).TLS.JA3
+		if !transport.TLSUACoherent(ua, bridgeHello) {
+			gaps = append(gaps, "tlsUaCoherent: align proxy TLS template with UA major (docs/49 C4)")
+		}
+	}
 	return gaps
+}
+
+func extractUserAgentFromArgs(args []string) string {
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if strings.HasPrefix(strings.ToLower(arg), "--user-agent=") {
+			return strings.TrimSpace(arg[len("--user-agent="):])
+		}
+	}
+	return ""
 }
 
 func mustParseTrustCookies(raw string) []trust.CookieEntry {
@@ -241,6 +257,14 @@ func mustParseTrustCookies(raw string) []trust.CookieEntry {
 func (a *App) AsymmetricApplyFeedbackAuto(profileID string) (map[string]interface{}, error) {
 	challenges := a.listRecentChallenges(profileID, 20)
 	fb := asymmetric.DeriveFeedback(challenges, 48*time.Hour)
+	ratePct := a.observedChallengeRatePct(profileID, challenges)
+	// AH4: high observed challenge rate forces stronger degradation even if window count is low.
+	if ratePct > 20 {
+		fb.PauseHours = maxPauseHours(fb.PauseHours, 24)
+		fb.RotateFingerprintSeed = true
+		fb.PreferAPIPath = true
+		fb.Notes = append(fb.Notes, fmt.Sprintf("challenge_rate=%.1f%% exceeds 20%% threshold", ratePct))
+	}
 	st := a.loadStealthState(profileID)
 	applied := make([]string, 0, 4)
 	if fb.PreferAPIPath {
@@ -257,7 +281,48 @@ func (a *App) AsymmetricApplyFeedbackAuto(profileID string) (map[string]interfac
 		}
 	}
 	_ = a.saveStealthState(profileID, st)
-	return map[string]interface{}{"feedback": fb, "applied": applied}, nil
+	return map[string]interface{}{
+		"feedback":           fb,
+		"applied":            applied,
+		"challengeRatePct":   ratePct,
+	}, nil
+}
+
+func (a *App) observedChallengeRatePct(profileID string, challenges []asymmetric.ChallengeRecord) float64 {
+	if trend, err := a.AccountHealthTrend(profileID, "challenge_rate", 7); err == nil && len(trend) > 0 {
+		var rateSum float64
+		var n int
+		for _, row := range trend {
+			if row.Status == "insufficient_data" && row.SampleN == 0 {
+				continue
+			}
+			rateSum += row.ChallengeRate
+			n++
+		}
+		if n > 0 {
+			pct := (rateSum / float64(n)) * 100
+			if pct > 100 {
+				pct = 100
+			}
+			return pct
+		}
+	}
+	if len(challenges) == 0 {
+		return 0
+	}
+	// Fallback: density heuristic when rollup table is empty.
+	pct := float64(len(challenges)) * 2
+	if pct > 100 {
+		pct = 100
+	}
+	return pct
+}
+
+func maxPauseHours(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // WorkbenchRunStealthProbeSuite runs WebRTC + CreepJS heuristic probe on running profile.
@@ -423,5 +488,8 @@ func (a *App) recordChallengeOnly(profileID, site, challengeType string) error {
 	 VALUES (?, ?, ?, ?, ?, ?)`,
 		"ch-"+generateUUID(), strings.TrimSpace(profileID), site, challengeType, string(raw), time.Now().UTC().Format(time.RFC3339),
 	)
+	if err == nil {
+		a.NoteAccountHealthObservation(profileID, site, 1, 0, 0, 0, 0)
+	}
 	return err
 }

@@ -1,9 +1,14 @@
 package transport
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
+
+// DefaultChromeMajor is the product Chromium major used when no UA is available
+// at the local proxy-bridge layer (aligned with browser.DefaultChromiumVersion).
+const DefaultChromeMajor = 139
 
 // EgressIdentity is the shared outbound identity for browser args and API clients.
 type EgressIdentity struct {
@@ -25,6 +30,29 @@ func ChromeHelloPreset(major int) string {
 	default:
 		return "Chrome_Auto"
 	}
+}
+
+// ChromeMajorTLSBaseline returns outbound TLS metadata aligned to a Chrome major (docs/49 C4).
+// JA3 field is a template label for config selection — not an observed JA3 hash.
+func ChromeMajorTLSBaseline(major int) OutboundConfig {
+	if major <= 0 {
+		major = DefaultChromeMajor
+	}
+	cfg := RuntimeProfile(RuntimeFamilyChrome)
+	preset := ChromeHelloPreset(major)
+	cfg.TLS.JA3 = preset
+	cfg.RouteTag = fmt.Sprintf("chrome-%d", major)
+	return cfg
+}
+
+// TLSUACoherent reports whether a User-Agent major maps to the same TLS template label.
+func TLSUACoherent(ua string, tlsTemplate string) bool {
+	major := ParseUAMajor(ua)
+	if major <= 0 {
+		major = DefaultChromeMajor
+	}
+	expected := ChromeHelloPreset(major)
+	return strings.EqualFold(strings.TrimSpace(tlsTemplate), expected)
 }
 
 // ParseUAMajor extracts the Chrome/Chromium major from a User-Agent string.

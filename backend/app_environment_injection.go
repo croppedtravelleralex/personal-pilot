@@ -79,6 +79,12 @@ func (a *App) applyProfileEnvironmentInjectionAsync(profileID string, debugPort 
 		executor, err := connectCDPExecutor(debugPort)
 		if err == nil {
 			plan, applyErr := executor.ApplyEnvironmentInjection(profileForInjection)
+			if applyErr == nil {
+				country, city := a.getProxyCachedGeo(snapshot.ProxyId)
+				if coord, ok := browser.LookupGeoCoordinate(country, city); ok {
+					_ = executor.SetGeolocationOverride(coord.Lat, coord.Lon, coord.Accuracy)
+				}
+			}
 			_ = executor.Close()
 			if applyErr == nil {
 				logger.New("Browser").Info("环境注入已接入实例启动流程",
@@ -252,6 +258,10 @@ func buildEnvironmentInjectionProfile(profile *BrowserProfile) behavior.Environm
 			injection.DevicePixelRatio = value
 		case "--window-size":
 			injection.WindowSize = value
+			if w, h, ok := parseWindowSizeDimensions(value); ok {
+				injection.ScreenWidth = w
+				injection.ScreenHeight = h
+			}
 		}
 	}
 
@@ -271,12 +281,7 @@ func buildEnvironmentInjectionProfile(profile *BrowserProfile) behavior.Environm
 		injection.WebGLExtensions = []string{"ANGLE_instanced_arrays", "EXT_blend_minmax", "EXT_color_buffer_half_float", "OES_element_index_uint", "OES_standard_derivatives", "WEBGL_debug_renderer_info"}
 	}
 	if len(injection.Plugins) == 0 {
-		injection.Plugins = []behavior.PluginInjection{{
-			Name:        "PDF Viewer",
-			Filename:    "internal-pdf-viewer",
-			Description: "Portable Document Format",
-			MimeType:    "application/pdf",
-		}}
+		injection.Plugins = defaultEnvironmentPDFPlugins()
 	}
 	if len(injection.MediaDevices) == 0 {
 		injection.MediaDevices = []behavior.MediaDeviceSpec{
@@ -397,4 +402,27 @@ func timezoneOffsetMinutes(timezone string) (int, bool) {
 
 func stableShortID(seed string, label string) string {
 	return fmt.Sprintf("pp-%x", browser.HashLaunchAuditValue(seed+":"+label))[:18]
+}
+
+func parseWindowSizeDimensions(raw string) (int, int, bool) {
+	parts := strings.Split(strings.TrimSpace(raw), ",")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	w := parsePositiveInt(parts[0])
+	h := parsePositiveInt(parts[1])
+	if w <= 0 || h <= 0 {
+		return 0, 0, false
+	}
+	return w, h, true
+}
+
+func defaultEnvironmentPDFPlugins() []behavior.PluginInjection {
+	return []behavior.PluginInjection{
+		{Name: "PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "Chrome PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "Chromium PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "Microsoft Edge PDF Viewer", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+		{Name: "WebKit built-in PDF", Filename: "internal-pdf-viewer", Description: "Portable Document Format", MimeType: "application/pdf"},
+	}
 }
