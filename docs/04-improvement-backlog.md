@@ -23,7 +23,7 @@
 | Behavior action result | `ExecuteMutatedAction` 类型化结果通道 | **已完成（2026-07-10）**：新增 `MutatedActionExecutionResult` / `ExecuteMutatedActionWithResult`；ScreenshotDataURL、HTML、Text 分字段返回；旧 error-only wrapper 兼容；未知 type 显式报错 | 变更 mutated action/result schema 或调用方后复跑 `TestCDPExecutorExecuteMutatedAction*`；后续调用方按需消费/持久化 payload |
 | Proxy subscription | durable subscription store 与事务式刷新 | **已完成（2026-07-10）**：migration 16 + `SQLiteProxySubscriptionStore`；URL/Clash parser；create/list/delete/nodes/validate/refresh/import-clash；稳定 node ID；分钟级 due refresh；失败记录 `lastError` 且旧节点不变；API/`browser_proxies.source_url` 均脱敏 | 变更 schema/parser/refresh/response 后复跑 `TestSubscription*` 与 migration tests；静态 Clash 保持不可 refresh；不得重新暴露 raw token/credential |
 | Subscription observability | 自动刷新失败桌面通知 | 自动刷新失败已写 `lastError` 并输出 `ProxySubscription` warning；列表 API 可查询，但主线 UI 尚无主动通知卡/事件 | 接入脱敏事件与 UI 告警；同一失败需节流，不能把订阅 URL/token 写入日志 |
-| Workbench / Workflow | `tabId`/target binding 与正式 full workflow smoke | HTTP action 已能携带 `tabId`，但目标生命周期与完整 workflow 证据仍不够；workflow 仍缺 execution detail、run history、cancel/pause | 目标绑定可验证、tab 切换不串线；真实本地 full workflow smoke 产出 artifact；history/cancel/pause 有持久化与 typed API |
+| Workbench / Workflow | `tabId`/target binding 与正式 full workflow smoke | **2026-07-17**：ExecuteActions/HTTP 支持 tabId；OpenUrl 优先 NewTab；GetTabs 真 CDP；`scripts/full_workflow_smoke.ps1` 最新 passed。仍缺 execution detail/run history/cancel/pause | 变更后复跑 full workflow smoke；history/cancel/pause 仍待 |
 | Provider closure | CAPTCHA/SMS/Email 真实账号凭证 smoke | 本地 readiness、dry-run、failure taxonomy、Settings operator surface、report history 已落地；真实账号、余额和 API key 未提供 | 用户提供真实凭证后跑 credential-backed smoke；通过前保持 `blocked_missing_credentials` |
 | Rust lint debt | 恢复 `cargo clippy -- -D warnings` 硬门禁 | 2026-07-10 当前基线为 `81` 个 clippy warnings；严格命令失败，普通 `cargo clippy --workspace --no-deps` 成功并保留告警，因此 CI 暂标 advisory，测试/构建仍是硬门禁 | 分批清零 type_complexity、too_many_arguments、needless borrow、io_other_error 等；warning=0 后恢复 `-D warnings`，不得把 advisory 写成 lint-clean |
 | Runtime | 本机 runtime adapter / M10 / M15 / TLS | 已完成：M10 stability passed；M15 process proof passed；M15 pool/process integration passed；本机 direct TLS/transport observed；runtime adapter local self-use passed | 变更 runtime/pool/transport 后复跑对应 gates |
@@ -32,8 +32,8 @@
 | Runtime | M15 browser pool/process lifecycle | 已完成：pool slot usage/budget/release cleanup、process attachment、proxy/session binding cleanup proof、真实 browser process CDP/RSS/cleanup report 已合并到 `passed_real_pool_process_integration` | 变更 pool 或 process cleanup 后复跑 M15 gates |
 | Proxy / Browser auth bridge | 认证代理和 VPS 转发链路 | 已实现：Go 检测链路能处理 `user:pass@` 认证代理，Chrome 启动链路已通过本机 `sing-box` 无认证入口消费认证代理；**2026-06-29** `NormalizeProxyServerForBrowser` 禁止向 Chromium 传 `socks5h://`（会 ERR_NO_SUPPORTED_PROXIES），统一为 `socks5://127.0.0.1:port`；远程 DNS 靠 sing-box + `--host-resolver-rules` | 变更 sing-box/SSH/代理启动后复跑 proxy 单测 + 一次带 `pp_via_ssh` 的实例 live smoke；见 `docs/29-proxy-supply-chain.md` §5.3 |
 | API config | LaunchServer API key 配置和说明 | 已修复：`launch_server.auth.api_key` 可写 `${VAR}` / `$VAR` / `%VAR%`，LaunchServer 鉴权运行时展开环境变量，缺失时不会把占位符当真实 key；保存配置仍保留占位符，避免泄露真实 key | 继续补 UI/文档说明：明确真实 key 不会通过 API 返回；需要修改 key 时应通过环境变量或本机配置文件后 `ReloadConfig`，不建议在 HTTP API 中暴露明文写入接口 |
-| API workbench | 多标签目标选择 | full workflow smoke 用 `autoLaunch=true`、`start.startUrls`、`skipDefaultStartUrls=true` 保证只打开测试页；普通实例启动会打开默认检测页，后续 workbench action 在多 tab 场景可能打到非目标页 | workbench navigate/actions/screenshot/storage/cookies 等 API 支持 `tabId` 或 target binding；默认启动检测页与 API 自动化目标隔离 |
-| API evidence | Full workflow smoke 固化 | 本轮已用临时脚本跑通过完整 API workflow，但脚本还不是正式门禁 | 把 full workflow smoke 整理进 `scripts/`，输出脱敏 JSON report，纳入本机自用 API 回归检查 |
+| API workbench | 多标签目标选择 | **2026-07-17**：HTTP navigate/click/type/scroll 与 ActionRequest.tabId 贯通；OpenUrl 默认新开目标 tab。screenshot/storage/cookies 仍默认 page target | 变更后复跑 full workflow smoke |
+| API evidence | Full workflow smoke 固化 | **2026-07-17** 正式脚本 `scripts/full_workflow_smoke.ps1`，report `data/reports/full-workflow-smoke/`，最新 passed_full_workflow_smoke | 变更 workbench/tab/action 后复跑 |
 | Stealth / XBS live | XHS explore 与平台 live 验收 | PGS 离线 gate 与 capability 雷达 34/34 已通过；Chrome `socks5h`→`socks5` 已修；**XHS explore live 未通过**（`ERR_NO_SUPPORTED_PROXIES` / chrome-error）；旧 navigate 200 验收口径错误 | 重启 core+实例后 `xhs_live_acceptance.ps1` 必须 FAIL on chrome-error；`pageUrl` 为目标 HTTPS；humanize 登录路径无 script；鼠标 overlay 可验收；见 `docs/45-stealth-platform-handoff.md` |
 | Stealth / 鼠标可视化 | workbench 拟人轨迹与 overlay | 启动参数含 `--personal-pilot-show-mouse-pointer`；overlay 在 debug ready 后注入；**裸 navigate 不移动鼠标** | live 验收含 humanize click/type/scroll 或 `POST /api/workbench/mouse/show`；失败时查 `auto mouse pointer overlay failed` 日志 |
 | Stealth / DNS hardening | `--host-resolver-rules` | 桥接模式默认注入，防 DNS 泄漏；Chromium 顶部黄条可见 | 文档化检测风险；可选改为仅桥接启用或 sing-box 独占 DNS；见 `docs/29-proxy-supply-chain.md` §5.3 |
@@ -116,25 +116,27 @@ Current correction 2026-06-22 local self-use closure:
 
 新增 backlog 时必须标清属于 Mainline release evidence 还是 Overall `60%`。不能确定归属时先放 Overall，等有代码证据后再提升到 Mainline release gate。
 
-## Stealth / 指纹优化 Backlog（2026-07-11，独立轨道）
+## Stealth / 指纹优化 Backlog（2026-07-17 校准，独立轨道）
 
-统一执行入口：**`PLAN.md`**。详细 Task + AC 见 `docs/49`–`docs/56`；本节只列跨文档 P0 阻塞。
+统一执行入口：**`PLAN.md`**。详细 Task + AC 见 `docs/49`–`docs/56`。下表已按代码事实校准；**不要按 07-11 旧口径开工**。
 
-| 领域 | 待改进项 | 证据 | 退出条件 |
+| 领域 | 待改进项 | 当前状态（代码） | 退出条件 |
 | --- | --- | --- | --- |
-| 指纹真实性 | toString + UA/core materialize **已实现**；横评分未刷新 | 2026-07-10/11：`makeNative`、`core_version.go`、`ua_core_coherent` | 新 missing/deep raw 后再判 CreepJS lies / UA-core 分 |
-| DNS 证据 | CDN A 记录不再当泄漏 | `leak_probe.go` → `inconclusive` | 保持三层测试；DNS-token 仍外部 |
-| D1 鼠标 | 重试 + Fitts + OS fallback **hook** 已落地 | `cdp_executor.go` `OSClickAtFallback` / `mouseMoveFitts` | 生产路径接线 PID→OSClickAt；deep 行为 6/6 复跑 |
-| 注入门控 | 注入后 `Runtime.disable`；仍有当前页 evaluate | `environment_injector.go` ApplyEnvironmentInjection | 49 A4 去掉双层或改为仅 new-document |
-| 连接隐匿 | Worker/SharedWorker classic 注入已落地 | `installEnvironment` + `wrapClassicWorker` | module worker / ServiceWorker 仍缺口；CDP Target.autoAttach 可选增强 |
-| 出站分裂 | Graph 无 profile 代理；**多处** `PersonalPilot/1.0` ops UA | `graphapi` + `http_client`/`iphealth`/`subscription*` | 56 E1（含 X15） |
-| 无效 flag | 仅 warning 不剔除 | `ValidateFingerprintArgs` | 56 F1 drop + report |
-| 相干性 | 仅报告非硬门禁 | `fingerprint_consistency.go` | 52 DP2 block 模式 |
-| 行为 L5 | Fitts mouseMove 已接；四段点击/dwell 仍待 | `mouseMoveFitts` | 53 L5-2+ |
-| Provider | 无凭证 smoke | `docs/03` | 56 P1 |
-| 信任双栈 | SessionBundle vs ProfileTrustBundle | `stealth_matrix.go` | 56 T1 |
-| Benchmark 解析 | CreepJS trust/lies 历史 `0/3` | `site_probe.go` | 56 B1 + 新 raw |
-| 并发卫生 | 端口 TOCTOU / pool | `app_instance.go` vs `port_reserve.go` | 54 CP1–CP6 |
-| 纵向度量 | warmup/cadence 未硬接线 | `app_lifecycle.go` | 55 全量 |
+| 指纹真实性 | toString + UA/core materialize | **已实现**；横评分未刷新 | 新 missing/deep raw 后再判 CreepJS / UA-core 商业分 |
+| DNS 证据 | CDN A 记录不当泄漏 | **已实现** `inconclusive` | DNS-token 仍外部 |
+| D1 鼠标 | OS fallback 生产接线 | **已实现** `app_cdp_os_fallback.go` | deep 行为 6/6 复跑（外部 raw） |
+| 注入门控 | blank 跳过当前页 patch + Runtime.disable | **已实现** | iframe 隔离仍待（P2） |
+| 连接隐匿 | classic/module Worker + SharedWorker + SW wrap | **已实现** | SW blob scope 边界可测；autoAttach 可选 |
+| 出站分裂 | ops UA 仍有 `PersonalPilot/1.0` 等 | **部分残留** | 56 E1 白名单统一 |
+| 无效 flag | materialize 路径 `DropIneffectiveFingerprintFlags` | **已剔除**；缺 operator 可见 dropped 报告 | drop 审计字段 |
+| 相干性 | `PERSONAL_PILOT_COHERENCE_MODE=block` + Enforce | **已实现**（默认 warn） | 可选默认 block / UI 开关 |
+| proxy_vs_exit | 曾恒 pass 占位 | **2026-07-17 真校验**（declared name/group vs exit IP） | 保持单测绿 |
+| 行为 L5 | Fitts + 四段点击/cold-start cadence | **主路径已落地** | 可选深化 dwell |
+| Provider | 无凭证 smoke | 骨架就绪 | 真实凭证后跑 |
+| 信任双栈 | TrustSurface + local_session + xhs trust.yaml | **已实现** | 真 OAuth 仍外部 |
+| Benchmark 解析 | CreepJS structured/parsed/heuristic | **已实现** | 新 raw 刷分仍外部 |
+| 并发卫生 | CP1–CP6 | **已落地**（见 PLAN） | 变更后复跑 concurrency smoke |
+| 纵向度量 | AH1–AH5 / cold-start | **已落地**（见 PLAN） | 变更后复跑 account health gate |
+| Workbench tab | 默认检测页串线 | **2026-07-17** OpenUrl 新开 tab + HTTP/RPC tabId 绑定 + full workflow smoke 脚本 | `scripts/full_workflow_smoke.ps1` 绿 |
 
 **纪律**：本轨道不改 Mainline `100% / 0% / green`；评分刷新需 **新** raw artifact（`docs/48`）；改前 `missing-178349*` 不得当作 W0 后失败证据。
