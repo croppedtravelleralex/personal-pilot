@@ -25,3 +25,10 @@ src-tauri/target/
 
 # Environment variables / secrets
 .env
+
+# Agent scratch / tooling output
+.pi-subagents/
+.tmp/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
