@@ -24,6 +24,7 @@ func (a *App) noteProxyHealthObserved(profileID string, result ProxyIPHealthResu
 			})
 		}
 	}
+	a.verifyStreaksMu.Lock()
 	if a.verifyStreaks == nil {
 		a.verifyStreaks = make(map[string]*proxy.VerifyV2Streak)
 	}
@@ -33,6 +34,7 @@ func (a *App) noteProxyHealthObserved(profileID string, result ProxyIPHealthResu
 		a.verifyStreaks[result.ProxyId] = streak
 	}
 	streak.Record(proxy.VerifyV2Sample{OK: result.Ok, LatencyMs: result.LatencyMs, ExitIP: result.IP, At: time.Now()})
+	a.verifyStreaksMu.Unlock()
 }
 
 func (a *App) reconcileRunningProfile(profileID, proxyID string, result ProxyIPHealthResult) {
@@ -41,10 +43,10 @@ func (a *App) reconcileRunningProfile(profileID, proxyID string, result ProxyIPH
 	}
 	proxies := a.getLatestProxies()
 	in := proxy.ReconcileInput{
-		Binding: proxy.RoutingBinding{ProfileID: profileID, ProxyID: proxyID},
-		HealthOK: result.Ok,
+		Binding:   proxy.RoutingBinding{ProfileID: profileID, ProxyID: proxyID},
+		HealthOK:  result.Ok,
 		LatencyMs: result.LatencyMs,
-		ExitIP: result.IP,
+		ExitIP:    result.IP,
 	}
 	reconcile := proxy.ReconcileProfileRouting(in, proxies)
 	if !reconcile.SwitchRequired || reconcile.NewProxyID == "" {

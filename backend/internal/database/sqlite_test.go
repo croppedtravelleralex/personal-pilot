@@ -22,6 +22,10 @@ func TestMigrateRepairsBrowserCoreKindColumnWhenVersionAlreadyAdvanced(t *testin
 			sort_order INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE browser_profiles (
+			profile_id       TEXT PRIMARY KEY,
+			profile_name     TEXT NOT NULL
+		);
 		CREATE TABLE schema_migrations (
 			version    INTEGER PRIMARY KEY,
 			desc       TEXT NOT NULL DEFAULT '',
@@ -78,6 +82,10 @@ func TestMigrateRepairsSchedulerTaskRuntimeColumnsWhenVersionAlreadyAdvanced(t *
 			sort_order INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			kind TEXT NOT NULL DEFAULT 'chromium'
+		);
+		CREATE TABLE browser_profiles (
+			profile_id       TEXT PRIMARY KEY,
+			profile_name     TEXT NOT NULL
 		);
 		CREATE TABLE schema_migrations (
 			version    INTEGER PRIMARY KEY,
