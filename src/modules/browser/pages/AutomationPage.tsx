@@ -772,7 +772,7 @@ export function AutomationPage() {
   const sampleCreateAndLaunchRequest = buildSampleCreateAndLaunchRequest(launchBaseUrl, apiAuth)
   const sampleRequest = buildSampleRequest(launchBaseUrl, apiAuth)
   const sampleLogsRequest = buildSampleLogsRequest(launchBaseUrl, apiAuth)
-  const activeTabMeta = AUTOMATION_TABS.find(tab => tab.key === activeTab) || AUTOMATION_TABS[0]
+  const activeTabMeta = AUTOMATION_TABS.find(tab => tab.key === activeTab) || AUTOMATION_TABS[0]!
 
   return (
     <div className="space-y-5 animate-fade-in">

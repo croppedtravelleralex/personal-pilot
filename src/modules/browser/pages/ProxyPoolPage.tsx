@@ -90,7 +90,7 @@ function parseProxyInfo(proxyConfig: string): { type: string; server: string; po
   const cfg = proxyConfig.trim()
   if (cfg === 'direct://') return { type: 'direct', server: '-', port: 0 }
   const urlMatch = cfg.match(/^([a-zA-Z0-9+\-]+):\/\//)
-  if (urlMatch) {
+  if (urlMatch && urlMatch[1]) {
     const scheme = urlMatch[1].toLowerCase()
     if (scheme === 'vmess') {
       const info = parseVmessURLInfo(cfg)

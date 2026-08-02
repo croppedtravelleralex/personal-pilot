@@ -163,7 +163,7 @@ function createAppProxy(): BridgeAppProxy {
   const directMethods: BridgeAppProxy = {
     BackupInitializeSystem: initializeSystemData,
     BackupExportPackage: exportSystemConfig,
-    BackupImportPackage: importSystemConfig,
+    BackupImportPackage: (...args) => importSystemConfig(args[0] === true),
     GetAppLogs: getAppLogs,
     ClearAppLogs: clearAppLogs,
     BrowserSnapshotRestore: restoreBrowserSnapshot,

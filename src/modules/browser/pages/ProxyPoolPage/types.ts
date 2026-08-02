@@ -1,5 +1,5 @@
-import type { SortOrder } from '../../../shared/components/Table'
-import type { BrowserProxy, ProxyIPHealthResult } from '../types'
+import type { SortOrder } from '../../../../shared/components/Table'
+import type { BrowserProxy, ProxyIPHealthResult } from '../../types'
 
 export interface ClashProxy {
   name: string

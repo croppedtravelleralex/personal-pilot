@@ -535,7 +535,7 @@ export function SynchronizerPage() {
         const currentActiveGroupId = activeGroupIdRef.current
         setGroups(nextGroups)
         if (nextGroups.length > 0 && (!currentActiveGroupId || !nextGroups.some((g) => g.id === currentActiveGroupId))) {
-          setActiveGroup(nextGroups[0].id)
+          setActiveGroup(nextGroups[0]!.id)
         }
       }
     } catch (err) {

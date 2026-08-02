@@ -17,7 +17,7 @@ export function BrowserCopyPage() {
       const list = await fetchBrowserProfiles()
       setProfiles(list)
       if (!sourceId && list.length > 0) {
-        setSourceId(list[0].profileId)
+        setSourceId(list[0]!.profileId)
       }
     }
     loadProfiles()

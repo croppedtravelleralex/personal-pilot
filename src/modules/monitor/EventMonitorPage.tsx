@@ -490,7 +490,7 @@ function HistoryTab() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
   const buildQuery = useCallback((): DesktopEventLogQueryInput => {
-    const range = TIME_RANGES.find(r => r.key === timeRange) || TIME_RANGES[0]
+    const range = TIME_RANGES.find(r => r.key === timeRange) || TIME_RANGES[0]!
     const after = new Date(Date.now() - range.hours * 3600 * 1000).toISOString()
     return {
       after,
@@ -573,7 +573,7 @@ function HistoryTab() {
   const handlePrune = async () => {
     if (!window.confirm('确定要清理当前时间范围之前的所有日志吗？此操作不可撤销。')) return
     try {
-      const range = TIME_RANGES.find(r => r.key === timeRange) || TIME_RANGES[0]
+      const range = TIME_RANGES.find(r => r.key === timeRange) || TIME_RANGES[0]!
       const before = new Date(Date.now() - range.hours * 3600 * 1000).toISOString()
       const count = await pruneEventLog(before)
       toast.success(`已清理 ${count} 条日志`)

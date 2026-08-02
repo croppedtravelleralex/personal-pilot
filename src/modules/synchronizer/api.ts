@@ -22,6 +22,11 @@ import {
   workbenchSaveDetectionResult,
   workbenchSaveUiState,
 } from '../../services/desktop'
+import type {
+  DesktopCoreSyncGroup,
+  DesktopCoreSyncWindow,
+  DesktopCoreWorkbenchTask,
+} from '../../types/desktop'
 import type { BrowserProfile } from '../browser/types'
 import type {
   BrowserInstanceLifecycleEvent,
@@ -30,6 +35,7 @@ import type {
   FingerprintHealthLevel,
   SyncGroup,
   SyncOperation,
+  SyncWindow,
   SyncWindowPlacement,
   WorkbenchDetectionKind,
   WorkbenchDetectionResult,
@@ -391,8 +397,52 @@ export function onBrowserInstanceLifecycle(
   )))
 }
 
+// Desktop RPC widens literal unions to plain `string`. Narrow them back to
+// the module surface types with safe fallbacks so consumers see exact unions.
+const SYNC_WINDOW_STATUSES: readonly string[] = ['running', 'loading']
+const WORKBENCH_TASK_TYPES: readonly string[] = ['start', 'stop', 'navigate', 'refresh', 'activate', 'fingerprint-health', 'screenshot']
+const WORKBENCH_TASK_STATUSES: readonly string[] = ['pending', 'running', 'success', 'error']
+
+function normalizeSyncWindow(row: DesktopCoreSyncWindow): SyncWindow {
+  const status = SYNC_WINDOW_STATUSES.includes(row.status) ? row.status as SyncWindow['status'] : 'loading'
+  return {
+    profileId: row.profileId,
+    profileName: row.profileName,
+    url: row.url,
+    title: row.title,
+    debugPort: row.debugPort,
+    pid: row.pid,
+    status,
+    groupId: row.groupId,
+  }
+}
+
+function normalizeSyncGroup(row: DesktopCoreSyncGroup): SyncGroup {
+  return {
+    id: row.id,
+    name: row.name,
+    windows: (row.windows || []).map(normalizeSyncWindow),
+  }
+}
+
+function normalizeWorkbenchTask(row: DesktopCoreWorkbenchTask): WorkbenchTask {
+  const type = WORKBENCH_TASK_TYPES.includes(row.type) ? row.type as WorkbenchTask['type'] : 'navigate'
+  const status = WORKBENCH_TASK_STATUSES.includes(row.status) ? row.status as WorkbenchTask['status'] : 'error'
+  return {
+    id: row.id,
+    type,
+    profileId: row.profileId,
+    profileName: row.profileName,
+    detail: row.detail,
+    status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    error: row.error,
+  }
+}
+
 export function listSyncGroups(): Promise<SyncGroup[]> {
-  return synchronizerListGroups()
+  return synchronizerListGroups().then(groups => (groups || []).map(normalizeSyncGroup))
 }
 
 export function broadcastNavigate(groupId: string, url: string): Promise<void> {
@@ -452,7 +502,7 @@ export function getSyncOperationLog(limit?: number): Promise<SyncOperation[]> {
 }
 
 export function listWorkbenchTasks(limit?: number): Promise<WorkbenchTask[]> {
-  return synchronizerListTasks(limit ?? 200)
+  return synchronizerListTasks(limit ?? 200).then(tasks => (tasks || []).map(normalizeWorkbenchTask))
 }
 
 export function saveWorkbenchTasks(tasks: WorkbenchTask[]): Promise<void> {

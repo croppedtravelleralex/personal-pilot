@@ -255,7 +255,6 @@ export interface RecordingExportBundle {
   exportedAt?: string
   recording?: Recording
   recordings?: Recording[]
-  [key: string]: unknown
 }
 
 export interface ActiveRecordingStatus {

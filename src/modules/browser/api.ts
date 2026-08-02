@@ -42,6 +42,7 @@ import type {
   BrowserInstanceRuntimeEventName,
   BrowserRuntimeEventPayload,
 } from './types'
+import { backend } from '../../wailsjs/go/models'
 import { DEFAULT_BEHAVIOR_EXECUTION_PERMISSION_MODE } from './types'
 
 type Unsubscribe = () => void
@@ -170,8 +171,8 @@ type BrowserNativeBindings = Partial<{
   BehaviorRecordingCopy: (id: string, name: string) => Promise<Recording>
   BehaviorPlaybackReview: (profileId: string, decision: string) => Promise<void>
   BehaviorRecordingTrim: (id: string, startEvent: number, endEvent: number, name: string) => Promise<Recording>
-  SchedulerListTasks: () => Promise<SchedulerTaskInfo[]>
-  SchedulerAddTask: (input: SchedulerTaskInput) => Promise<SchedulerTaskInfo>
+  SchedulerListTasks: () => Promise<backend.SchedulerTaskInfo[]>
+  SchedulerAddTask: (input: backend.SchedulerTaskInput) => Promise<backend.SchedulerTaskInfo>
   SchedulerRemoveTask: (taskId: string) => Promise<void>
   SchedulerRunTaskNow: (taskId: string) => Promise<void>
   AutomationRuleList: () => Promise<AutomationRuleInfo[]>
@@ -280,6 +281,60 @@ function readBooleanField(source: Record<string, unknown>, keys: string[]): bool
     }
   }
   return undefined
+}
+
+function stringField(source: Record<string, unknown>, key: string): string | undefined {
+  const value = source[key]
+  if (typeof value === 'string') return value
+  if (value != null && typeof value !== 'object') return String(value)
+  return undefined
+}
+
+function numberField(source: Record<string, unknown>, key: string): number | undefined {
+  const value = source[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value)
+  return undefined
+}
+
+// The desktop RPC returns proxy rows as unchecked records. Normalize the
+// known BrowserProxy fields so callers receive a typed array instead of a cast.
+function normalizeProxyRecords(rows: Array<Record<string, unknown>> | undefined): BrowserProxy[] {
+  if (!rows) return []
+  const proxies: BrowserProxy[] = []
+  for (const row of rows) {
+    const proxyId = stringField(row, 'proxyId') || stringField(row, 'proxy_id') || stringField(row, 'id')
+    if (!proxyId) continue
+    const proxy: BrowserProxy = {
+      proxyId,
+      proxyName: stringField(row, 'proxyName') || stringField(row, 'proxy_name') || proxyId,
+      proxyConfig: stringField(row, 'proxyConfig') || stringField(row, 'proxy_config') || '',
+    }
+    const dnsServers = stringField(row, 'dnsServers')
+    if (dnsServers) proxy.dnsServers = dnsServers
+    const groupName = stringField(row, 'groupName')
+    if (groupName) proxy.groupName = groupName
+    const sourceId = stringField(row, 'sourceId')
+    if (sourceId) proxy.sourceId = sourceId
+    const sourceUrl = stringField(row, 'sourceUrl')
+    if (sourceUrl) proxy.sourceUrl = sourceUrl
+    const sourceNamePrefix = stringField(row, 'sourceNamePrefix')
+    if (sourceNamePrefix) proxy.sourceNamePrefix = sourceNamePrefix
+    if (typeof row.sourceAutoRefresh === 'boolean') proxy.sourceAutoRefresh = row.sourceAutoRefresh
+    const sourceRefreshIntervalM = numberField(row, 'sourceRefreshIntervalM')
+    if (sourceRefreshIntervalM !== undefined) proxy.sourceRefreshIntervalM = sourceRefreshIntervalM
+    const sourceLastRefreshAt = stringField(row, 'sourceLastRefreshAt')
+    if (sourceLastRefreshAt) proxy.sourceLastRefreshAt = sourceLastRefreshAt
+    const lastLatencyMs = numberField(row, 'lastLatencyMs')
+    if (lastLatencyMs !== undefined) proxy.lastLatencyMs = lastLatencyMs
+    if (typeof row.lastTestOk === 'boolean') proxy.lastTestOk = row.lastTestOk
+    const lastTestedAt = stringField(row, 'lastTestedAt')
+    if (lastTestedAt) proxy.lastTestedAt = lastTestedAt
+    const lastIPHealthJson = stringField(row, 'lastIPHealthJson')
+    if (lastIPHealthJson) proxy.lastIPHealthJson = lastIPHealthJson
+    proxies.push(proxy)
+  }
+  return proxies
 }
 
 export function normalizeBrowserRuntimeEventPayload(payload: unknown): BrowserRuntimeEventPayload {
@@ -408,8 +463,10 @@ export async function updateBrowserProfile(profileId: string, input: BrowserProf
   }
   const index = mockProfiles.findIndex(item => item.profileId === profileId)
   if (index === -1) return null
-  mockProfiles[index] = { ...mockProfiles[index], ...input, updatedAt: new Date().toISOString() }
-  return mockProfiles[index]
+  const current = mockProfiles[index]!
+  const updated: BrowserProfile = { ...current, ...input, updatedAt: new Date().toISOString() }
+  mockProfiles[index] = updated
+  return updated
 }
 
 export async function deleteBrowserProfile(profileId: string): Promise<boolean> {
@@ -634,7 +691,7 @@ export async function fetchSubscriptionImportFromURL(targetURL: string, groupNam
     skippedCount: Number(result?.skippedCount || 0),
     totalCount: Number(result?.totalCount || 0),
     groupName: String(result?.groupName || groupName),
-    allProxies: (result?.allProxies || []) as BrowserProxy[],
+    allProxies: normalizeProxyRecords(result?.allProxies),
   }
 }
 
@@ -674,7 +731,7 @@ export async function fetchClashImportFromURL(targetURL: string): Promise<ClashI
     skippedCount: result.skippedCount,
     totalCount: result.totalCount,
     groupName: result.groupName,
-    allProxies: (result.allProxies || []) as BrowserProxy[],
+    allProxies: normalizeProxyRecords(result.allProxies),
   }
 }
 
@@ -1316,7 +1373,7 @@ export async function createSchedulerTask(input: SchedulerTaskInput): Promise<Sc
   if (!bindings?.SchedulerAddTask) {
     throw new Error('Wails bindings are not available')
   }
-  return (await bindings.SchedulerAddTask(input)) || null
+  return (await bindings.SchedulerAddTask(new backend.SchedulerTaskInput(input))) || null
 }
 
 export async function deleteSchedulerTask(taskId: string): Promise<void> {

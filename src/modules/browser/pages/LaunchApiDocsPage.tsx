@@ -1,6 +1,7 @@
 import { isValidElement, useEffect, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import { CheckCircle, ChevronRight, Copy, FileText } from 'lucide-react'
 import { toast } from '../../../shared/components'

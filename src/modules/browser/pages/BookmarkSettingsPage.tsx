@@ -56,7 +56,7 @@ export function BookmarkSettingsPage() {
     setItems(prev => {
       const next = [...prev]
       const [moved] = next.splice(dragIndex, 1)
-      next.splice(index, 0, moved)
+      next.splice(index, 0, moved!)
       return next
     })
     setDragIndex(index)

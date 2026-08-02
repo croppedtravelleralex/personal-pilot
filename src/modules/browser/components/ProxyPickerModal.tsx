@@ -67,7 +67,7 @@ function latencyColor(result?: SpeedResult): string {
 function protocolLabel(proxyConfig: string): string {
   if (proxyConfig === 'direct://') return 'DIRECT'
   const match = proxyConfig.trim().match(/^([a-zA-Z0-9+\-]+):\/\//)
-  if (match) return match[1].toUpperCase()
+  if (match && match[1]) return match[1].toUpperCase()
   return 'YAML'
 }
 

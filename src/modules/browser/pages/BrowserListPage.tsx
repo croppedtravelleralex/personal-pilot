@@ -505,7 +505,7 @@ export function BrowserListPage() {
       for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
         if (i >= partsA.length) return -1
         if (i >= partsB.length) return 1
-        const pa = partsA[i], pb = partsB[i]
+        const pa = partsA[i]! , pb = partsB[i]!
         const na = Number(pa), nb = Number(pb)
         if (!isNaN(na) && !isNaN(nb)) {
           if (na !== nb) return na - nb

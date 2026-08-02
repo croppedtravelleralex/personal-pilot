@@ -665,7 +665,7 @@ export function CoreManagementPage() {
                 setDownloadForm(prev => ({
                   ...prev,
                   proxyMode: mode,
-                  proxyId: mode === 'custom' && proxies.length > 0 ? proxies[0].proxyId : ''
+                  proxyId: mode === 'custom' && proxies.length > 0 ? proxies[0]!.proxyId : ''
                 }))
               }}
               className="w-full h-9 px-3 rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"

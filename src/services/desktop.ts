@@ -649,7 +649,7 @@ function describeDestructivePreflight(preflight: DesktopDestructivePreflight): s
 function assertDestructivePreflightCanContinue(preflight: DesktopDestructivePreflight): void {
   const blockers = preflight.blockers || [];
   if (blockers.length > 0) {
-    const first = blockers[0];
+    const first = blockers[0]!;
     throw new Error(first.message || first.code || "destructive preflight blocked");
   }
   if (!preflight.confirmationToken) {
