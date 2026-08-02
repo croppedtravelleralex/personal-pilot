@@ -3515,10 +3515,14 @@ async fn execute_active_form_action_plan(
     task: &RunnerTask,
     action: &str,
 ) -> Result<FormActionRuntime, RunnerFailure> {
-    let plan = task
-        .form_action_plan
-        .as_ref()
-        .expect("form action plan should exist when active flow executes");
+    let plan = task.form_action_plan.as_ref().ok_or_else(|| {
+        RunnerFailure::new(
+            "form_action_plan_missing",
+            "active form action flow requires a form action plan",
+            Some("action"),
+            None,
+        )
+    })?;
     let retry_limit = plan.retry_limit.clamp(0, 1);
     let poll_timeout = form_poll_timeout(task);
     let mut trace_lines = Vec::new();

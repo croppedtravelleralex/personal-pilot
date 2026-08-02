@@ -74,6 +74,7 @@ use windows::Win32::{
 use crate::state::{CoreBridgeReady, DesktopState, ManagedRuntimeProcess};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+const CORE_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const LOCAL_RUNTIME_HEALTH_URL: &str = "http://127.0.0.1:3000/health";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2707,24 +2708,41 @@ pub fn read_local_runtime_status(
     build_runtime_status(&state)
 }
 
-fn terminate_orphan_personal_pilot_cores() {
+fn terminate_orphan_personal_pilot_cores(state: &DesktopState) {
     // 清理孤儿 core（上次崩溃残留、仍持有单实例互斥量的进程）。
-    // 非致命：失败仅记录，不阻断本次 core 启动。用 taskkill + 隐藏窗口 + 空 stdio，
-    // 避免 GUI 子系统下继承空句柄导致子进程初始化失败或阻塞。
-    let result = Command::new("taskkill")
-        .args(["/F", "/IM", "personal-pilot-core.exe"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
-    if let Err(error) = result {
-        eprintln!("terminate orphan personal-pilot-core skipped: {error}");
+    // 只对本会话 ManagedRuntimeProcess 记录的 PID/子进程句柄 kill，
+    // 绝不按镜像名 taskkill /IM 无差别杀同机任何同名进程。
+    // 非致命：失败仅记录，不阻断本次 core 启动。
+    let mut bridge = match state.core_bridge.lock() {
+        Ok(bridge) => bridge,
+        Err(_) => {
+            eprintln!("terminate orphan personal-pilot-core skipped: bridge lock unavailable");
+            return;
+        }
+    };
+    let Some(process) = bridge.managed_process.as_mut() else {
+        return;
+    };
+    let pid = process.pid;
+    match process.child.try_wait() {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            if let Err(error) = process.child.kill() {
+                eprintln!("terminate orphan personal-pilot-core {pid} failed: {error}");
+            } else {
+                let _ = process.child.wait();
+            }
+        }
+        Err(error) => {
+            eprintln!("terminate orphan personal-pilot-core {pid} inspect failed: {error}");
+        }
     }
+    bridge.managed_process = None;
+    bridge.ready = None;
 }
 
 #[tauri::command]
-pub fn start_personal_pilot_core(
+pub async fn start_personal_pilot_core(
     state: State<'_, DesktopState>,
 ) -> Result<DesktopCoreBridgeStatus, String> {
     {
@@ -2760,7 +2778,7 @@ pub fn start_personal_pilot_core(
 
     let snapshot = read_desktop_settings(Some(&state.database_url));
     let project_root = PathBuf::from(&snapshot.project_root);
-    terminate_orphan_personal_pilot_cores();
+    terminate_orphan_personal_pilot_cores(&state);
     let binary_path = resolve_core_bridge_binary(&project_root)?;
     let (log_dir, stdout_path, stderr_path) = core_bridge_log_paths(&snapshot);
     fs::create_dir_all(&log_dir).map_err(|error| {
@@ -2804,8 +2822,6 @@ pub fn start_personal_pilot_core(
         .stdout
         .take()
         .ok_or_else(|| "personal-pilot core stdout pipe was not available".to_string())?;
-    let mut reader = BufReader::new(stdout);
-    let mut ready: Option<CoreBridgeReady> = None;
     let mut stdout_file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -2817,43 +2833,87 @@ pub fn start_personal_pilot_core(
             )
         })?;
 
-    let ready_prefix = "PERSONAL_PILOT_CORE_READY ";
-    for _ in 0..200 {
-        let mut line = String::new();
-        let bytes = reader
-            .read_line(&mut line)
-            .map_err(|error| format!("Failed to read personal-pilot core readiness: {error}"))?;
-        if bytes == 0 {
-            break;
-        }
-        let _ = std::io::Write::write_all(&mut stdout_file, line.as_bytes());
-        if let Some(raw) = line.trim().strip_prefix(ready_prefix) {
-            let parsed: CoreReadyLine = serde_json::from_str(raw).map_err(|error| {
-                format!("Failed to parse personal-pilot core readiness: {error}")
-            })?;
-            ready = Some(CoreBridgeReady {
-                bridge_url: parsed.bridge_url,
-                event_url: parsed.event_url,
-                bridge_token: parsed.bridge_token,
-                pid: parsed.pid.unwrap_or(pid),
-            });
-            break;
-        }
+    // readiness 轮询移入独立 std 线程，避免在 Tauri 主/异步线程做最多 200 次
+    // 阻塞式 read_line 而冻结 UI。线程先读到 ready 后经 mpsc 回报，再排空 stdout 日志。
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<CoreBridgeReady, String>>();
+    {
+        let mut reader = BufReader::new(stdout);
+        let ready_prefix = "PERSONAL_PILOT_CORE_READY ";
+        std::thread::spawn(move || {
+            let mut ready: Option<CoreBridgeReady> = None;
+            for _ in 0..200 {
+                let mut line = String::new();
+                match reader.read_line(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        let _ = std::io::Write::write_all(&mut stdout_file, line.as_bytes());
+                        if let Some(raw) = line.trim().strip_prefix(ready_prefix) {
+                            match serde_json::from_str::<CoreReadyLine>(raw) {
+                                Ok(parsed) => {
+                                    ready = Some(CoreBridgeReady {
+                                        bridge_url: parsed.bridge_url,
+                                        event_url: parsed.event_url,
+                                        bridge_token: parsed.bridge_token,
+                                        pid: parsed.pid.unwrap_or(pid),
+                                    });
+                                    break;
+                                }
+                                Err(error) => {
+                                    let _ = ready_tx.send(Err(format!(
+                                        "Failed to parse personal-pilot core readiness: {error}"
+                                    )));
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        let _ = ready_tx.send(Err(format!(
+                            "Failed to read personal-pilot core readiness: {error}"
+                        )));
+                        return;
+                    }
+                }
+            }
+
+            if let Some(value) = ready {
+                let _ = ready_tx.send(Ok(value));
+            } else {
+                let _ = ready_tx
+                    .send(Err("personal-pilot core did not report readiness".to_string()));
+            }
+
+            // 继续排空 stdout 到日志直到子进程退出。
+            for line in reader.lines().map_while(Result::ok) {
+                let _ = writeln!(stdout_file, "{line}");
+            }
+        });
     }
 
-    let ready = match ready {
-        Some(value) => value,
-        None => {
+    // 在阻塞线程等待 ready，带超时；超时则 kill 子进程并返回 Err。
+    let ready = match tauri::async_runtime::spawn_blocking(move || {
+        ready_rx.recv_timeout(CORE_READY_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(Ok(value))) => value,
+        Ok(Ok(Err(message))) => {
             let _ = child.kill();
-            return Err("personal-pilot core did not report readiness".to_string());
+            return Err(message);
+        }
+        Ok(Err(_)) => {
+            let _ = child.kill();
+            return Err(
+                "personal-pilot core did not report readiness within the timeout".to_string(),
+            );
+        }
+        Err(join_error) => {
+            let _ = child.kill();
+            return Err(format!(
+                "personal-pilot core readiness wait task failed: {join_error}"
+            ));
         }
     };
-
-    std::thread::spawn(move || {
-        for line in reader.lines().map_while(Result::ok) {
-            let _ = writeln!(stdout_file, "{line}");
-        }
-    });
 
     let mut bridge = state
         .core_bridge

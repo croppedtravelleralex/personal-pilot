@@ -2811,6 +2811,13 @@ where
             return Ok(None);
         };
 
+        let candidates_len = candidates.len();
+        let Some(selected) = candidates.into_iter().nth(selected_idx) else {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(
+                "selected claim candidate index {selected_idx} is out of range (candidates len {candidates_len})"
+            ));
+        };
         let (
             selected_id,
             _selected_kind,
@@ -2818,10 +2825,7 @@ where
             _selected_fp_id,
             _selected_fp_version,
             _selected_profile_json,
-        ) = candidates
-            .into_iter()
-            .nth(selected_idx)
-            .expect("selected candidate by index");
+        ) = selected;
 
         let claimed = sqlx::query_as::<
             _,
