@@ -129,10 +129,94 @@ func (r *Recorder) StopRecording(name string) (*Recording, error) {
 		return nil, err
 	}
 	r.events = snapshot.Events
+	networkEvents, _ := r.retrieveNetworkEventsLocked()
+	performanceMetrics, _ := r.retrievePerformanceMetricsLocked()
+	domSnapshot, _ := r.retrieveDOMSnapshotLocked()
 
 	r.cleanupRecordingTargetsLocked()
 
-	return newRecordingFromSnapshot(name, recordingWarningDescription(r.warnings), snapshot), nil
+	rec := newRecordingFromSnapshot(name, recordingWarningDescription(r.warnings), snapshot)
+	rec.NetworkEvents = networkEvents
+	rec.Performance = performanceMetrics
+	rec.DOMSnapshot = domSnapshot
+	return rec, nil
+}
+
+func (r *Recorder) retrieveNetworkEventsLocked() ([]NetworkRecordedEvent, error) {
+	target := r.primaryRecordingTargetLocked()
+	if target == nil {
+		return nil, fmt.Errorf("no recording target")
+	}
+	raw, err := r.sendTargetCommandLocked(target, "Runtime.evaluate", map[string]interface{}{
+		"expression":    networkCaptureRetrieveJS,
+		"returnByValue": true,
+	}, 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	value, ok := runtimeEvaluateValue(raw)
+	if !ok {
+		return nil, fmt.Errorf("network capture empty")
+	}
+	var events []NetworkRecordedEvent
+	if err := json.Unmarshal([]byte(value), &events); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (r *Recorder) retrievePerformanceMetricsLocked() (*PerformanceCaptureMetrics, error) {
+	target := r.primaryRecordingTargetLocked()
+	if target == nil {
+		return nil, fmt.Errorf("no recording target")
+	}
+	raw, err := r.sendTargetCommandLocked(target, "Runtime.evaluate", map[string]interface{}{
+		"expression":    performanceCaptureRetrieveJS,
+		"returnByValue": true,
+	}, 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	value, ok := runtimeEvaluateValue(raw)
+	if !ok {
+		return nil, fmt.Errorf("performance metrics empty")
+	}
+	var metrics PerformanceCaptureMetrics
+	if err := json.Unmarshal([]byte(value), &metrics); err != nil {
+		return nil, err
+	}
+	return &metrics, nil
+}
+
+func (r *Recorder) retrieveDOMSnapshotLocked() (string, error) {
+	target := r.primaryRecordingTargetLocked()
+	if target == nil {
+		return "", fmt.Errorf("no recording target")
+	}
+	js := `(function(){
+		function walk(node, depth) {
+			if (!node || depth > 3) return '';
+			var name = node.nodeName || '';
+			if (name === '#text') return '';
+			var line = '  '.repeat(depth) + name.toLowerCase() + '\n';
+			var children = node.children || [];
+			for (var i = 0; i < children.length && i < 30; i++) line += walk(children[i], depth + 1);
+			return line;
+		}
+		return walk(document.documentElement, 0);
+	})()`
+	raw, err := r.sendTargetCommandLocked(target, "Runtime.evaluate", map[string]interface{}{
+		"expression":    js,
+		"returnByValue": true,
+	}, 10*time.Second)
+	if err != nil {
+		return "", err
+	}
+	value, ok := runtimeEvaluateValue(raw)
+	if !ok {
+		return "", fmt.Errorf("dom snapshot empty")
+	}
+	return value, nil
 }
 
 // IsRecording returns whether the recorder is currently active.
@@ -349,6 +433,14 @@ func (r *Recorder) prepareRecordingTargetLocked(target *recordingTargetConn) err
 		"returnByValue": false,
 	}, 10*time.Second); err != nil {
 		return fmt.Errorf("inject recording script on %s: %w", describeCDPTarget(target.target), err)
+	}
+	if _, err := r.sendTargetCommandLocked(target, "Page.addScriptToEvaluateOnNewDocument", map[string]interface{}{
+		"source": NetworkCaptureInjectJS,
+	}, 10*time.Second); err == nil {
+		_, _ = r.sendTargetCommandLocked(target, "Runtime.evaluate", map[string]interface{}{
+			"expression":    NetworkCaptureInjectJS,
+			"returnByValue": false,
+		}, 10*time.Second)
 	}
 	r.injectExistingChildFramesForTargetLocked(target)
 	return nil

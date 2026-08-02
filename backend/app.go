@@ -10,9 +10,11 @@ import (
 	"personal-pilot/backend/internal/apppath"
 	"personal-pilot/backend/internal/automation"
 	"personal-pilot/backend/internal/behavior"
+	"personal-pilot/backend/internal/behavior/lifecycle"
 	"personal-pilot/backend/internal/browser"
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/database"
+	"personal-pilot/backend/internal/email"
 	"personal-pilot/backend/internal/events"
 	"personal-pilot/backend/internal/launchcode"
 	"personal-pilot/backend/internal/logger"
@@ -31,6 +33,17 @@ type quitMode uint8
 const (
 	quitModeFull quitMode = iota
 	quitModeAppOnly
+)
+
+// 编译期检查：App 实现了 launchcode 所需的接口
+var (
+	_ launchcode.BrowserStarter           = (*App)(nil)
+	_ launchcode.BrowserStopper           = (*App)(nil)
+	_ launchcode.BrowserStarterWithParams = (*App)(nil)
+	_ launchcode.RecordingAPI             = (*App)(nil)
+	_ launchcode.WorkbenchOperator        = (*App)(nil)
+	_ launchcode.InstanceOperator         = (*App)(nil)
+	_ launchcode.InstanceStater           = (*App)(nil)
 )
 
 // App 应用结构体
@@ -71,6 +84,8 @@ type App struct {
 
 	behaviorEngines   map[string]*behavior.Engine // profileId → engine
 	behaviorEnginesMu sync.Mutex
+	envInjectionMu    sync.Mutex
+	envInjectionKeys  map[string]struct{}
 
 	recorders           map[string]*behavior.Recorder       // profileId → recorder
 	playbacks           map[string]*behavior.PlaybackEngine // profileId → playback
@@ -78,6 +93,12 @@ type App struct {
 	recordingSessionDir string
 	recMu               sync.Mutex
 	playMu              sync.Mutex
+
+	lifecycleStore  *lifecycle.Store
+	proxyIPMonitor  *browser.ProxyIPMonitor
+	stickySessions  *proxy.StickySessionTracker
+	verifyStreaksMu sync.RWMutex
+	verifyStreaks   map[string]*proxy.VerifyV2Streak
 }
 
 // NewApp 创建新的应用实例
@@ -92,6 +113,9 @@ func NewApp(appRoot string, appVersion ...string) *App {
 		xrayBridgeRefs:    make(map[string]string),
 		singboxBridgeRefs: make(map[string]string),
 		crashTimestamps:   make(map[string][]time.Time),
+		envInjectionKeys:  make(map[string]struct{}),
+		stickySessions:    proxy.NewStickySessionTracker(),
+		verifyStreaks:     make(map[string]*proxy.VerifyV2Streak),
 		recorders:         make(map[string]*behavior.Recorder),
 		playbacks:         make(map[string]*behavior.PlaybackEngine),
 	}
@@ -187,6 +211,8 @@ func (a *App) startup(ctx context.Context) {
 	if err := db.Migrate(); err != nil {
 		log.Error("数据库迁移失败", logger.F("error", err))
 	}
+	a.startTrustTokenRefreshLoop(ctx)
+	a.startOrphanReconcileLoop(ctx)
 
 	a.browserMgr = browser.NewManager(cfg, a.appRoot)
 	a.xrayMgr = proxy.NewXrayManager(cfg, a.appRoot)
@@ -203,6 +229,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// 一次性迁移：若 SQLite 表为空则从旧文件导入
 	a.migrateToSQLite()
+	a.ensureCamoufoxCorePreset()
 
 	a.browserMgr.InitData()
 	a.autoDetectCores()
@@ -237,11 +264,18 @@ func (a *App) startup(ctx context.Context) {
 	// 启动 LaunchServer
 	port := a.config.LaunchServer.Port
 	a.launchServer = launchcode.NewLaunchServer(a.launchCodeSvc, a, a, a.browserMgr, port)
+	a.launchServer.SetProxySubscriptionStore(launchcode.NewSQLiteProxySubscriptionStore(a.db.GetConn()))
 	a.launchServer.SetAPIAuthConfig(launchcode.APIAuthConfig{
 		Enabled: a.config.LaunchServer.Auth.Enabled,
 		APIKey:  a.config.LaunchServer.Auth.APIKey,
 		Header:  a.config.LaunchServer.Auth.Header,
 	})
+	a.launchServer.SetEmailService(email.NewEmailService(
+		email.NewCloudflareProvider(nil),
+		email.NewMailTMProvider(nil),
+		a.db.GetConn(),
+		nil,
+	))
 	if err := a.launchServer.Start(); err != nil {
 		log.Error("LaunchServer 启动失败", logger.F("error", err))
 	} else {
@@ -250,8 +284,6 @@ func (a *App) startup(ctx context.Context) {
 			logger.F("preferred_port", port),
 		)
 	}
-
-	a.InitLLMClient()
 
 	// 连接池失效通知
 	a.xrayMgr.OnBridgeDied = func(key string, err error) {
@@ -277,13 +309,16 @@ func (a *App) startup(ctx context.Context) {
 	a.speedScheduler = browser.NewProxySpeedScheduler(
 		a.browserMgr.ProxyDAO,
 		func(proxyId string) (bool, int64, string) {
-			r := proxy.SpeedTest(proxyId, a.getLatestProxies(), a.xrayMgr, a.singboxMgr, nil)
+			r := proxy.SpeedTest(context.Background(), proxyId, a.getLatestProxies(), a.bridgeManagers(), nil)
 			return r.Ok, r.LatencyMs, r.Error
 		},
 		5*time.Minute,
 		5,
 	)
 	a.speedScheduler.Start()
+
+	a.lifecycleStore, _ = lifecycle.NewStore(conn)
+	a.startProxyIPMonitor(ctx)
 
 	// 初始化任务调度器
 	a.taskStore = scheduler.NewSQLiteTaskStore(conn)
@@ -394,6 +429,11 @@ func (a *App) shutdown(ctx context.Context) {
 
 func (a *App) GetInterceptor() *logger.MethodInterceptor {
 	return a.interceptor
+}
+
+// BrowserMgr returns the browser manager for external orchestrators.
+func (a *App) BrowserMgr() *browser.Manager {
+	return a.browserMgr
 }
 
 // ForceQuit 设置强制退出标志并调用 runtime.Quit
@@ -552,6 +592,22 @@ func (a *App) GetDashboardStats() map[string]interface{} {
 		"coreCount":        coreCount,
 		"memUsedMB":        int(memUsedMB),
 		"appVersion":       a.appVersion(),
+		"budget": map[string]interface{}{
+			"maxConcurrentInstances": a.config.Runtime.MaxConcurrentInstances,
+			"runningInstances":       runningInstances,
+			"remainingSlots": func() int {
+				limit := a.config.Runtime.MaxConcurrentInstances
+				if limit <= 0 {
+					return -1
+				}
+				left := limit - runningInstances
+				if left < 0 {
+					return 0
+				}
+				return left
+			}(),
+			"maxMemoryMB": a.config.Runtime.MaxMemoryMB,
+		},
 	}
 }
 
@@ -663,12 +719,13 @@ func (a *App) BrowserProfileCopy(profileId string, newName string) (*BrowserProf
 
 func (a *App) GetBrowserSettings() BrowserSettings {
 	return BrowserSettings{
-		UserDataRoot:           a.config.Browser.UserDataRoot,
-		DefaultFingerprintArgs: append([]string{}, a.config.Browser.DefaultFingerprintArgs...),
-		DefaultLaunchArgs:      append([]string{}, a.config.Browser.DefaultLaunchArgs...),
-		DefaultProxy:           a.config.Browser.DefaultProxy,
-		StartReadyTimeoutMs:    browserStartReadyTimeoutMillis(a.config),
-		StartStableWindowMs:    browserStartStableWindowMillis(a.config),
+		UserDataRoot:            a.config.Browser.UserDataRoot,
+		DefaultFingerprintArgs:  append([]string{}, a.config.Browser.DefaultFingerprintArgs...),
+		DefaultLaunchArgs:       append([]string{}, a.config.Browser.DefaultLaunchArgs...),
+		DefaultProxy:            a.config.Browser.DefaultProxy,
+		StartReadyTimeoutMs:     browserStartReadyTimeoutMillis(a.config),
+		StartStableWindowMs:     browserStartStableWindowMillis(a.config),
+		ShowMousePointerDefault: a.config.Browser.ShowMousePointerDefault,
 	}
 }
 
@@ -695,6 +752,7 @@ func (a *App) SaveBrowserSettings(settings BrowserSettings) error {
 	} else if a.config.Browser.StartStableWindowMs <= 0 {
 		a.config.Browser.StartStableWindowMs = browserStartStableWindowMillis(nil)
 	}
+	a.config.Browser.ShowMousePointerDefault = settings.ShowMousePointerDefault
 	if err := a.config.Save(a.resolveAppPath("config.yaml")); err != nil {
 		log.Error("浏览器配置保存失败", logger.F("error", err))
 		return err
@@ -747,6 +805,10 @@ func (a *App) BrowserCoreSetDefault(coreId string) error {
 
 func (a *App) BrowserCoreValidate(corePath string) BrowserCoreValidateResult {
 	return a.browserMgr.ValidateCorePath(corePath)
+}
+
+func (a *App) BrowserCoreValidateForKind(corePath string, kind string) BrowserCoreValidateResult {
+	return a.browserMgr.ValidateCorePathForKind(corePath, kind)
 }
 
 func (a *App) BrowserCoreExtendedInfo() []BrowserCoreExtendedInfo {
@@ -815,6 +877,46 @@ func (a *App) BrowserProxyListByGroup(groupName string) []BrowserProxy {
 	return result
 }
 
+// BrowserProxyDelete 删除单个代理。删除走 DAO 单条删除，避免用前端残缺列表覆盖整张代理表。
+func (a *App) BrowserProxyDelete(proxyId string) error {
+	if a == nil {
+		return fmt.Errorf("app is nil")
+	}
+	if a.config == nil {
+		a.config = config.DefaultConfig()
+	}
+	proxyId = strings.TrimSpace(proxyId)
+	if proxyId == "" {
+		return fmt.Errorf("代理 ID 不能为空")
+	}
+	if proxyId == "__direct__" || proxyId == "__local__" {
+		return fmt.Errorf("内置代理不能删除")
+	}
+
+	if a.browserMgr != nil && a.browserMgr.ProxyDAO != nil {
+		if err := a.browserMgr.ProxyDAO.Delete(proxyId); err != nil {
+			return err
+		}
+		a.config.Browser.Proxies = a.BrowserProxyList()
+		a.reconcileProfileProxyBindings()
+		return nil
+	}
+
+	updated := make([]BrowserProxy, 0, len(a.config.Browser.Proxies))
+	for _, item := range a.config.Browser.Proxies {
+		if strings.TrimSpace(item.ProxyId) != proxyId {
+			updated = append(updated, item)
+		}
+	}
+	a.config.Browser.Proxies = updated
+
+	if err := config.SaveProxies(a.resolveAppPath("proxies.yaml"), updated); err != nil {
+		return err
+	}
+	a.reconcileProfileProxyBindings()
+	return nil
+}
+
 // ValidateProxyConfig 验证代理配置是否支持
 func (a *App) ValidateProxyConfig(proxyConfig string, proxyId string) ProxyValidationResult {
 	proxies := a.getLatestProxies()
@@ -863,14 +965,14 @@ func (a *App) TestProxyConnectivity(proxyId string, proxyConfig string) ProxyTes
 // 参考 Clash URLTest 策略：多 URL fallback + 复用桥接 + TCP ping 降级
 func (a *App) TestProxyRealConnectivity(proxyId string) ProxyTestResult {
 	proxies := a.getLatestProxies()
-	r := proxy.SpeedTest(proxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
+	r := proxy.SpeedTest(a.ctx, proxyId, proxies, a.bridgeManagers(), nil)
 	return ProxyTestResult{ProxyId: r.ProxyId, Ok: r.Ok, LatencyMs: r.LatencyMs, Error: r.Error}
 }
 
 // BrowserProxyTestSpeed 手动触发单个代理测速并持久化结果
 func (a *App) BrowserProxyTestSpeed(proxyId string) ProxyTestResult {
 	proxies := a.getLatestProxies()
-	r := proxy.SpeedTest(proxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
+	r := proxy.SpeedTest(a.ctx, proxyId, proxies, a.bridgeManagers(), nil)
 	if a.browserMgr.ProxyDAO != nil {
 		testedAt := time.Now().Format(time.RFC3339)
 		_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(proxyId, r.Ok, r.LatencyMs, testedAt)
@@ -911,7 +1013,7 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				r := proxy.SpeedTest(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
+				r := proxy.SpeedTest(a.ctx, job.ProxyId, proxies, a.bridgeManagers(), nil)
 				if a.browserMgr.ProxyDAO != nil {
 					testedAt := time.Now().Format(time.RFC3339)
 					_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(job.ProxyId, r.Ok, r.LatencyMs, testedAt)
@@ -943,7 +1045,7 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 // BrowserProxyCheckIPHealth 检测单个代理的出口 IP 健康信息（通过 IPPure 接口）
 func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 	proxies := a.getLatestProxies()
-	data, err := proxy.FetchProxyIPInfo(proxyId, proxies, a.xrayMgr, a.singboxMgr)
+	data, err := proxy.FetchProxyIPInfo(a.ctx, proxyId, proxies, a.bridgeManagers())
 	result := buildProxyIPHealthResult(proxyId, data, err)
 	result = a.withProxyHTTPSConnectivity(result, proxies)
 	a.persistProxyIPHealthResult(result)
@@ -951,6 +1053,26 @@ func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 		a.emit(events.EventProxyIPHealthResult, result)
 	}
 	a.emitProxyIPHealthRisks(result)
+	return result
+}
+
+// BrowserProxyCheckIPHealthByConfig checks an inline proxy URL/config without requiring a stored proxyId.
+// Used for ProxyConfig-only profile launches (Clash local mixed port, temporary bridges).
+func (a *App) BrowserProxyCheckIPHealthByConfig(proxyConfig string) ProxyIPHealthResult {
+	proxyConfig = strings.TrimSpace(proxyConfig)
+	if proxyConfig == "" || strings.EqualFold(proxyConfig, "direct://") {
+		return ProxyIPHealthResult{Ok: false, Error: "empty or direct proxy config"}
+	}
+	tempID := "__inline_proxy_config__"
+	proxies := []BrowserProxy{{
+		ProxyId:     tempID,
+		ProxyName:   "inline-proxy-config",
+		ProxyConfig: proxyConfig,
+	}}
+	data, err := proxy.FetchProxyIPInfo(a.ctx, tempID, proxies, a.bridgeManagers())
+	result := buildProxyIPHealthResult(tempID, data, err)
+	result = a.withProxyHTTPSConnectivity(result, proxies)
+	// Do not persist temporary inline probes into the durable proxy table.
 	return result
 }
 
@@ -983,7 +1105,7 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				data, err := proxy.FetchProxyIPInfo(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr)
+				data, err := proxy.FetchProxyIPInfo(a.ctx, job.ProxyId, proxies, a.bridgeManagers())
 				result := buildProxyIPHealthResult(job.ProxyId, data, err)
 				result = a.withProxyHTTPSConnectivity(result, proxies)
 				a.persistProxyIPHealthResult(result)
@@ -1015,7 +1137,7 @@ func (a *App) withProxyHTTPSConnectivity(result ProxyIPHealthResult, proxies []B
 		}
 		return result
 	}
-	connectivity := proxy.CheckProxyHTTPSConnectivity(result.ProxyId, proxies, a.xrayMgr, a.singboxMgr, 8*time.Second)
+	connectivity := proxy.CheckProxyHTTPSConnectivity(a.ctx, result.ProxyId, proxies, a.bridgeManagers(), 8*time.Second)
 	result.RawData["realHttpsCheck"] = map[string]interface{}{
 		"ok":        connectivity.Ok,
 		"latencyMs": connectivity.LatencyMs,
@@ -1078,11 +1200,53 @@ func (a *App) persistProxyIPHealthResult(result ProxyIPHealthResult) {
 	if a.browserMgr.ProxyDAO == nil {
 		return
 	}
+	oldIP := a.lookupProxyStoredExitIP(result.ProxyId)
 	payload, err := json.Marshal(result)
 	if err != nil {
 		return
 	}
 	_ = a.browserMgr.ProxyDAO.UpdateIPHealthResult(result.ProxyId, string(payload))
+	if a.ctx != nil && result.Ok && oldIP != "" && result.IP != "" && oldIP != result.IP {
+		events.EmitProxyQualityNodeRotated(a.ctx, events.ProxyQualityNodeRotatedPayload{
+			ProxyId: result.ProxyId,
+			OldIP:   oldIP,
+			NewIP:   result.IP,
+		})
+	}
+	if a.ctx != nil && result.Ok {
+		dns := proxy.ProbeDNSConsistency(a.ctx, result.ProxyId, result.IP, "api.ipify.org")
+		if dns.DNSLeakSuspect {
+			events.EmitRiskDnsLeak(a.ctx, events.RiskDnsLeakPayload{
+				ProfileId:     "",
+				LeakedDomains: dns.DNSResolvedIPs,
+			})
+		}
+	}
+}
+
+func (a *App) lookupProxyStoredExitIP(proxyID string) string {
+	if a.browserMgr.ProxyDAO == nil || strings.TrimSpace(proxyID) == "" {
+		return ""
+	}
+	proxies, err := a.browserMgr.ProxyDAO.List()
+	if err != nil {
+		return ""
+	}
+	for _, item := range proxies {
+		if !strings.EqualFold(item.ProxyId, proxyID) {
+			continue
+		}
+		raw := strings.TrimSpace(item.LastIPHealthJSON)
+		if raw == "" {
+			return ""
+		}
+		var stored ProxyIPHealthResult
+		if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+			return ""
+		}
+		return strings.TrimSpace(stored.IP)
+	}
+	return ""
 }
 
 // emitProxyHighLatency 推送代理高延迟风险事件。
@@ -1219,6 +1383,15 @@ func mapBool(m map[string]interface{}, key string) bool {
 }
 
 // getLatestProxies 获取最新的代理列表，优先从数据库读取
+func (a *App) bridgeManagers() []proxy.BridgeManager {
+	return []proxy.BridgeManager{a.xrayMgr, a.singboxMgr}
+}
+
+// ProxyBridgeManagers implements launchcode.ProxyBridgeProvider for LaunchServer proxy tests.
+func (a *App) ProxyBridgeManagers() []proxy.BridgeManager {
+	return a.bridgeManagers()
+}
+
 func (a *App) getLatestProxies() []BrowserProxy {
 	if a.browserMgr.ProxyDAO != nil {
 		if list, err := a.browserMgr.ProxyDAO.List(); err == nil && len(list) > 0 {

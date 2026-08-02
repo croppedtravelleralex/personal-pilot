@@ -2,14 +2,30 @@ import { useEffect, useState, useCallback } from 'react'
 import { FolderOpen, Settings, Edit2 } from 'lucide-react'
 import { Badge, Button, Card, ConfirmModal, FormItem, Input, Modal, Table, Textarea, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserSettings, BrowserCoreExtended, BrowserProxy } from '../types'
 import { fetchBrowserCores, saveBrowserCore, deleteBrowserCore, setDefaultBrowserCore, validateBrowserCorePath, openCorePath, fetchBrowserSettings, saveBrowserSettings, fetchCoreExtendedInfo, scanBrowserCores, BrowserCoreDownload, fetchBrowserProxies } from '../api'
-import { EventsOn, EventsOff, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
+import { desktopOpenExternalUrl, desktopRuntimeListen } from '../../../services/desktop'
+
+const CORE_KIND_OPTIONS = [
+  { value: 'chromium', label: 'Chromium' },
+  { value: 'lightpanda', label: 'Lightpanda' },
+  { value: 'camoufox', label: 'Camoufox' },
+] as const
+
+function normalizeCoreKind(kind?: string): BrowserCoreInput['kind'] {
+  return kind === 'lightpanda' || kind === 'camoufox' ? kind : 'chromium'
+}
+
+function coreKindLabel(kind?: string): string {
+  return CORE_KIND_OPTIONS.find(item => item.value === normalizeCoreKind(kind))?.label || 'Chromium'
+}
 
 interface CoreDisplayInfo {
   coreId: string
   coreName: string
   corePath: string
+  kind: BrowserCoreInput['kind']
   isDefault: boolean
   pathValid: boolean
   pathMessage: string
@@ -46,7 +62,7 @@ export function CoreManagementPage() {
   // 编辑弹窗状态
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingCore, setEditingCore] = useState<BrowserCore | null>(null)
-  const [editForm, setEditForm] = useState({ coreName: '', corePath: '' })
+  const [editForm, setEditForm] = useState<{ coreName: string; corePath: string; kind: BrowserCoreInput['kind'] }>({ coreName: '', corePath: '', kind: 'chromium' })
   const [saving, setSaving] = useState(false)
   const [pathValidating, setPathValidating] = useState(false)
   const [pathValidResult, setPathValidResult] = useState<BrowserCoreValidateResult | null>(null)
@@ -79,11 +95,7 @@ export function CoreManagementPage() {
         setDownloadProgress(null) // 清理进度使其可以重新开始
       }
     }
-    EventsOn('download:progress', onDownloadProgress)
-
-    return () => {
-      EventsOff('download:progress')
-    }
+    return desktopRuntimeListen('download:progress', onDownloadProgress)
   }, [])
 
   const loadData = async () => {
@@ -106,12 +118,14 @@ export function CoreManagementPage() {
       // 验证所有路径并合并扩展信息
       const displayInfoList: CoreDisplayInfo[] = await Promise.all(
         coreList.map(async (core) => {
-          const result = await validateBrowserCorePath(core.corePath)
+          const kind = normalizeCoreKind(core.kind)
+          const result = await validateBrowserCorePath(core.corePath, kind)
           const extended = extendedMap.get(core.coreId)
           return {
             coreId: core.coreId,
             coreName: core.coreName,
             corePath: core.corePath,
+            kind,
             isDefault: core.isDefault,
             pathValid: result.valid,
             pathMessage: result.message,
@@ -127,14 +141,14 @@ export function CoreManagementPage() {
   }
 
   // 防抖验证路径
-  const validatePath = useCallback(async (path: string) => {
+  const validatePath = useCallback(async (path: string, kind: BrowserCoreInput['kind']) => {
     if (!path.trim()) {
       setPathValidResult(null)
       return
     }
     setPathValidating(true)
     try {
-      const result = await validateBrowserCorePath(path)
+      const result = await validateBrowserCorePath(path, kind)
       setPathValidResult(result)
     } finally {
       setPathValidating(false)
@@ -146,15 +160,21 @@ export function CoreManagementPage() {
     fetchBrowserProxies().then(setProxies)
     const timer = setTimeout(() => {
       if (editModalOpen && editForm.corePath) {
-        validatePath(editForm.corePath)
+        validatePath(editForm.corePath, editForm.kind)
       }
     }, 500)
     return () => clearTimeout(timer)
-  }, [editForm.corePath, editModalOpen, validatePath])
+  }, [editForm.corePath, editForm.kind, editModalOpen, validatePath])
 
   // 表格列定义
   const columns: TableColumn<CoreDisplayInfo>[] = [
     { key: 'coreName', title: '内核名称', width: '150px' },
+    {
+      key: 'kind',
+      title: '引擎',
+      width: '100px',
+      render: (val) => <Badge variant="default">{coreKindLabel(String(val || ''))}</Badge>,
+    },
     { key: 'corePath', title: '内核路径', width: '180px' },
     {
       key: 'chromeVersion',
@@ -213,8 +233,8 @@ export function CoreManagementPage() {
   const handleOpenPath = async (corePath: string) => {
     try {
       await openCorePath(corePath)
-    } catch (error: any) {
-      toast.error(error?.message || '打开目录失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '打开目录失败'))
     }
   }
 
@@ -225,8 +245,8 @@ export function CoreManagementPage() {
       await scanBrowserCores()
       await loadData()
       toast.success('扫描完成')
-    } catch (error: any) {
-      toast.error(error?.message || '扫描失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '扫描失败'))
     } finally {
       setScanning(false)
     }
@@ -235,7 +255,7 @@ export function CoreManagementPage() {
   // 新增内核
   const handleAdd = () => {
     setEditingCore(null)
-    setEditForm({ coreName: '', corePath: '' })
+    setEditForm({ coreName: '', corePath: '', kind: 'chromium' })
     setPathValidResult(null)
     setEditModalOpen(true)
   }
@@ -245,7 +265,7 @@ export function CoreManagementPage() {
     const core = cores.find(c => c.coreId === record.coreId)
     if (core) {
       setEditingCore(core)
-      setEditForm({ coreName: core.coreName, corePath: core.corePath })
+      setEditForm({ coreName: core.coreName, corePath: core.corePath, kind: normalizeCoreKind(core.kind) })
       setPathValidResult({ valid: record.pathValid, message: record.pathMessage })
       setEditModalOpen(true)
     }
@@ -267,14 +287,15 @@ export function CoreManagementPage() {
         coreId: editingCore?.coreId || `core-${Date.now()}`,
         coreName: editForm.coreName.trim(),
         corePath: editForm.corePath.trim(),
+        kind: editForm.kind,
         isDefault: editingCore?.isDefault || false,
       }
       await saveBrowserCore(input)
       await loadData()
       setEditModalOpen(false)
       toast.success(editingCore ? '内核已更新' : '内核已添加')
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -297,8 +318,8 @@ export function CoreManagementPage() {
       await deleteBrowserCore(deletingCore.coreId)
       await loadData()
       toast.success('内核已删除')
-    } catch (error: any) {
-      toast.error(error?.message || '删除失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除失败'))
     }
     setDeletingCore(null)
   }
@@ -309,8 +330,8 @@ export function CoreManagementPage() {
       await setDefaultBrowserCore(coreId)
       await loadData()
       toast.success('已设为默认内核')
-    } catch (error: any) {
-      toast.error(error?.message || '设置失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '设置失败'))
     }
   }
 
@@ -341,8 +362,8 @@ export function CoreManagementPage() {
       }
 
       await BrowserCoreDownload(downloadForm.name.trim(), downloadForm.url.trim(), targetProxy)
-    } catch (err: any) {
-      toast.error(err.message || '内部启动下载失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '内部启动下载失败'))
       setDownloadProgress(null)
     }
   }
@@ -376,8 +397,8 @@ export function CoreManagementPage() {
       setSettings(newSettings)
       setSettingsModalOpen(false)
       toast.success('设置已保存')
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSavingSettings(false)
     }
@@ -551,6 +572,15 @@ export function CoreManagementPage() {
               placeholder="例如：Chrome 142"
             />
           </FormItem>
+          <FormItem label="浏览器引擎" required>
+            <select
+              value={editForm.kind}
+              onChange={e => { setEditForm(prev => ({ ...prev, kind: normalizeCoreKind(e.target.value) })); setPathValidResult(null) }}
+              className="w-full h-9 px-3 rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
+            >
+              {CORE_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </FormItem>
           <FormItem label="内核路径" required>
             <Input
               value={editForm.corePath}
@@ -619,7 +649,7 @@ export function CoreManagementPage() {
               <span>推荐指纹内核: fingerprint-chromium</span>
               <button
                 type="button"
-                onClick={() => BrowserOpenURL('https://github.com/adryfish/fingerprint-chromium/releases')}
+                onClick={() => desktopOpenExternalUrl('https://github.com/adryfish/fingerprint-chromium/releases')}
                 className="text-[var(--color-accent)] hover:underline cursor-pointer font-medium"
               >
                 前往 Releases 页面获取链接
@@ -635,7 +665,7 @@ export function CoreManagementPage() {
                 setDownloadForm(prev => ({
                   ...prev,
                   proxyMode: mode,
-                  proxyId: mode === 'custom' && proxies.length > 0 ? proxies[0].proxyId : ''
+                  proxyId: mode === 'custom' && proxies.length > 0 ? proxies[0]!.proxyId : ''
                 }))
               }}
               className="w-full h-9 px-3 rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"

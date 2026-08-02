@@ -183,6 +183,7 @@ export interface IdentitySubscores {
   fingerprintVisible: number
   consistency: number
   profilePersistence: number
+  longTermCoherence: number
   proxyNetwork: number
   behaviorNaturalness: number
   automationSafety: number

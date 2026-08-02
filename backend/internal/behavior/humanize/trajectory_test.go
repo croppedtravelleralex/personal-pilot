@@ -164,6 +164,75 @@ func TestComputeClickTargetForElement_StableForSameSeedAndConfig(t *testing.T) {
 	}
 }
 
+func TestBuildFittsTrajectoryUsesThreePhaseMovementAndNoise(t *testing.T) {
+	plan := BuildFittsTrajectory(0, 0, 480, 120, 40, 123)
+	if len(plan.Points) < 8 {
+		t.Fatalf("points = %d, want >= 8", len(plan.Points))
+	}
+	if plan.MovementTimeMs < 120 {
+		t.Fatalf("movement time = %d, want >= 120", plan.MovementTimeMs)
+	}
+	if plan.Points[0].X != 0 || plan.Points[0].Y != 0 {
+		t.Fatalf("first point = %+v", plan.Points[0])
+	}
+	last := plan.Points[len(plan.Points)-1]
+	if last.X != 480 || last.Y != 120 || last.Ms != plan.MovementTimeMs {
+		t.Fatalf("last point = %+v, movement=%d", last, plan.MovementTimeMs)
+	}
+	if plan.NoiseAmplitude <= 0 {
+		t.Fatalf("noise amplitude = %f, want > 0", plan.NoiseAmplitude)
+	}
+}
+
+func TestBuildFourPhaseClickPlanContainsExpectedPhases(t *testing.T) {
+	plan := BuildFourPhaseClickPlan(0, 0, 100, 20, 30, 7)
+	if len(plan.Phases) != 5 {
+		t.Fatalf("phases = %d, want 5", len(plan.Phases))
+	}
+	want := []ClickPhaseType{ClickPhaseMove, ClickPhasePrePress, ClickPhasePressPeak, ClickPhasePostPress, ClickPhaseRelease}
+	for i, phase := range plan.Phases {
+		if phase.Type != want[i] {
+			t.Fatalf("phase[%d] = %s, want %s", i, phase.Type, want[i])
+		}
+	}
+}
+
+func TestBuildDoubleClickPlanAddsHumanIntervalAndMicroMove(t *testing.T) {
+	plan := BuildDoubleClickPlan(0, 0, 100, 20, 30, 9)
+	found := false
+	for _, phase := range plan.Phases {
+		if phase.Type == ClickPhaseInterClick {
+			found = true
+			if phase.DurationMs < 180 || phase.DurationMs > 450 {
+				t.Fatalf("double click interval = %d", phase.DurationMs)
+			}
+			if absInt32(int32(phase.X-100)) > 5 || absInt32(int32(phase.Y-20)) > 5 {
+				t.Fatalf("micro move too large: %+v", phase)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing inter-click phase")
+	}
+}
+
+func TestBuildDragAndContextMenuPlansExposeDistinctSemantics(t *testing.T) {
+	drag := BuildDragPlan(10, 10, 300, 300, 20, 11)
+	if drag.Phases[0].Type != ClickPhasePrePress || drag.Phases[1].Type != ClickPhaseDragHold {
+		t.Fatalf("drag phases = %+v", drag.Phases)
+	}
+	ctx := BuildContextMenuPlan(10, 10, 300, 300, 20, 12)
+	foundContext := false
+	for _, phase := range ctx.Phases {
+		if phase.Type == ClickPhaseContextMenu {
+			foundContext = true
+		}
+	}
+	if !foundContext {
+		t.Fatalf("context phases = %+v", ctx.Phases)
+	}
+}
+
 func TestComputeOffsetVector_WithBias(t *testing.T) {
 	bias := BiasTopLeft
 	for i := 0; i < 50; i++ {

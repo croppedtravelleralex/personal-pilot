@@ -44,6 +44,12 @@ type LaunchServerAuthConfig struct {
 	Header  string `yaml:"header"`
 }
 
+// WebhookConfig Webhook 通知配置
+type WebhookConfig struct {
+	URL    string `yaml:"url" json:"url"`
+	Secret string `yaml:"secret" json:"secret"`
+}
+
 // Config 应用配置
 type Config struct {
 	Database     DatabaseConfig     `yaml:"database"`
@@ -52,7 +58,7 @@ type Config struct {
 	Logging      LoggingConfig      `yaml:"logging"`
 	Browser      BrowserConfig      `yaml:"browser"`
 	LaunchServer LaunchServerConfig `yaml:"launch_server"`
-	LLM          LLMConfig          `yaml:"llm"`
+	Webhook      WebhookConfig      `yaml:"webhook"`
 }
 
 // DatabaseConfig 数据库配置
@@ -84,8 +90,9 @@ type WindowConfig struct {
 
 // RuntimeConfig 运行时配置
 type RuntimeConfig struct {
-	MaxMemoryMB int `yaml:"max_memory_mb"` // 最大内存软限制（MB），0 表示禁用
-	GCPercent   int `yaml:"gc_percent"`    // GC 触发百分比
+	MaxMemoryMB           int `yaml:"max_memory_mb"`            // 最大内存软限制（MB），0 表示禁用
+	MaxConcurrentInstances int `yaml:"max_concurrent_instances"` // 同时运行实例上限，0 表示不限制
+	GCPercent             int `yaml:"gc_percent"`               // GC 触发百分比
 }
 
 type BrowserBookmark struct {
@@ -99,8 +106,9 @@ type BrowserConfig struct {
 	DefaultLaunchArgs      []string               `yaml:"default_launch_args"`
 	DefaultProxy           string                 `yaml:"default_proxy"`
 	StartReadyTimeoutMs    int                    `yaml:"start_ready_timeout_ms,omitempty"`
-	StartStableWindowMs    int                    `yaml:"start_stable_window_ms,omitempty"`
-	DefaultBookmarks       []BrowserBookmark      `yaml:"default_bookmarks,omitempty"`
+	StartStableWindowMs     int                    `yaml:"start_stable_window_ms,omitempty"`
+	ShowMousePointerDefault bool                   `yaml:"show_mouse_pointer_default,omitempty"`
+	DefaultBookmarks        []BrowserBookmark      `yaml:"default_bookmarks,omitempty"`
 	Cores                  []BrowserCore          `yaml:"cores,omitempty"`
 	Proxies                []BrowserProxy         `yaml:"proxies,omitempty"`
 	Profiles               []BrowserProfileConfig `yaml:"profiles,omitempty"`
@@ -119,7 +127,7 @@ type BrowserCore struct {
 	CoreId    string `yaml:"core_id" json:"coreId"`
 	CoreName  string `yaml:"core_name" json:"coreName"`
 	CorePath  string `yaml:"core_path" json:"corePath"`
-	Kind      string `yaml:"kind,omitempty" json:"kind,omitempty"` // "chromium" (default) or "lightpanda"
+	Kind      string `yaml:"kind,omitempty" json:"kind,omitempty"` // "chromium" (default), "lightpanda", or "camoufox"
 	IsDefault bool   `yaml:"is_default" json:"isDefault"`
 }
 
@@ -127,6 +135,7 @@ type BrowserCore struct {
 const (
 	CoreKindChromium   = "chromium"
 	CoreKindLightpanda = "lightpanda"
+	CoreKindCamoufox   = "camoufox"
 )
 
 type BrowserProxy struct {
@@ -414,11 +423,22 @@ func DefaultConfig() *Config {
 				TimeInterval: "daily",
 			},
 			Interceptor: InterceptorConfig{
-				Enabled:         true,
-				LogParameters:   true,
-				LogResults:      true,
-				SensitiveFields: []string{"password", "token", "secret"},
+				Enabled:       true,
+				LogParameters: true,
+				LogResults:    true,
+				SensitiveFields: []string{
+					"password", "passwd", "pwd",
+					"token", "access_token", "refresh_token", "id_token",
+					"api_key", "apikey", "authorization",
+					"credential", "credentials",
+					"secret", "client_secret", "private_key",
+					"cookie", "cookies", "set_cookie", "set-cookie",
+				},
 			},
+		},
+		Webhook: WebhookConfig{
+			URL:    "",
+			Secret: "",
 		},
 		LaunchServer: LaunchServerConfig{
 			Port: DefaultLaunchServerPort,
@@ -428,7 +448,6 @@ func DefaultConfig() *Config {
 				Header:  DefaultLaunchServerAPIKeyHeader,
 			},
 		},
-		LLM: DefaultLLMConfig(),
 	}
 }
 

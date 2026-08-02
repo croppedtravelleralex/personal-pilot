@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Copy, Globe, Play, RefreshCw, RotateCcw, Square } from 'lucide-react'
+import { Copy, Globe, MousePointer2, Play, RefreshCw, RotateCcw, Square } from 'lucide-react'
 import { Badge, Button, Card, Input, Table, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserProfile, BrowserTab } from '../types'
-import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import {
   fetchBrowserProfiles,
   fetchBrowserTabs,
@@ -13,10 +12,12 @@ import {
   restartBrowserInstance,
   startBrowserInstance,
   stopBrowserInstance,
+  onBrowserInstanceRuntimeEvents,
 } from '../api'
 import { CookieManagerCard } from '../components/CookieManagerCard'
 import { SnapshotTab } from '../components/SnapshotTab'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
+import { workbenchHideMousePointer, workbenchShowMousePointer } from '../../../services/desktop'
 
 const resolveRuntimeStatus = (running: boolean, debugReady: boolean) => {
   if (!running) return { variant: 'warning' as const, label: '已停止' }
@@ -45,6 +46,8 @@ export function BrowserDetailPage() {
   const [targetUrl, setTargetUrl] = useState('https://example.com')
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
   const [pendingAction, setPendingAction] = useState<'starting' | 'stopping' | 'restarting' | null>(null)
+  const [mousePointerVisible, setMousePointerVisible] = useState(false)
+  const [mousePointerPending, setMousePointerPending] = useState(false)
 
   const loadProfile = async () => {
     const list = await fetchBrowserProfiles()
@@ -65,33 +68,30 @@ export function BrowserDetailPage() {
   useEffect(() => {
     if (!id) return
 
-    const handleRuntimeChange = (payload: any) => {
-      const profileId = typeof payload === 'string' ? payload : payload?.profileId
-      if (profileId !== id) return
+    const offLifecycle = onBrowserInstanceRuntimeEvents(({ payload, rawPayload }) => {
+      if (payload.profileId !== id) return
 
       setPendingAction(null)
       void loadProfile()
 
-      if (typeof payload === 'string' || payload?.error) {
+      if (typeof rawPayload === 'string' || payload.error) {
         setTabs([])
         return
       }
 
       void loadTabs()
-    }
-
-    const offStarted = EventsOn('browser:instance:started', handleRuntimeChange)
-    const offUpdated = EventsOn('browser:instance:updated', handleRuntimeChange)
-    const offStopped = EventsOn('browser:instance:stopped', handleRuntimeChange)
-    const offCrashed = EventsOn('browser:instance:crashed', handleRuntimeChange)
+    })
 
     return () => {
-      offStarted?.()
-      offUpdated?.()
-      offStopped?.()
-      offCrashed?.()
+      offLifecycle()
     }
   }, [id])
+
+  useEffect(() => {
+    if (!profile?.running) {
+      setMousePointerVisible(false)
+    }
+  }, [profile?.running])
 
   if (!profile) {
     return (
@@ -118,7 +118,7 @@ export function BrowserDetailPage() {
       } else {
         toast.success('实例已启动')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const feedback = resolveActionFeedback(error, '实例启动失败')
       if (feedback.tone === 'warning') {
         toast.warning(feedback.message)
@@ -139,7 +139,7 @@ export function BrowserDetailPage() {
         setProfile(stoppedProfile)
       }
       toast.success('实例已停止')
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(resolveActionErrorMessage(error, '实例停止失败'))
     } finally {
       await loadProfile()
@@ -155,7 +155,7 @@ export function BrowserDetailPage() {
         setProfile(restartedProfile)
       }
       toast.success('实例已重启')
-    } catch (error: any) {
+    } catch (error: unknown) {
       const feedback = resolveActionFeedback(error, '实例重启失败')
       if (feedback.tone === 'warning') {
         toast.warning(feedback.message)
@@ -165,6 +165,29 @@ export function BrowserDetailPage() {
     } finally {
       await loadProfile()
       setPendingAction(null)
+    }
+  }
+
+  const handleToggleMousePointer = async () => {
+    if (!profile.running || !profile.debugReady) {
+      toast.warning('实例需运行且 CDP 就绪后才能显示鼠标指针')
+      return
+    }
+    setMousePointerPending(true)
+    try {
+      if (mousePointerVisible) {
+        await workbenchHideMousePointer(profile.profileId)
+        setMousePointerVisible(false)
+        toast.success('已隐藏鼠标指针')
+      } else {
+        await workbenchShowMousePointer(profile.profileId)
+        setMousePointerVisible(true)
+        toast.success('已显示鼠标指针（含自动化轨迹）')
+      }
+    } catch (error: unknown) {
+      toast.error(resolveActionErrorMessage(error, '鼠标指针开关失败'))
+    } finally {
+      setMousePointerPending(false)
     }
   }
 
@@ -332,6 +355,18 @@ export function BrowserDetailPage() {
                 {!isRestarting && <RotateCcw className="w-4 h-4" />}
                 {isRestarting ? '重启中' : '重启'}
               </Button>
+              {profile.running && profile.debugReady && (
+                <Button
+                  size="sm"
+                  variant={mousePointerVisible ? 'primary' : 'secondary'}
+                  onClick={handleToggleMousePointer}
+                  loading={mousePointerPending}
+                  disabled={mousePointerPending}
+                >
+                  {!mousePointerPending && <MousePointer2 className="w-4 h-4" />}
+                  {mousePointerVisible ? '隐藏鼠标' : '显示鼠标'}
+                </Button>
+              )}
             </div>
           </Card>
 

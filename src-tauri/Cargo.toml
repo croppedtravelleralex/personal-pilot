@@ -1,26 +1,24 @@
 [package]
 name = "personal-pilot-tauri"
 version = "1.1.0"
-description = "personal-pilot Tauri shell"
-authors = ["personal-pilot"]
+description = "PersonaPilot local Windows desktop"
+authors = ["Codex"]
 edition = "2021"
+rust-version = "1.77.2"
 
 [lib]
-name = "personal_pilot_tauri_lib"
+name = "persona_pilot_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tauri = { version = "2", features = [] }
-tauri-plugin-dialog = "2.7.0"
+anyhow = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.10.3", features = [] }
 tauri-plugin-single-instance = "2"
-
-[profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
-strip = true
+persona-pilot = { version = "0.1.0", path = ".." }
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }

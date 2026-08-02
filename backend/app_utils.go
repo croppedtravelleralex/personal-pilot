@@ -2,20 +2,22 @@ package backend
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"personal-pilot/backend/internal/apppath"
 	"personal-pilot/backend/internal/browser"
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/proxy"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/google/uuid"
 )
 
 const personalPilotBrandName = "personal-pilot"
+
+var debugPortReleases sync.Map // port -> func()
 
 // ============================================================================
 // 工具函数
@@ -32,25 +34,25 @@ func generateUUID() string {
 }
 
 func nextAvailablePort() (int, error) {
-	// 二次验证策略：分配端口后立即再次绑定确认未被抢占，最多重试 10 次
-	for i := 0; i < 10; i++ {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			continue
-		}
-		port := l.Addr().(*net.TCPAddr).Port
-		l.Close()
-		// 短暂等待 OS 释放端口
-		time.Sleep(5 * time.Millisecond)
-		// 二次验证端口未被其他进程抢占
-		v, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-		if err != nil {
-			continue
-		}
-		v.Close()
-		return port, nil
+	port, release, err := proxy.ReservePortNumber()
+	if err != nil {
+		return 0, err
 	}
-	return 0, fmt.Errorf("无法分配可用端口")
+	debugPortReleases.Store(port, release)
+	return port, nil
+}
+
+func releaseDebugPortReservation(port int) {
+	if port <= 0 {
+		return
+	}
+	if v, ok := debugPortReleases.LoadAndDelete(port); ok {
+		if release, ok := v.(func()); ok && release != nil {
+			release()
+			return
+		}
+	}
+	proxy.ReleaseReservedPort(port)
 }
 
 // ============================================================================
@@ -215,6 +217,22 @@ func (a *App) autoDetectCores() {
 			log.Warn("内核路径无效", logger.F("core_id", core.CoreId), logger.F("path", core.CorePath), logger.F("message", result.Message))
 		}
 	}
+}
+
+func (a *App) ensureCamoufoxCorePreset() {
+	log := logger.New("Browser")
+	if a == nil || a.browserMgr == nil || a.browserMgr.CoreDAO == nil {
+		return
+	}
+	dao, ok := a.browserMgr.CoreDAO.(*browser.SQLiteCoreDAO)
+	if !ok {
+		return
+	}
+	if err := dao.EnsureCamoufoxPreset(); err != nil {
+		log.Warn("Camoufox 内核预置初始化失败", logger.F("error", err.Error()))
+		return
+	}
+	a.config.Browser.Cores = a.browserMgr.ListCores()
 }
 
 // scanChromeDir 扫描指定目录，将包含浏览器可执行文件的子文件夹识别为内核。

@@ -48,8 +48,11 @@ type Recording struct {
 	CurrentURL       string          `json:"currentUrl,omitempty"`
 	Title            string          `json:"title,omitempty"`
 	DevicePixelRatio float64         `json:"devicePixelRatio,omitempty"`
-	Scale            float64         `json:"scale,omitempty"`
-	CreatedAt        string          `json:"createdAt"`
+	Scale            float64                 `json:"scale,omitempty"`
+	CreatedAt        string                  `json:"createdAt"`
+	NetworkEvents    []NetworkRecordedEvent  `json:"networkEvents,omitempty"`
+	Performance      *PerformanceCaptureMetrics `json:"performance,omitempty"`
+	DOMSnapshot      string                  `json:"domSnapshot,omitempty"`
 }
 
 // RecordingSummary is the list/API shape for recordings without full events.

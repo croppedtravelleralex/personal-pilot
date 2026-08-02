@@ -18,7 +18,7 @@
 - 回放引擎：`backend/internal/behavior/playback.go`
 - 自动养号录制：`backend/internal/behavior/auto_recorder.go`
 - 录制存储：`backend/internal/behavior/recording_store.go`
-- 自然语言任务：`backend/app_llm.go`
+- 自然语言任务：历史上曾存在 `backend/app_llm.go` 设想；当前仓库不再提供该入口
 - 前端入口：`frontend/src/modules/browser/pages/BehaviorRecordingPage.tsx`
 - 前端控制面板：`frontend/src/modules/browser/components/RecordingPanel.tsx`
 - 前端自然语言任务：`frontend/src/modules/browser/components/NaturalLanguageTask.tsx`
@@ -42,9 +42,9 @@
 | BR-P0-001 | P0 | Done | 新录制不再保存派生 `click`，保留 `down/up`；旧录制保存前做 click 去重，避免一次点击回放多次触发 |
 | BR-P0-002 | P0 | Done | 刷新/同一 CDP page target 内导航后重注入录制脚本并累计事件；新标签/跨 target 仍列为后续边界 |
 | BR-P0-003 | P0 | Done | 启动初始化 `data/recordings/.sessions`，session 文件名安全编码，补保存/恢复/清理测试 |
-| BR-P0-004 | P0 | Done | LLM click/scroll/type 改走 CDP Input 或显式录制事件；敏感输入只保存脱敏表达 |
+| BR-P0-004 | P0 | Done | 自然语言任务不再对外冒充独立 LLM 入口；录制相关动作仍只通过 CDP Input / 显式录制事件流处理 |
 | BR-P0-005 | P0 | Done | CDP 回放命令增加 request/response 匹配、超时和 CDP error 处理 |
-| BR-P0-006 | P0 | Done | 行为录制 API 和 LLM 保存路径统一走 `requireRecordingStore`，避免 store nil panic |
+| BR-P0-006 | P0 | Done | 行为录制 API 统一走 `requireRecordingStore`，避免 store nil panic；旧 LLM 保存路径已移出当前主线 |
 | BR-P1-001 | P1 | Done | CDP page target 选择改为评分策略，优先可用的当前/活动 page |
 | BR-P1-002 | P1 | Done | Recording 增加 URL、标题、DPR、scale、viewport 等元数据 |
 | BR-P1-003 | P1 | Done | 回放按录制 viewport 与当前 viewport 做坐标比例映射 |
@@ -132,7 +132,7 @@
 | BR-P2-002 | P2 | Done | `/api/recording/sessions/cleanup` 支持 POST；GET 保留兼容并返回 `deprecated` / `compatibility` | 后续可在版本切换时移除 GET 兼容 |
 | BR-P2-003 | P2 | Done | `BehaviorRecordingPage.tsx`、`RecordingPanel.tsx`、`NaturalLanguageTask.tsx` 行为录制调用收口到 `frontend/src/modules/browser/api.ts` | 其他非行为录制页面的历史 Wails 调用不在本切片范围 |
 | BR-P2-004 | P2 | Done | 后端暴露 `ActiveRecordingStatus` / `BehaviorRecordingStatus` / HTTP `/api/recording/status`；`BrowserListPage.tsx` 与 `RecordingPanel.tsx` 均从 `fetchRecordingStatus()` 同步录制中 profile | 当前用查询/轮询同步，不依赖前端本地状态作为权威来源 |
-| BR-P2-005 | P2 | Done | `RecordingPanel.tsx` 播放事件、`NaturalLanguageTask.tsx` LLM 事件均通过 `api.ts` 中的订阅函数释放 `EventsOn` 返回的 off 函数，不再对同事件名调用 `EventsOff` | `CoreManagementPage` 等非录制页如有历史 `EventsOff`，另行治理；旧实验页已移除 |
+| BR-P2-005 | P2 | Done | `RecordingPanel.tsx` 播放事件通过 `api.ts` 中的订阅函数释放 `EventsOn` 返回的 off 函数；`NaturalLanguageTask.tsx` 现在只做本地预览，不再对外宣称可执行 LLM 事件 | `CoreManagementPage` 等非录制页如有历史 `EventsOff`，另行治理；旧实验页已移除 |
 | BR-P3-001 | P3 | Done | 新增 `RecordingSummary`、`RecordingDetailPage`、`BehaviorRecordingSummaryList()`、`BehaviorGetRecordingDetail(id, offset, limit)`；HTTP list 默认返回 metadata，Wails 详情按页返回 events；manifest/index 已完成，detail page 已走索引 | 后续用超大录制样本复核读取成本，不应退回一次性全量 JSON 读取 |
 | BR-P3-002 | P3 | Done | `RecordingPanel.tsx` 搜索使用 300ms debounce；录制列表使用 25/50/100 分页；`RecordingDetailModal.tsx` 事件列表使用 50/100/200 分页 | 未新增虚拟滚动库；本切片选择分页满足大量数据渲染约束 |
 | BR-P3-003 | P3 | Done | `inject_script.go` 识别 password/otp/captcha/token 等敏感字段并标记 `sensitive`；`recorder_model_test.go` 验证敏感 text 被清空 | 真实敏感值不会回放，这是安全边界 |
@@ -171,17 +171,17 @@
 - 录制开始后跳转页面仍能继续采集。
 - 停止录制后列表页和录制页状态一致。
 
-### 第 3 阶段：自然语言任务对齐录制
+### 第 3 阶段：自然语言任务收口
 
-目标：LLM 执行动作和录制事件语义一致。
+目标：不再把自然语言任务伪装成可执行 LLM 编排入口。
 
-1. 将 LLM click/type/scroll 改为 CDP 输入层或显式写入录制事件流。
-2. 对输入动作增加敏感字段保护。
-3. 给自然语言任务补失败/取消/完成事件的前端状态收敛。
+1. 保留本地预览，但不对外承诺执行。
+2. 取消对不存在 LLM RPC 的调用。
+3. 明确在文档和 UI 中标注当前只支持提示，不支持执行。
 
 验收：
 
-- LLM 执行一次导航、滚动、点击、输入后，保存的录制详情能看到对应事件。
+- 点击执行按钮只给出明确不支持提示，不再走不存在的后端入口。
 
 ### 第 4 阶段：性能与产品化
 
@@ -253,9 +253,9 @@
 
 | ID | 状态 | 落地内容 | 验证 |
 | --- | --- | --- | --- |
-| BR-P2-003 | Done | 行为录制页面、录制面板和自然语言任务调用收口到 `frontend/src/modules/browser/api.ts` | `npm --prefix frontend run build` |
+| BR-P2-003 | Done | 行为录制页面和录制面板调用收口到 `frontend/src/modules/browser/api.ts`；自然语言任务已降级为本地预览壳 | `npm --prefix frontend run build` |
 | BR-P2-004 | Done | `BrowserListPage.tsx` 和 `RecordingPanel.tsx` 通过 `fetchRecordingStatus()` 同步后端 active recording 状态 | `npm --prefix frontend run build` |
-| BR-P2-005 | Done | 录制/播放/LLM 事件监听使用 `EventsOn` 返回的 off 函数逐个释放 | `npm --prefix frontend run build` |
+| BR-P2-005 | Done | 录制/播放事件监听使用 `EventsOn` 返回的 off 函数逐个释放；自然语言任务不再监听不存在的 LLM 事件 | `npm --prefix frontend run build` |
 | BR-P3-002 | Done | 录制搜索 300ms debounce，列表和详情事件分页 | `npm --prefix frontend run build` |
 | BR-P3-004 | Done | JSON 文本导入/导出、复制模板、详情裁剪、回放进度显示和失败重试已接入 `RecordingPanel.tsx` / `RecordingDetailModal.tsx`，Wails 绑定同步更新 | `go test -count=1 ./backend -run "TestBehaviorRecording|TestBehaviorPlayback|TestBehaviorGetRecordingDetail"`、`npm --prefix frontend run build` |
 | BR-P3-005 | Done | 真实指纹 Chromium 录制/回放 E2E 通过，事件计数包含 `change/down/input/key/move/scroll/up` | `PERSONAL_PILOT_RECORDING_E2E=1 go test -count=1 ./backend/internal/behavior -run TestRealFingerprintBrowserRecordPlayback -v` |

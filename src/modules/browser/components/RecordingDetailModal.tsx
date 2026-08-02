@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, Trash2, MousePointer, Keyboard, ScrollText, Clock, Monitor, Scissors } from 'lucide-react'
 import { Button, Input, Select, toast } from '../../../shared/components'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { RecordingDetailPage, RecordingEventStats } from '../types'
 import { fetchRecordingDetail, trimRecording } from '../api'
 
@@ -12,10 +13,6 @@ interface RecordingDetailModalProps {
 }
 
 const EVENT_PAGE_SIZES = [50, 100, 200]
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged }: RecordingDetailModalProps) {
   const [detail, setDetail] = useState<RecordingDetailPage | null>(null)
@@ -40,8 +37,8 @@ export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged
         const eventOffset = (eventPage - 1) * eventPageSize
         const nextDetail = await fetchRecordingDetail(recordingId, { eventOffset, eventLimit: eventPageSize })
         if (active) setDetail(nextDetail)
-      } catch (e: any) {
-        if (active) toast.error(`加载录制详情失败: ${e?.message || e}`)
+      } catch (error: unknown) {
+        if (active) toast.error(`加载录制详情失败: ${messageFromUnknownError(error, '未知错误')}`)
       } finally {
         if (active) setLoading(false)
       }
@@ -92,8 +89,8 @@ export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged
       await onChanged?.()
       setTrimOpen(false)
       toast.success('裁剪录制已保存')
-    } catch (e) {
-      toast.error(`裁剪失败: ${getErrorMessage(e)}`)
+    } catch (error: unknown) {
+      toast.error(`裁剪失败: ${messageFromUnknownError(error, '未知错误')}`)
     } finally {
       setTrimming(false)
     }
@@ -267,6 +264,27 @@ export function RecordingDetailModal({ recordingId, onClose, onDelete, onChanged
                 <Button size="sm" className="h-7 px-2" onClick={handleTrim} loading={trimming}>保存</Button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* R1 timeline MVP — first steps overview */}
+        {pageEvents.length > 0 && (
+          <div className="mb-4">
+            <h5 className="text-xs font-semibold text-[var(--color-text)] mb-2">步骤时间线（本页前 12 步）</h5>
+            <ol className="space-y-1 max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg p-2">
+              {pageEvents.slice(0, 12).map((ev, i) => (
+                <li key={`tl-${pageEventOffset + i}-${ev.t}`} className="flex items-start gap-2 text-[11px] text-[var(--color-text-muted)]">
+                  <span className="tabular-nums w-10 shrink-0 text-right text-[var(--color-text)]">{(ev.t / 1000).toFixed(2)}s</span>
+                  <span className="font-medium text-[var(--color-text)] w-14 shrink-0">{ev.type}</span>
+                  <span className="truncate">
+                    {ev.type === 'key' ? (ev.key || ev.text || '') :
+                      ev.type === 'scroll' ? `dx=${ev.dx ?? 0} dy=${ev.dy ?? 0}` :
+                      (ev.x != null || ev.y != null) ? `(${ev.x?.toFixed?.(0) ?? ev.x},${ev.y?.toFixed?.(0) ?? ev.y})` :
+                      `#${pageEventOffset + i + 1}`}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
 

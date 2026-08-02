@@ -47,7 +47,7 @@ func TestBackupExportPackageToPathWritesZip(t *testing.T) {
 	if result["cancelled"] == true {
 		t.Fatalf("export should not be cancelled: %+v", result)
 	}
-	expectedPath := zipPath + ".zip"
+	expectedPath := zipPath + ".zip.enc"
 	if result["zipPath"] != expectedPath {
 		t.Fatalf("zip path mismatch: got=%v want=%s", result["zipPath"], expectedPath)
 	}

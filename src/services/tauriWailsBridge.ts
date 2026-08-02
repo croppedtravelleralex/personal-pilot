@@ -1,19 +1,29 @@
 import {
   desktopCoreStart,
   desktopEnvironment,
+  clearAppLogs,
+  confirmDestructivePreflight,
   desktopListen,
-  desktopOpenBackupPath,
   desktopQuit,
   desktopQuitAppOnly,
   desktopQuitFull,
   desktopRpc,
-  desktopSaveBackupPath,
   desktopWindowHide,
   desktopWindowMinimize,
   desktopWindowShow,
+  exportSystemConfig,
+  getAppLogs,
+  importSystemConfig,
+  initializeSystemData,
 } from './desktop'
+import type { DesktopRpcArgs } from './desktop'
+import type { DesktopDestructivePreflight } from '../types/desktop'
 
-type RuntimeCallback = (...data: unknown[]) => void
+type BridgeEventData = Array<unknown>
+type BridgeRpcResult = unknown
+type BridgeRpcMethod = (...args: DesktopRpcArgs) => Promise<BridgeRpcResult>
+type BridgeAppProxy = Record<string, BridgeRpcMethod>
+type RuntimeCallback = (...data: BridgeEventData) => void
 type ListenerSet = Set<RuntimeCallback>
 
 interface WailsRuntimeShim {
@@ -22,7 +32,7 @@ interface WailsRuntimeShim {
   EventsOnce: (eventName: string, callback: RuntimeCallback) => () => void
   EventsOff: (eventName: string, ...additionalEventNames: string[]) => void
   EventsOffAll: () => void
-  EventsEmit: (eventName: string, ...data: unknown[]) => void
+  EventsEmit: (eventName: string, ...data: BridgeEventData) => void
   Environment: typeof desktopEnvironment
   Quit: typeof desktopQuit
   Hide: typeof desktopWindowHide
@@ -40,7 +50,7 @@ interface WailsRuntimeShim {
 interface BridgeWindow extends Window {
   go?: {
     main?: {
-      App?: Record<string, (...args: unknown[]) => Promise<unknown>>
+      App?: BridgeAppProxy
     }
   }
   runtime?: WailsRuntimeShim
@@ -49,26 +59,81 @@ interface BridgeWindow extends Window {
 
 interface SidecarEventPayload {
   eventName: string
-  data?: unknown[]
-}
-
-interface DestructivePreflight {
-  operation?: string
-  targetProfileId?: string
-  targetUserDataDir?: string
-  requiresStop?: boolean
-  writesCookie?: boolean
-  destructivePaths?: string[]
-  warnings?: Array<{ code?: string; message?: string }>
-  blockers?: Array<{ code?: string; message?: string }>
-  confirmationToken?: string
-  confirmationPrompt?: string
+  data?: BridgeEventData
 }
 
 const bridgeWindow = window as BridgeWindow
 const listeners = new Map<string, ListenerSet>()
 
-function emitLocal(eventName: string, ...data: unknown[]) {
+const BRIDGE_RPC_METHOD_NAMES = new Set<string>([
+  'BrowserProfileList',
+  'BrowserProfileListByTag',
+  'BrowserGetAllTags',
+  'BrowserProfileCreate',
+  'BrowserProfileUpdate',
+  'BrowserProfileDelete',
+  'BrowserProfileCopy',
+  'BrowserInstanceStart',
+  'BrowserInstanceStartByCode',
+  'BrowserInstanceStop',
+  'BrowserInstanceRestart',
+  'BrowserInstanceOpenUrl',
+  'BrowserInstanceGetTabs',
+  'BrowserGetCookies',
+  'BrowserClearCookies',
+  'BrowserExportCookies',
+  'BrowserSnapshotList',
+  'BrowserSnapshotCreate',
+  'BrowserSnapshotDelete',
+  'BookmarkList',
+  'BookmarkSave',
+  'BookmarkReset',
+  'BrowserProfileSetKeywords',
+  'GetLaunchServerInfo',
+  'BrowserProfileGetCode',
+  'BrowserProfileRegenerateCode',
+  'BrowserProfileSetCode',
+  'BrowserProfileBatchSetTags',
+  'BrowserProfileBatchRemoveTags',
+  'BrowserRenameTag',
+  'BrowserProxyDelete',
+  'ListGroups',
+  'CreateGroup',
+  'UpdateGroup',
+  'DeleteGroup',
+  'MoveInstancesToGroup',
+  'BehaviorStartRecording',
+  'BehaviorStopRecording',
+  'BehaviorRecordingList',
+  'BehaviorRecordingSummaryList',
+  'BehaviorRecordingStatus',
+  'ActiveRecordingStatus',
+  'BehaviorRecordingDelete',
+  'BehaviorGetRecording',
+  'BehaviorGetRecordingDetail',
+  'BehaviorPlayRecording',
+  'BehaviorStopPlayback',
+  'BehaviorQuickRecord',
+  'BehaviorPresetList',
+  'CleanupStaleRecordingSessions',
+  'BehaviorRecordingRename',
+  'BehaviorRecordingExport',
+  'BehaviorRecordingImport',
+  'BehaviorRecordingCopy',
+  'BehaviorPlaybackReview',
+  'BehaviorRecordingTrim',
+  'SchedulerListTasks',
+  'SchedulerAddTask',
+  'SchedulerRemoveTask',
+  'SchedulerRunTaskNow',
+  'AutomationRuleList',
+  'AutomationRuleCreate',
+  'AutomationRuleDelete',
+  'AutomationRuleToggle',
+  'AutomationRuleTestFire',
+])
+
+function emitLocal(eventName: string, ...data: BridgeEventData) {
   const callbacks = listeners.get(eventName)
   if (!callbacks) return
   for (const callback of Array.from(callbacks)) {
@@ -94,112 +159,38 @@ function onMultiple(eventName: string, callback: RuntimeCallback, maxCallbacks: 
   }
 }
 
-function createAppProxy(): Record<string, (...args: unknown[]) => Promise<unknown>> {
+function createAppProxy(): BridgeAppProxy {
+  const directMethods: BridgeAppProxy = {
+    BackupInitializeSystem: initializeSystemData,
+    BackupExportPackage: exportSystemConfig,
+    BackupImportPackage: (...args) => importSystemConfig(args[0] === true),
+    GetAppLogs: getAppLogs,
+    ClearAppLogs: clearAppLogs,
+    BrowserSnapshotRestore: restoreBrowserSnapshot,
+  }
+
   return new Proxy(
     {},
     {
       get(_target, property) {
         if (typeof property !== 'string') return undefined
-        if (property === 'BackupInitializeSystem') return initializeSystemData
-        if (property === 'BackupExportPackage') return exportBackupPackage
-        if (property === 'BackupImportPackage') return importBackupPackage
-        if (property === 'BrowserSnapshotRestore') return restoreBrowserSnapshot
-        return (...args: unknown[]) => desktopRpc(property, args)
+        if (property === 'then') return undefined
+        const directMethod = directMethods[property]
+        if (directMethod) return directMethod
+        if (BRIDGE_RPC_METHOD_NAMES.has(property)) {
+          return (...args: DesktopRpcArgs) => desktopRpc(property, args)
+        }
+        return undefined
       },
     },
-  ) as Record<string, (...args: unknown[]) => Promise<unknown>>
-}
-
-function backupDefaultFilename() {
-  const now = new Date()
-  const pad = (value: number) => String(value).padStart(2, '0')
-  const stamp = [
-    now.getFullYear(),
-    pad(now.getMonth() + 1),
-    pad(now.getDate()),
-    '-',
-    pad(now.getHours()),
-    pad(now.getMinutes()),
-    pad(now.getSeconds()),
-  ].join('')
-  return `personal-pilot-backup-${stamp}.zip`
-}
-
-function describePreflight(preflight: DestructivePreflight): string {
-  const lines = [
-    preflight.confirmationPrompt || 'Confirm this destructive operation before continuing.',
-  ]
-  if (preflight.targetProfileId) lines.push(`Profile: ${preflight.targetProfileId}`)
-  if (preflight.targetUserDataDir) lines.push(`Target: ${preflight.targetUserDataDir}`)
-  if (preflight.writesCookie) lines.push('Cookie assets will be written.')
-  if (preflight.requiresStop) lines.push('Affected running profiles must be stopped first.')
-  if (preflight.destructivePaths?.length) {
-    lines.push('Paths:')
-    lines.push(...preflight.destructivePaths.slice(0, 8).map(path => `- ${path}`))
-  }
-  if (preflight.warnings?.length) {
-    lines.push('Warnings:')
-    lines.push(...preflight.warnings.slice(0, 5).map(item => `- ${item.message || item.code || 'warning'}`))
-  }
-  return lines.join('\n')
-}
-
-function assertPreflightCanContinue(preflight: DestructivePreflight) {
-  const blockers = preflight.blockers || []
-  if (blockers.length > 0) {
-    const first = blockers[0]
-    throw new Error(first.message || first.code || 'destructive preflight blocked')
-  }
-  if (!preflight.confirmationToken) {
-    throw new Error('destructive preflight did not return a confirmation token')
-  }
-}
-
-function confirmPreflight(preflight: DestructivePreflight): boolean {
-  assertPreflightCanContinue(preflight)
-  return window.confirm(describePreflight(preflight))
-}
-
-async function exportBackupPackage() {
-  const savePath = await desktopSaveBackupPath(backupDefaultFilename())
-  if (!savePath) {
-    return { cancelled: true, message: 'export cancelled' }
-  }
-  return desktopRpc('BackupExportPackageToPath', [savePath], { timeoutMs: 120000 })
-}
-
-async function importBackupPackage(resetFirst?: unknown) {
-  const zipPath = await desktopOpenBackupPath()
-  if (!zipPath) {
-    return { cancelled: true, message: 'import cancelled' }
-  }
-  const shouldReset = Boolean(resetFirst)
-  const preflight = await desktopRpc<DestructivePreflight>('BackupImportPackagePreflightFromPath', [zipPath, shouldReset], { timeoutMs: 120000 })
-  if (!confirmPreflight(preflight)) {
-    return { cancelled: true, message: 'import cancelled' }
-  }
-  return desktopRpc('BackupImportPackageFromPathConfirmed', [
-    zipPath,
-    shouldReset,
-    { confirmed: true, confirmationToken: preflight.confirmationToken },
-  ], { timeoutMs: 120000 })
-}
-
-async function initializeSystemData() {
-  const preflight = await desktopRpc<DestructivePreflight>('BackupInitializeSystemPreflight', [], { timeoutMs: 120000 })
-  if (!confirmPreflight(preflight)) {
-    return { cancelled: true, message: 'initialize cancelled' }
-  }
-  return desktopRpc('BackupInitializeSystemConfirmed', [
-    { confirmed: true, confirmationToken: preflight.confirmationToken },
-  ], { timeoutMs: 120000 })
+  ) as BridgeAppProxy
 }
 
 async function restoreBrowserSnapshot(profileId?: unknown, snapshotId?: unknown) {
   const pid = String(profileId || '')
   const sid = String(snapshotId || '')
-  const preflight = await desktopRpc<DestructivePreflight>('BrowserSnapshotRestorePreflight', [pid, sid], { timeoutMs: 120000 })
-  if (!confirmPreflight(preflight)) {
+  const preflight = await desktopRpc<DesktopDestructivePreflight>('BrowserSnapshotRestorePreflight', [pid, sid], { timeoutMs: 120000 })
+  if (!confirmDestructivePreflight(preflight)) {
     return undefined
   }
   return desktopRpc('BrowserSnapshotRestoreConfirmed', [

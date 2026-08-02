@@ -110,6 +110,9 @@ func TestProperty4_SensitiveFieldMasking(t *testing.T) {
 			if sensitiveField == normalField {
 				return true
 			}
+			if normalizeSensitiveKey(sensitiveField) == normalizeSensitiveKey(normalField) {
+				return true
+			}
 
 			interceptor := NewMethodInterceptor(nil, InterceptorConfig{
 				Enabled:         true,

@@ -226,6 +226,130 @@ var migrations = []migration{
 				updated_at TEXT NOT NULL
 			)`,
 		},
+	}, {
+		version: 12,
+		desc:    "browser cores add kind",
+		stmts: []string{
+			`ALTER TABLE browser_cores ADD COLUMN kind TEXT NOT NULL DEFAULT 'chromium'`,
+		},
+	},
+	{
+		version: 13,
+		desc:    "scheduler tasks persist runtime state",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS scheduler_tasks (
+				id               TEXT PRIMARY KEY,
+				name             TEXT    NOT NULL,
+				trigger_type     TEXT    NOT NULL DEFAULT 'interval',
+				trigger_cron     TEXT    NOT NULL DEFAULT '',
+				trigger_interval TEXT    NOT NULL DEFAULT '',
+				trigger_event    TEXT    NOT NULL DEFAULT '',
+				actions          TEXT    NOT NULL DEFAULT '[]',
+				max_retries      INTEGER NOT NULL DEFAULT 3,
+				retry_delay      TEXT    NOT NULL DEFAULT '10s',
+				depends_on       TEXT    NOT NULL DEFAULT '[]',
+				profile_id       TEXT    NOT NULL DEFAULT '',
+				enabled          INTEGER NOT NULL DEFAULT 1,
+				created_at       TEXT    NOT NULL,
+				updated_at       TEXT    NOT NULL,
+				status           TEXT    NOT NULL DEFAULT 'idle',
+				last_run_at      TEXT    NOT NULL DEFAULT '',
+				last_error       TEXT    NOT NULL DEFAULT '',
+				retry_count      INTEGER NOT NULL DEFAULT 0
+			)`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'idle'`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN last_run_at TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`,
+		},
+	},
+	{
+		version: 14,
+		desc:    "profile trust bundles and asymmetric challenge log",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS profile_trust_bundles (
+				profile_id   TEXT PRIMARY KEY,
+				provider     TEXT NOT NULL DEFAULT 'generic',
+				payload      TEXT NOT NULL DEFAULT '{}',
+				updated_at   TEXT NOT NULL
+			)`,
+			`CREATE TABLE IF NOT EXISTS asymmetric_challenges (
+				id           TEXT PRIMARY KEY,
+				profile_id   TEXT NOT NULL,
+				site         TEXT NOT NULL DEFAULT '',
+				challenge_type TEXT NOT NULL DEFAULT '',
+				payload      TEXT NOT NULL DEFAULT '{}',
+				created_at   TEXT NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_asymmetric_challenges_profile_time
+				ON asymmetric_challenges(profile_id, created_at DESC)`,
+		},
+	},
+	{
+		version: 15,
+		desc:    "stealth state ip budget and probe scores",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS profile_stealth_state (
+				profile_id    TEXT PRIMARY KEY,
+				paused_until  TEXT NOT NULL DEFAULT '',
+				prefer_api    INTEGER NOT NULL DEFAULT 0,
+				creepjs_score REAL NOT NULL DEFAULT 0,
+				last_probe_at TEXT NOT NULL DEFAULT '',
+				cookies_ok    INTEGER NOT NULL DEFAULT 0,
+				updated_at    TEXT NOT NULL
+			)`,
+			`CREATE TABLE IF NOT EXISTS profile_ip_visits (
+				profile_id TEXT NOT NULL,
+				exit_ip    TEXT NOT NULL,
+				day_key    TEXT NOT NULL,
+				visit_count INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (profile_id, exit_ip, day_key)
+			)`,
+		},
+	},
+	{
+		version: 16,
+		desc:    "durable proxy subscription store",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS proxy_subscriptions (
+				subscription_id   TEXT PRIMARY KEY,
+				name              TEXT NOT NULL,
+				source_type       TEXT NOT NULL DEFAULT 'url',
+				source_url        TEXT NOT NULL DEFAULT '',
+				group_name        TEXT NOT NULL DEFAULT '',
+				auto_refresh      INTEGER NOT NULL DEFAULT 0,
+				refresh_interval_m INTEGER NOT NULL DEFAULT 0,
+				last_refresh_at   TEXT NOT NULL DEFAULT '',
+				last_error        TEXT NOT NULL DEFAULT '',
+				created_at        TEXT NOT NULL,
+				updated_at        TEXT NOT NULL
+			)`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_proxy_subscriptions_source_url
+				ON proxy_subscriptions(source_url) WHERE source_url != ''`,
+			`CREATE INDEX IF NOT EXISTS idx_proxy_subscriptions_auto_refresh
+				ON proxy_subscriptions(auto_refresh, last_refresh_at)`,
+		},
+	},
+	{
+		version: 17,
+		desc:    "persona_id on browser_profiles + account_health_daily rollup",
+		stmts: []string{
+			`ALTER TABLE browser_profiles ADD COLUMN persona_id TEXT NOT NULL DEFAULT ''`,
+			`CREATE TABLE IF NOT EXISTS account_health_daily (
+				profile_id   TEXT NOT NULL,
+				day_key      TEXT NOT NULL,
+				site         TEXT NOT NULL DEFAULT '',
+				challenges   INTEGER NOT NULL DEFAULT 0,
+				successes    INTEGER NOT NULL DEFAULT 0,
+				failures     INTEGER NOT NULL DEFAULT 0,
+				detector_ok  INTEGER NOT NULL DEFAULT 0,
+				detector_n   INTEGER NOT NULL DEFAULT 0,
+				updated_at   TEXT NOT NULL DEFAULT '',
+				PRIMARY KEY (profile_id, day_key, site)
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_account_health_daily_profile_day
+				ON account_health_daily(profile_id, day_key DESC)`,
+		},
 	},
 }
 
@@ -300,6 +424,16 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if err := db.ensureBrowserCoreKindColumn(); err != nil {
+		return err
+	}
+	if err := db.ensureSchedulerTaskRuntimeColumns(); err != nil {
+		return err
+	}
+	if err := db.ensureProxySubscriptionSchema(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -330,6 +464,167 @@ func (db *DB) applyMigration(m migration) error {
 	}
 
 	return tx.Commit()
+}
+
+func (db *DB) ensureProxySubscriptionSchema() error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS proxy_subscriptions (
+			subscription_id   TEXT PRIMARY KEY,
+			name              TEXT NOT NULL,
+			source_type       TEXT NOT NULL DEFAULT 'url',
+			source_url        TEXT NOT NULL DEFAULT '',
+			group_name        TEXT NOT NULL DEFAULT '',
+			auto_refresh      INTEGER NOT NULL DEFAULT 0,
+			refresh_interval_m INTEGER NOT NULL DEFAULT 0,
+			last_refresh_at   TEXT NOT NULL DEFAULT '',
+			last_error        TEXT NOT NULL DEFAULT '',
+			created_at        TEXT NOT NULL,
+			updated_at        TEXT NOT NULL
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_proxy_subscriptions_source_url
+			ON proxy_subscriptions(source_url) WHERE source_url != ''`,
+		`CREATE INDEX IF NOT EXISTS idx_proxy_subscriptions_auto_refresh
+			ON proxy_subscriptions(auto_refresh, last_refresh_at)`,
+	}
+	for _, statement := range statements {
+		if _, err := db.conn.Exec(statement); err != nil {
+			return fmt.Errorf("修复代理订阅 schema 失败: %w", err)
+		}
+	}
+	hasSourceID, err := db.tableHasColumn("browser_proxies", "source_id")
+	if err != nil {
+		return fmt.Errorf("检查 browser_proxies.source_id 失败: %w", err)
+	}
+	if hasSourceID {
+		if _, err := db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_browser_proxies_source_id ON browser_proxies(source_id)`); err != nil {
+			return fmt.Errorf("修复 browser_proxies.source_id 索引失败: %w", err)
+		}
+	}
+	return nil
+}
+
+func (db *DB) ensureBrowserCoreKindColumn() error {
+	hasKind, err := db.tableHasColumn("browser_cores", "kind")
+	if err != nil {
+		return fmt.Errorf("检查 browser_cores.kind 失败: %w", err)
+	}
+	if hasKind {
+		return nil
+	}
+	if _, err := db.conn.Exec(`ALTER TABLE browser_cores ADD COLUMN kind TEXT NOT NULL DEFAULT 'chromium'`); err != nil && !isColumnExistsError(err) {
+		return fmt.Errorf("修复 browser_cores.kind 失败: %w", err)
+	}
+	if _, err := db.conn.Exec(
+		`INSERT OR IGNORE INTO schema_migrations (version, desc) VALUES (?, ?)`,
+		12, "browser cores add kind",
+	); err != nil {
+		return fmt.Errorf("记录 browser_cores.kind 修复版本失败: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) ensureSchedulerTaskRuntimeColumns() error {
+	if _, err := db.conn.Exec(`CREATE TABLE IF NOT EXISTS scheduler_tasks (
+		id               TEXT PRIMARY KEY,
+		name             TEXT    NOT NULL,
+		trigger_type     TEXT    NOT NULL DEFAULT 'interval',
+		trigger_cron     TEXT    NOT NULL DEFAULT '',
+		trigger_interval TEXT    NOT NULL DEFAULT '',
+		trigger_event    TEXT    NOT NULL DEFAULT '',
+		actions          TEXT    NOT NULL DEFAULT '[]',
+		max_retries      INTEGER NOT NULL DEFAULT 3,
+		retry_delay      TEXT    NOT NULL DEFAULT '10s',
+		depends_on       TEXT    NOT NULL DEFAULT '[]',
+		profile_id       TEXT    NOT NULL DEFAULT '',
+		enabled          INTEGER NOT NULL DEFAULT 1,
+		created_at       TEXT    NOT NULL,
+		updated_at       TEXT    NOT NULL,
+		status           TEXT    NOT NULL DEFAULT 'idle',
+		last_run_at      TEXT    NOT NULL DEFAULT '',
+		last_error       TEXT    NOT NULL DEFAULT '',
+		retry_count      INTEGER NOT NULL DEFAULT 0
+	)`); err != nil {
+		return fmt.Errorf("确保 scheduler_tasks 表存在失败: %w", err)
+	}
+
+	columns := []struct {
+		name string
+		stmt string
+	}{
+		{"status", `ALTER TABLE scheduler_tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'idle'`},
+		{"last_run_at", `ALTER TABLE scheduler_tasks ADD COLUMN last_run_at TEXT NOT NULL DEFAULT ''`},
+		{"last_error", `ALTER TABLE scheduler_tasks ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`},
+		{"retry_count", `ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`},
+	}
+
+	for _, column := range columns {
+		hasColumn, err := db.tableHasColumn("scheduler_tasks", column.name)
+		if err != nil {
+			return fmt.Errorf("检查 scheduler_tasks.%s 失败: %w", column.name, err)
+		}
+		if hasColumn {
+			continue
+		}
+		if _, err := db.conn.Exec(column.stmt); err != nil && !isColumnExistsError(err) {
+			return fmt.Errorf("修复 scheduler_tasks.%s 失败: %w", column.name, err)
+		}
+	}
+
+	if _, err := db.conn.Exec(
+		`INSERT OR IGNORE INTO schema_migrations (version, desc) VALUES (?, ?)`,
+		13, "scheduler tasks persist runtime state",
+	); err != nil {
+		return fmt.Errorf("记录 scheduler_tasks runtime state 修复版本失败: %w", err)
+	}
+	if _, err := db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_tasks_profile_enabled ON scheduler_tasks(profile_id, enabled)`); err != nil {
+		return fmt.Errorf("创建 scheduler_tasks 复合索引失败: %w", err)
+	}
+	if _, err := db.conn.Exec(
+		`INSERT OR IGNORE INTO schema_migrations (version, desc) VALUES (?, ?)`,
+		14, "scheduler tasks profile enabled index",
+	); err != nil {
+		return fmt.Errorf("记录 scheduler_tasks 索引迁移失败: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) tableHasColumn(tableName, columnName string) (bool, error) {
+	if !isSafeIdentifier(tableName) {
+		return false, fmt.Errorf("invalid table name: %s", tableName)
+	}
+	rows, err := db.conn.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, tableName))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+		if strings.EqualFold(name, columnName) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func isSafeIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // isColumnExistsError 检查是否是列已存在的错误（SQLite 错误信息）

@@ -1,5 +1,32 @@
-import { EventsOn } from '../../wailsjs/runtime'
-import { desktopRpc } from '../../services/desktop'
+import {
+  browserInstanceStatus,
+  desktopRuntimeListen,
+  identityReportProfile,
+  synchronizerActivateProfile,
+  synchronizerArrangeProfiles,
+  synchronizerBroadcastNavigate,
+  synchronizerBroadcastRefresh,
+  synchronizerCaptureScreenshot,
+  synchronizerGetOperationLog,
+  synchronizerListGroups,
+  synchronizerListTasks,
+  synchronizerNavigateProfile,
+  synchronizerRefreshProfile,
+  synchronizerSaveTasks,
+  workbenchFingerprintHealthProfile,
+  workbenchFingerprintProfile,
+  workbenchGetUiState,
+  workbenchListDetectionResults,
+  workbenchListDetectorSites,
+  workbenchRunDetectorSite,
+  workbenchSaveDetectionResult,
+  workbenchSaveUiState,
+} from '../../services/desktop'
+import type {
+  DesktopCoreSyncGroup,
+  DesktopCoreSyncWindow,
+  DesktopCoreWorkbenchTask,
+} from '../../types/desktop'
 import type { BrowserProfile } from '../browser/types'
 import type {
   BrowserInstanceLifecycleEvent,
@@ -8,6 +35,7 @@ import type {
   FingerprintHealthLevel,
   SyncGroup,
   SyncOperation,
+  SyncWindow,
   SyncWindowPlacement,
   WorkbenchDetectionKind,
   WorkbenchDetectionResult,
@@ -19,9 +47,6 @@ import type {
   WorkbenchTask,
   WorkbenchUiState,
 } from './types'
-
-// Sidecar RPC stays routed through services/desktop.ts, which owns Tauri invoke.
-const backendCall = <T>(name: string, ...args: unknown[]): Promise<T> => desktopRpc<T>(name, args)
 
 type Unsubscribe = () => void
 
@@ -35,11 +60,7 @@ const INSTANCE_EVENT_NAMES: BrowserInstanceLifecycleEventName[] = [
 function noop() {}
 
 function onRuntimeEvent<T>(eventName: string, callback: (payload: T) => void): Unsubscribe {
-  try {
-    return EventsOn(eventName, (payload: T) => callback(payload))
-  } catch {
-    return noop
-  }
+  return desktopRuntimeListen(eventName, callback)
 }
 
 function combineUnsubscribes(offs: Unsubscribe[]): Unsubscribe {
@@ -222,6 +243,7 @@ function normalizeIdentityReport(
       fingerprintVisible: clampScore(readNumber(rawSubscores, ['fingerprintVisible'], 0)),
       consistency: clampScore(readNumber(rawSubscores, ['consistency'], 0)),
       profilePersistence: clampScore(readNumber(rawSubscores, ['profilePersistence'], 0)),
+      longTermCoherence: clampScore(readNumber(rawSubscores, ['longTermCoherence'], 0)),
       proxyNetwork: clampScore(readNumber(rawSubscores, ['proxyNetwork'], 0)),
       behaviorNaturalness: clampScore(readNumber(rawSubscores, ['behaviorNaturalness'], 0)),
       automationSafety: clampScore(readNumber(rawSubscores, ['automationSafety'], 0)),
@@ -375,47 +397,91 @@ export function onBrowserInstanceLifecycle(
   )))
 }
 
+// Desktop RPC widens literal unions to plain `string`. Narrow them back to
+// the module surface types with safe fallbacks so consumers see exact unions.
+const SYNC_WINDOW_STATUSES: readonly string[] = ['running', 'loading']
+const WORKBENCH_TASK_TYPES: readonly string[] = ['start', 'stop', 'navigate', 'refresh', 'activate', 'fingerprint-health', 'screenshot']
+const WORKBENCH_TASK_STATUSES: readonly string[] = ['pending', 'running', 'success', 'error']
+
+function normalizeSyncWindow(row: DesktopCoreSyncWindow): SyncWindow {
+  const status = SYNC_WINDOW_STATUSES.includes(row.status) ? row.status as SyncWindow['status'] : 'loading'
+  return {
+    profileId: row.profileId,
+    profileName: row.profileName,
+    url: row.url,
+    title: row.title,
+    debugPort: row.debugPort,
+    pid: row.pid,
+    status,
+    groupId: row.groupId,
+  }
+}
+
+function normalizeSyncGroup(row: DesktopCoreSyncGroup): SyncGroup {
+  return {
+    id: row.id,
+    name: row.name,
+    windows: (row.windows || []).map(normalizeSyncWindow),
+  }
+}
+
+function normalizeWorkbenchTask(row: DesktopCoreWorkbenchTask): WorkbenchTask {
+  const type = WORKBENCH_TASK_TYPES.includes(row.type) ? row.type as WorkbenchTask['type'] : 'navigate'
+  const status = WORKBENCH_TASK_STATUSES.includes(row.status) ? row.status as WorkbenchTask['status'] : 'error'
+  return {
+    id: row.id,
+    type,
+    profileId: row.profileId,
+    profileName: row.profileName,
+    detail: row.detail,
+    status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    error: row.error,
+  }
+}
+
 export function listSyncGroups(): Promise<SyncGroup[]> {
-  return backendCall<SyncGroup[]>('SynchronizerListGroups')
+  return synchronizerListGroups().then(groups => (groups || []).map(normalizeSyncGroup))
 }
 
 export function broadcastNavigate(groupId: string, url: string): Promise<void> {
-  return backendCall('SynchronizerBroadcastNavigate', groupId, url)
+  return synchronizerBroadcastNavigate(groupId, url)
 }
 
 export function broadcastRefresh(groupId: string): Promise<void> {
-  return backendCall('SynchronizerBroadcastRefresh', groupId)
+  return synchronizerBroadcastRefresh(groupId)
 }
 
 export function navigateProfile(profileId: string, url: string): Promise<void> {
-  return backendCall('SynchronizerNavigateProfile', profileId, url)
+  return synchronizerNavigateProfile(profileId, url)
 }
 
 export function refreshProfile(profileId: string): Promise<void> {
-  return backendCall('SynchronizerRefreshProfile', profileId)
+  return synchronizerRefreshProfile(profileId)
 }
 
 export function captureProfileScreenshot(profileId: string): Promise<string> {
-  return backendCall<string>('SynchronizerCaptureScreenshot', profileId)
+  return synchronizerCaptureScreenshot(profileId)
 }
 
 export function activateProfileWindow(profileId: string): Promise<void> {
-  return backendCall('SynchronizerActivateProfile', profileId)
+  return synchronizerActivateProfile(profileId)
 }
 
 export function getBrowserInstanceStatus(profileId: string): Promise<BrowserProfile | null> {
-  return backendCall<BrowserProfile | null>('BrowserInstanceStatus', profileId)
+  return browserInstanceStatus(profileId)
 }
 
 export async function checkWorkbenchFingerprintHealthProfile(profileId: string): Promise<WorkbenchFingerprintHealthProfile> {
   try {
     return normalizeFingerprintHealthProfile(
       profileId,
-      await backendCall<unknown>('WorkbenchFingerprintHealthProfile', profileId),
+      await workbenchFingerprintHealthProfile(profileId),
     )
   } catch (error) {
     if (!isMissingBackendFunction(error)) throw error
-    const fingerprint = await backendCall<WorkbenchFingerprintSnapshot>('WorkbenchFingerprintProfile', profileId)
+    const fingerprint = await workbenchFingerprintProfile(profileId)
     return buildHealthFromSnapshot(profileId, fingerprint)
   }
 }
@@ -423,24 +489,24 @@ export async function checkWorkbenchFingerprintHealthProfile(profileId: string):
 export async function checkWorkbenchIdentityReport(profileId: string): Promise<WorkbenchIdentityStrengthReport> {
   return normalizeIdentityReport(
     profileId,
-    await backendCall<unknown>('IdentityReportProfile', profileId),
+    await identityReportProfile(profileId),
   )
 }
 
 export function arrangeProfileWindows(profileIds: string[], layout: 'grid' | 'main-left'): Promise<SyncWindowPlacement[]> {
-  return backendCall<SyncWindowPlacement[]>('SynchronizerArrangeProfiles', profileIds, layout)
+  return synchronizerArrangeProfiles(profileIds, layout)
 }
 
 export function getSyncOperationLog(limit?: number): Promise<SyncOperation[]> {
-  return backendCall<SyncOperation[]>('SynchronizerGetOperationLog', limit ?? 50)
+  return synchronizerGetOperationLog(limit ?? 50)
 }
 
 export function listWorkbenchTasks(limit?: number): Promise<WorkbenchTask[]> {
-  return backendCall<WorkbenchTask[]>('SynchronizerListTasks', limit ?? 200)
+  return synchronizerListTasks(limit ?? 200).then(tasks => (tasks || []).map(normalizeWorkbenchTask))
 }
 
 export function saveWorkbenchTasks(tasks: WorkbenchTask[]): Promise<void> {
-  return backendCall('SynchronizerSaveTasks', tasks)
+  return synchronizerSaveTasks(tasks)
 }
 
 export async function listWorkbenchDetectionResults(
@@ -448,41 +514,39 @@ export async function listWorkbenchDetectionResults(
   kind: WorkbenchDetectionKind | '' = '',
   limit = 50,
 ): Promise<WorkbenchDetectionResult[]> {
-  const results = await backendCall<unknown[]>('WorkbenchListDetectionResults', profileId, kind, limit)
-  return Array.isArray(results) ? results.map(normalizeDetectionResult) : []
+  const results = await workbenchListDetectionResults(profileId, kind, limit)
+  return results.map(normalizeDetectionResult)
 }
 
 export function saveWorkbenchDetectionResult(result: WorkbenchDetectionResult): Promise<void> {
-  return backendCall('WorkbenchSaveDetectionResult', result)
+  return workbenchSaveDetectionResult(result)
 }
 
 export async function getWorkbenchUiState(): Promise<WorkbenchUiState> {
-  return normalizeUiState(await backendCall<unknown>('WorkbenchGetUiState'))
+  return normalizeUiState(await workbenchGetUiState())
 }
 
 export function saveWorkbenchUiState(state: WorkbenchUiState): Promise<void> {
-  return backendCall('WorkbenchSaveUiState', state)
+  return workbenchSaveUiState(state)
 }
 
 export async function listWorkbenchDetectorSites(): Promise<WorkbenchDetectorSite[]> {
-  const results = await backendCall<unknown[]>('WorkbenchListDetectorSites')
-  return Array.isArray(results)
-    ? results.map((item) => {
-      const source = readRecord(item)
-      return {
-        id: readString(source, ['id']),
-        name: readString(source, ['name']),
-        url: readString(source, ['url']),
-        enabled: source.enabled !== false,
-        defaultOn: Boolean(source.defaultOn),
-        gate: readString(source, ['gate'], 'medium'),
-        traceWarning: readString(source, ['traceWarning']),
-        notes: readString(source, ['notes']),
-      }
-    })
-    : []
+  const results = await workbenchListDetectorSites()
+  return results.map((item) => {
+    const source = readRecord(item)
+    return {
+      id: readString(source, ['id']),
+      name: readString(source, ['name']),
+      url: readString(source, ['url']),
+      enabled: source.enabled !== false,
+      defaultOn: Boolean(source.defaultOn),
+      gate: readString(source, ['gate'], 'medium'),
+      traceWarning: readString(source, ['traceWarning']),
+      notes: readString(source, ['notes']),
+    }
+  })
 }
 
 export async function runWorkbenchDetectorSite(profileId: string, detectorId: string): Promise<WorkbenchDetectionResult> {
-  return normalizeDetectionResult(await backendCall<unknown>('WorkbenchRunDetectorSite', profileId, detectorId))
+  return normalizeDetectionResult(await workbenchRunDetectorSite(profileId, detectorId))
 }

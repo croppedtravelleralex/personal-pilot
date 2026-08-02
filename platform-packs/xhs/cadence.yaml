@@ -1,0 +1,6 @@
+nurture:
+  sessionMinutes: [8, 15]
+  scrollPauseMs: [1200, 2800]
+  maxActionsPerSession: 12
+login:
+  otpWaitSeconds: 120

@@ -183,7 +183,8 @@ export function randomFingerprintSeed(): string {
   const buf = new Uint32Array(1)
   crypto.getRandomValues(buf)
   // Ensure positive and within int32 range (1 .. 2147483647)
-  return String((buf[0] % 2147483647) + 1)
+  const value = buf[0] ?? 0
+  return String((value % 2147483647) + 1)
 }
 
 // ─── 预设指纹配置 ────────────────────────────────────────────────────────────

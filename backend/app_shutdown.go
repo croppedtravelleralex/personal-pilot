@@ -39,6 +39,8 @@ func (a *App) stopRuntimeServices() {
 			a.speedScheduler = nil
 		}
 
+		a.stopProxyIPMonitor()
+
 		if a.ruleEngine != nil {
 			a.ruleEngine.Stop()
 			a.ruleEngine = nil

@@ -28,6 +28,30 @@ export interface BrowserProfile {
   behaviorProfileId?: string
 }
 
+export interface BrowserRuntimeEventPayload {
+  profileId: string
+  profileName?: string
+  debugPort?: number
+  debugReady?: boolean
+  pid?: number
+  running?: boolean
+  reused?: boolean
+  runtimeWarning?: string
+  error?: string
+}
+
+export type BrowserInstanceRuntimeEventName =
+  | 'browser:instance:started'
+  | 'browser:instance:updated'
+  | 'browser:instance:stopped'
+  | 'browser:instance:crashed'
+
+export interface BrowserInstanceRuntimeEvent {
+  eventName: BrowserInstanceRuntimeEventName
+  payload: BrowserRuntimeEventPayload
+  rawPayload: unknown
+}
+
 export interface BrowserProfileInput {
   profileName: string
   userDataDir: string
@@ -62,13 +86,17 @@ export interface BrowserCore {
   coreId: string
   coreName: string
   corePath: string
+  kind?: BrowserCoreKind
   isDefault: boolean
 }
+
+export type BrowserCoreKind = 'chromium' | 'lightpanda' | 'camoufox'
 
 export interface BrowserCoreInput {
   coreId: string
   coreName: string
   corePath: string
+  kind?: BrowserCoreKind
   isDefault: boolean
 }
 
@@ -108,7 +136,7 @@ export interface ProxyIPHealthResult {
   region: string
   city: string
   asOrganization: string
-  rawData: Record<string, any>
+  rawData: Record<string, unknown>
   updatedAt: string
 }
 
@@ -227,7 +255,6 @@ export interface RecordingExportBundle {
   exportedAt?: string
   recording?: Recording
   recordings?: Recording[]
-  [key: string]: unknown
 }
 
 export interface ActiveRecordingStatus {

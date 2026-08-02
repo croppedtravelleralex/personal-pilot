@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/logger"
+	transportpkg "personal-pilot/backend/internal/transport"
 )
 
 // ─── Clash 标准测速 URL ───
@@ -40,10 +43,10 @@ var DefaultSpeedTestConfig = SpeedTestConfig{
 // 采用 unified-delay 策略：先建立连接（预热），再单独计时 HTTP 往返，
 // 与 Clash 客户端 unified-delay: true 的延迟结果一致。
 func SpeedTest(
+	ctx context.Context,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	cfg *SpeedTestConfig,
 ) TestResult {
 	log := logger.New("SpeedTest")
@@ -75,8 +78,8 @@ func SpeedTest(
 	}
 
 	// 将代理配置转换为 mihomo mapping
-	if RequiresBridge(src, proxies, proxyId) || IsSingBoxProtocol(src) {
-		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
+	if findBridgeManager(src, managers) != nil {
+		return httpClientDelayTest(ctx, proxyId, src, proxies, managers, testURL, cfg.Timeout)
 	}
 
 	mapping, err := proxyConfigToMapping(src)
@@ -85,7 +88,7 @@ func SpeedTest(
 			logger.F("proxy_id", proxyId),
 			logger.F("error", err.Error()),
 		)
-		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
+		return httpClientDelayTest(ctx, proxyId, src, proxies, managers, testURL, cfg.Timeout)
 	}
 
 	// 使用 mihomo adapter.ParseProxy 创建代理实例
@@ -96,7 +99,7 @@ func SpeedTest(
 			logger.F("error", err.Error()),
 			logger.F("type", mapping["type"]),
 		)
-		return httpClientDelayTest(proxyId, src, proxies, xrayMgr, singboxMgr, testURL, cfg.Timeout)
+		return httpClientDelayTest(ctx, proxyId, src, proxies, managers, testURL, cfg.Timeout)
 	}
 
 	// unified-delay 测速：分离连接建立和 HTTP 往返计时
@@ -105,19 +108,19 @@ func SpeedTest(
 
 // httpClientDelayTest 通过实际 HTTP 请求检测代理出口，避免把远端 TCP 可达误判为可用出口。
 func httpClientDelayTest(
+	ctx context.Context,
 	proxyId string,
 	src string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	testURL string,
 	timeout time.Duration,
 ) TestResult {
-	client, err := buildProxyHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, timeout)
+	client, err := buildProxyHTTPClient(src, proxyId, proxies, managers, timeout)
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, Error: err.Error()}
 	}
-	latency, statusCode, err := checkHTTPClientGET(context.Background(), client, testURL, "PersonalPilot/1.0")
+	latency, statusCode, err := checkHTTPClientGET(ctx, client, testURL, transportpkg.ProductUserAgent)
 	if err != nil {
 		return TestResult{ProxyId: proxyId, Ok: false, LatencyMs: latency, Error: err.Error()}
 	}
@@ -223,7 +226,7 @@ func urlToMeta(rawURL string) (C.Metadata, error) {
 // ─── 代理配置转换为 mihomo mapping ───
 
 func proxyConfigToMapping(src string) (map[string]any, error) {
-	src = strings.TrimSpace(src)
+	src = NormalizeStandardProxyScheme(src)
 	l := strings.ToLower(src)
 
 	// http/https 直连代理
@@ -245,25 +248,14 @@ func proxyConfigToMapping(src string) (map[string]any, error) {
 }
 
 func parseStandardProxy(src string, proxyType string) (map[string]any, error) {
-	rest := src[strings.Index(src, "://")+3:]
-
-	var username, password, hostport string
-	if atIdx := strings.LastIndex(rest, "@"); atIdx >= 0 {
-		userInfo := rest[:atIdx]
-		hostport = rest[atIdx+1:]
-		parts := strings.SplitN(userInfo, ":", 2)
-		username = parts[0]
-		if len(parts) > 1 {
-			password = parts[1]
-		}
-	} else {
-		hostport = rest
+	u, err := url.Parse(NormalizeStandardProxyScheme(src))
+	if err != nil {
+		return nil, fmt.Errorf("无法解析地址: %s", RedactProxyURL(src))
 	}
-	hostport = strings.SplitN(hostport, "/", 2)[0]
-
-	host, port := splitHostPort(hostport)
+	host := strings.TrimSpace(u.Hostname())
+	port, _ := strconv.Atoi(u.Port())
 	if host == "" || port == 0 {
-		return nil, fmt.Errorf("无法解析地址: %s", src)
+		return nil, fmt.Errorf("无法解析地址: %s", RedactProxyURL(src))
 	}
 
 	mapping := map[string]any{
@@ -272,7 +264,9 @@ func parseStandardProxy(src string, proxyType string) (map[string]any, error) {
 		"server": host,
 		"port":   port,
 	}
-	if username != "" {
+	if u.User != nil && strings.TrimSpace(u.User.Username()) != "" {
+		username := strings.TrimSpace(u.User.Username())
+		password, _ := u.User.Password()
 		mapping["username"] = username
 		mapping["password"] = password
 	}

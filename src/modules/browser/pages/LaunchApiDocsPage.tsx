@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { isValidElement, useEffect, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize from 'rehype-sanitize'
 import { CheckCircle, ChevronRight, Copy, FileText } from 'lucide-react'
 import { toast } from '../../../shared/components'
-import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
+import { desktopOpenExternalUrl } from '../../../services/desktop'
 import { fetchLaunchServerInfo, type LaunchServerInfo } from '../api'
 
 // ============================================================================
@@ -275,6 +277,9 @@ const DOC_API_INDEX = `# 接口总览
 |------|------|------|------|
 | 健康检查 | GET | \`/api/health\` | 检查 Launch 服务是否可用 |
 | 实例配置管理 | GET / POST | \`/api/profiles\` | 查询实例列表，或创建包含代理/标签/关键字/分组的实例配置 |
+| 代理订阅管理 | POST / GET / DELETE | \`/api/proxy/subscribe\`、\`/api/proxy/subscribe/list\`、\`/api/proxy/subscribe/{id}\` | SQLite 持久化订阅源与所属代理节点 |
+| 订阅刷新与预览 | POST / GET | \`/api/proxy/subscribe/{id}/refresh\`、\`/validate\`、\`/nodes\` | 事务刷新、只读预览和脱敏节点列表 |
+| Clash 静态导入 | POST | \`/api/proxy/subscribe/import-clash\` | 从 Clash YAML 创建不可自动刷新的静态订阅 |
 | 单实例配置管理 | GET / PUT / DELETE | \`/api/profiles/{profileId}\` | 查询、更新、删除指定实例配置 |
 | 按 Code 启动 | GET | \`/api/launch/{code}\` | 兼容旧版、最快捷的唤起方式 |
 | 选择器启动 | POST | \`/api/launch\` | 支持 code / profileId / 名称 / 关键字 / 标签 / 分组 |
@@ -1406,10 +1411,29 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
+type MarkdownCodeElementProps = {
+  className?: string
+  children?: ReactNode
+}
+
+function readMarkdownCodeBlock(children: ReactNode) {
+  const child = Array.isArray(children) ? children[0] : children
+  if (!isValidElement<MarkdownCodeElementProps>(child)) {
+    return { lang: '', codeText: '' }
+  }
+
+  const className = typeof child.props.className === 'string' ? child.props.className : ''
+  return {
+    lang: className.replace('language-', ''),
+    codeText: child.props.children ?? '',
+  }
+}
+
 function MarkdownContent({ content }: { content: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw, rehypeSanitize]}
       components={{
         h1: ({ children }) => (
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-6 pb-3 border-b border-[var(--color-border-default)]">
@@ -1453,9 +1477,7 @@ function MarkdownContent({ content }: { content: string }) {
           )
         },
         pre: ({ children }) => {
-          const codeEl = (children as any)?.props
-          const lang = codeEl?.className?.replace('language-', '') || ''
-          const codeText = codeEl?.children || ''
+          const { lang, codeText } = readMarkdownCodeBlock(children)
           return (
             <div className="my-4 rounded-lg overflow-hidden border border-[var(--color-border-default)]">
               <div className="flex items-center justify-between px-4 py-2 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-muted)]">
@@ -1503,7 +1525,7 @@ function MarkdownContent({ content }: { content: string }) {
             onClick={(e) => {
               e.preventDefault()
               if (href) {
-                BrowserOpenURL(href)
+                desktopOpenExternalUrl(href)
               }
             }}
             className="text-[var(--color-accent)] hover:underline cursor-pointer"

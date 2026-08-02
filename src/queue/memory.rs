@@ -1,0 +1,67 @@
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
+
+#[derive(Debug, Clone)]
+pub struct MemoryTaskQueue {
+    inner: Arc<Mutex<VecDeque<String>>>,
+}
+
+impl MemoryTaskQueue {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    pub fn push(&self, task_id: String) {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.push_back(task_id);
+    }
+
+    pub fn push_unique(&self, task_id: String) -> bool {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if guard.iter().any(|id| id == &task_id) {
+            false
+        } else {
+            guard.push_back(task_id);
+            true
+        }
+    }
+
+    pub fn pop(&self) -> Option<String> {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.pop_front()
+    }
+
+    pub fn remove(&self, task_id: &str) -> bool {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(index) = guard.iter().position(|id| id == task_id) {
+            guard.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        let guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.len()
+    }
+}

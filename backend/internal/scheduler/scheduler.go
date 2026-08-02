@@ -259,6 +259,7 @@ func (s *Scheduler) executeTask(task *TaskDef) {
 	}()
 
 	task.SetStatus(StatusRunning)
+	s.persistTaskRuntime(task)
 
 	s.emit("automation:task:started", map[string]interface{}{
 		"taskId":    task.ID,
@@ -281,6 +282,7 @@ func (s *Scheduler) executeTask(task *TaskDef) {
 		task.lastError = err.Error()
 		task.retryCount++
 		task.mu.Unlock()
+		s.persistTaskRuntime(task)
 
 		s.log.Warn("任务执行失败",
 			logger.F("task_id", task.ID),
@@ -295,6 +297,7 @@ func (s *Scheduler) executeTask(task *TaskDef) {
 			}
 			time.AfterFunc(delay, func() {
 				task.SetStatus(StatusIdle)
+				s.persistTaskRuntime(task)
 			})
 			s.emit("automation:task:retried", map[string]interface{}{
 				"taskId":     task.ID,
@@ -303,6 +306,7 @@ func (s *Scheduler) executeTask(task *TaskDef) {
 			})
 		} else {
 			task.SetStatus(StatusFailed)
+			s.persistTaskRuntime(task)
 			s.emit("automation:task:failed", map[string]interface{}{
 				"taskId": task.ID,
 				"error":  err.Error(),
@@ -311,7 +315,9 @@ func (s *Scheduler) executeTask(task *TaskDef) {
 		return
 	}
 
+	task.ClearLastError()
 	task.SetStatus(StatusDone)
+	s.persistTaskRuntime(task)
 
 	s.emit("automation:task:completed", map[string]interface{}{
 		"taskId":   task.ID,
@@ -368,6 +374,15 @@ func (s *Scheduler) emit(eventName string, data map[string]interface{}) {
 		return
 	}
 	s.emitFn(eventName, data)
+}
+
+func (s *Scheduler) persistTaskRuntime(task *TaskDef) {
+	if err := s.store.Save(task); err != nil {
+		s.log.Warn("保存任务运行状态失败",
+			logger.F("task_id", task.ID),
+			logger.F("error", err),
+		)
+	}
 }
 
 // NoopRunner is a task runner that does nothing (for testing).

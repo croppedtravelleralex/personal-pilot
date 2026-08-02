@@ -274,6 +274,10 @@ export function BrowserProxyCheckIPHealth(arg1) {
   return window['go']['main']['App']['BrowserProxyCheckIPHealth'](arg1);
 }
 
+export function BrowserProxyDelete(arg1) {
+  return window['go']['main']['App']['BrowserProxyDelete'](arg1);
+}
+
 export function BrowserProxyFetchClashByURL(arg1) {
   return window['go']['main']['App']['BrowserProxyFetchClashByURL'](arg1);
 }
@@ -432,26 +436,6 @@ export function GetRunningInstances() {
 
 export function IdentityReportProfile(arg1) {
   return window['go']['main']['App']['IdentityReportProfile'](arg1);
-}
-
-export function InitLLMClient() {
-  return window['go']['main']['App']['InitLLMClient']();
-}
-
-export function LLMExecuteTask(arg1, arg2) {
-  return window['go']['main']['App']['LLMExecuteTask'](arg1, arg2);
-}
-
-export function LLMGetOffsetLibrary() {
-  return window['go']['main']['App']['LLMGetOffsetLibrary']();
-}
-
-export function LLMHasKey() {
-  return window['go']['main']['App']['LLMHasKey']();
-}
-
-export function LLMPlanOnly(arg1) {
-  return window['go']['main']['App']['LLMPlanOnly'](arg1);
 }
 
 export function ListGroups() {

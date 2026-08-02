@@ -4,10 +4,10 @@
   "version": "1.1.0",
   "identifier": "local.personal-pilot.desktop",
   "build": {
-    "beforeDevCommand": "npm run build:sidecar && npm run dev",
-    "beforeBuildCommand": "npm run build:sidecar && npm run build",
-    "devUrl": "http://127.0.0.1:5218",
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
   },
   "app": {
     "windows": [
@@ -18,8 +18,11 @@
         "height": 800,
         "minWidth": 960,
         "minHeight": 640,
+        "center": true,
+        "devtools": false,
         "resizable": true,
-        "devtools": false
+        "fullscreen": false,
+        "maximized": false
       }
     ],
     "security": {
@@ -30,15 +33,10 @@
     "active": true,
     "targets": "nsis",
     "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
       "icons/icon.ico"
-    ],
-    "externalBin": [
-      "../bin/personal-pilot-core"
-    ],
-    "windows": {
-      "nsis": {
-        "installerIcon": "../build/windows/icon.ico"
-      }
-    }
+    ]
   }
 }

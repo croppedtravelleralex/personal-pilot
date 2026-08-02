@@ -13,6 +13,7 @@ import (
 	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/fsutil"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/transport"
 	goruntime "runtime"
 	"strconv"
 	"strings"
@@ -53,12 +54,12 @@ func NewXrayManager(cfg *config.Config, appRoot string) *XrayManager {
 // ValidateProxyConfig 验证代理配置是否支持
 // 返回: supported bool, errorMsg string
 func ValidateProxyConfig(proxyConfig string, proxies []config.BrowserProxy, proxyId string) (bool, string) {
-	src := strings.TrimSpace(proxyConfig)
+	src := NormalizeStandardProxyScheme(proxyConfig)
 	found := false
 	if proxyId != "" {
 		for _, item := range proxies {
 			if strings.EqualFold(item.ProxyId, proxyId) {
-				src = strings.TrimSpace(item.ProxyConfig)
+				src = NormalizeStandardProxyScheme(item.ProxyConfig)
 				found = true
 				break
 			}
@@ -75,6 +76,11 @@ func ValidateProxyConfig(proxyConfig string, proxies []config.BrowserProxy, prox
 		return true, "" // 无代理配置，允许启动
 	}
 	if strings.EqualFold(src, "direct://") {
+		return true, ""
+	}
+	if _, ok, err := ParseSSHTunnelDirective(src); err != nil {
+		return false, fmt.Sprintf("代理 SSH 转发参数无效: %v", err)
+	} else if ok {
 		return true, ""
 	}
 	l := strings.ToLower(src)
@@ -105,11 +111,11 @@ func ValidateProxyConfig(proxyConfig string, proxies []config.BrowserProxy, prox
 // 注意: Xray 仅支持 vless/vmess/trojan/shadowsocks 等协议
 // hysteria2 不支持，需要使用 Hysteria 客户端或 sing-box
 func RequiresBridge(proxyConfig string, proxies []config.BrowserProxy, proxyId string) bool {
-	src := strings.TrimSpace(proxyConfig)
+	src := NormalizeStandardProxyScheme(proxyConfig)
 	if proxyId != "" {
 		for _, item := range proxies {
 			if strings.EqualFold(item.ProxyId, proxyId) {
-				src = strings.TrimSpace(item.ProxyConfig)
+				src = NormalizeStandardProxyScheme(item.ProxyConfig)
 				break
 			}
 		}
@@ -173,6 +179,12 @@ func (m *XrayManager) ReleaseBridge(key string) {
 }
 
 // StopAll 关闭所有 xray 桥接进程。
+var _ BridgeManager = (*XrayManager)(nil)
+
+func (m *XrayManager) CanHandle(proxyConfig string) bool {
+	return RequiresBridge(proxyConfig, nil, "")
+}
+
 func (m *XrayManager) StopAll() {
 	m.stopOnce.Do(func() {
 		close(m.stopCh)
@@ -253,14 +265,14 @@ func (m *XrayManager) ensureBridge(proxyConfig string, proxies []config.BrowserP
 		hideWindow(cmd)
 		cmd.Dir = filepath.Dir(cfgPath)
 		stderrPath := filepath.Join(filepath.Dir(cfgPath), "xray-stderr.log")
-		stderrFile, _ := os.Create(stderrPath)
-		if stderrFile != nil {
+		stderrFile, err := os.Create(stderrPath)
+		if err != nil {
+			log.Warn("xray stderr 文件创建失败", logger.F("error", err))
+		} else {
 			cmd.Stderr = stderrFile
+			defer stderrFile.Close()
 		}
 		if err := cmd.Start(); err != nil {
-			if stderrFile != nil {
-				stderrFile.Close()
-			}
 			log.Error("xray 启动失败", logger.F("error", err), logger.F("attempt", attempt))
 			lastErr = err
 			continue
@@ -276,9 +288,6 @@ func (m *XrayManager) ensureBridge(proxyConfig string, proxies []config.BrowserP
 		}
 		log.Info("xray 启动", logger.F("key", key), logger.F("pid", bridge.Pid), logger.F("port", bridge.Port), logger.F("attempt", attempt))
 		if err := waitPortReady("127.0.0.1", port, 10*time.Second); err != nil {
-			if stderrFile != nil {
-				stderrFile.Close()
-			}
 			// 优先读 stderr，再读 xray-error.log
 			if stderrContent, readErr := os.ReadFile(stderrPath); readErr == nil && len(stderrContent) > 0 {
 				log.Error("xray stderr", logger.F("output", string(stderrContent)))
@@ -299,10 +308,6 @@ func (m *XrayManager) ensureBridge(proxyConfig string, proxies []config.BrowserP
 			time.Sleep(200 * time.Millisecond)
 			continue
 		}
-		if stderrFile != nil {
-			stderrFile.Close()
-		}
-
 		if socksURL, reused := m.registerBridge(key, bridge, pin); reused {
 			log.Info("复用已就绪桥接进程", logger.F("key", key), logger.F("socks_url", socksURL))
 			bridge.Stopping = true
@@ -601,6 +606,9 @@ func (m *XrayManager) buildRuntimeConfig(key string, outbound map[string]interfa
 		return "", err
 	}
 	cfgPath := filepath.Join(baseDir, "xray-config.json")
+	// 49-C4: bind TLS template to product Chrome major (not fixed chrome-stable).
+	transportProfile := transport.ChromeMajorTLSBaseline(transport.DefaultChromeMajor)
+	outbound["streamSettings"] = mergeXrayStreamSettings(outbound["streamSettings"], transportProfile)
 	cfg := map[string]interface{}{
 		"log": map[string]interface{}{
 			"loglevel": "info",
@@ -635,6 +643,12 @@ func (m *XrayManager) buildRuntimeConfig(key string, outbound map[string]interfa
 			"rules": []interface{}{
 				map[string]interface{}{
 					"type":        "field",
+					"network":     "udp",
+					"port":        53,
+					"outboundTag": "proxy-out",
+				},
+				map[string]interface{}{
+					"type":        "field",
 					"inboundTag":  []string{"socks-in"},
 					"outboundTag": "proxy-out",
 				},
@@ -648,10 +662,40 @@ func (m *XrayManager) buildRuntimeConfig(key string, outbound map[string]interfa
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, data, 0600); err != nil {
 		return "", err
 	}
 	return cfgPath, nil
+}
+
+func mergeXrayStreamSettings(existing interface{}, profile transport.OutboundConfig) map[string]interface{} {
+	settings := map[string]interface{}{}
+	if source, ok := existing.(map[string]interface{}); ok {
+		for key, value := range source {
+			settings[key] = value
+		}
+	}
+	if len(profile.TLS.ALPN) > 0 && strings.EqualFold(fmt.Sprint(settings["security"]), "tls") {
+		tlsSettings, _ := settings["tlsSettings"].(map[string]interface{})
+		if tlsSettings == nil {
+			tlsSettings = map[string]interface{}{}
+		}
+		tlsSettings["alpn"] = append([]string{}, profile.TLS.ALPN...)
+		settings["tlsSettings"] = tlsSettings
+	}
+	// Attach utls fingerprint when TLS security is enabled (template label, not observed JA3).
+	if ja3 := strings.TrimSpace(profile.TLS.JA3); ja3 != "" && strings.EqualFold(fmt.Sprint(settings["security"]), "tls") {
+		fp := strings.ToLower(strings.TrimPrefix(ja3, "Chrome_"))
+		if fp == "" || strings.EqualFold(fp, "auto") {
+			fp = "chrome"
+		}
+		settings["utls"] = map[string]any{
+			"enabled":         true,
+			"fingerprint":     fp,
+			"fingerprint_tag": ja3,
+		}
+	}
+	return settings
 }
 
 func (m *XrayManager) resolveWorkdir(key string) string {
@@ -724,30 +768,18 @@ func waitPortReady(host string, port int, timeout time.Duration) error {
 	return fmt.Errorf("端口 %d 不可用", port)
 }
 
-// nextAvailablePort 分配一个可用端口。
-// 采用二次验证策略：分配后立即再次绑定确认未被其他进程抢占，
-// 并在 EnsureBridge 层面加重试，彻底消除 TOCTOU 竞争窗口。
+// nextAvailablePort 分配一个可用端口（无 hold；适用于短生命周期探测）。
 func nextAvailablePort() (int, error) {
 	return nextAvailablePortWithRetry(10)
 }
 
 func nextAvailablePortWithRetry(maxRetries int) (int, error) {
 	for i := 0; i < maxRetries; i++ {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		port, release, err := reservePortNumber()
 		if err != nil {
 			continue
 		}
-		port := listener.Addr().(*net.TCPAddr).Port
-		listener.Close()
-		// 短暂等待确保 OS 释放端口
-		time.Sleep(10 * time.Millisecond)
-		// 二次验证端口确实可用（没有被其他进程抢占）
-		verifyListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-		if err != nil {
-			// 端口被抢占，重试
-			continue
-		}
-		verifyListener.Close()
+		release()
 		return port, nil
 	}
 	return 0, fmt.Errorf("无法分配可用端口，已重试 %d 次", maxRetries)

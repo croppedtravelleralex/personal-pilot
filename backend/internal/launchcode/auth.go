@@ -3,6 +3,7 @@ package launchcode
 import (
 	"crypto/subtle"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -16,12 +17,32 @@ type APIAuthConfig struct {
 }
 
 func normalizeAPIAuthConfig(cfg APIAuthConfig) APIAuthConfig {
-	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
+	cfg.APIKey = resolveEnvOnlyAPIKey(cfg.APIKey)
 	cfg.Header = strings.TrimSpace(cfg.Header)
 	if cfg.Header == "" {
 		cfg.Header = DefaultAPIKeyHeader
 	}
 	return cfg
+}
+
+func resolveEnvOnlyAPIKey(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}") {
+		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, "${"), "}"))
+		return strings.TrimSpace(os.Getenv(name))
+	}
+	if strings.HasPrefix(value, "$") && len(value) > 1 && !strings.ContainsAny(value[1:], "${}") {
+		return strings.TrimSpace(os.Getenv(strings.TrimSpace(value[1:])))
+	}
+	if strings.HasPrefix(value, "%") && strings.HasSuffix(value, "%") && len(value) > 2 {
+		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, "%"), "%"))
+		return strings.TrimSpace(os.Getenv(name))
+	}
+	return value
 }
 
 func (cfg APIAuthConfig) Requested() bool {
@@ -40,6 +61,12 @@ func (s *LaunchServer) SetAPIAuthConfig(cfg APIAuthConfig) {
 	s.authMu.Lock()
 	s.apiAuth = normalizeAPIAuthConfig(cfg)
 	s.authMu.Unlock()
+}
+
+func (s *LaunchServer) SetRateLimiter(rl *RateLimiter) {
+	s.mu.Lock()
+	s.rateLimiter = rl
+	s.mu.Unlock()
 }
 
 func (s *LaunchServer) apiAuthConfig() APIAuthConfig {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CheckCircle, Edit2, Plus, Star, Trash2, XCircle } from 'lucide-react'
 import { Button, Card, FormItem, Input, Modal, Table, Textarea, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
+import { messageFromUnknownError } from '../../../shared/errors'
 import type { BrowserCore, BrowserCoreInput, BrowserSettings } from '../types'
 import {
   deleteBrowserCore,
@@ -10,6 +11,20 @@ import {
   setDefaultBrowserCore,
   validateBrowserCorePath,
 } from '../api'
+
+const CORE_KIND_OPTIONS = [
+  { value: 'chromium', label: 'Chromium' },
+  { value: 'lightpanda', label: 'Lightpanda' },
+  { value: 'camoufox', label: 'Camoufox' },
+] as const
+
+function normalizeCoreKind(kind?: string): BrowserCoreInput['kind'] {
+  return kind === 'lightpanda' || kind === 'camoufox' ? kind : 'chromium'
+}
+
+function coreKindLabel(kind?: string): string {
+  return CORE_KIND_OPTIONS.find(item => item.value === normalizeCoreKind(kind))?.label || 'Chromium'
+}
 
 interface BrowserSettingsModalProps {
   open: boolean
@@ -27,7 +42,7 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
 
   // 内核编辑弹窗
   const [coreModalOpen, setCoreModalOpen] = useState(false)
-  const [coreForm, setCoreForm] = useState<BrowserCoreInput>({ coreId: '', coreName: '', corePath: '', isDefault: false })
+  const [coreForm, setCoreForm] = useState<BrowserCoreInput>({ coreId: '', coreName: '', corePath: '', kind: 'chromium', isDefault: false })
   const [coreValidation, setCoreValidation] = useState<{ valid: boolean; message: string } | null>(null)
   const [savingCore, setSavingCore] = useState(false)
 
@@ -41,22 +56,22 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
       })
       toast.success('配置已保存')
       onClose()
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleOpenCoreModal = (core?: BrowserCore) => {
-    setCoreForm(core ? { ...core } : { coreId: '', coreName: '', corePath: '', isDefault: false })
+    setCoreForm(core ? { ...core, kind: normalizeCoreKind(core.kind) } : { coreId: '', coreName: '', corePath: '', kind: 'chromium', isDefault: false })
     setCoreValidation(null)
     setCoreModalOpen(true)
   }
 
   const handleValidateCorePath = async () => {
     if (!coreForm.corePath.trim()) { setCoreValidation({ valid: false, message: '请输入路径' }); return }
-    setCoreValidation(await validateBrowserCorePath(coreForm.corePath))
+    setCoreValidation(await validateBrowserCorePath(coreForm.corePath, coreForm.kind))
   }
 
   const handleSaveCore = async () => {
@@ -70,8 +85,8 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
       // 刷新 cores 列表
       const { fetchBrowserCores } = await import('../api')
       onCoresChange(await fetchBrowserCores())
-    } catch (error: any) {
-      toast.error(error?.message || '保存失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '保存失败'))
     } finally {
       setSavingCore(false)
     }
@@ -94,6 +109,7 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
 
   const coreColumns: TableColumn<BrowserCore>[] = [
     { key: 'coreName', title: '名称' },
+    { key: 'kind', title: '引擎', render: (v) => coreKindLabel(String(v || '')) },
     { key: 'corePath', title: '路径' },
     { key: 'isDefault', title: '默认', render: (v) => v ? <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" /> : null },
     {
@@ -140,6 +156,15 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
         <div className="space-y-4">
           <FormItem label="内核名称" required>
             <Input value={coreForm.coreName} onChange={e => setCoreForm(p => ({ ...p, coreName: e.target.value }))} placeholder="Chrome 142" />
+          </FormItem>
+          <FormItem label="浏览器引擎" required>
+            <select
+              value={coreForm.kind || 'chromium'}
+              onChange={e => { setCoreForm(p => ({ ...p, kind: normalizeCoreKind(e.target.value) })); setCoreValidation(null) }}
+              className="w-full h-9 px-3 rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
+            >
+              {CORE_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
           </FormItem>
           <FormItem label="内核路径" required>
             <div className="flex gap-2">

@@ -1,19 +1,22 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Bot, Copy, Rocket, Plus, Play, Trash2, Clock, Repeat, Zap, Pause, RefreshCw, AlertCircle } from 'lucide-react'
 import { Button, Card, toast } from '../../../shared/components'
-import { fetchLaunchServerInfo, type LaunchServerInfo } from '../api'
+import { messageFromUnknownError } from '../../../shared/errors'
 import {
-  SchedulerListTasks,
-  SchedulerAddTask,
-  SchedulerRemoveTask,
-  SchedulerRunTaskNow,
-  AutomationRuleList,
-  AutomationRuleCreate,
-  AutomationRuleDelete,
-  AutomationRuleToggle,
-  AutomationRuleTestFire,
-} from '../../../wailsjs/go/main/App'
-import { backend } from '../../../wailsjs/go/models'
+  createAutomationRule,
+  createSchedulerTask,
+  deleteAutomationRule,
+  deleteSchedulerTask,
+  fetchAutomationRules,
+  fetchLaunchServerInfo,
+  fetchSchedulerTasks,
+  runSchedulerTaskNow,
+  testFireAutomationRule,
+  toggleAutomationRule,
+  type AutomationRuleInfo,
+  type LaunchServerInfo,
+  type SchedulerTaskInfo,
+} from '../api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,22 +36,7 @@ interface TaskAction {
   timeout: number
 }
 
-interface TaskInfo {
-  id: string
-  name: string
-  trigger: TaskTrigger
-  actions: TaskAction[]
-  maxRetries: number
-  retryDelay: string
-  dependsOn: string[]
-  profileId: string
-  enabled: boolean
-  createdAt: string
-  status: string
-  lastRunAt: string
-  lastError: string
-  retryCount: number
-}
+type TaskInfo = SchedulerTaskInfo
 
 interface TaskTemplate {
   id: string
@@ -115,6 +103,13 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
   cron: '定时',
   interval: '间隔',
   event: '事件驱动',
+}
+
+function formatTaskTime(value?: string): string {
+  if (!value) return '未运行'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
 // ─── AutomationPage ───────────────────────────────────────────────────────────
@@ -244,18 +239,7 @@ function CodeBlock({ text }: { text: string }) {
 
 // ─── Rule Types & Templates ────────────────────────────────────────────────────
 
-interface RuleInfo {
-  id: string
-  name: string
-  triggerEvent: string
-  condition?: string
-  action: string
-  actionParams?: Record<string, any>
-  cooldown: string
-  enabled: boolean
-  createdAt: string
-  updatedAt: string
-}
+type RuleInfo = AutomationRuleInfo
 
 interface RuleTemplate {
   id: string
@@ -264,7 +248,7 @@ interface RuleTemplate {
   triggerEvent: string
   condition: string
   action: string
-  actionParams: Record<string, any>
+  actionParams: Record<string, unknown>
   cooldown: string
 }
 
@@ -595,12 +579,18 @@ function TasksTab({ tasks, loading, onAddTask, onDeleteTask, onRunNow, onRefresh
                             {TRIGGER_LABELS[task.trigger.type as TriggerType]}
                             {task.trigger.interval && ` · 每${task.trigger.interval}`}
                             {task.trigger.event && ` · ${task.trigger.event}`}
+                            {` · ${task.actions.length} steps`}
                           </span>
                           {task.profileId && (
                             <span className="text-xs text-[var(--color-text-muted)]">
                               · {task.profileId.slice(0, 8)}...
                             </span>
                           )}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--color-text-muted)]">
+                          <span>上次运行: {formatTaskTime(task.lastRunAt)}</span>
+                          {task.retryCount > 0 && <span>重试: {task.retryCount}/{task.maxRetries}</span>}
+                          {task.lastError && <span className="max-w-[360px] truncate text-[var(--color-error)]">错误: {task.lastError}</span>}
                         </div>
                       </div>
                     </div>
@@ -652,7 +642,7 @@ export function AutomationPage() {
   const refreshTasks = useCallback(async () => {
     setTasksLoading(true)
     try {
-      const list = await SchedulerListTasks()
+      const list = await fetchSchedulerTasks()
       setTasks(list || [])
     } catch {
       // backend may not be ready
@@ -667,15 +657,15 @@ export function AutomationPage() {
 
   const handleAddTask = async (tpl: TaskTemplate) => {
     try {
-      await SchedulerAddTask(new backend.SchedulerTaskInput({
+      await createSchedulerTask({
         name: tpl.name,
-        trigger: new backend.SchedulerTaskTrigger({
+        trigger: {
           type: tpl.trigger.type,
           cron: tpl.trigger.cron || '',
           interval: tpl.trigger.interval || '',
           event: tpl.trigger.event || '',
-        }),
-        actions: tpl.actions.map(a => new backend.SchedulerTaskAction({
+        },
+        actions: tpl.actions.map(a => ({
           type: a.type,
           target: a.target,
           value: a.value,
@@ -686,27 +676,32 @@ export function AutomationPage() {
         dependsOn: [],
         profileId: '',
         enabled: true,
-      }))
+      })
       toast.success(`任务「${tpl.name}」已创建`)
       await refreshTasks()
-    } catch (e: any) {
-      toast.error(e?.message || '创建任务失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '创建任务失败'))
     }
   }
 
   const handleDeleteTask = async (id: string) => {
     try {
-      await SchedulerRemoveTask(id)
+      await deleteSchedulerTask(id)
       toast.success('任务已删除')
       await refreshTasks()
-    } catch (e: any) {
-      toast.error(e?.message || '删除任务失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除任务失败'))
     }
   }
 
-  const handleRunNow = (id: string) => {
-    SchedulerRunTaskNow(id)
-    toast.success('任务已触发执行')
+  const handleRunNow = async (id: string) => {
+    try {
+      await runSchedulerTaskNow(id)
+      toast.success('任务已触发执行')
+      await refreshTasks()
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '任务触发失败'))
+    }
   }
 
   // ─── Rules handlers ─────────────────────────────────────────────────────────
@@ -714,7 +709,7 @@ export function AutomationPage() {
   const refreshRules = useCallback(async () => {
     setRulesLoading(true)
     try {
-      const list = await AutomationRuleList()
+      const list = await fetchAutomationRules()
       setRules(list || [])
     } catch {
       // backend may not be ready
@@ -729,7 +724,7 @@ export function AutomationPage() {
 
   const handleAddRule = async (tpl: RuleTemplate) => {
     try {
-      await AutomationRuleCreate(new backend.AutomationRuleInput({
+      await createAutomationRule({
         name: tpl.name,
         triggerEvent: tpl.triggerEvent,
         condition: tpl.condition,
@@ -737,39 +732,39 @@ export function AutomationPage() {
         actionParams: tpl.actionParams,
         cooldown: tpl.cooldown,
         enabled: true,
-      }))
+      })
       toast.success(`规则「${tpl.name}」已创建`)
       await refreshRules()
-    } catch (e: any) {
-      toast.error(e?.message || '创建规则失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '创建规则失败'))
     }
   }
 
   const handleDeleteRule = async (id: string) => {
     try {
-      await AutomationRuleDelete(id)
+      await deleteAutomationRule(id)
       toast.success('规则已删除')
       await refreshRules()
-    } catch (e: any) {
-      toast.error(e?.message || '删除规则失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '删除规则失败'))
     }
   }
 
   const handleToggleRule = async (id: string, enabled: boolean) => {
     try {
-      await AutomationRuleToggle(id, enabled)
+      await toggleAutomationRule(id, enabled)
       await refreshRules()
-    } catch (e: any) {
-      toast.error(e?.message || (enabled ? '启用' : '禁用') + '规则失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, `${enabled ? '启用' : '禁用'}规则失败`))
     }
   }
 
   const handleTestFire = async (id: string) => {
     try {
-      await AutomationRuleTestFire(id)
+      await testFireAutomationRule(id)
       toast.success('测试事件已发送')
-    } catch (e: any) {
-      toast.error(e?.message || '测试触发失败')
+    } catch (error: unknown) {
+      toast.error(messageFromUnknownError(error, '测试触发失败'))
     }
   }
 
@@ -777,7 +772,7 @@ export function AutomationPage() {
   const sampleCreateAndLaunchRequest = buildSampleCreateAndLaunchRequest(launchBaseUrl, apiAuth)
   const sampleRequest = buildSampleRequest(launchBaseUrl, apiAuth)
   const sampleLogsRequest = buildSampleLogsRequest(launchBaseUrl, apiAuth)
-  const activeTabMeta = AUTOMATION_TABS.find(tab => tab.key === activeTab) || AUTOMATION_TABS[0]
+  const activeTabMeta = AUTOMATION_TABS.find(tab => tab.key === activeTab) || AUTOMATION_TABS[0]!
 
   return (
     <div className="space-y-5 animate-fade-in">

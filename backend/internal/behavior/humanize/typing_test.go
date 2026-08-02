@@ -67,3 +67,37 @@ func TestCharInterval_UppercasePenalty(t *testing.T) {
 		t.Fatalf("Uppercase interval = %d, want lowercase+25 (%d)", upper, lower+25)
 	}
 }
+
+func TestTypingP1Plans(t *testing.T) {
+	cfg := ConfigForLevel(LevelMedium)
+	password := BuildContextTypingPlan("secret", TypingContext{FieldKind: "password", MinutesElapsed: 2}, &cfg)
+	normal := BuildContextTypingPlan("secret", TypingContext{}, &cfg)
+	if password.TotalMs <= normal.TotalMs {
+		t.Fatalf("password TotalMs = %d, want > normal %d", password.TotalMs, normal.TotalMs)
+	}
+	captcha := BuildContextTypingPlan("1234", TypingContext{FieldKind: "captcha", CaptchaCellCount: 4}, &cfg)
+	pauses := 0
+	for _, event := range captcha.Events {
+		if event.Type == TypingEventPause {
+			pauses++
+		}
+	}
+	if pauses == 0 {
+		t.Fatal("captcha plan should include cell pauses")
+	}
+	ime := BuildIMEPlan("nihao", 2, &cfg)
+	if ime.Events[len(ime.Events)-1].Action != "candidate_enter" {
+		t.Fatalf("last IME action = %q", ime.Events[len(ime.Events)-1].Action)
+	}
+	clipboard := BuildClipboardPlan(&cfg)
+	if len(clipboard.Events) != 9 {
+		t.Fatalf("clipboard events = %d, want 9", len(clipboard.Events))
+	}
+	tabs := BuildTabSwitchPlan(3)
+	if len(tabs.Events) != 3 || tabs.TotalMs == 0 {
+		t.Fatalf("tab plan = %+v", tabs)
+	}
+	if FingerSpeedRatio('a') >= FingerSpeedRatio('f') {
+		t.Fatal("pinky keys should be slower than index keys")
+	}
+}

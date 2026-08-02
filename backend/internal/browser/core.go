@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/fsutil"
 	"personal-pilot/backend/internal/logger"
 	"strings"
@@ -55,8 +56,11 @@ func (m *Manager) ResolveCoreExecutable(core Core) (string, error) {
 		return "", fmt.Errorf("浏览器内核路径为空,请在\u201c内核管理\u201d中补充内核目录")
 	}
 
-	if core.Kind == "lightpanda" {
+	switch normalizeCoreKind(core.Kind) {
+	case config.CoreKindLightpanda:
 		return m.ResolveLightpandaExecutable(core)
+	case config.CoreKindCamoufox:
+		return m.ResolveCamoufoxExecutable(core)
 	}
 
 	baseDir := m.ResolveRelativePath(corePath)
@@ -96,9 +100,12 @@ func (m *Manager) ValidateCorePathForKind(corePath, kind string) CoreValidateRes
 	}
 
 	var exePath string
-	if kind == "lightpanda" {
+	switch normalizeCoreKind(kind) {
+	case config.CoreKindLightpanda:
 		exePath, _, ok = FindLightpandaExecutable(baseDir)
-	} else {
+	case config.CoreKindCamoufox:
+		exePath, _, ok = FindCamoufoxExecutable(baseDir)
+	default:
 		exePath, _, ok = FindCoreExecutable(baseDir)
 	}
 	if !ok {
@@ -148,7 +155,7 @@ func (m *Manager) SaveCore(input CoreInput) error {
 				_ = err
 			}
 		}
-		core := Core{CoreId: coreId, CoreName: coreName, CorePath: corePath, IsDefault: input.IsDefault}
+		core := Core{CoreId: coreId, CoreName: coreName, CorePath: corePath, Kind: normalizeCoreKind(input.Kind), IsDefault: input.IsDefault}
 		if err := m.CoreDAO.Upsert(core); err != nil {
 			return err
 		}
@@ -169,6 +176,7 @@ func (m *Manager) SaveCore(input CoreInput) error {
 	if existingIndex >= 0 {
 		m.Config.Browser.Cores[existingIndex].CoreName = coreName
 		m.Config.Browser.Cores[existingIndex].CorePath = corePath
+		m.Config.Browser.Cores[existingIndex].Kind = normalizeCoreKind(input.Kind)
 		if input.IsDefault {
 			m.clearDefaultCore()
 			m.Config.Browser.Cores[existingIndex].IsDefault = true
@@ -177,7 +185,7 @@ func (m *Manager) SaveCore(input CoreInput) error {
 		if coreId == "" {
 			coreId = uuid.NewString()
 		}
-		newCore := Core{CoreId: coreId, CoreName: coreName, CorePath: corePath,
+		newCore := Core{CoreId: coreId, CoreName: coreName, CorePath: corePath, Kind: normalizeCoreKind(input.Kind),
 			IsDefault: input.IsDefault || len(m.Config.Browser.Cores) == 0}
 		if newCore.IsDefault {
 			m.clearDefaultCore()
@@ -276,9 +284,7 @@ func (m *Manager) clearDefaultCore() {
 	}
 }
 
-// ResolveChromeBinary 解析浏览器二进制路径（简化版）。支持 Chromium 和 Lightpanda。
-func (m *Manager) ResolveChromeBinary(profile *Profile) (string, error) {
-	log := logger.New("Browser")
+func (m *Manager) ResolveProfileCore(profile *Profile) (Core, error) {
 	coreId := normalizeProfileCoreID(profile.CoreId)
 
 	var core Core
@@ -291,7 +297,18 @@ func (m *Manager) ResolveChromeBinary(profile *Profile) (string, error) {
 		core, found = m.GetDefaultCore()
 	}
 	if !found {
-		return "", fmt.Errorf("未配置可用浏览器内核。请先在\u201c内核管理\u201d中添加内核并设置默认内核")
+		return Core{}, fmt.Errorf("未配置可用浏览器内核。请先在\u201c内核管理\u201d中添加内核并设置默认内核")
+	}
+	core.Kind = normalizeCoreKind(core.Kind)
+	return core, nil
+}
+
+// ResolveChromeBinary 解析浏览器二进制路径（简化版）。支持 Chromium、Lightpanda 和 Camoufox。
+func (m *Manager) ResolveChromeBinary(profile *Profile) (string, error) {
+	log := logger.New("Browser")
+	core, err := m.ResolveProfileCore(profile)
+	if err != nil {
+		return "", err
 	}
 
 	exePath, err := m.ResolveBrowserBinary(core)

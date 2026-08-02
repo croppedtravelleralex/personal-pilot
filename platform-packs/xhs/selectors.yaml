@@ -1,0 +1,8 @@
+login:
+  phoneInput: 'input[type="tel"], input[placeholder*="手机"]'
+  otpInput: 'input[placeholder*="验证码"]'
+  submitButton: 'button:has-text("登录"), button[type="submit"]'
+feed:
+  scrollContainer: '#exploreFeeds, .feeds-container'
+creator:
+  dashboardTitle: 'h1, .creator-title'

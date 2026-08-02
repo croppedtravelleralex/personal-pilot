@@ -1,0 +1,12 @@
+platform: xhs
+displayName: 小红书
+version: 1
+genericPlans:
+  - account-login-v1
+  - account-nurture-conservative-v1
+  - feed-scrape-v1
+  - platform-console-readonly-v1
+tags:
+  - auto-99
+behaviorPreset: office-worker
+notes: 平台差异包；登录/养号逻辑在 plans/，此处仅 URL/选择器/节奏

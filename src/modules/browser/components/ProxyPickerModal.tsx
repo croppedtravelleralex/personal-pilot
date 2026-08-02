@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Check, Clock3, Loader2, Search, Wifi, X } from 'lucide-react'
 import type { BrowserProxy } from '../types'
 import { browserProxyBatchTestSpeed, browserProxyTestSpeed, fetchBrowserProxies, fetchBrowserProxyGroups } from '../api'
-import { EventsOn } from '../../../wailsjs/runtime/runtime'
+import { desktopRuntimeListen } from '../../../services/desktop'
 
 interface ProxyPickerModalProps {
   open: boolean
@@ -67,7 +67,7 @@ function latencyColor(result?: SpeedResult): string {
 function protocolLabel(proxyConfig: string): string {
   if (proxyConfig === 'direct://') return 'DIRECT'
   const match = proxyConfig.trim().match(/^([a-zA-Z0-9+\-]+):\/\//)
-  if (match) return match[1].toUpperCase()
+  if (match && match[1]) return match[1].toUpperCase()
   return 'YAML'
 }
 
@@ -216,7 +216,7 @@ export function ProxyPickerModal({ open, currentProxyId, onSelect, onClose }: Pr
     abortRef.current = false
     setTestingIds(new Set(ids))
     const idSet = new Set(ids)
-    const off = EventsOn('proxy:speed:result', (data: { proxyId: string; ok: boolean; latencyMs: number; error: string }) => {
+    const off = desktopRuntimeListen('proxy:speed:result', (data: { proxyId: string; ok: boolean; latencyMs: number; error: string }) => {
       if (abortRef.current || !idSet.has(data.proxyId)) return
       queueSpeedPatch(data.proxyId, {
         ok: data.ok,

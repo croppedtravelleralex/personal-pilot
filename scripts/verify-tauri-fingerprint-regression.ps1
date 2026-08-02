@@ -16,7 +16,7 @@ if ([string]::IsNullOrWhiteSpace($BaselineAppPath)) {
     $BaselineAppPath = Join-Path $ProjectRoot "build\bin\personal-pilot.exe"
 }
 if ([string]::IsNullOrWhiteSpace($CandidateAppPath)) {
-    $CandidateAppPath = Join-Path $ProjectRoot "src-tauri\target\release\personal-pilot-tauri.exe"
+    $CandidateAppPath = Join-Path $ProjectRoot "personal-pilot-tauri.exe"
 }
 $BaselineAppPath = [System.IO.Path]::GetFullPath($BaselineAppPath)
 $CandidateAppPath = [System.IO.Path]::GetFullPath($CandidateAppPath)

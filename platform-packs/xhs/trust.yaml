@@ -1,0 +1,26 @@
+# XHS platform trust inheritance rules (docs/56 T2)
+# Loaded by stealth autopilot / harvest when present.
+
+version: 1
+platform: xhs
+
+cookieDomains:
+  - .xiaohongshu.com
+  - www.xiaohongshu.com
+  - .xhscdn.com
+
+storageKeys:
+  # Best-effort keys commonly needed for session continuity; harvest may filter further.
+  - localStorage:webId
+  - localStorage:b1
+  - sessionStorage:sessionId
+
+bootstrapUrls:
+  - https://www.xiaohongshu.com/explore
+
+# Bundle older than this is treated as trust_stale (hours).
+maxAgeHours: 168
+
+notes: >
+  Skeleton pack for TrustSurface hydrate. Does not invent cookies.
+  Real harvest must populate ProfileTrustBundle before API-first routes.

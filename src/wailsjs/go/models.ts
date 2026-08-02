@@ -1063,6 +1063,321 @@ export namespace behavior {
 
 export namespace browser {
 
+	export class FingerprintSnapshot {
+	    userAgent: string;
+	    appVersion: string;
+	    appName: string;
+	    product: string;
+	    productSub: string;
+	    platform: string;
+	    webdriver: boolean;
+	    cookieEnabled: boolean;
+	    doNotTrack: string;
+	    pdfViewerEnabled: boolean;
+	    online: boolean;
+	    hardwareConcurrency: number;
+	    deviceMemory: number;
+	    colorDepth: number;
+	    pixelDepth: number;
+	    screenWidth: number;
+	    screenHeight: number;
+	    availWidth: number;
+	    availHeight: number;
+	    devicePixelRatio: number;
+	    maxTouchPoints: number;
+	    vendor: string;
+	    timezone: string;
+	    timezoneOffset: number;
+	    language: string;
+	    languages: string[];
+	    intlLocale: string;
+	    intlCalendar: string;
+	    intlNumberingSystem: string;
+	    dateFormatSample: string;
+	    numberFormatSample: string;
+	    uaDataBrands: string[];
+	    uaDataMobile: boolean;
+	    uaDataPlatform: string;
+	    uaDataPlatformVersion: string;
+	    uaDataArchitecture: string;
+	    uaDataBitness: string;
+	    uaDataModel: string;
+	    uaDataFullVersionList: string[];
+	    innerWidth: number;
+	    innerHeight: number;
+	    outerWidth: number;
+	    outerHeight: number;
+	    visualViewportWidth: number;
+	    visualViewportHeight: number;
+	    visualViewportScale: number;
+	    pointerFine: boolean;
+	    pointerCoarse: boolean;
+	    hoverHover: boolean;
+	    hoverNone: boolean;
+	    prefersColorScheme: string;
+	    prefersReducedMotion: string;
+	    networkEffectiveType: string;
+	    networkDownlink: number;
+	    networkRtt: number;
+	    networkSaveData: boolean;
+	    storageQuota: number;
+	    storageUsage: number;
+	    canvasHash: string;
+	    webglVendor: string;
+	    webglRenderer: string;
+	    webglExtensionsHash: string;
+	    webglMaxTextureSize: number;
+	    webglMaxVertexAttribs: number;
+	    webglMaxViewportDims: string;
+	    fontHash: string;
+	    audioHash: string;
+	    pluginsHash: string;
+	    mimeTypesHash: string;
+	    webgpuAvailable: boolean;
+	    webrtcSupported: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new FingerprintSnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.userAgent = source["userAgent"];
+	        this.appVersion = source["appVersion"];
+	        this.appName = source["appName"];
+	        this.product = source["product"];
+	        this.productSub = source["productSub"];
+	        this.platform = source["platform"];
+	        this.webdriver = source["webdriver"];
+	        this.cookieEnabled = source["cookieEnabled"];
+	        this.doNotTrack = source["doNotTrack"];
+	        this.pdfViewerEnabled = source["pdfViewerEnabled"];
+	        this.online = source["online"];
+	        this.hardwareConcurrency = source["hardwareConcurrency"];
+	        this.deviceMemory = source["deviceMemory"];
+	        this.colorDepth = source["colorDepth"];
+	        this.pixelDepth = source["pixelDepth"];
+	        this.screenWidth = source["screenWidth"];
+	        this.screenHeight = source["screenHeight"];
+	        this.availWidth = source["availWidth"];
+	        this.availHeight = source["availHeight"];
+	        this.devicePixelRatio = source["devicePixelRatio"];
+	        this.maxTouchPoints = source["maxTouchPoints"];
+	        this.vendor = source["vendor"];
+	        this.timezone = source["timezone"];
+	        this.timezoneOffset = source["timezoneOffset"];
+	        this.language = source["language"];
+	        this.languages = source["languages"];
+	        this.intlLocale = source["intlLocale"];
+	        this.intlCalendar = source["intlCalendar"];
+	        this.intlNumberingSystem = source["intlNumberingSystem"];
+	        this.dateFormatSample = source["dateFormatSample"];
+	        this.numberFormatSample = source["numberFormatSample"];
+	        this.uaDataBrands = source["uaDataBrands"];
+	        this.uaDataMobile = source["uaDataMobile"];
+	        this.uaDataPlatform = source["uaDataPlatform"];
+	        this.uaDataPlatformVersion = source["uaDataPlatformVersion"];
+	        this.uaDataArchitecture = source["uaDataArchitecture"];
+	        this.uaDataBitness = source["uaDataBitness"];
+	        this.uaDataModel = source["uaDataModel"];
+	        this.uaDataFullVersionList = source["uaDataFullVersionList"];
+	        this.innerWidth = source["innerWidth"];
+	        this.innerHeight = source["innerHeight"];
+	        this.outerWidth = source["outerWidth"];
+	        this.outerHeight = source["outerHeight"];
+	        this.visualViewportWidth = source["visualViewportWidth"];
+	        this.visualViewportHeight = source["visualViewportHeight"];
+	        this.visualViewportScale = source["visualViewportScale"];
+	        this.pointerFine = source["pointerFine"];
+	        this.pointerCoarse = source["pointerCoarse"];
+	        this.hoverHover = source["hoverHover"];
+	        this.hoverNone = source["hoverNone"];
+	        this.prefersColorScheme = source["prefersColorScheme"];
+	        this.prefersReducedMotion = source["prefersReducedMotion"];
+	        this.networkEffectiveType = source["networkEffectiveType"];
+	        this.networkDownlink = source["networkDownlink"];
+	        this.networkRtt = source["networkRtt"];
+	        this.networkSaveData = source["networkSaveData"];
+	        this.storageQuota = source["storageQuota"];
+	        this.storageUsage = source["storageUsage"];
+	        this.canvasHash = source["canvasHash"];
+	        this.webglVendor = source["webglVendor"];
+	        this.webglRenderer = source["webglRenderer"];
+	        this.webglExtensionsHash = source["webglExtensionsHash"];
+	        this.webglMaxTextureSize = source["webglMaxTextureSize"];
+	        this.webglMaxVertexAttribs = source["webglMaxVertexAttribs"];
+	        this.webglMaxViewportDims = source["webglMaxViewportDims"];
+	        this.fontHash = source["fontHash"];
+	        this.audioHash = source["audioHash"];
+	        this.pluginsHash = source["pluginsHash"];
+	        this.mimeTypesHash = source["mimeTypesHash"];
+	        this.webgpuAvailable = source["webgpuAvailable"];
+	        this.webrtcSupported = source["webrtcSupported"];
+	    }
+	}
+	export class FingerprintHealthCheck {
+	    id: string;
+	    status: string;
+	    message: string;
+	    expected?: string;
+	    actual?: string;
+	    penalty?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new FingerprintHealthCheck(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.expected = source["expected"];
+	        this.actual = source["actual"];
+	        this.penalty = source["penalty"];
+	    }
+	}
+	export class FingerprintHealthProfile {
+	    profileId?: string;
+	    score: number;
+	    level: string;
+	    checks: FingerprintHealthCheck[];
+	    fingerprint?: FingerprintSnapshot;
+	    capturedAt: string;
+	    source: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FingerprintHealthProfile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.score = source["score"];
+	        this.level = source["level"];
+	        this.checks = this.convertValues(source["checks"], FingerprintHealthCheck);
+	        this.fingerprint = this.convertValues(source["fingerprint"], FingerprintSnapshot);
+	        this.capturedAt = source["capturedAt"];
+	        this.source = source["source"];
+	    }
+
+	    convertValues(a: any, classType: any, asMap: boolean = false): any {
+	        if (!a) {
+	            return a;
+	        }
+	        if (a.slice) {
+	            return (a as any[]).map(elem => this.convertValues(elem, classType));
+	        } else if (typeof a === 'object') {
+	            if (asMap) {
+	                for (const key of Object.keys(a)) {
+	                    a[key] = new classType(a[key]);
+	                }
+	                return a;
+	            }
+	            return new classType(a);
+	        }
+	        return a;
+	    }
+	}
+	export class IdentitySubscores {
+	    fingerprintVisible: number;
+	    consistency: number;
+	    profilePersistence: number;
+	    longTermCoherence: number;
+	    proxyNetwork: number;
+	    behaviorNaturalness: number;
+	    automationSafety: number;
+
+	    static createFrom(source: any = {}) {
+	        return new IdentitySubscores(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fingerprintVisible = source["fingerprintVisible"];
+	        this.consistency = source["consistency"];
+	        this.profilePersistence = source["profilePersistence"];
+	        this.longTermCoherence = source["longTermCoherence"];
+	        this.proxyNetwork = source["proxyNetwork"];
+	        this.behaviorNaturalness = source["behaviorNaturalness"];
+	        this.automationSafety = source["automationSafety"];
+	    }
+	}
+	export class IdentityDimension {
+	    id: string;
+	    category: string;
+	    layer: string;
+	    status: string;
+	    message: string;
+	    expected?: string;
+	    actual?: string;
+	    penalty?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new IdentityDimension(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.category = source["category"];
+	        this.layer = source["layer"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.expected = source["expected"];
+	        this.actual = source["actual"];
+	        this.penalty = source["penalty"];
+	    }
+	}
+	export class IdentityStrengthReport {
+	    profileId: string;
+	    profileName?: string;
+	    score: number;
+	    level: string;
+	    subscores: IdentitySubscores;
+	    dimensions: IdentityDimension[];
+	    fingerprint?: FingerprintSnapshot;
+	    capturedAt: string;
+	    source: string;
+	    summary: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new IdentityStrengthReport(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.score = source["score"];
+	        this.level = source["level"];
+	        this.subscores = this.convertValues(source["subscores"], IdentitySubscores);
+	        this.dimensions = this.convertValues(source["dimensions"], IdentityDimension);
+	        this.fingerprint = this.convertValues(source["fingerprint"], FingerprintSnapshot);
+	        this.capturedAt = source["capturedAt"];
+	        this.source = source["source"];
+	        this.summary = source["summary"];
+	    }
+
+	    convertValues(a: any, classType: any, asMap: boolean = false): any {
+	        if (!a) {
+	            return a;
+	        }
+	        if (a.slice) {
+	            return (a as any[]).map(elem => this.convertValues(elem, classType));
+	        } else if (typeof a === 'object') {
+	            if (asMap) {
+	                for (const key of Object.keys(a)) {
+	                    a[key] = new classType(a[key]);
+	                }
+	                return a;
+	            }
+	            return new classType(a);
+	        }
+	        return a;
+	    }
+	}
+
 	export class CoreExtendedInfo {
 	    coreId: string;
 	    chromeVersion: string;
@@ -1083,6 +1398,7 @@ export namespace browser {
 	    coreId: string;
 	    coreName: string;
 	    corePath: string;
+	    kind?: string;
 	    isDefault: boolean;
 
 	    static createFrom(source: any = {}) {
@@ -1094,6 +1410,7 @@ export namespace browser {
 	        this.coreId = source["coreId"];
 	        this.coreName = source["coreName"];
 	        this.corePath = source["corePath"];
+	        this.kind = source["kind"];
 	        this.isDefault = source["isDefault"];
 	    }
 	}

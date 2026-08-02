@@ -340,6 +340,7 @@ function identityFromDetection(result: WorkbenchDetectionResult): WorkbenchIdent
       fingerprintVisible: 0,
       consistency: 0,
       profilePersistence: 0,
+      longTermCoherence: 0,
       proxyNetwork: 0,
       behaviorNaturalness: 0,
       automationSafety: 0,
@@ -534,7 +535,7 @@ export function SynchronizerPage() {
         const currentActiveGroupId = activeGroupIdRef.current
         setGroups(nextGroups)
         if (nextGroups.length > 0 && (!currentActiveGroupId || !nextGroups.some((g) => g.id === currentActiveGroupId))) {
-          setActiveGroup(nextGroups[0].id)
+          setActiveGroup(nextGroups[0]!.id)
         }
       }
     } catch (err) {
@@ -1409,6 +1410,7 @@ export function SynchronizerPage() {
                   <Badge size="sm" variant="default">指纹 {selectedIdentityReport.subscores.fingerprintVisible}</Badge>
                   <Badge size="sm" variant="default">一致性 {selectedIdentityReport.subscores.consistency}</Badge>
                   <Badge size="sm" variant="default">Profile {selectedIdentityReport.subscores.profilePersistence}</Badge>
+                  <Badge size="sm" variant="default">长期 {selectedIdentityReport.subscores.longTermCoherence}</Badge>
                   <Badge size="sm" variant={selectedProxyQuality.variant}>{selectedProxyQuality.label}</Badge>
                   <Badge size="sm" variant="default">行为 {selectedIdentityReport.subscores.behaviorNaturalness}</Badge>
                   <Badge size="sm" variant="default">自动化 {selectedIdentityReport.subscores.automationSafety}</Badge>
@@ -1469,6 +1471,7 @@ export function SynchronizerPage() {
                         <Badge size="sm" variant="default">指纹 {report.subscores.fingerprintVisible}</Badge>
                         <Badge size="sm" variant="default">一致 {report.subscores.consistency}</Badge>
                         <Badge size="sm" variant="default">Profile {report.subscores.profilePersistence}</Badge>
+                        <Badge size="sm" variant="default">长期 {report.subscores.longTermCoherence}</Badge>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <Badge size="sm" variant="success">维度 {report.dimensions?.length || 0}</Badge>

@@ -14,6 +14,9 @@ import (
 
 	"personal-pilot/backend/internal/behavior"
 	"personal-pilot/backend/internal/events"
+	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/detection"
+	"personal-pilot/backend/internal/launchcode"
 )
 
 type recordingAppError struct {
@@ -597,6 +600,65 @@ func (a *App) CleanupStaleRecordingSessions() error {
 	return nil
 }
 
+// StoreActionBatch records a batch of workbench actions as a lightweight recording
+// when an active recorder exists for the profile. Silently no-ops if no recorder.
+func (a *App) StoreActionBatch(profileId string, actions []launchcode.ActionRequest, results []launchcode.ActionResult) error {
+	if len(actions) == 0 {
+		return nil
+	}
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil
+	}
+
+	a.recMu.Lock()
+	recorder, hasRecorder := a.recorders[profileId]
+	a.recMu.Unlock()
+	if !hasRecorder || recorder == nil {
+		return nil
+	}
+
+	events := make([]behavior.RecordedEvent, 0, len(actions))
+	for i, action := range actions {
+		eventType := actionTypeToEventType(action.Type)
+		events = append(events, behavior.RecordedEvent{
+			T:    time.Now().UnixMilli(),
+			Type: eventType,
+			Text: action.Text,
+			TargetPath: action.Selector,
+			InputType:  action.Type,
+		})
+		_ = results // keep for future use (e.g. result correlation)
+		_ = i
+	}
+
+	rec := &behavior.Recording{
+		ID:         fmt.Sprintf("actionbatch_%s_%d", profileId, time.Now().UnixMilli()),
+		Name:       fmt.Sprintf("动作批处理 %s", time.Now().Format("15:04:05")),
+		Events:     events,
+		EventCount: len(events),
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	return store.Save(rec)
+}
+
+func actionTypeToEventType(actionType string) string {
+	switch strings.ToLower(strings.TrimSpace(actionType)) {
+	case "click", "double-click", "right-click", "click-offset":
+		return "down"
+	case "type", "text":
+		return "key"
+	case "scroll":
+		return "scroll"
+	case "hover":
+		return "move"
+	case "navigate":
+		return "change"
+	default:
+		return "input"
+	}
+}
+
 func (a *App) ActiveRecordingStatus() (*behavior.ActiveRecordingStatus, error) {
 	if _, err := a.requireRecordingStore(); err != nil {
 		return nil, err
@@ -653,4 +715,112 @@ func sortedStringKeys(values map[string]struct{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// BehaviorRecordingAnalyze returns cadence/hotspot analysis for a saved recording.
+func (a *App) BehaviorRecordingAnalyze(recordingID string) (*behavior.RecordingAnalyzeReport, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := store.Get(recordingID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "recording not found", err)
+	}
+	return behavior.AnalyzeRecording(rec), nil
+}
+
+// BrowserRuntimeProjectionReport returns first-family runtime projection stats for a profile.
+func (a *App) BrowserRuntimeProjectionReport(profileID string) browser.RuntimeProjectionReport {
+	if a == nil || a.browserMgr == nil {
+		return browser.RuntimeProjectionReport{}
+	}
+	a.browserMgr.Mutex.Lock()
+	profile := a.browserMgr.Profiles[profileID]
+	a.browserMgr.Mutex.Unlock()
+	if profile == nil {
+		return browser.RuntimeProjectionReport{}
+	}
+	return browser.FullRuntimeProjectionReport(profile, a.config.Browser.DefaultFingerprintArgs, a.config.Browser.DefaultLaunchArgs)
+}
+
+// BehaviorShippedPrimitiveList returns runtime-backed behavior primitives.
+func (a *App) BehaviorShippedPrimitiveList() []string {
+	return append([]string(nil), behavior.ShippedPrimitives...)
+}
+
+func (a *App) BehaviorRecordingDiff(leftID, rightID string) (*behavior.RecordingDiffReport, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	left, err := store.Get(leftID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "left recording not found", err)
+	}
+	right, err := store.Get(rightID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "right recording not found", err)
+	}
+	return behavior.DiffRecordings(left, right), nil
+}
+
+func (a *App) BehaviorRecordingMerge(leftID, rightID, name string) (*behavior.Recording, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	left, err := store.Get(leftID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "left recording not found", err)
+	}
+	right, err := store.Get(rightID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "right recording not found", err)
+	}
+	merged := behavior.MergeRecordings(left, right, name)
+	if err := store.Save(merged); err != nil {
+		return nil, recordingError(http.StatusInternalServerError, "save merged recording failed", err)
+	}
+	return merged, nil
+}
+
+func (a *App) BehaviorRecordingToWorkflow(recordingID string) (map[string]interface{}, error) {
+	store, err := a.requireRecordingStore()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := store.Get(recordingID)
+	if err != nil {
+		return nil, recordingError(http.StatusNotFound, "recording not found", err)
+	}
+	wf := behavior.BridgeRecordingToWorkflowPlan(rec)
+	return map[string]interface{}{
+		"id":    wf.ID,
+		"name":  wf.Name,
+		"steps": len(wf.Steps),
+	}, nil
+}
+
+func (a *App) WorkbenchAutoDetectionScore(profileID string) (map[string]interface{}, error) {
+	fp, err := a.WorkbenchFingerprintProfile(profileID)
+	if err != nil {
+		return nil, err
+	}
+	report, _ := a.IdentityReportProfile(profileID)
+	trust := 80
+	if report != nil {
+		trust = report.Score
+	}
+	signals := a.collectLiveDetectionSignals(profileID, fp)
+	score := detection.EvaluateAutoScore(a.liveAutoScoreInput(profileID, fp, trust))
+	return map[string]interface{}{
+		"score":    score.Score,
+		"level":    score.Level,
+		"passed":   score.Passed,
+		"summary":  score.Summary,
+		"hints":    detection.RemediationHints(score),
+		"signals":  signals,
+		"confidenceNote": "Probabilistic local gate; confirm on browserleaks/pixelscan and with account outcomes.",
+	}, nil
 }

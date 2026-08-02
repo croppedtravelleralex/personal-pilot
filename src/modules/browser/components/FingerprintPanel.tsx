@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, RefreshCw, Wand2, AlertCircle } from 'lucide-react'
 import { ConfirmModal, FormItem, Input, Select, Textarea, Alert, Badge } from '../../../shared/components'
+import { fetchBehaviorPresets } from '../api'
 import {
   type FingerprintConfig,
   FINGERPRINT_PRESETS,
@@ -10,7 +11,6 @@ import {
   randomFingerprintSeed,
   serialize,
 } from '../utils/fingerprintSerializer'
-import { BehaviorPresetList } from '../../../wailsjs/go/main/App'
 
 
 interface FingerprintPanelProps {
@@ -185,7 +185,7 @@ export function FingerprintPanel({ value, onChange, behaviorProfileId, onBehavio
   const isInternalUpdate = useRef(false)
 
   useEffect(() => {
-    BehaviorPresetList().then(setBehaviorPresets).catch(() => setBehaviorPresets([]))
+    fetchBehaviorPresets().then(setBehaviorPresets).catch(() => setBehaviorPresets([]))
   }, [])
 
   useEffect(() => {

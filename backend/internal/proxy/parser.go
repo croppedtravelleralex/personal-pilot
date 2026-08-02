@@ -12,7 +12,7 @@ import (
 
 // ParseProxyNode 解析代理节点
 func ParseProxyNode(node string) (string, map[string]interface{}, error) {
-	src := strings.TrimSpace(node)
+	src := NormalizeStandardProxyScheme(node)
 	if src == "" {
 		return "", nil, fmt.Errorf("代理节点为空")
 	}

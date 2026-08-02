@@ -27,6 +27,7 @@ func (f *TextFormatter) Format(entry *LogEntry) ([]byte, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("log entry is nil")
 	}
+	entry = RedactLogEntry(entry)
 
 	var sb strings.Builder
 
@@ -147,6 +148,7 @@ func (f *JSONFormatter) Format(entry *LogEntry) ([]byte, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("log entry is nil")
 	}
+	entry = RedactLogEntry(entry)
 
 	// 构建调用位置字符串
 	var caller string

@@ -85,3 +85,45 @@ func TestScrollStepDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestScrollP1Plans(t *testing.T) {
+	cfg := ConfigForLevel(LevelMedium)
+	inertial := BuildInertialScrollPlan(900, 0.8, &cfg)
+	if len(inertial.Steps) == 0 || inertial.TotalDistancePx == 0 {
+		t.Fatalf("inertial plan = %+v", inertial)
+	}
+	content := BuildContentAwareScrollPlan(1000, []ContentLandmark{{Y: 300, Kind: "paragraph_end"}, {Y: 500, Kind: "image"}, {Y: 700, Kind: "heading"}}, &cfg)
+	if content.TotalMs == 0 {
+		t.Fatal("content-aware plan should have timing")
+	}
+	reread := MaybeAddReread(content, 1)
+	foundReread := false
+	for _, step := range reread.Steps {
+		if step.Reason == "reread_backtrack" {
+			foundReread = true
+		}
+	}
+	if !foundReread {
+		t.Fatal("reread step missing")
+	}
+	infinite := BuildInfiniteScrollPlan(800, 2, &cfg)
+	loadMore := 0
+	for _, step := range infinite.Steps {
+		if step.Type == ScrollStepLoadMore {
+			loadMore++
+		}
+	}
+	if loadMore != 2 {
+		t.Fatalf("loadMore steps = %d, want 2", loadMore)
+	}
+	jitter := AddMicroJitter(BuildScrollPlan(100, &cfg), 3)
+	seenJitter := false
+	for _, step := range jitter.Steps {
+		if step.Type == ScrollStepMicroJitter {
+			seenJitter = true
+		}
+	}
+	if !seenJitter {
+		t.Fatal("micro jitter step missing")
+	}
+}

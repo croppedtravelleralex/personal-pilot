@@ -1,0 +1,19 @@
+{
+  "roundId": 5,
+  "cycleId": 0,
+  "roundType": "summarize",
+  "status": "completed",
+  "startedAt": "2026-03-26T02:23:02+08:00",
+  "finishedAt": "2026-03-26T02:23:02+08:00",
+  "currentObjective": "进入 summarize 轮，汇总首个 mini-cycle 的前四轮。",
+  "changedFiles": [
+    "summaries/cycle-0.md"
+  ],
+  "verificationActions": [
+    "Generated cycle summary"
+  ],
+  "summary": "已完成本 mini-cycle 汇总。",
+  "issues": [],
+  "nextStep": "进入下一个 cycle 的 plan 轮。",
+  "pendingRecovery": false
+}

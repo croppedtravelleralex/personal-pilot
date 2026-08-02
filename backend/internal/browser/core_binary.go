@@ -3,6 +3,7 @@ package browser
 import (
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/config"
 	goruntime "runtime"
 	"strings"
 )
@@ -27,10 +28,14 @@ func CoreExecutableCandidates() []string {
 
 // CoreExecutableCandidatesForKind returns executable candidates for a given core kind.
 func CoreExecutableCandidatesForKind(kind string) []string {
-	if kind == "lightpanda" {
+	switch normalizeCoreKind(kind) {
+	case config.CoreKindLightpanda:
 		return LightpandaExecutableCandidates()
+	case config.CoreKindCamoufox:
+		return CamoufoxExecutableCandidates()
+	default:
+		return CoreExecutableCandidates()
 	}
-	return CoreExecutableCandidates()
 }
 
 // FindCoreExecutable 在指定目录查找可执行文件，返回绝对路径和命中的候选名。

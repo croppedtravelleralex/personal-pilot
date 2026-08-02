@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"personal-pilot/backend/internal/browser"
 	"strconv"
 	"strings"
 	"time"
@@ -47,18 +48,18 @@ func (e *browserStartupExitError) Detail() string {
 	return ""
 }
 
-func newBrowserStartupExitError(result browserProcessExitResult) error {
+func newBrowserStartupExitError(result browser.BrowserProcessExitResult) error {
 	return &browserStartupExitError{
 		exitErr:    result.Err,
 		stderrTail: result.StderrTail,
 	}
 }
 
-func waitBrowserDebugPortReady(initialDebugPort int, userDataDir string, timeout time.Duration, monitor *browserProcessMonitor) (int, error) {
+func waitBrowserDebugPortReady(initialDebugPort int, userDataDir string, timeout time.Duration, monitor *browser.BrowserProcessMonitor) (int, error) {
 	deadline := time.Now().Add(timeout)
 	allowDetachedGrace := initialDebugPort > 0
 	var lastErr error
-	var exitResult browserProcessExitResult
+	var exitResult browser.BrowserProcessExitResult
 	exitObserved := false
 
 	for time.Now().Before(deadline) {
@@ -125,7 +126,7 @@ func waitBrowserDebugPortReady(initialDebugPort int, userDataDir string, timeout
 	return 0, fmt.Errorf("浏览器进程未在 %s 内完成启动，尚未获取调试端口", timeout.Round(time.Second))
 }
 
-func waitBrowserDebugPortStable(initialDebugPort int, userDataDir string, timeout time.Duration, stableFor time.Duration, monitor *browserProcessMonitor) (int, error) {
+func waitBrowserDebugPortStable(initialDebugPort int, userDataDir string, timeout time.Duration, stableFor time.Duration, monitor *browser.BrowserProcessMonitor) (int, error) {
 	debugPort, err := waitBrowserDebugPortReady(initialDebugPort, userDataDir, timeout, monitor)
 	if err != nil {
 		return 0, err
@@ -155,7 +156,7 @@ func waitBrowserDebugPortStable(initialDebugPort int, userDataDir string, timeou
 	return debugPort, nil
 }
 
-func resolveBrowserDebugPort(initialDebugPort int, userDataDir string, monitor *browserProcessMonitor) (int, error) {
+func resolveBrowserDebugPort(initialDebugPort int, userDataDir string, monitor *browser.BrowserProcessMonitor) (int, error) {
 	if initialDebugPort > 0 {
 		return initialDebugPort, nil
 	}

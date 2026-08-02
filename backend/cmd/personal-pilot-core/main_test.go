@@ -70,6 +70,46 @@ func TestWriteJSONUsesContentLengthAndSingleBody(t *testing.T) {
 	}
 }
 
+func TestRPCBrowserInstanceExecActionReachesAppMethod(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := backend.NewApp(t.TempDir())
+	server, bridgeURL, _, err := startBridgeServer(ctx, app, newEventHub(), "bridge-token", "event-token", cancel)
+	if err != nil {
+		t.Fatalf("start bridge server: %v", err)
+	}
+	defer server.Close()
+
+	body := strings.NewReader(`{"method":"BrowserInstanceExecAction","args":["missing-profile",{"type":"navigate","url":"https://example.test"}]}`)
+	req, err := http.NewRequest(http.MethodPost, bridgeURL+"/rpc", body)
+	if err != nil {
+		t.Fatalf("create rpc request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bridgeTokenHeader, "bridge-token")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post rpc request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("rpc status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var decoded rpcResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode rpc response: %v", err)
+	}
+	if decoded.OK {
+		t.Fatalf("rpc response should fail for missing profile: %+v", decoded)
+	}
+	if !strings.Contains(decoded.Error, "profile not found") {
+		t.Fatalf("rpc error = %q, want profile not found", decoded.Error)
+	}
+}
+
 func TestShutdownClosesEventStream(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -86,6 +126,7 @@ func TestShutdownClosesEventStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create events request: %v", err)
 	}
+	req.Header.Set(eventTokenHeader, "event-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("open event stream: %v", err)

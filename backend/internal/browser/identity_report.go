@@ -37,6 +37,7 @@ type IdentitySubscores struct {
 	FingerprintVisible  int `json:"fingerprintVisible"`
 	Consistency         int `json:"consistency"`
 	ProfilePersistence  int `json:"profilePersistence"`
+	LongTermCoherence   int `json:"longTermCoherence"`
 	ProxyNetwork        int `json:"proxyNetwork"`
 	BehaviorNaturalness int `json:"behaviorNaturalness"`
 	AutomationSafety    int `json:"automationSafety"`
@@ -158,6 +159,7 @@ func buildIdentityDimensions(profile *Profile, fp *FingerprintSnapshot, ctx Iden
 	addValue("client_hints_bitness", "fingerprint", "L2", fp.UADataBitness, false)
 	addValue("client_hints_model", "fingerprint", "L2", fp.UADataModel, false)
 	addValue("client_hints_full_versions", "fingerprint", "L2", strings.Join(fp.UADataFullVersions, ","), false)
+	addUACoreCoherenceDimension(add, profile, fp)
 	addNumber("inner_width", "fingerprint", "L1", fp.InnerWidth, 1, true)
 	addNumber("inner_height", "fingerprint", "L1", fp.InnerHeight, 1, true)
 	addNumber("outer_width", "fingerprint", "L1", fp.OuterWidth, 1, false)
@@ -192,6 +194,7 @@ func buildIdentityDimensions(profile *Profile, fp *FingerprintSnapshot, ctx Iden
 	dims = append(dims, expectedIdentityDimensions(profile, fp)...)
 	dims = append(dims, consistencyIdentityDimensions(profile, fp)...)
 	dims = append(dims, profileGuardDimensions(profile, ctx)...)
+	dims = append(dims, longTermCoherenceDimensions(profile)...)
 	return dims
 }
 
@@ -313,11 +316,124 @@ func profileGuardDimensions(profile *Profile, ctx IdentityReportContext) []Ident
 	return dims
 }
 
+func longTermCoherenceDimensions(profile *Profile) []IdentityDimension {
+	dims := make([]IdentityDimension, 0, 10)
+	add := func(id, status, message, expected, actual string, penalty int) {
+		dims = append(dims, IdentityDimension{
+			ID: id, Category: "long_term", Layer: "L5", Status: status,
+			Message: message, Expected: expected, Actual: actual, Penalty: penalty,
+		})
+	}
+	if profile == nil {
+		add("long_term_profile_present", "fail", "profile is missing", "profile", "", 100)
+		return dims
+	}
+
+	createdAt := strings.TrimSpace(profile.CreatedAt)
+	updatedAt := strings.TrimSpace(profile.UpdatedAt)
+	if createdAt == "" || updatedAt == "" {
+		add("long_term_profile_timeline", "warning", "profile created/updated timeline is incomplete", "createdAt and updatedAt", createdAt+" / "+updatedAt, 12)
+	} else {
+		add("long_term_profile_timeline", "pass", "profile created/updated timeline captured", "", createdAt+" / "+updatedAt, 0)
+	}
+
+	lastStartAt := strings.TrimSpace(profile.LastStartAt)
+	lastStopAt := strings.TrimSpace(profile.LastStopAt)
+	if lastStartAt == "" && lastStopAt == "" {
+		add("long_term_runtime_timeline", "warning", "runtime start/stop history is not recorded yet", "lastStartAt or lastStopAt", "", 12)
+	} else {
+		add("long_term_runtime_timeline", "pass", "runtime start/stop history captured", "", lastStartAt+" / "+lastStopAt, 0)
+	}
+
+	if strings.TrimSpace(profile.HumanizeSeed) == "" {
+		add("long_term_behavior_seed_stable", "fail", "stable humanize seed is missing", "non-empty stable seed", "", 18)
+	} else {
+		add("long_term_behavior_seed_stable", "pass", "stable humanize seed is present", "", "present", 0)
+	}
+
+	if strings.TrimSpace(profile.BehaviorProfileID) == "" {
+		add("long_term_behavior_profile_bound", "warning", "behavior profile is not bound", "behavior profile id", "", 8)
+	} else {
+		add("long_term_behavior_profile_bound", "pass", "behavior profile is bound", "", profile.BehaviorProfileID, 0)
+	}
+
+	if strings.TrimSpace(profile.ProxyId) == "" &&
+		strings.TrimSpace(profile.ProxyConfig) == "" &&
+		strings.TrimSpace(profile.ProxyBindName) == "" &&
+		strings.TrimSpace(profile.ProxyBindSourceID) == "" &&
+		strings.TrimSpace(profile.ProxyBindSourceURL) == "" {
+		add("long_term_proxy_binding", "warning", "proxy binding history is missing", "proxy id/config/binding", "", 10)
+	} else {
+		actual := strings.TrimSpace(profile.ProxyId)
+		if actual == "" {
+			actual = strings.TrimSpace(profile.ProxyBindName)
+		}
+		if actual == "" && strings.TrimSpace(profile.ProxyConfig) != "" {
+			actual = "inline proxy config"
+		}
+		add("long_term_proxy_binding", "pass", "proxy binding identity is present", "", actual, 0)
+	}
+
+	if strings.TrimSpace(profile.ProxyBindUpdatedAt) != "" {
+		add("long_term_proxy_bind_time", "pass", "proxy binding update time captured", "", profile.ProxyBindUpdatedAt, 0)
+	} else if strings.TrimSpace(profile.ProxyBindName) != "" || strings.TrimSpace(profile.ProxyBindSourceID) != "" || strings.TrimSpace(profile.ProxyBindSourceURL) != "" {
+		add("long_term_proxy_bind_time", "warning", "proxy binding exists but update time is missing", "proxyBindUpdatedAt", "", 6)
+	} else {
+		add("long_term_proxy_bind_time", "info", "no proxy binding update time because no binding is configured", "", "", 0)
+	}
+
+	if profile.LaunchAudit == nil {
+		add("long_term_launch_audit", "warning", "current run launch audit is missing", "launch audit", "", 12)
+	} else {
+		add("long_term_launch_audit", "pass", "current run launch audit captured", "", profile.LaunchAudit.Timestamp, 0)
+	}
+
+	return dims
+}
+
+func addUACoreCoherenceDimension(
+	add func(id, category, layer, status, message, expected, actual string, penalty int),
+	profile *Profile,
+	fp *FingerprintSnapshot,
+) {
+	expected := ResolveChromiumVersion(nil, "", profile)
+	if expected.Source == "fallback" {
+		add("ua_core_coherent", "consistency", "L2", "info", "core version is not explicitly bound to the profile", "explicit core/runtime version", "fallback="+expected.Full, 0)
+		return
+	}
+	uaVersion, uaOK := coreVersionFromText(fp.UserAgent, "observed_ua")
+	clientHintsVersion, hintsOK := firstClientHintsVersion(fp.UADataFullVersions)
+	actual := fmt.Sprintf("ua=%s; ua_ch=%s", uaVersion.Full, clientHintsVersion.Full)
+	if !uaOK || !hintsOK {
+		add("ua_core_coherent", "consistency", "L2", "warning", "UA/core coherence evidence is incomplete", expected.Full, actual, 8)
+		return
+	}
+	if uaVersion.Major == expected.Major && clientHintsVersion.Major == expected.Major {
+		add("ua_core_coherent", "consistency", "L2", "pass", "UA, UA-CH and core major are coherent", expected.Full, actual, 0)
+		return
+	}
+	add("ua_core_coherent", "consistency", "L2", "fail", "UA or UA-CH major differs from the selected core", expected.Full, actual, 20)
+}
+
+func firstClientHintsVersion(items []string) (CoreVersionInfo, bool) {
+	for _, item := range items {
+		lower := strings.ToLower(item)
+		if !strings.Contains(lower, "chrome") && !strings.Contains(lower, "chromium") {
+			continue
+		}
+		if info, ok := coreVersionFromText(item, "observed_ua_ch"); ok {
+			return info, true
+		}
+	}
+	return CoreVersionInfo{}, false
+}
+
 func buildIdentitySubscores(profile *Profile, fp *FingerprintSnapshot, dims []IdentityDimension) IdentitySubscores {
 	return IdentitySubscores{
 		FingerprintVisible:  scoreCategory(dims, "fingerprint"),
 		Consistency:         scoreCategory(dims, "consistency"),
 		ProfilePersistence:  scoreCategory(dims, "profile"),
+		LongTermCoherence:   scoreCategory(dims, "long_term"),
 		ProxyNetwork:        proxyNetworkScore(profile),
 		BehaviorNaturalness: behaviorNaturalnessScore(profile),
 		AutomationSafety:    automationSafetyScore(fp),
@@ -355,6 +471,9 @@ func behaviorNaturalnessScore(profile *Profile) int {
 	if strings.TrimSpace(profile.BehaviorProfileID) != "" {
 		score += 10
 	}
+	if strings.TrimSpace(profile.LastStartAt) != "" && strings.TrimSpace(profile.CreatedAt) != "" {
+		score += 5
+	}
 	return clampIdentityScore(score)
 }
 
@@ -369,9 +488,10 @@ func automationSafetyScore(fp *FingerprintSnapshot) int {
 }
 
 func weightedIdentityScore(s IdentitySubscores) int {
-	score := float64(s.FingerprintVisible)*0.30 +
-		float64(s.Consistency)*0.25 +
-		float64(s.ProfilePersistence)*0.20 +
+	score := float64(s.FingerprintVisible)*0.27 +
+		float64(s.Consistency)*0.22 +
+		float64(s.ProfilePersistence)*0.16 +
+		float64(s.LongTermCoherence)*0.10 +
 		float64(s.ProxyNetwork)*0.10 +
 		float64(s.BehaviorNaturalness)*0.10 +
 		float64(s.AutomationSafety)*0.05

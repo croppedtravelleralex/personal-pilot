@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"personal-pilot/backend/internal/config"
+	"personal-pilot/backend/internal/transport"
 )
 
 const (
@@ -31,16 +32,16 @@ var proxyIPInfoEndpoints = []proxyIPInfoEndpoint{
 }
 
 func FetchIPPureInfo(
+	ctx context.Context,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 ) (map[string]interface{}, error) {
 	src, err := findProxyConfig(proxyId, proxies)
 	if err != nil {
 		return nil, err
 	}
-	client, err := buildIPPureHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, legacyIPPureInfoTimeout)
+	client, err := buildIPPureHTTPClient(src, proxyId, proxies, managers, legacyIPPureInfoTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -48,16 +49,16 @@ func FetchIPPureInfo(
 }
 
 func FetchProxyIPInfo(
+	ctx context.Context,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 ) (map[string]interface{}, error) {
 	src, err := findProxyConfig(proxyId, proxies)
 	if err != nil {
 		return nil, err
 	}
-	client, err := buildIPPureHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, defaultProxyIPInfoTimeout)
+	client, err := buildIPPureHTTPClient(src, proxyId, proxies, managers, defaultProxyIPInfoTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +72,7 @@ func FetchProxyIPInfo(
 		metadataErrors[endpoint.source] = err.Error()
 	}
 
-	latency, statusCode, canaryErr := checkHTTPClientGET(context.Background(), client, defaultProxyHTTPSCanaryURL, "PersonalPilot/1.0")
+	latency, statusCode, canaryErr := checkHTTPClientGET(ctx, client, defaultProxyHTTPSCanaryURL, transport.ProductUserAgent)
 	canaryData := map[string]interface{}{
 		"source":              "https-canary",
 		"metadataErrors":      metadataErrors,
@@ -99,11 +100,10 @@ func buildIPPureHTTPClient(
 	src string,
 	proxyId string,
 	proxies []config.BrowserProxy,
-	xrayMgr *XrayManager,
-	singboxMgr *SingBoxManager,
+	managers []BridgeManager,
 	timeout time.Duration,
 ) (*http.Client, error) {
-	return buildProxyHTTPClient(src, proxyId, proxies, xrayMgr, singboxMgr, timeout)
+	return buildProxyHTTPClient(src, proxyId, proxies, managers, timeout)
 }
 
 func findProxyConfig(proxyId string, proxies []config.BrowserProxy) (string, error) {
@@ -121,7 +121,7 @@ func findProxyConfig(proxyId string, proxies []config.BrowserProxy) (string, err
 func fetchProxyIPInfoEndpoint(client *http.Client, endpointURL string, source string) (map[string]interface{}, error) {
 	req, _ := http.NewRequest(http.MethodGet, endpointURL, nil)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "PersonalPilot/1.0")
+	req.Header.Set("User-Agent", transport.ProductUserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {

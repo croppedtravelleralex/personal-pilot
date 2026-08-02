@@ -6,4 +6,17 @@ export interface DashboardStats {
   memUsedMB: number
   maxProfileLimit: number
   appVersion: string
+  maxConcurrentInstances: number
+  remainingSlots: number
 }
+
+export interface AccountHealthDailyRow {
+  day: string
+  site?: string
+  challengeRate: number
+  successRate: number
+  detectorPassRate: number
+  sampleN: number
+  status: string
+}
+

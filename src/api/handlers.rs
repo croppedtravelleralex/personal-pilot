@@ -1,0 +1,7546 @@
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::Json,
+};
+use reqwest::Url;
+use serde_json::{json, Value};
+use sqlx::Row;
+use std::{
+    net::SocketAddr,
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use uuid::Uuid;
+
+use crate::{
+    app::state::AppState,
+    behavior::compile_behavior_plan,
+    behavior::form::compile_form_action_plan,
+    db::init::{
+        provider_risk_version_state_for_proxy, refresh_cached_trust_score_for_proxy,
+        refresh_proxy_trust_views_for_scope,
+    },
+    domain::{
+        run::{RUN_STATUS_CANCELLED, RUN_STATUS_RUNNING},
+        task::{
+            TASK_STATUS_CANCELLED, TASK_STATUS_FAILED, TASK_STATUS_PENDING, TASK_STATUS_QUEUED,
+            TASK_STATUS_RUNNING, TASK_STATUS_SUCCEEDED, TASK_STATUS_TIMED_OUT,
+        },
+    },
+    network_identity::{
+        fingerprint_consistency::assess_fingerprint_profile_consistency,
+        fingerprint_consumption::build_lightpanda_runtime_projection,
+        first_family::{
+            detect_fingerprint_schema_kind, first_family_declared_control_fields,
+            first_family_section_summaries, inferred_family_id, inferred_family_variant,
+        },
+        proxy_growth::{
+            assess_proxy_pool_health, proxy_pool_growth_policy_from_env,
+            proxy_replenish_global_batch_limit_from_env,
+            proxy_replenish_region_batch_limit_from_env,
+            proxy_replenish_total_batch_limit_from_env, ProxyPoolInventorySnapshot,
+        },
+        proxy_harvest::load_proxy_harvest_metrics,
+        validator::validate_fingerprint_profile,
+    },
+    runner::RunnerExecutionIntent,
+};
+
+use super::{
+    dto::{
+        AuthMetricsResponse, BehaviorMetricsResponse, BrowserExtractTextRequest,
+        BrowserGetFinalUrlRequest, BrowserGetHtmlRequest, BrowserGetTitleRequest,
+        BrowserOpenRequest, CancelTaskResponse, ConsumptionExplain,
+        ContinuityHeartbeatTickItemResponse, ContinuityHeartbeatTickResponse,
+        CreateFingerprintProfileRequest, CreateProxyRequest, CreateTaskRequest,
+        FingerprintMetricsResponse, FingerprintProfileResponse, FormInputRequest, HealthResponse,
+        LogResponse, PaginationQuery, ProxyMetricsResponse, ProxyResponse,
+        ProxySelectionExplainResponse, ProxySmokeResponse, ProxyTrustCacheCheckResponse,
+        ProxyTrustCacheMaintenanceResponse, ProxyTrustCacheRepairBatchResponse,
+        ProxyTrustCacheRepairResponse, ProxyTrustCacheScanItem, ProxyTrustCacheScanQuery,
+        ProxyTrustCacheScanResponse, ProxyVerifyBatchProviderSummary, ProxyVerifyBatchRequest,
+        ProxyVerifyBatchResponse, ProxyVerifyResponse, RetryTaskResponse, RunResponse,
+        StatusResponse, TaskResponse, TaskStatusCounts, VerifyBatchListQuery, VerifyBatchResponse,
+        VerifyMetricsResponse, WorkerStatusResponse,
+    },
+    explainability::{
+        build_task_explainability, content_bool_field, content_i64_field, content_string_field,
+        enrich_summary_artifacts, latest_browser_ready_tasks, latest_execution_summaries,
+    },
+};
+
+fn perf_probe_enabled() -> bool {
+    std::env::var("PP_PERF_PROBE")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
+        .unwrap_or(false)
+}
+
+fn perf_probe_log(event: &str, fields: &[(&str, String)]) {
+    if !perf_probe_enabled() {
+        return;
+    }
+    let detail = fields
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if detail.is_empty() {
+        eprintln!("perf_probe event={}", event);
+    } else {
+        eprintln!("perf_probe event={} {}", event, detail);
+    }
+}
+
+fn now_ts_string() -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    secs.to_string()
+}
+
+fn sanitize_limit(limit: Option<i64>, default_value: i64, max_value: i64) -> i64 {
+    match limit {
+        Some(value) if value > 0 => value.min(max_value),
+        _ => default_value,
+    }
+}
+
+fn sanitize_offset(offset: Option<i64>) -> i64 {
+    match offset {
+        Some(value) if value > 0 => value,
+        _ => 0,
+    }
+}
+
+const HOT_REGION_WINDOW_SECONDS: i64 = 600;
+
+fn round_percent(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
+fn fingerprint_consumption_explain(
+    profile_id: &str,
+    version: i64,
+    profile_json: &Value,
+) -> ConsumptionExplain {
+    let projection = build_lightpanda_runtime_projection(profile_id, version, profile_json);
+    let consumption = projection.consumption;
+    ConsumptionExplain {
+        declared_count: consumption.declared_count(),
+        resolved_count: consumption.resolved_count(),
+        applied_count: consumption.applied_count(),
+        ignored_count: consumption.ignored_count(),
+        declared_fields: consumption.declared_fields,
+        resolved_fields: consumption.resolved_fields,
+        applied_fields: consumption.applied_fields,
+        ignored_fields: consumption.ignored_fields,
+        consumption_status: consumption.consumption_status,
+        consumption_version: Some(consumption.consumption_version),
+        partial_support_warning: consumption.partial_support_warning,
+    }
+}
+
+fn build_fingerprint_profile_response(
+    id: String,
+    name: String,
+    version: i64,
+    status: String,
+    tags_json: Option<String>,
+    profile_json: Value,
+    created_at: String,
+    updated_at: String,
+) -> FingerprintProfileResponse {
+    let validation = validate_fingerprint_profile(&profile_json);
+    let declared_control_fields = first_family_declared_control_fields(&profile_json);
+    let consumption_explain = fingerprint_consumption_explain(&id, version, &profile_json);
+    let supported_runtime_fields = consumption_explain.resolved_fields.clone();
+    let unsupported_control_fields = declared_control_fields
+        .iter()
+        .filter(|field| {
+            !supported_runtime_fields
+                .iter()
+                .any(|resolved| resolved == *field)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    FingerprintProfileResponse {
+        id,
+        name,
+        version,
+        status,
+        tags_json,
+        family_id: inferred_family_id(&profile_json),
+        family_variant: inferred_family_variant(&profile_json),
+        schema_kind: detect_fingerprint_schema_kind(&profile_json).to_string(),
+        declared_control_count: declared_control_fields.len(),
+        declared_control_fields,
+        declared_sections: first_family_section_summaries(&profile_json),
+        supported_runtime_fields,
+        unsupported_control_fields,
+        consistency_assessment: assess_fingerprint_profile_consistency(
+            None,
+            None,
+            None,
+            &profile_json,
+        ),
+        consumption_explain,
+        profile_json,
+        validation_ok: validation.ok,
+        validation_issues: validation.issues,
+        created_at,
+        updated_at,
+    }
+}
+
+const HEARTBEAT_METRICS_WINDOW_SECONDS: i64 = 86_400;
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct ResolvedNetworkPolicyModel {
+    id: String,
+    region_anchor: Option<String>,
+    allow_same_country_fallback: bool,
+    allow_same_region_fallback: bool,
+    provider_preference: Option<String>,
+    network_policy_json: Value,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedContinuityPolicyModel {
+    id: String,
+    session_ttl_seconds: i64,
+    heartbeat_interval_seconds: i64,
+    site_group_mode: String,
+    recovery_enabled: bool,
+    protect_on_login_loss: bool,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedPlatformTemplateModel {
+    id: String,
+    platform_id: String,
+    readiness_level: String,
+    warm_paths_json: Value,
+    revisit_paths_json: Value,
+    stateful_paths_json: Value,
+    write_operation_paths_json: Value,
+    high_risk_paths_json: Value,
+    continuity_checks_json: Value,
+    identity_markers_json: Value,
+    identity_markers_source: Option<String>,
+    login_loss_signals_json: Value,
+    recovery_steps_json: Value,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct StorePlatformOverrideLookupRow {
+    admin_origin: Option<String>,
+    entry_origin: Option<String>,
+    entry_paths_json: Option<String>,
+    warm_paths_json: Option<String>,
+    revisit_paths_json: Option<String>,
+    stateful_paths_json: Option<String>,
+    high_risk_paths_json: Option<String>,
+    recovery_steps_json: Option<String>,
+    login_loss_signals_json: Option<String>,
+    identity_markers_json: Option<String>,
+    status: String,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct ResolvedPersonaBundle {
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    country_anchor: String,
+    region_anchor: Option<String>,
+    locale: String,
+    timezone: String,
+    fingerprint_profile_id: String,
+    behavior_profile_id: Option<String>,
+    network_policy: ResolvedNetworkPolicyModel,
+    continuity_policy: ResolvedContinuityPolicyModel,
+    platform_template: Option<ResolvedPlatformTemplateModel>,
+    resolved_admin_origin: Option<String>,
+    resolved_entry_origin: Option<String>,
+    resolved_entry_paths: Vec<String>,
+    default_platform_origin: Option<String>,
+    origin_source: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ResolvedPersonaLookupRow {
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    country_anchor: String,
+    region_anchor: Option<String>,
+    locale: String,
+    timezone: String,
+    fingerprint_profile_id: String,
+    behavior_profile_id: Option<String>,
+    network_policy_id: String,
+    continuity_policy_id: String,
+    persona_status: String,
+    network_policy_region_anchor: Option<String>,
+    allow_same_country_fallback: i64,
+    allow_same_region_fallback: i64,
+    provider_preference: Option<String>,
+    network_policy_json: String,
+    network_status: String,
+    continuity_policy_lookup_id: String,
+    session_ttl_seconds: i64,
+    heartbeat_interval_seconds: i64,
+    site_group_mode: String,
+    recovery_enabled: i64,
+    protect_on_login_loss: i64,
+    continuity_status: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct HeartbeatPersonaCandidateRow {
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    heartbeat_interval_seconds: i64,
+}
+
+fn normalize_origin_value(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let parsed = Url::parse(trimmed).ok()?;
+    let scheme = parsed.scheme();
+    if !matches!(scheme, "http" | "https") {
+        return None;
+    }
+    if parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path() != "/"
+    {
+        return None;
+    }
+
+    Some(parsed.origin().ascii_serialization())
+}
+
+fn parse_json_text_compat(raw: &str) -> Option<Value> {
+    if let Ok(value) = serde_json::from_str::<Value>(raw) {
+        return Some(value);
+    }
+    if raw.contains("\\\"") {
+        let normalized = raw.replace("\\\"", "\"");
+        if let Ok(value) = serde_json::from_str::<Value>(&normalized) {
+            return Some(value);
+        }
+    }
+    serde_json::from_str::<String>(raw)
+        .ok()
+        .and_then(|value| serde_json::from_str::<Value>(&value).ok())
+}
+
+fn parse_json_text(raw: Option<String>, fallback: Value) -> Value {
+    raw.as_deref()
+        .and_then(parse_json_text_compat)
+        .unwrap_or(fallback)
+}
+
+fn parse_optional_json_text(raw: Option<String>) -> Option<Value> {
+    raw.as_deref().and_then(parse_json_text_compat)
+}
+
+fn merge_json_objects(base: Value, overlay: Value) -> Value {
+    let mut base_obj = match base {
+        Value::Object(obj) => obj,
+        _ => serde_json::Map::new(),
+    };
+    if let Value::Object(overlay_obj) = overlay {
+        for (key, value) in overlay_obj {
+            base_obj.insert(key, value);
+        }
+    }
+    Value::Object(base_obj)
+}
+
+fn path_patterns_from_value(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.as_str().map(str::trim))
+        .filter(|item| !item.is_empty())
+        .map(|item| item.to_string())
+        .collect()
+}
+
+fn url_matches_any_path(url: &str, patterns: &[String]) -> bool {
+    let parsed = Url::parse(url).ok();
+    let path = parsed
+        .as_ref()
+        .map(|value| value.path().to_string())
+        .unwrap_or_else(|| url.to_string());
+    patterns
+        .iter()
+        .any(|pattern| url.contains(pattern) || path.starts_with(pattern))
+}
+
+fn default_platform_origin(platform_id: &str) -> Option<&'static str> {
+    match platform_id.trim().to_ascii_lowercase().as_str() {
+        "amazon" | "amazon_seller_central" | "amazon-seller-central" => {
+            Some("https://sellercentral.amazon.com")
+        }
+        "ebay" | "ebay_seller_hub" | "ebay-seller-hub" => Some("https://www.ebay.com"),
+        "shopify" | "shopify_admin" | "shopify-admin" => Some("https://admin.shopify.com"),
+        "walmart" | "walmart_seller_center" | "walmart-seller-center" => {
+            Some("https://seller.walmart.com")
+        }
+        "tiktok_shop" | "tiktok-shop" | "tiktokshop" => Some("https://seller-us.tiktok.com"),
+        "xiaohongshu" | "xhs" => Some("https://seller.xiaohongshu.com"),
+        "independent_site" | "independent-site" | "independent" => Some("https://example.com"),
+        _ => None,
+    }
+}
+
+fn is_xiaohongshu_platform(platform_id: &str) -> bool {
+    matches!(
+        platform_id.trim().to_ascii_lowercase().as_str(),
+        "xiaohongshu" | "xhs"
+    )
+}
+
+fn is_sample_ready_template(template: &ResolvedPlatformTemplateModel) -> bool {
+    template
+        .readiness_level
+        .trim()
+        .eq_ignore_ascii_case("sample_ready")
+}
+
+fn heartbeat_task_kind_for_template(template: &ResolvedPlatformTemplateModel) -> &'static str {
+    if is_sample_ready_template(template) && is_xiaohongshu_platform(&template.platform_id) {
+        "extract_text"
+    } else {
+        "open_page"
+    }
+}
+
+fn resolve_heartbeat_target_candidates(
+    bundle: &ResolvedPersonaBundle,
+    template: &ResolvedPlatformTemplateModel,
+) -> Vec<String> {
+    if !bundle.resolved_entry_paths.is_empty() {
+        return bundle.resolved_entry_paths.clone();
+    }
+    [
+        &template.revisit_paths_json,
+        &template.warm_paths_json,
+        &template.stateful_paths_json,
+    ]
+    .into_iter()
+    .find_map(|value| {
+        let paths = path_patterns_from_value(value);
+        (!paths.is_empty()).then_some(paths)
+    })
+    .unwrap_or_default()
+}
+
+async fn heartbeat_target_index_for_persona(
+    state: &AppState,
+    persona_id: &str,
+    candidate_count: usize,
+) -> Result<usize, (StatusCode, String)> {
+    if candidate_count <= 1 {
+        return Ok(0);
+    }
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('heartbeat_scheduled', 'heartbeat_skipped', 'heartbeat_failed')"#,
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load heartbeat event count for persona {persona_id}: {err}"),
+        )
+    })?;
+    Ok((total.rem_euclid(candidate_count as i64)) as usize)
+}
+
+async fn resolve_heartbeat_target_path(
+    state: &AppState,
+    bundle: &ResolvedPersonaBundle,
+    template: &ResolvedPlatformTemplateModel,
+) -> Result<Option<String>, (StatusCode, String)> {
+    let candidates = resolve_heartbeat_target_candidates(bundle, template);
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    if is_sample_ready_template(template) && candidates.len() > 1 {
+        let index =
+            heartbeat_target_index_for_persona(state, &bundle.persona_id, candidates.len()).await?;
+        return Ok(candidates.get(index).cloned());
+    }
+    Ok(candidates.first().cloned())
+}
+
+fn join_origin_with_target(origin: &str, target_path: &str) -> Option<String> {
+    let trimmed = target_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Some(trimmed.to_string());
+    }
+    let normalized_path = if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    };
+    Url::parse(origin)
+        .ok()
+        .and_then(|value| value.join(&normalized_path).ok())
+        .map(|value| value.to_string())
+}
+
+fn resolve_heartbeat_target_url(
+    bundle: &ResolvedPersonaBundle,
+    target_path: &str,
+) -> Option<(String, String)> {
+    let trimmed = target_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Some((
+            trimmed.to_string(),
+            bundle
+                .origin_source
+                .clone()
+                .or_else(|| {
+                    bundle
+                        .default_platform_origin
+                        .as_ref()
+                        .map(|_| "platform_default".to_string())
+                })
+                .unwrap_or_else(|| "platform_default".to_string()),
+        ));
+    }
+
+    let candidates = [
+        (
+            bundle.resolved_entry_origin.as_deref(),
+            bundle.origin_source.as_deref(),
+        ),
+        (
+            bundle.resolved_admin_origin.as_deref(),
+            Some("store_override_admin"),
+        ),
+        (
+            bundle.default_platform_origin.as_deref(),
+            Some("platform_default"),
+        ),
+    ];
+    for (origin, source) in candidates {
+        let Some(origin) = origin else {
+            continue;
+        };
+        if let Some(target_url) = join_origin_with_target(origin, trimmed) {
+            return Some((target_url, source.unwrap_or("platform_default").to_string()));
+        }
+    }
+    None
+}
+
+async fn persona_has_inflight_task(
+    state: &AppState,
+    persona_id: &str,
+) -> Result<bool, (StatusCode, String)> {
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM tasks WHERE persona_id = ? AND status IN ('pending', 'queued', 'running')"#,
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to inspect in-flight task state for persona {persona_id}: {err}"),
+        )
+    })?;
+    Ok(count > 0)
+}
+
+async fn latest_persona_task_activity_ts(
+    state: &AppState,
+    persona_id: &str,
+) -> Result<Option<i64>, (StatusCode, String)> {
+    sqlx::query_scalar(
+        r#"SELECT MAX(CAST(COALESCE(finished_at, started_at, queued_at, created_at) AS INTEGER)) FROM tasks WHERE persona_id = ?"#,
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to inspect latest task activity for persona {persona_id}: {err}"),
+        )
+    })
+}
+
+fn merged_template_value(base: &Value, override_value: Option<&Value>) -> Value {
+    override_value.cloned().unwrap_or_else(|| base.clone())
+}
+
+async fn resolve_persona_bundle(
+    state: &AppState,
+    persona_id: &str,
+) -> Result<ResolvedPersonaBundle, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, ResolvedPersonaLookupRow>(
+        r#"
+        SELECT
+            p.id AS persona_id,
+            p.store_id,
+            p.platform_id,
+            p.country_anchor,
+            p.region_anchor,
+            p.locale,
+            p.timezone,
+            p.fingerprint_profile_id,
+            p.behavior_profile_id,
+            p.network_policy_id,
+            p.continuity_policy_id,
+            p.status AS persona_status,
+            np.region_anchor AS network_policy_region_anchor,
+            np.allow_same_country_fallback,
+            np.allow_same_region_fallback,
+            np.provider_preference,
+            np.network_policy_json,
+            np.status AS network_status,
+            cp.id AS continuity_policy_lookup_id,
+            cp.session_ttl_seconds,
+            cp.heartbeat_interval_seconds,
+            cp.site_group_mode,
+            cp.recovery_enabled,
+            cp.protect_on_login_loss,
+            cp.status AS continuity_status
+        FROM persona_profiles p
+        JOIN network_policies np ON np.id = p.network_policy_id
+        JOIN continuity_policies cp ON cp.id = p.continuity_policy_id
+        WHERE p.id = ?
+        "#,
+    )
+    .bind(persona_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to resolve persona profile: {err}"),
+        )
+    })?;
+
+    let Some(row) = row else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("persona profile not found: {persona_id}"),
+        ));
+    };
+
+    if !matches!(row.persona_status.as_str(), "active" | "degraded") {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("persona profile is not runnable: {}", row.persona_id),
+        ));
+    }
+    if row.network_status != "active" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("network policy is not active: {}", row.network_policy_id),
+        ));
+    }
+    if row.continuity_status != "active" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "continuity policy is not active: {}",
+                row.continuity_policy_id
+            ),
+        ));
+    }
+
+    let template_row = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            String,
+            String,
+        ),
+    >(
+        r#"
+        SELECT
+            id,
+            platform_id,
+            warm_paths_json,
+            revisit_paths_json,
+            stateful_paths_json,
+            write_operation_paths_json,
+            high_risk_paths_json,
+            continuity_checks_json,
+            identity_markers_json,
+            login_loss_signals_json,
+            recovery_steps_json,
+            readiness_level,
+            status
+        FROM platform_templates
+        WHERE platform_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&row.platform_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load platform template: {err}"),
+        )
+    })?;
+
+    let override_row = sqlx::query_as::<_, StorePlatformOverrideLookupRow>(
+        r#"
+        SELECT
+            admin_origin,
+            entry_origin,
+            entry_paths_json,
+            warm_paths_json,
+            revisit_paths_json,
+            stateful_paths_json,
+            high_risk_paths_json,
+            recovery_steps_json,
+            login_loss_signals_json,
+            identity_markers_json,
+            status
+        FROM store_platform_overrides
+        WHERE store_id = ? AND platform_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&row.store_id)
+    .bind(&row.platform_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load store platform override: {err}"),
+        )
+    })?;
+
+    let override_active = override_row
+        .as_ref()
+        .map(|row| row.status.as_str() == "active")
+        .unwrap_or(false);
+    let override_admin_origin = override_active
+        .then(|| {
+            override_row
+                .as_ref()
+                .and_then(|row| row.admin_origin.as_deref().and_then(normalize_origin_value))
+        })
+        .flatten();
+    let override_entry_origin = override_active
+        .then(|| {
+            override_row
+                .as_ref()
+                .and_then(|row| row.entry_origin.as_deref().and_then(normalize_origin_value))
+        })
+        .flatten();
+    let override_entry_paths = override_active
+        .then(|| {
+            override_row
+                .as_ref()
+                .and_then(|row| parse_optional_json_text(row.entry_paths_json.clone()))
+        })
+        .flatten()
+        .map(|value| path_patterns_from_value(&value))
+        .unwrap_or_default();
+    let default_origin = default_platform_origin(&row.platform_id).map(str::to_string);
+    let resolved_admin_origin = override_admin_origin
+        .clone()
+        .or_else(|| default_origin.clone());
+    let resolved_entry_origin = override_entry_origin
+        .clone()
+        .or_else(|| resolved_admin_origin.clone());
+    let origin_source = if override_entry_origin.is_some() {
+        Some("store_override_entry".to_string())
+    } else if override_admin_origin.is_some() {
+        Some("store_override_admin".to_string())
+    } else if default_origin.is_some() {
+        Some("platform_default".to_string())
+    } else {
+        None
+    };
+
+    let platform_template = template_row.and_then(
+        |(
+            template_id,
+            template_platform_id,
+            warm_paths_json,
+            revisit_paths_json,
+            stateful_paths_json,
+            write_operation_paths_json,
+            high_risk_paths_json,
+            continuity_checks_json,
+            identity_markers_json,
+            login_loss_signals_json,
+            recovery_steps_json,
+            readiness_level,
+            template_status,
+        )| {
+            if template_status != "active" {
+                return None;
+            }
+
+            let override_warm = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.warm_paths_json.clone()))
+                })
+                .flatten();
+            let override_revisit = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.revisit_paths_json.clone()))
+                })
+                .flatten();
+            let override_stateful = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.stateful_paths_json.clone()))
+                })
+                .flatten();
+            let override_high_risk = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.high_risk_paths_json.clone()))
+                })
+                .flatten();
+            let override_recovery = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.recovery_steps_json.clone()))
+                })
+                .flatten();
+            let override_login_signals = override_active
+                .then(|| {
+                    override_row.as_ref().and_then(|row| {
+                        parse_optional_json_text(row.login_loss_signals_json.clone())
+                    })
+                })
+                .flatten();
+            let override_identity_markers = override_active
+                .then(|| {
+                    override_row
+                        .as_ref()
+                        .and_then(|row| parse_optional_json_text(row.identity_markers_json.clone()))
+                })
+                .flatten();
+            let base_identity_markers = parse_json_text(identity_markers_json.clone(), json!([]));
+            let resolved_identity_markers =
+                merged_template_value(&base_identity_markers, override_identity_markers.as_ref());
+            let base_identity_markers_present = base_identity_markers
+                .as_array()
+                .map(|items| !items.is_empty())
+                .unwrap_or(false);
+            let override_identity_markers_present = override_identity_markers
+                .as_ref()
+                .and_then(Value::as_array)
+                .map(|items| !items.is_empty())
+                .unwrap_or(false);
+
+            Some(ResolvedPlatformTemplateModel {
+                id: template_id,
+                platform_id: template_platform_id,
+                readiness_level,
+                warm_paths_json: merged_template_value(
+                    &parse_json_text(Some(warm_paths_json), json!([])),
+                    override_warm.as_ref(),
+                ),
+                revisit_paths_json: merged_template_value(
+                    &parse_json_text(Some(revisit_paths_json), json!([])),
+                    override_revisit.as_ref(),
+                ),
+                stateful_paths_json: merged_template_value(
+                    &parse_json_text(Some(stateful_paths_json), json!([])),
+                    override_stateful.as_ref(),
+                ),
+                write_operation_paths_json: parse_json_text(
+                    Some(write_operation_paths_json),
+                    json!([]),
+                ),
+                high_risk_paths_json: merged_template_value(
+                    &parse_json_text(Some(high_risk_paths_json), json!([])),
+                    override_high_risk.as_ref(),
+                ),
+                continuity_checks_json: parse_json_text(continuity_checks_json, json!([])),
+                identity_markers_json: resolved_identity_markers,
+                identity_markers_source: if override_identity_markers_present {
+                    Some("store_override".to_string())
+                } else if base_identity_markers_present {
+                    Some("platform_template".to_string())
+                } else {
+                    None
+                },
+                login_loss_signals_json: merged_template_value(
+                    &parse_json_text(login_loss_signals_json, json!([])),
+                    override_login_signals.as_ref(),
+                ),
+                recovery_steps_json: merged_template_value(
+                    &parse_json_text(recovery_steps_json, json!([])),
+                    override_recovery.as_ref(),
+                ),
+            })
+        },
+    );
+
+    Ok(ResolvedPersonaBundle {
+        persona_id: row.persona_id,
+        store_id: row.store_id,
+        platform_id: row.platform_id,
+        country_anchor: row.country_anchor,
+        region_anchor: row.region_anchor,
+        locale: row.locale,
+        timezone: row.timezone,
+        fingerprint_profile_id: row.fingerprint_profile_id,
+        behavior_profile_id: row.behavior_profile_id,
+        network_policy: ResolvedNetworkPolicyModel {
+            id: row.network_policy_id,
+            region_anchor: row.network_policy_region_anchor,
+            allow_same_country_fallback: row.allow_same_country_fallback != 0,
+            allow_same_region_fallback: row.allow_same_region_fallback != 0,
+            provider_preference: row.provider_preference,
+            network_policy_json: parse_json_text(Some(row.network_policy_json), json!({})),
+        },
+        continuity_policy: ResolvedContinuityPolicyModel {
+            id: row.continuity_policy_lookup_id,
+            session_ttl_seconds: row.session_ttl_seconds,
+            heartbeat_interval_seconds: row.heartbeat_interval_seconds,
+            site_group_mode: row.site_group_mode,
+            recovery_enabled: row.recovery_enabled != 0,
+            protect_on_login_loss: row.protect_on_login_loss != 0,
+        },
+        platform_template,
+        resolved_admin_origin,
+        resolved_entry_origin,
+        resolved_entry_paths: override_entry_paths,
+        default_platform_origin: default_origin,
+        origin_source,
+    })
+}
+
+fn manual_gate_category_from_inputs(
+    platform_id: Option<&str>,
+    task_kind: &str,
+    requested_operation_kind: Option<&str>,
+    requested_url: Option<&str>,
+) -> String {
+    let normalized_operation = requested_operation_kind
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty());
+    let normalized_url = requested_url
+        .and_then(|value| Url::parse(value).ok())
+        .map(|url| url.path().to_ascii_lowercase())
+        .unwrap_or_default();
+    let normalized_platform = platform_id
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    let normalized_task_kind = task_kind.trim().to_ascii_lowercase();
+
+    normalized_operation
+        .as_deref()
+        .and_then(|value| match value {
+            "content_publish" => Some("content_publish"),
+            "listing_publish" => Some("listing_publish"),
+            "price_inventory_change" => Some("price_inventory_change"),
+            "finance_payout" => Some("finance_payout"),
+            "security_account" => Some("security_account"),
+            "permissions_team" => Some("permissions_team"),
+            _ => None,
+        })
+        .or_else(|| {
+            let path = normalized_url.as_str();
+            if path.contains("/finance")
+                || path.contains("/payout")
+                || path.contains("/withdraw")
+                || path.contains("/settlement")
+                || path.contains("/billing")
+            {
+                Some("finance_payout")
+            } else if path.contains("/permissions")
+                || path.contains("/team")
+                || path.contains("/staff")
+                || path.contains("/users")
+                || path.contains("/roles")
+            {
+                Some("permissions_team")
+            } else if path.contains("/security")
+                || path.contains("/account")
+                || path.contains("/recovery")
+                || path.contains("/2fa")
+            {
+                Some("security_account")
+            } else if path.contains("/price")
+                || path.contains("/inventory")
+                || path.contains("/stock")
+                || path.contains("/sku")
+            {
+                Some("price_inventory_change")
+            } else if path.contains("/publish")
+                || path.contains("/notes")
+                || path.contains("/content")
+                || (normalized_platform == "xiaohongshu" && path.contains("/note"))
+            {
+                Some("content_publish")
+            } else if path.contains("/listing")
+                || path.contains("/product")
+                || path.contains("/products")
+                || path.contains("/item")
+                || normalized_task_kind.contains("listing")
+            {
+                Some("listing_publish")
+            } else {
+                None
+            }
+        })
+        .unwrap_or("security_account")
+        .to_string()
+}
+
+fn heartbeat_reason_bucket(reason: &str) -> &'static str {
+    match reason {
+        "persona_has_active_task" => "active_task",
+        "recent_persona_activity" | "heartbeat_not_due" => "recent_activity",
+        "platform_template_missing" => "template_missing",
+        "heartbeat_target_missing" => "no_target",
+        "heartbeat_target_is_high_risk" => "high_risk_target",
+        "heartbeat_target_origin_unresolved" => "origin_unresolved",
+        "heartbeat_due" => "scheduled_due",
+        _ => "other",
+    }
+}
+
+fn heartbeat_platform_cap_from_env() -> usize {
+    std::env::var("PERSONA_PILOT_HEARTBEAT_PLATFORM_CAP")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(3)
+}
+
+fn heartbeat_item(
+    persona_id: String,
+    store_id: String,
+    platform_id: String,
+    status: &str,
+    reason: &str,
+    task_id: Option<String>,
+    target_url: Option<String>,
+    heartbeat_interval_seconds: i64,
+) -> ContinuityHeartbeatTickItemResponse {
+    ContinuityHeartbeatTickItemResponse {
+        persona_id,
+        store_id,
+        platform_id,
+        status: status.to_string(),
+        reason: reason.to_string(),
+        task_id,
+        target_url,
+        heartbeat_interval_seconds,
+    }
+}
+
+async fn append_heartbeat_event(
+    state: &AppState,
+    persona_id: &str,
+    store_id: &str,
+    platform_id: &str,
+    task_id: Option<&str>,
+    event_type: &str,
+    severity: &str,
+    reason: &str,
+    heartbeat_interval_seconds: i64,
+    target_path: Option<&str>,
+    target_url: Option<&str>,
+    origin_source: Option<&str>,
+    probe_action: Option<&str>,
+) -> Result<(), (StatusCode, String)> {
+    append_continuity_event(
+        state,
+        Some(persona_id),
+        Some(store_id),
+        Some(platform_id),
+        task_id,
+        None,
+        event_type,
+        severity,
+        Some(&json!({
+            "reason": reason,
+            "reason_bucket": heartbeat_reason_bucket(reason),
+            "heartbeat_interval_seconds": heartbeat_interval_seconds,
+            "target_path": target_path,
+            "target_url": target_url,
+            "origin_source": origin_source,
+            "probe_action": probe_action,
+            "task_id": task_id,
+        })),
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to record {event_type} event: {err}"),
+        )
+    })
+}
+
+async fn recent_heartbeat_failure_streak_24h(
+    state: &AppState,
+    persona_id: &str,
+) -> anyhow::Result<i64> {
+    let rows = sqlx::query_as::<_, (String,)>(
+        r#"SELECT event_type
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('heartbeat_scheduled', 'heartbeat_failed', 'heartbeat_skipped')
+             AND CAST(created_at AS INTEGER) >= CAST(strftime('%s','now') AS INTEGER) - ?
+           ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC"#,
+    )
+    .bind(persona_id)
+    .bind(HEARTBEAT_METRICS_WINDOW_SECONDS)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut streak = 0_i64;
+    for (event_type,) in rows {
+        match event_type.as_str() {
+            "heartbeat_failed" => streak += 1,
+            "heartbeat_skipped" => {}
+            "heartbeat_scheduled" => break,
+            _ => break,
+        }
+        if streak >= 3 {
+            return Ok(streak);
+        }
+    }
+
+    Ok(streak)
+}
+
+pub async fn append_continuity_event(
+    state: &AppState,
+    persona_id: Option<&str>,
+    store_id: Option<&str>,
+    platform_id: Option<&str>,
+    task_id: Option<&str>,
+    run_id: Option<&str>,
+    event_type: &str,
+    severity: &str,
+    event_json: Option<&Value>,
+) -> anyhow::Result<()> {
+    let event_id = format!("evt-{}", Uuid::new_v4());
+    let created_at = now_ts_string();
+    sqlx::query(
+        r#"INSERT INTO continuity_events (
+               id, persona_id, store_id, platform_id, task_id, run_id,
+               event_type, severity, event_json, created_at
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&event_id)
+    .bind(persona_id)
+    .bind(store_id)
+    .bind(platform_id)
+    .bind(task_id)
+    .bind(run_id)
+    .bind(event_type)
+    .bind(severity)
+    .bind(event_json.map(Value::to_string))
+    .bind(&created_at)
+    .execute(&state.db)
+    .await?;
+
+    if let (Some(persona_id), Some(store_id), Some(platform_id)) =
+        (persona_id, store_id, platform_id)
+    {
+        record_persona_health_snapshot(
+            state,
+            persona_id,
+            store_id,
+            platform_id,
+            event_type,
+            task_id,
+            event_json,
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn record_persona_health_snapshot(
+    state: &AppState,
+    persona_id: &str,
+    store_id: &str,
+    platform_id: &str,
+    event_type: &str,
+    task_id: Option<&str>,
+    event_json: Option<&Value>,
+) -> anyhow::Result<()> {
+    let active_session_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM proxy_session_bindings WHERE persona_id = ?")
+            .bind(persona_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(0);
+
+    let login_risk_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM continuity_events WHERE persona_id = ? AND event_type IN ('login_risk_detected', 'continuity_broken')",
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    let continuity_score = (active_session_count as f64 * 10.0) - (login_risk_count as f64 * 5.0);
+    let current_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM persona_profiles WHERE id = ?")
+            .bind(persona_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+    let pending_manual_gate_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM manual_gate_requests WHERE persona_id = ? AND status = 'pending'",
+    )
+    .bind(persona_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+    let heartbeat_failure_streak = recent_heartbeat_failure_streak_24h(state, persona_id)
+        .await
+        .unwrap_or(0);
+    let last_task_at = latest_persona_task_activity_ts(state, persona_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|value| value.to_string());
+    let heartbeat_rows = sqlx::query_as::<_, (String, Option<String>, String)>(
+        r#"SELECT event_type, event_json, created_at
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('heartbeat_scheduled', 'heartbeat_skipped', 'heartbeat_failed')
+             AND CAST(created_at AS INTEGER) >= CAST(strftime('%s','now') AS INTEGER) - ?
+           ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC"#,
+    )
+    .bind(persona_id)
+    .bind(HEARTBEAT_METRICS_WINDOW_SECONDS)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    let mut heartbeat_scheduled_count = 0_i64;
+    let mut heartbeat_skipped_count = 0_i64;
+    let mut heartbeat_failed_count = 0_i64;
+    let mut heartbeat_skip_breakdown = serde_json::Map::new();
+    for (row_event_type, row_event_json, _) in &heartbeat_rows {
+        let parsed_json = row_event_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+        match row_event_type.as_str() {
+            "heartbeat_scheduled" => heartbeat_scheduled_count += 1,
+            "heartbeat_skipped" => {
+                heartbeat_skipped_count += 1;
+                if let Some(bucket) = parsed_json
+                    .as_ref()
+                    .and_then(|value| value.get("reason_bucket"))
+                    .and_then(|value| value.as_str())
+                {
+                    let current = heartbeat_skip_breakdown
+                        .get(bucket)
+                        .and_then(|value| value.as_i64())
+                        .unwrap_or(0);
+                    heartbeat_skip_breakdown.insert(bucket.to_string(), json!(current + 1));
+                }
+            }
+            "heartbeat_failed" => heartbeat_failed_count += 1,
+            _ => {}
+        }
+    }
+    let heartbeat_total =
+        heartbeat_scheduled_count + heartbeat_skipped_count + heartbeat_failed_count;
+    let heartbeat_success_ratio = if heartbeat_total > 0 {
+        heartbeat_scheduled_count as f64 / heartbeat_total as f64
+    } else {
+        0.0
+    };
+    let latest_heartbeat_json = heartbeat_rows
+        .first()
+        .and_then(|(_, event_json, _)| event_json.as_deref())
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+    let continuity_probe_rows = sqlx::query_as::<_, (String, Option<String>, String)>(
+        r#"SELECT event_type, event_json, created_at
+           FROM continuity_events
+           WHERE persona_id = ?
+             AND event_type IN ('browser_action_succeeded', 'browser_action_failed', 'heartbeat_failed', 'login_risk_detected', 'region_drift')
+             AND CAST(created_at AS INTEGER) >= CAST(strftime('%s','now') AS INTEGER) - ?
+           ORDER BY CAST(created_at AS INTEGER) DESC, rowid DESC"#,
+    )
+    .bind(persona_id)
+    .bind(HEARTBEAT_METRICS_WINDOW_SECONDS)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    let mut continuity_check_total = 0_i64;
+    let mut continuity_check_failed_count = 0_i64;
+    let mut continuity_check_skipped_count = 0_i64;
+    let mut last_probe_action = Value::Null;
+    let mut last_probe_path = Value::Null;
+    let mut last_continuity_check_results = Value::Null;
+    for (row_event_type, row_event_json, _) in &continuity_probe_rows {
+        let Some(parsed_json) = row_event_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        else {
+            continue;
+        };
+        if parsed_json
+            .get("probe_action")
+            .and_then(|value| value.as_str())
+            .is_none()
+        {
+            continue;
+        }
+        continuity_check_total += 1;
+        let failed_checks = parsed_json
+            .get("failed_checks")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let skipped_checks = parsed_json
+            .get("skipped_checks")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let matched_identity_marker = parsed_json
+            .get("matched_identity_marker")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let configured_identity_markers = parsed_json
+            .get("configured_identity_markers")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+        let identity_markers_source = parsed_json
+            .get("identity_markers_source")
+            .cloned()
+            .unwrap_or(Value::Null);
+        continuity_check_skipped_count += skipped_checks.len() as i64;
+        let has_failures =
+            !failed_checks.is_empty() || matches!(row_event_type.as_str(), "browser_action_failed");
+        if has_failures {
+            continuity_check_failed_count += 1;
+        }
+        if last_probe_action.is_null() {
+            last_probe_action = parsed_json
+                .get("probe_action")
+                .cloned()
+                .unwrap_or(Value::Null);
+            last_probe_path = parsed_json
+                .get("probe_path")
+                .cloned()
+                .unwrap_or(Value::Null);
+            last_continuity_check_results = json!({
+                "passed_checks": parsed_json.get("passed_checks").cloned().unwrap_or_else(|| json!([])),
+                "failed_checks": failed_checks,
+                "skipped_checks": skipped_checks,
+                "matched_identity_marker": matched_identity_marker.clone(),
+                "configured_identity_markers": configured_identity_markers.clone(),
+                "identity_markers_source": identity_markers_source.clone(),
+                "evidence_summary": parsed_json.get("evidence_summary").cloned().unwrap_or(Value::Null),
+            });
+        } else if !matched_identity_marker.is_null() {
+            if let Some(last_results) = last_continuity_check_results.as_object_mut() {
+                let current_marker_is_missing = last_results
+                    .get("matched_identity_marker")
+                    .map(Value::is_null)
+                    .unwrap_or(true);
+                if current_marker_is_missing {
+                    last_results.insert(
+                        "matched_identity_marker".to_string(),
+                        matched_identity_marker,
+                    );
+                    last_results.insert(
+                        "configured_identity_markers".to_string(),
+                        configured_identity_markers,
+                    );
+                    last_results.insert(
+                        "identity_markers_source".to_string(),
+                        identity_markers_source,
+                    );
+                }
+            }
+        }
+    }
+    let continuity_check_success_ratio = if continuity_check_total > 0 {
+        (continuity_check_total - continuity_check_failed_count) as f64
+            / continuity_check_total as f64
+    } else {
+        0.0
+    };
+    let snapshot_json = json!({
+        "heartbeat_window_24h": heartbeat_total,
+        "heartbeat_success_ratio_24h": heartbeat_success_ratio,
+        "heartbeat_failed_count_24h": heartbeat_failed_count,
+        "heartbeat_skip_breakdown_24h": heartbeat_skip_breakdown,
+        "last_heartbeat_reason": latest_heartbeat_json.as_ref().and_then(|value| value.get("reason")).cloned().unwrap_or(Value::Null),
+        "last_heartbeat_target_url": latest_heartbeat_json.as_ref().and_then(|value| value.get("target_url")).cloned().unwrap_or(Value::Null),
+        "last_origin_source": latest_heartbeat_json.as_ref().and_then(|value| value.get("origin_source")).cloned().unwrap_or(Value::Null),
+        "current_event_type": event_type,
+        "current_event_context": event_json.cloned().unwrap_or(Value::Null),
+        "last_task_id": task_id,
+        "heartbeat_failed_streak_24h": heartbeat_failure_streak,
+        "manual_gate_pending": pending_manual_gate_count > 0,
+        "last_continuity_check_results": last_continuity_check_results,
+        "continuity_check_success_ratio_24h": continuity_check_success_ratio,
+        "continuity_check_failed_count_24h": continuity_check_failed_count,
+        "continuity_check_skipped_count_24h": continuity_check_skipped_count,
+        "last_probe_action": last_probe_action,
+        "last_probe_path": last_probe_path,
+    });
+
+    let direct_frozen = matches!(
+        event_type,
+        "login_risk_detected" | "continuity_broken" | "region_drift" | "restore_failed_after_retry"
+    );
+    let status = if matches!(current_status.as_deref(), Some("frozen")) || direct_frozen {
+        "frozen"
+    } else if heartbeat_failure_streak >= 3 || matches!(event_type, "recovery_failed") {
+        "degraded"
+    } else if matches!(
+        event_type,
+        "heartbeat_scheduled" | "continuity_restored" | "continuity_persisted"
+    ) {
+        "active"
+    } else {
+        current_status.as_deref().unwrap_or("active")
+    };
+    let created_at = now_ts_string();
+    sqlx::query(
+        r#"INSERT INTO persona_health_snapshots (
+               id, persona_id, store_id, platform_id, status,
+               active_session_count, continuity_score, login_risk_count,
+               last_event_type, last_task_at, snapshot_json, created_at
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(format!("phs-{}", Uuid::new_v4()))
+    .bind(persona_id)
+    .bind(store_id)
+    .bind(platform_id)
+    .bind(status)
+    .bind(active_session_count)
+    .bind(continuity_score.max(0.0))
+    .bind(login_risk_count)
+    .bind(event_type)
+    .bind(last_task_at)
+    .bind(snapshot_json.to_string())
+    .bind(&created_at)
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query("UPDATE persona_profiles SET status = ?, updated_at = ? WHERE id = ?")
+        .bind(status)
+        .bind(&created_at)
+        .bind(persona_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(())
+}
+
+fn continuity_text_haystack(payload: &Value, result_json: &Value) -> String {
+    [
+        result_json.get("title").and_then(Value::as_str),
+        result_json.get("text_preview").and_then(Value::as_str),
+        result_json.get("content_preview").and_then(Value::as_str),
+        result_json.get("html_preview").and_then(Value::as_str),
+        result_json.get("final_url").and_then(Value::as_str),
+        payload.get("url").and_then(Value::as_str),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join("\n")
+    .to_ascii_lowercase()
+}
+
+fn continuity_probe_path(payload: &Value, result_json: &Value) -> Option<String> {
+    result_json
+        .get("final_url")
+        .and_then(Value::as_str)
+        .or_else(|| payload.get("url").and_then(Value::as_str))
+        .and_then(|value| Url::parse(value).ok())
+        .map(|value| value.path().to_string())
+}
+
+fn configured_identity_markers(template: &Value) -> Vec<String> {
+    template
+        .get("identity_markers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .collect()
+}
+
+fn continuity_check_names(template: &Value) -> Vec<String> {
+    template
+        .get("continuity_checks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .collect()
+}
+
+fn continuity_login_loss_signals(template: &Value) -> Vec<String> {
+    template
+        .get("login_loss_signals")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
+        .collect()
+}
+
+fn evaluate_continuity_probe_result(
+    task_kind: &str,
+    payload: &Value,
+    result_json: &Value,
+) -> Option<Value> {
+    let template = payload.get("platform_template")?;
+    let checks = continuity_check_names(template);
+    if checks.is_empty() {
+        return None;
+    }
+
+    let probe_path = continuity_probe_path(payload, result_json)?;
+    let haystack = continuity_text_haystack(payload, result_json);
+    let login_loss_signals = continuity_login_loss_signals(template);
+    let configured_markers = configured_identity_markers(template);
+    let matched_identity_marker = configured_markers.iter().find_map(|marker| {
+        haystack
+            .contains(&marker.to_ascii_lowercase())
+            .then(|| marker.clone())
+    });
+
+    let probe_path_lower = probe_path.to_ascii_lowercase();
+    let mut passed_checks = Vec::new();
+    let mut failed_checks = Vec::new();
+    let mut skipped_checks = Vec::new();
+
+    for check in checks {
+        let normalized = check.to_ascii_lowercase();
+        match normalized.as_str() {
+            "login_state" => {
+                if login_loss_signals
+                    .iter()
+                    .any(|signal| haystack.contains(signal) || probe_path_lower.contains(signal))
+                {
+                    failed_checks.push(check);
+                } else {
+                    passed_checks.push(check);
+                }
+            }
+            "identity" => {
+                if configured_markers.is_empty() {
+                    skipped_checks.push(check);
+                } else if matched_identity_marker.is_some() {
+                    passed_checks.push(check);
+                } else {
+                    failed_checks.push(check);
+                }
+            }
+            "region" => {
+                if payload
+                    .get("network_policy_json")
+                    .and_then(|value| value.get("region"))
+                    .and_then(Value::as_str)
+                    .is_some()
+                {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+            "dashboard" => {
+                if probe_path_lower.contains("/dashboard") || haystack.contains("dashboard") {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+            "notes" => {
+                if probe_path_lower.contains("/notes")
+                    || haystack.contains("/notes")
+                    || haystack.contains(" notes")
+                {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+            other => {
+                if probe_path_lower.contains(other) || haystack.contains(other) {
+                    passed_checks.push(check);
+                } else {
+                    skipped_checks.push(check);
+                }
+            }
+        }
+    }
+
+    let evidence_summary = format!(
+        "probe_action={} probe_path={} passed={} failed={} skipped={}",
+        task_kind,
+        probe_path,
+        if passed_checks.is_empty() {
+            "none".to_string()
+        } else {
+            passed_checks.join(",")
+        },
+        if failed_checks.is_empty() {
+            "none".to_string()
+        } else {
+            failed_checks.join(",")
+        },
+        if skipped_checks.is_empty() {
+            "none".to_string()
+        } else {
+            skipped_checks.join(",")
+        }
+    );
+
+    Some(json!({
+        "probe_action": task_kind,
+        "probe_path": probe_path,
+        "passed_checks": passed_checks,
+        "failed_checks": failed_checks,
+        "skipped_checks": skipped_checks,
+        "matched_identity_marker": matched_identity_marker,
+        "configured_identity_markers": configured_markers,
+        "identity_markers_source": template.get("identity_markers_source").cloned().unwrap_or(Value::Null),
+        "evidence_summary": evidence_summary,
+    }))
+}
+
+pub async fn apply_task_continuity_after_execution(
+    state: &AppState,
+    task_id: &str,
+    run_id: &str,
+    task_kind: &str,
+    task_status: &str,
+    payload: &Value,
+    result_json: &mut Value,
+) -> anyhow::Result<()> {
+    if !is_browser_task_kind(task_kind) {
+        return Ok(());
+    }
+
+    let persona_id = payload.get("persona_id").and_then(Value::as_str);
+    let store_id = payload.get("store_id").and_then(Value::as_str);
+    let platform_id = payload.get("platform_id").and_then(Value::as_str);
+    let (Some(persona_id), Some(store_id), Some(platform_id)) = (persona_id, store_id, platform_id)
+    else {
+        return Ok(());
+    };
+
+    let Some(probe_result) = evaluate_continuity_probe_result(task_kind, payload, result_json)
+    else {
+        return Ok(());
+    };
+
+    if let Value::Object(obj) = result_json {
+        obj.insert("continuity_check_result".to_string(), probe_result.clone());
+    }
+
+    let event_type = if task_status == TASK_STATUS_SUCCEEDED {
+        "browser_action_succeeded"
+    } else {
+        "browser_action_failed"
+    };
+    let severity = if task_status == TASK_STATUS_SUCCEEDED {
+        "info"
+    } else {
+        "warning"
+    };
+
+    append_continuity_event(
+        state,
+        Some(persona_id),
+        Some(store_id),
+        Some(platform_id),
+        Some(task_id),
+        Some(run_id),
+        event_type,
+        severity,
+        Some(&probe_result),
+    )
+    .await?;
+
+    Ok(())
+}
+
+const BROWSER_PROXY_REQUIRED_MESSAGE: &str =
+    "direct mode is forbidden for browser tasks; browser access must use proxy pool";
+
+fn is_browser_task_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "open_page" | "get_html" | "get_title" | "get_final_url" | "extract_text"
+    )
+}
+
+fn is_candidate_proxy_status(status: &str) -> bool {
+    matches!(status, "candidate" | "candidate_rejected")
+}
+
+fn normalize_browser_task_request(
+    mut payload: CreateTaskRequest,
+) -> Result<CreateTaskRequest, (StatusCode, String)> {
+    if !is_browser_task_kind(payload.kind.as_str()) {
+        return Ok(payload);
+    }
+
+    let mut policy_obj = match payload.network_policy_json.take() {
+        Some(Value::Object(obj)) => obj,
+        Some(Value::Null) | None => serde_json::Map::new(),
+        Some(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "network_policy_json must be an object for browser tasks".to_string(),
+            ))
+        }
+    };
+
+    if policy_obj
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .map(|mode| mode.eq_ignore_ascii_case("direct"))
+        .unwrap_or(false)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            BROWSER_PROXY_REQUIRED_MESSAGE.to_string(),
+        ));
+    }
+
+    policy_obj.insert("mode".to_string(), json!("required_proxy"));
+    policy_obj.insert("require_proxy".to_string(), json!(true));
+    if let Some(proxy_id) = payload.proxy_id.as_deref() {
+        policy_obj
+            .entry("proxy_id".to_string())
+            .or_insert_with(|| json!(proxy_id));
+    }
+
+    payload.network_policy_json = Some(Value::Object(policy_obj));
+    Ok(payload)
+}
+
+fn ensure_form_input_allowed_for_task(
+    kind: &str,
+    form_input: Option<&FormInputRequest>,
+) -> Result<(), (StatusCode, String)> {
+    if form_input.is_none() {
+        return Ok(());
+    }
+    if kind != "open_page" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "form_input is only supported for open_page tasks and /browser/open".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[derive(sqlx::FromRow)]
+struct ProxyRow {
+    id: String,
+    scheme: String,
+    host: String,
+    port: i64,
+    username: Option<String>,
+    region: Option<String>,
+    country: Option<String>,
+    provider: Option<String>,
+    status: String,
+    score: f64,
+    success_count: i64,
+    failure_count: i64,
+    last_checked_at: Option<String>,
+    last_used_at: Option<String>,
+    cooldown_until: Option<String>,
+    last_smoke_status: Option<String>,
+    last_smoke_protocol_ok: Option<i64>,
+    last_smoke_upstream_ok: Option<i64>,
+    last_exit_ip: Option<String>,
+    last_anonymity_level: Option<String>,
+    last_smoke_at: Option<String>,
+    last_verify_status: Option<String>,
+    last_verify_geo_match_ok: Option<i64>,
+    last_exit_country: Option<String>,
+    last_exit_region: Option<String>,
+    last_verify_at: Option<String>,
+    last_probe_latency_ms: Option<i64>,
+    last_probe_error: Option<String>,
+    last_probe_error_category: Option<String>,
+    last_verify_confidence: Option<f64>,
+    last_verify_score_delta: Option<i64>,
+    last_verify_source: Option<String>,
+    created_at: String,
+    updated_at: String,
+}
+
+pub async fn run_proxy_verify_probe(
+    state: &AppState,
+    proxy_id: &str,
+) -> Result<ProxyVerifyResponse, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, (String, i64, Option<String>, Option<String>, String)>(
+        r#"SELECT host, port, country, region, status FROM proxies WHERE id = ?"#,
+    )
+    .bind(proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load proxy for verify: {err}"),
+        )
+    })?;
+
+    let Some((host, port, expected_country, expected_region, prior_proxy_status)) = row else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
+    };
+
+    let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("proxy address is invalid for verify: {err}"),
+        )
+    })?;
+
+    let started = Instant::now();
+    let mut stream = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::net::TcpStream::connect(addr),
+    )
+    .await
+    .ok()
+    .and_then(|result| result.ok());
+    let reachable = stream.is_some();
+    let mut protocol_ok = false;
+    let mut upstream_ok = false;
+    let mut exit_ip: Option<String> = None;
+    let mut exit_country: Option<String> = None;
+    let mut exit_region: Option<String> = None;
+    let mut geo_match_ok: Option<bool> = None;
+    let mut region_match_ok: Option<bool> = None;
+    let mut identity_fields_complete: Option<bool> = None;
+    let mut exit_ip_public: Option<bool> = None;
+    let mut anonymity_level: Option<String> = None;
+    let mut invalid_identity_echo = false;
+    let mut probe_error: Option<String> = if reachable {
+        None
+    } else {
+        Some("proxy verify tcp connect failed".to_string())
+    };
+    let mut probe_error_category: Option<String> = if reachable {
+        None
+    } else {
+        Some("connect_failed".to_string())
+    };
+    let mut verify_message = if reachable {
+        "tcp connect succeeded but verify probe did not complete".to_string()
+    } else {
+        "proxy verify tcp connect failed".to_string()
+    };
+
+    if let Some(stream_ref) = stream.as_mut() {
+        let probe = b"CONNECT verify.example:443 HTTP/1.1
+Host: verify.example:443
+
+";
+        if tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            stream_ref.write_all(probe),
+        )
+        .await
+        .ok()
+        .is_some()
+        {
+            let mut buf = [0_u8; 1024];
+            if let Ok(Ok(n)) =
+                tokio::time::timeout(std::time::Duration::from_secs(5), stream_ref.read(&mut buf))
+                    .await
+            {
+                if n > 0 {
+                    let text = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let text_lower = text.to_ascii_lowercase();
+                    let is_http_response =
+                        text_lower.starts_with("http/1.1") || text_lower.starts_with("http/1.0");
+                    let connect_established = is_http_response
+                        && (text_lower.starts_with("http/1.1 200")
+                            || text_lower.starts_with("http/1.0 200")
+                            || text_lower.contains("connection established"));
+                    if is_http_response {
+                        protocol_ok = true;
+                        let has_via = text_lower.contains("via:");
+                        let has_forwarded = text_lower.contains("forwarded:")
+                            || text_lower.contains("x-forwarded-for:");
+                        anonymity_level = Some(if has_forwarded {
+                            "transparent".to_string()
+                        } else if has_via {
+                            "anonymous".to_string()
+                        } else {
+                            "elite".to_string()
+                        });
+                        let raw_exit_ip = parse_probe_field(&text, "ip");
+                        exit_ip = raw_exit_ip
+                            .as_deref()
+                            .filter(|v| looks_like_ip(v))
+                            .map(str::to_string);
+                        invalid_identity_echo = raw_exit_ip.is_some() && exit_ip.is_none();
+                        exit_country = parse_probe_field(&text, "country");
+                        exit_region = parse_probe_field(&text, "region");
+                        exit_ip_public = exit_ip.as_deref().map(ip_is_public);
+                        identity_fields_complete = Some(
+                            exit_ip.is_some() && exit_country.is_some() && exit_region.is_some(),
+                        );
+                        let identity_echo_ok = identity_fields_complete.unwrap_or(false)
+                            && exit_ip_public != Some(false);
+                        upstream_ok = identity_echo_ok || connect_established;
+                        geo_match_ok = exit_country.as_ref().and_then(|actual| {
+                            expected_country
+                                .as_ref()
+                                .map(|expected| actual.eq_ignore_ascii_case(expected))
+                        });
+                        region_match_ok = exit_region.as_ref().and_then(|actual| {
+                            expected_region
+                                .as_ref()
+                                .map(|expected| actual.eq_ignore_ascii_case(expected))
+                        });
+                        verify_message = if connect_established && !identity_echo_ok {
+                            format!(
+                                "proxy verify established CONNECT tunnel without identity echo fields anonymity={:?}",
+                                anonymity_level
+                            )
+                        } else {
+                            format!(
+                                "proxy verify completed ip={:?} public_ip={:?} country={:?} region={:?} region_match={:?}",
+                                exit_ip, exit_ip_public, exit_country, exit_region, region_match_ok
+                            )
+                        };
+                        probe_error = None;
+                        probe_error_category = None;
+                    } else {
+                        verify_message =
+                            format!("proxy verify got non-http response: {text_lower}");
+                        probe_error = Some(verify_message.clone());
+                        probe_error_category = Some("protocol_invalid".to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    if reachable && protocol_ok && invalid_identity_echo {
+        upstream_ok = false;
+        probe_error = Some("verify probe returned invalid exit ip".to_string());
+        probe_error_category = Some("invalid_exit_ip".to_string());
+    } else if reachable && protocol_ok && exit_ip_public == Some(false) {
+        upstream_ok = false;
+        probe_error = Some("verify probe reported non-public exit ip".to_string());
+        probe_error_category = Some("exit_ip_not_public".to_string());
+    } else if reachable && protocol_ok && !upstream_ok {
+        probe_error = Some("verify probe did not receive upstream identity fields".to_string());
+        probe_error_category = Some("upstream_missing".to_string());
+    }
+    let latency_ms = Some(started.elapsed().as_millis());
+    let latency_ms_i64 = latency_ms.and_then(|v| i64::try_from(v).ok());
+    let status = if reachable && protocol_ok && upstream_ok {
+        "ok"
+    } else {
+        "failed"
+    };
+    let verification_confidence = Some(
+        if reachable
+            && protocol_ok
+            && upstream_ok
+            && geo_match_ok == Some(true)
+            && region_match_ok != Some(false)
+            && anonymity_level.as_deref() == Some("elite")
+        {
+            0.98
+        } else if reachable
+            && protocol_ok
+            && upstream_ok
+            && geo_match_ok == Some(true)
+            && region_match_ok != Some(false)
+        {
+            0.95
+        } else if reachable && protocol_ok && upstream_ok && geo_match_ok == Some(true) {
+            0.86
+        } else if reachable && protocol_ok && upstream_ok {
+            0.68
+        } else if reachable && protocol_ok {
+            0.45
+        } else if reachable {
+            0.20
+        } else {
+            0.05
+        },
+    );
+    let verification_score_delta = Some(
+        (if status == "ok" { 8 } else { -8 })
+            + (if geo_match_ok == Some(true) {
+                4
+            } else if geo_match_ok == Some(false) {
+                -4
+            } else {
+                0
+            })
+            + (if region_match_ok == Some(true) {
+                2
+            } else if region_match_ok == Some(false) {
+                -2
+            } else {
+                0
+            })
+            + (if identity_fields_complete == Some(true) {
+                1
+            } else {
+                -1
+            })
+            + (if exit_ip_public == Some(true) {
+                1
+            } else if exit_ip_public == Some(false) {
+                -3
+            } else {
+                0
+            })
+            + match anonymity_level.as_deref() {
+                Some("elite") => 2,
+                Some("anonymous") => -1,
+                Some("transparent") => -3,
+                _ => 0,
+            },
+    );
+    let (risk_level, risk_reasons) = compute_verify_risk_summary(
+        reachable,
+        protocol_ok,
+        upstream_ok,
+        geo_match_ok,
+        region_match_ok,
+        identity_fields_complete,
+        exit_ip_public,
+        anonymity_level.as_deref(),
+        probe_error_category.as_deref(),
+    );
+    let (failure_stage, failure_stage_detail) = classify_verify_failure_stage(
+        reachable,
+        protocol_ok,
+        upstream_ok,
+        probe_error_category.as_deref(),
+        &risk_reasons,
+    );
+    let verification_class =
+        classify_verification_class(status, risk_level.as_deref(), failure_stage.as_deref());
+    let recommended_action = recommend_verify_action(
+        verification_class.as_deref(),
+        risk_level.as_deref(),
+        failure_stage.as_deref(),
+        failure_stage_detail.as_deref(),
+    );
+    let verify_source = Some("local_verify".to_string());
+    let now = now_ts_string();
+    let candidate_cooldown_until = (now.parse::<i64>().unwrap_or(0) + 1800).to_string();
+    let is_candidate_family = is_candidate_proxy_status(prior_proxy_status.as_str());
+    let next_proxy_status = if is_candidate_family {
+        if status == "ok" {
+            "active"
+        } else {
+            "candidate_rejected"
+        }
+    } else {
+        prior_proxy_status.as_str()
+    };
+    let next_promoted_at = if is_candidate_family && status == "ok" {
+        Some(now.clone())
+    } else {
+        None
+    };
+    let next_cooldown_until = if is_candidate_family {
+        if status == "ok" {
+            None
+        } else {
+            Some(candidate_cooldown_until)
+        }
+    } else {
+        None
+    };
+    let should_update_cooldown = if is_candidate_family { 1_i64 } else { 0_i64 };
+    sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, last_verify_status = ?, last_verify_geo_match_ok = ?, last_exit_ip = ?, last_exit_country = ?, last_exit_region = ?, last_anonymity_level = ?, last_verify_at = ?, last_probe_latency_ms = ?, last_probe_error = ?, last_probe_error_category = ?, last_verify_confidence = ?, last_verify_score_delta = ?, last_verify_source = ?, status = ?, promoted_at = COALESCE(?, promoted_at), cooldown_until = CASE WHEN ? != 0 THEN ? ELSE cooldown_until END, score = MAX(0.0, score + (? / 100.0)), updated_at = ? WHERE id = ?"#)
+        .bind(&now)
+        .bind(status)
+        .bind(geo_match_ok.map(|v| if v { 1_i64 } else { 0_i64 }))
+        .bind(&exit_ip)
+        .bind(&exit_country)
+        .bind(&exit_region)
+        .bind(&anonymity_level)
+        .bind(&now)
+        .bind(&latency_ms_i64)
+        .bind(&probe_error)
+        .bind(&probe_error_category)
+        .bind(verification_confidence)
+        .bind(verification_score_delta)
+        .bind(&verify_source)
+        .bind(next_proxy_status)
+        .bind(&next_promoted_at)
+        .bind(should_update_cooldown)
+        .bind(&next_cooldown_until)
+        .bind(verification_score_delta.unwrap_or(0) as f64)
+        .bind(&now)
+        .bind(proxy_id)
+        .execute(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist proxy verify result: {err}")))?;
+    let provider_region = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT provider, region FROM proxies WHERE id = ?",
+    )
+    .bind(proxy_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load proxy provider/region after verify: {err}"),
+        )
+    })?;
+    refresh_proxy_trust_views_for_scope(
+        &state.db,
+        proxy_id,
+        provider_region.0.as_deref(),
+        provider_region.1.as_deref(),
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to refresh scoped trust views after verify: {err}"),
+        )
+    })?;
+
+    Ok(ProxyVerifyResponse {
+        id: proxy_id.to_string(),
+        reachable,
+        protocol_ok,
+        upstream_ok,
+        exit_ip,
+        exit_country,
+        exit_region,
+        geo_match_ok,
+        region_match_ok,
+        identity_fields_complete,
+        risk_level,
+        risk_reasons,
+        failure_stage,
+        failure_stage_detail,
+        anonymity_level,
+        latency_ms,
+        probe_error,
+        probe_error_category,
+        verification_confidence,
+        verification_class,
+        recommended_action,
+        verification_score_delta,
+        verify_source,
+        status: status.to_string(),
+        message: verify_message,
+    })
+}
+
+fn recommend_verify_action(
+    verification_class: Option<&str>,
+    risk_level: Option<&str>,
+    failure_stage: Option<&str>,
+    failure_stage_detail: Option<&str>,
+) -> Option<String> {
+    if verification_class == Some("trusted") {
+        return Some("use".to_string());
+    }
+    if verification_class == Some("conditional") {
+        return Some("use_with_caution".to_string());
+    }
+    if verification_class == Some("rejected") {
+        if matches!(
+            failure_stage,
+            Some("connect") | Some("protocol") | Some("identity")
+        ) {
+            return Some("retry_later".to_string());
+        }
+        if matches!(
+            failure_stage_detail,
+            Some("transparent_proxy") | Some("exit_ip_not_public")
+        ) || risk_level == Some("high")
+        {
+            return Some("quarantine".to_string());
+        }
+        return Some("retry_later".to_string());
+    }
+    None
+}
+
+fn classify_verification_class(
+    status: &str,
+    risk_level: Option<&str>,
+    failure_stage: Option<&str>,
+) -> Option<String> {
+    if status != "ok" {
+        return Some("rejected".to_string());
+    }
+    if failure_stage.is_some() {
+        return Some("rejected".to_string());
+    }
+    match risk_level {
+        Some("low") => Some("trusted".to_string()),
+        Some("medium") | Some("high") => Some("conditional".to_string()),
+        _ => Some("conditional".to_string()),
+    }
+}
+
+fn classify_verify_failure_stage(
+    reachable: bool,
+    protocol_ok: bool,
+    upstream_ok: bool,
+    probe_error_category: Option<&str>,
+    risk_reasons: &[String],
+) -> (Option<String>, Option<String>) {
+    if !reachable {
+        return (
+            Some("connect".to_string()),
+            Some("tcp_connect_failed".to_string()),
+        );
+    }
+    if reachable && !protocol_ok {
+        return (
+            Some("protocol".to_string()),
+            Some(
+                probe_error_category
+                    .unwrap_or("protocol_invalid")
+                    .to_string(),
+            ),
+        );
+    }
+    if probe_error_category == Some("exit_ip_not_public") {
+        return (
+            Some("risk".to_string()),
+            Some("exit_ip_not_public".to_string()),
+        );
+    }
+    if !upstream_ok {
+        return (
+            Some("identity".to_string()),
+            Some(
+                probe_error_category
+                    .unwrap_or("upstream_missing")
+                    .to_string(),
+            ),
+        );
+    }
+    if risk_reasons.iter().any(|r| {
+        matches!(
+            r.as_str(),
+            "transparent_proxy" | "anonymous_proxy" | "geo_mismatch" | "region_mismatch"
+        )
+    }) {
+        let detail = if risk_reasons.iter().any(|r| r == "transparent_proxy") {
+            "transparent_proxy"
+        } else if risk_reasons.iter().any(|r| r == "anonymous_proxy") {
+            "anonymous_proxy"
+        } else if risk_reasons.iter().any(|r| r == "geo_mismatch") {
+            "geo_mismatch"
+        } else {
+            "region_mismatch"
+        };
+        return (Some("risk".to_string()), Some(detail.to_string()));
+    }
+    (None, None)
+}
+
+fn compute_verify_risk_summary(
+    reachable: bool,
+    protocol_ok: bool,
+    upstream_ok: bool,
+    geo_match_ok: Option<bool>,
+    region_match_ok: Option<bool>,
+    identity_fields_complete: Option<bool>,
+    exit_ip_public: Option<bool>,
+    anonymity_level: Option<&str>,
+    probe_error_category: Option<&str>,
+) -> (Option<String>, Vec<String>) {
+    let mut reasons = Vec::new();
+    if !reachable {
+        reasons.push("connect_failed".to_string());
+    }
+    if reachable && !protocol_ok {
+        reasons.push("protocol_invalid".to_string());
+    }
+    if probe_error_category == Some("exit_ip_not_public") || exit_ip_public == Some(false) {
+        reasons.push("exit_ip_not_public".to_string());
+    }
+    if upstream_ok == false {
+        reasons.push("identity_incomplete".to_string());
+    } else if identity_fields_complete == Some(false) {
+        reasons.push("identity_incomplete".to_string());
+    }
+    if geo_match_ok == Some(false) {
+        reasons.push("geo_mismatch".to_string());
+    }
+    if region_match_ok == Some(false) {
+        reasons.push("region_mismatch".to_string());
+    }
+    match anonymity_level {
+        Some("transparent") => reasons.push("transparent_proxy".to_string()),
+        Some("anonymous") => reasons.push("anonymous_proxy".to_string()),
+        _ => {}
+    }
+    reasons.sort();
+    reasons.dedup();
+
+    let risk_level = if reasons.iter().any(|r| {
+        matches!(
+            r.as_str(),
+            "connect_failed" | "protocol_invalid" | "exit_ip_not_public" | "transparent_proxy"
+        )
+    }) {
+        Some("high".to_string())
+    } else if reasons.iter().any(|r| {
+        matches!(
+            r.as_str(),
+            "identity_incomplete" | "geo_mismatch" | "region_mismatch" | "anonymous_proxy"
+        )
+    }) {
+        Some("medium".to_string())
+    } else if reachable && protocol_ok && upstream_ok {
+        Some("low".to_string())
+    } else {
+        None
+    };
+
+    (risk_level, reasons)
+}
+
+fn looks_like_ip(value: &str) -> bool {
+    value.parse::<std::net::IpAddr>().is_ok()
+}
+
+fn ip_is_public(value: &str) -> bool {
+    match value.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => {
+            !(ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || ip.is_unspecified())
+        }
+        Ok(std::net::IpAddr::V6(ip)) => {
+            !(ip.is_loopback()
+                || ip.is_unspecified()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local())
+        }
+        Err(_) => false,
+    }
+}
+
+fn parse_probe_field(text: &str, key: &str) -> Option<String> {
+    let needle = format!("{key}=");
+    let idx = text.find(&needle)?;
+    let value = text[idx + needle.len()..].lines().next()?.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn map_proxy_row(row: ProxyRow) -> ProxyResponse {
+    ProxyResponse {
+        id: row.id,
+        scheme: row.scheme,
+        host: row.host,
+        port: row.port,
+        username: row.username,
+        region: row.region,
+        country: row.country,
+        provider: row.provider,
+        status: row.status,
+        score: row.score,
+        success_count: row.success_count,
+        failure_count: row.failure_count,
+        last_checked_at: row.last_checked_at,
+        last_used_at: row.last_used_at,
+        cooldown_until: row.cooldown_until,
+        last_smoke_status: row.last_smoke_status,
+        last_smoke_protocol_ok: row.last_smoke_protocol_ok.map(|v| v != 0),
+        last_smoke_upstream_ok: row.last_smoke_upstream_ok.map(|v| v != 0),
+        last_exit_ip: row.last_exit_ip,
+        last_anonymity_level: row.last_anonymity_level,
+        last_smoke_at: row.last_smoke_at,
+        last_verify_status: row.last_verify_status,
+        last_verify_geo_match_ok: row.last_verify_geo_match_ok.map(|v| v != 0),
+        last_exit_country: row.last_exit_country,
+        last_exit_region: row.last_exit_region,
+        last_verify_at: row.last_verify_at,
+        last_probe_latency_ms: row.last_probe_latency_ms,
+        last_probe_error: row.last_probe_error,
+        last_probe_error_category: row.last_probe_error_category,
+        last_verify_confidence: row.last_verify_confidence,
+        last_verify_score_delta: row.last_verify_score_delta,
+        last_verify_source: row.last_verify_source,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }
+}
+
+const PROXY_ROW_SELECT_SQL: &str = r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at FROM proxies"#;
+
+async fn load_proxy_row_by_id(
+    state: &AppState,
+    proxy_id: &str,
+) -> Result<Option<ProxyRow>, (StatusCode, String)> {
+    sqlx::query_as::<_, ProxyRow>(&format!("{PROXY_ROW_SELECT_SQL} WHERE id = ?"))
+        .bind(proxy_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to fetch proxy: {err}"),
+            )
+        })
+}
+
+async fn load_proxy_row_by_endpoint_key(
+    state: &AppState,
+    payload: &CreateProxyRequest,
+) -> Result<Option<ProxyRow>, (StatusCode, String)> {
+    sqlx::query_as::<_, ProxyRow>(&format!(
+        "{PROXY_ROW_SELECT_SQL}
+         WHERE scheme = ?
+           AND host = ?
+           AND port = ?
+           AND ((username IS NULL AND ? IS NULL) OR username = ?)
+           AND ((provider IS NULL AND ? IS NULL) OR provider = ?)
+           AND ((region IS NULL AND ? IS NULL) OR region = ?)
+         ORDER BY
+           CASE status
+             WHEN 'active' THEN 0
+             WHEN 'candidate' THEN 1
+             WHEN 'candidate_rejected' THEN 2
+             ELSE 3
+           END ASC,
+           created_at ASC
+         LIMIT 1"
+    ))
+    .bind(&payload.scheme)
+    .bind(&payload.host)
+    .bind(payload.port)
+    .bind(&payload.username)
+    .bind(&payload.username)
+    .bind(&payload.provider)
+    .bind(&payload.provider)
+    .bind(&payload.region)
+    .bind(&payload.region)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch candidate proxy by endpoint key: {err}"),
+        )
+    })
+}
+
+async fn create_or_refresh_candidate_proxy(
+    state: &AppState,
+    payload: &CreateProxyRequest,
+) -> Result<(StatusCode, Json<ProxyResponse>), (StatusCode, String)> {
+    let now = now_ts_string();
+    if let Some(existing) = load_proxy_row_by_endpoint_key(state, payload).await? {
+        if existing.status == "active" {
+            sqlx::query(
+                r#"UPDATE proxies
+                   SET last_seen_at = ?, source_label = COALESCE(?, source_label), updated_at = ?
+                   WHERE id = ?"#,
+            )
+            .bind(&now)
+            .bind("api_create_proxy")
+            .bind(&now)
+            .bind(&existing.id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to refresh active proxy candidate sighting: {err}"),
+                )
+            })?;
+        } else {
+            sqlx::query(
+                r#"UPDATE proxies
+                   SET last_seen_at = ?,
+                       source_label = ?,
+                       score = MAX(score, ?),
+                       country = COALESCE(country, ?),
+                       password = COALESCE(password, ?),
+                       updated_at = ?
+                   WHERE id = ?"#,
+            )
+            .bind(&now)
+            .bind("api_create_proxy")
+            .bind(payload.score.unwrap_or(1.0))
+            .bind(&payload.country)
+            .bind(&payload.password)
+            .bind(&now)
+            .bind(&existing.id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to refresh candidate proxy: {err}"),
+                )
+            })?;
+        }
+
+        let refreshed = load_proxy_row_by_id(state, &existing.id)
+            .await?
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("proxy disappeared after candidate refresh: {}", existing.id),
+                )
+            })?;
+        return Ok((StatusCode::OK, Json(map_proxy_row(refreshed))));
+    }
+
+    let status = payload
+        .status
+        .clone()
+        .filter(|value| is_candidate_proxy_status(value))
+        .unwrap_or_else(|| "candidate".to_string());
+    let score = payload.score.unwrap_or(1.0);
+    sqlx::query(
+        r#"INSERT INTO proxies (
+               id, scheme, host, port, username, password, region, country, provider,
+               status, score, success_count, failure_count, last_checked_at, last_used_at,
+               cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok,
+               last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status,
+               last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at,
+               last_probe_latency_ms, last_probe_error, last_probe_error_category,
+               last_verify_confidence, last_verify_score_delta, last_verify_source,
+               source_label, last_seen_at, promoted_at, created_at, updated_at
+           ) VALUES (
+               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL,
+               NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+               NULL, ?, ?, NULL, ?, ?
+           )"#,
+    )
+    .bind(&payload.id)
+    .bind(&payload.scheme)
+    .bind(&payload.host)
+    .bind(payload.port)
+    .bind(&payload.username)
+    .bind(&payload.password)
+    .bind(&payload.region)
+    .bind(&payload.country)
+    .bind(&payload.provider)
+    .bind(&status)
+    .bind(score)
+    .bind("api_create_proxy")
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to create candidate proxy: {err}"),
+        )
+    })?;
+
+    let created = load_proxy_row_by_id(state, &payload.id)
+        .await?
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("candidate proxy missing after create: {}", payload.id),
+            )
+        })?;
+    Ok((StatusCode::CREATED, Json(map_proxy_row(created))))
+}
+
+fn build_proxy_metrics(tasks: &[TaskResponse]) -> ProxyMetricsResponse {
+    let mut metrics = ProxyMetricsResponse {
+        direct: 0,
+        resolved: 0,
+        resolved_sticky: 0,
+        unresolved: 0,
+        none: 0,
+    };
+    for task in tasks {
+        match task.proxy_resolution_status.as_deref() {
+            Some("direct") => metrics.direct += 1,
+            Some("resolved") => metrics.resolved += 1,
+            Some("resolved_sticky") => metrics.resolved_sticky += 1,
+            Some("unresolved") => metrics.unresolved += 1,
+            _ => metrics.none += 1,
+        }
+    }
+    metrics
+}
+
+fn build_fingerprint_metrics(tasks: &[TaskResponse]) -> FingerprintMetricsResponse {
+    let mut metrics = FingerprintMetricsResponse {
+        pending: 0,
+        resolved: 0,
+        downgraded: 0,
+        none: 0,
+    };
+
+    for task in tasks {
+        match task.fingerprint_resolution_status.as_deref() {
+            Some("pending") => metrics.pending += 1,
+            Some("resolved") => metrics.resolved += 1,
+            Some("downgraded") => metrics.downgraded += 1,
+            _ => metrics.none += 1,
+        }
+    }
+
+    metrics
+}
+
+async fn insert_task_log(
+    state: &AppState,
+    task_id: &str,
+    run_id: Option<&str>,
+    level: &str,
+    message: &str,
+) -> Result<(), (StatusCode, String)> {
+    let log_id = format!("log-{}", Uuid::new_v4());
+    let created_at = now_ts_string();
+    sqlx::query(
+        r#"
+        INSERT INTO logs (id, task_id, run_id, level, message, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(log_id)
+    .bind(task_id)
+    .bind(run_id)
+    .bind(level)
+    .bind(message)
+    .bind(created_at)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to insert cancel log: {err}"),
+        )
+    })?;
+    Ok(())
+}
+
+async fn load_counts(state: &AppState) -> Result<TaskStatusCounts, (StatusCode, String)> {
+    let (total, queued, running, succeeded, failed, timed_out, cancelled): (
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+    ) = sqlx::query_as(
+        r#"SELECT
+                   COUNT(*) AS total,
+                   COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS queued,
+                   COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS running,
+                   COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS succeeded,
+                   COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS failed,
+                   COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS timed_out,
+                   COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS cancelled
+               FROM tasks"#,
+    )
+    .bind(TASK_STATUS_QUEUED)
+    .bind(TASK_STATUS_RUNNING)
+    .bind(TASK_STATUS_SUCCEEDED)
+    .bind(TASK_STATUS_FAILED)
+    .bind(TASK_STATUS_TIMED_OUT)
+    .bind(TASK_STATUS_CANCELLED)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to aggregate task counts: {err}"),
+        )
+    })?;
+
+    Ok(TaskStatusCounts {
+        total,
+        queued,
+        running,
+        succeeded,
+        failed,
+        timed_out,
+        cancelled,
+    })
+}
+
+async fn map_verify_batch_row(
+    state: &AppState,
+    id: String,
+    status: String,
+    requested_count: i64,
+    accepted_count: i64,
+    skipped_count: i64,
+    stale_after_seconds: i64,
+    task_timeout_seconds: i64,
+    provider_summary_json: Option<String>,
+    filters_json: Option<String>,
+    created_at: String,
+    updated_at: String,
+) -> Result<VerifyBatchResponse, (StatusCode, String)> {
+    let (queued_count, running_count, succeeded_count, failed_count): (i64, i64, i64, i64) = sqlx::query_as(
+        r#"SELECT
+               COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN status IN ('failed', 'timed_out', 'cancelled') THEN 1 ELSE 0 END), 0)
+           FROM tasks
+           WHERE kind = 'verify_proxy' AND json_extract(input_json, '$.verify_batch_id') = ?"#,
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate verify batch task counts: {err}")))?;
+
+    let derived_status = if accepted_count == 0 {
+        status.clone()
+    } else if queued_count > 0 || running_count > 0 {
+        "running".to_string()
+    } else if succeeded_count + failed_count >= accepted_count {
+        "completed".to_string()
+    } else {
+        status.clone()
+    };
+
+    Ok(VerifyBatchResponse {
+        id,
+        status: derived_status,
+        requested_count,
+        accepted_count,
+        skipped_count,
+        queued_count,
+        running_count,
+        succeeded_count,
+        failed_count,
+        stale_after_seconds,
+        task_timeout_seconds,
+        provider_summary_json: provider_summary_json.and_then(|v| serde_json::from_str(&v).ok()),
+        filters_json: filters_json.and_then(|v| serde_json::from_str(&v).ok()),
+        created_at,
+        updated_at,
+    })
+}
+
+async fn load_verify_metrics(
+    state: &AppState,
+) -> Result<VerifyMetricsResponse, (StatusCode, String)> {
+    let (verified_ok, verified_failed, geo_match_ok, stale_or_missing_verify): (i64, i64, i64, i64) =
+        sqlx::query_as(
+            r#"SELECT
+                   COALESCE(SUM(CASE WHEN last_verify_status = 'ok' THEN 1 ELSE 0 END), 0) AS verified_ok,
+                   COALESCE(SUM(CASE WHEN last_verify_status = 'failed' THEN 1 ELSE 0 END), 0) AS verified_failed,
+                   COALESCE(SUM(CASE WHEN COALESCE(last_verify_geo_match_ok, 0) != 0 THEN 1 ELSE 0 END), 0) AS geo_match_ok,
+                   COALESCE(SUM(CASE WHEN last_verify_at IS NULL OR last_verify_status IS NULL THEN 1 ELSE 0 END), 0) AS stale_or_missing_verify
+               FROM proxies"#,
+        )
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate verify metrics: {err}")))?;
+
+    Ok(VerifyMetricsResponse {
+        verified_ok,
+        verified_failed,
+        geo_match_ok,
+        stale_or_missing_verify,
+    })
+}
+
+async fn load_proxy_pool_status_summary(
+    state: &AppState,
+) -> Result<super::dto::ProxyPoolStatusSummary, (StatusCode, String)> {
+    let mode = state.proxy_runtime_mode.clone();
+    let (total, active, candidate, candidate_rejected): (i64, i64, i64, i64) = sqlx::query_as(
+        r#"SELECT
+               COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END), 0) AS active,
+               COALESCE(SUM(CASE WHEN p.status = 'candidate' THEN 1 ELSE 0 END), 0) AS candidate,
+               COALESCE(SUM(CASE WHEN p.status = 'candidate_rejected' THEN 1 ELSE 0 END), 0) AS candidate_rejected
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE (
+             (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+             OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+           )"#,
+    )
+    .bind(&mode)
+    .bind(&mode)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate proxy pool status: {err}")))?;
+    let hot_regions = load_hot_browser_regions(state).await.map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load hot regions: {err}"),
+        )
+    })?;
+    let recent_hot_region_rows = load_recent_hot_browser_regions(state, HOT_REGION_WINDOW_SECONDS)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to load recent hot regions: {err}"),
+            )
+        })?;
+    let policy = proxy_pool_growth_policy_from_env();
+    let mut region_shortages = Vec::new();
+    for region in &hot_regions {
+        let available_in_region: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*)
+               FROM proxies p
+               LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+               WHERE p.status = 'active'
+                 AND p.region = ?
+                 AND (p.cooldown_until IS NULL OR CAST(p.cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))
+                 AND (
+                   (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+                   OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+                 )"#,
+        )
+        .bind(region)
+        .bind(&mode)
+        .bind(&mode)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count region availability: {err}")))?;
+        if available_in_region < policy.min_available_per_region {
+            region_shortages.push(region.clone());
+        }
+    }
+    let source_rows = sqlx::query_as::<_, (Option<String>, i64)>(
+        r#"SELECT p.source_label, COUNT(*) AS active_count
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status = 'active'
+             AND (
+               (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+               OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+             )
+           GROUP BY p.source_label
+           ORDER BY active_count DESC, p.source_label ASC"#,
+    )
+    .bind(&mode)
+    .bind(&mode)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load source inventory concentration: {err}"),
+        )
+    })?;
+    let active_total = source_rows.iter().map(|(_, count)| *count).sum::<i64>();
+    let top1_active = source_rows.first().map(|(_, count)| *count).unwrap_or(0);
+    let top3_active = source_rows
+        .iter()
+        .take(3)
+        .map(|(_, count)| *count)
+        .sum::<i64>();
+    let active_sources_with_min_inventory = i64::try_from(
+        source_rows
+            .iter()
+            .filter(|(_, count)| *count >= policy.min_available_per_region)
+            .count(),
+    )
+    .unwrap_or(0);
+    let region_rows = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT p.region, COUNT(*) AS active_count
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status = 'active'
+             AND p.region IS NOT NULL
+             AND TRIM(p.region) != ''
+             AND (
+               (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+               OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+             )
+           GROUP BY p.region
+           ORDER BY active_count DESC, p.region ASC"#,
+    )
+    .bind(&mode)
+    .bind(&mode)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load region inventory concentration: {err}"),
+        )
+    })?;
+    let active_regions_with_min_inventory = i64::try_from(
+        region_rows
+            .iter()
+            .filter(|(_, count)| *count >= policy.min_available_per_region)
+            .count(),
+    )
+    .unwrap_or(0);
+    let recent_hot_regions = recent_hot_region_rows
+        .iter()
+        .map(|(region, _)| region.clone())
+        .collect::<Vec<_>>();
+    let recent_hot_region_counts = recent_hot_region_rows
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let reported_active_ratio_percent = if total <= 0 {
+        0.0
+    } else {
+        (active as f64 / total as f64) * 100.0
+    };
+    Ok(super::dto::ProxyPoolStatusSummary {
+        mode,
+        total,
+        active,
+        candidate,
+        candidate_rejected,
+        eligible_pool_total: total,
+        fresh_candidate_total: candidate,
+        recent_rejected_total: candidate_rejected,
+        reported_active_ratio_percent,
+        effective_active_ratio_percent: reported_active_ratio_percent,
+        active_ratio_percent: reported_active_ratio_percent,
+        hot_regions,
+        recent_hot_regions,
+        recent_hot_region_counts,
+        hot_region_window_seconds: HOT_REGION_WINDOW_SECONDS,
+        source_concentration_top1_percent: if active_total <= 0 {
+            0.0
+        } else {
+            round_percent((top1_active as f64 / active_total as f64) * 100.0)
+        },
+        source_concentration_top3_percent: if active_total <= 0 {
+            0.0
+        } else {
+            round_percent((top3_active as f64 / active_total as f64) * 100.0)
+        },
+        active_sources_with_min_inventory,
+        active_regions_with_min_inventory,
+        region_shortages,
+    })
+}
+
+async fn load_proxy_replenish_metrics(
+    state: &AppState,
+) -> Result<super::dto::ProxyReplenishMetricsSummary, (StatusCode, String)> {
+    let recent_batches: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM verify_batches WHERE json_extract(filters_json, '$.reason') = 'replenish_mvp'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count replenish batches: {err}")))?;
+    let promoted_active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND promoted_at IS NOT NULL",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count promoted proxies: {err}"),
+        )
+    })?;
+    let rejected_total: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM proxies WHERE status = 'candidate_rejected'")
+            .fetch_one(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to count rejected proxies: {err}"),
+                )
+            })?;
+    let fallback_total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.payload.network_policy_json.selection_explain.fallback_reason') = 'region_shortage_fallback_to_any_active'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count fallback tasks: {err}")))?;
+    let decision_total = promoted_active + rejected_total;
+    Ok(super::dto::ProxyReplenishMetricsSummary {
+        recent_batches,
+        promotion_rate: if decision_total == 0 {
+            0.0
+        } else {
+            promoted_active as f64 / decision_total as f64
+        },
+        reject_rate: if decision_total == 0 {
+            0.0
+        } else {
+            rejected_total as f64 / decision_total as f64
+        },
+        fallback_rate: if counts_like_browser_total(state).await? == 0 {
+            0.0
+        } else {
+            fallback_total as f64 / counts_like_browser_total(state).await? as f64
+        },
+    })
+}
+
+async fn counts_like_browser_total(state: &AppState) -> Result<i64, (StatusCode, String)> {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM tasks WHERE kind IN ('open_page', 'get_html', 'get_title', 'get_final_url', 'extract_text')",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count browser tasks: {err}")))
+}
+
+async fn load_identity_session_metrics(
+    state: &AppState,
+) -> Result<super::dto::IdentitySessionMetricsSummary, (StatusCode, String)> {
+    let active_sessions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM proxy_session_bindings")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to count sessions: {err}"),
+            )
+        })?;
+    let reused_sessions: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM tasks WHERE result_json IS NOT NULL AND json_extract(result_json, '$.identity_session_status') = 'auto_reused'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count reused sessions: {err}")))?;
+    let created_sessions: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM tasks WHERE result_json IS NOT NULL AND json_extract(result_json, '$.identity_session_status') = 'auto_created'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count created sessions: {err}")))?;
+    let cookie_restore_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.cookie_restore_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate cookie restore count: {err}")))?;
+    let cookie_persist_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.cookie_persist_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate cookie persist count: {err}")))?;
+    let local_storage_restore_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.local_storage_restore_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate local storage restore count: {err}")))?;
+    let local_storage_persist_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.local_storage_persist_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate local storage persist count: {err}")))?;
+    let session_storage_restore_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.session_storage_restore_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate session storage restore count: {err}")))?;
+    let session_storage_persist_count: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.session_storage_persist_count') AS INTEGER)), 0) FROM tasks WHERE result_json IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to aggregate session storage persist count: {err}")))?;
+    Ok(super::dto::IdentitySessionMetricsSummary {
+        active_sessions,
+        reused_sessions,
+        created_sessions,
+        cookie_restore_count,
+        cookie_persist_count,
+        local_storage_restore_count,
+        local_storage_persist_count,
+        session_storage_restore_count,
+        session_storage_persist_count,
+    })
+}
+
+async fn load_behavior_metrics(
+    state: &AppState,
+) -> Result<BehaviorMetricsResponse, (StatusCode, String)> {
+    let runs_with_behavior: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(behavior_policy_json, '$.mode') IN ('shadow', 'active')"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count behavior-enabled tasks: {err}"),
+        )
+    })?;
+    let shadow_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(behavior_policy_json, '$.mode') = 'shadow'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count shadow behavior tasks: {err}"),
+        )
+    })?;
+    let active_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(behavior_policy_json, '$.mode') = 'active'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count active behavior tasks: {err}"),
+        )
+    })?;
+    let aborted_by_budget: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND (
+               json_extract(result_json, '$.behavior_trace_summary.abort_reason') = 'budget_exceeded'
+               OR json_extract(result_json, '$.behavior_trace_summary.abort_reason') = 'soft_budget_abort'
+             )"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count budget-aborted behavior tasks: {err}"),
+        )
+    })?;
+    let avg_added_latency_ms = sqlx::query_scalar::<_, Option<f64>>(
+        r#"SELECT AVG(CAST(json_extract(result_json, '$.behavior_trace_summary.total_added_latency_ms') AS REAL))
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.behavior_trace_summary.total_added_latency_ms') IS NOT NULL"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to compute average behavior latency: {err}"),
+        )
+    })?
+    .unwrap_or(0.0)
+    .round() as i64;
+    let top_behavior_profiles = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT behavior_profile_id, COUNT(*) AS uses
+           FROM tasks
+           WHERE behavior_profile_id IS NOT NULL
+           GROUP BY behavior_profile_id
+           ORDER BY uses DESC, behavior_profile_id ASC
+           LIMIT 5"#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load top behavior profiles: {err}"),
+        )
+    })?
+    .into_iter()
+    .map(|(profile_id, uses)| format!("{profile_id}:{uses}"))
+    .collect();
+
+    Ok(BehaviorMetricsResponse {
+        runs_with_behavior,
+        shadow_runs,
+        active_runs,
+        aborted_by_budget,
+        avg_added_latency_ms,
+        top_behavior_profiles,
+    })
+}
+
+async fn load_auth_metrics(state: &AppState) -> Result<AuthMetricsResponse, (StatusCode, String)> {
+    let auth_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(form_input_redacted_json, '$.mode') = 'auth'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count auth tasks: {err}"),
+        )
+    })?;
+    let auth_success_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'
+             AND json_extract(result_json, '$.form_action_status') = 'succeeded'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count successful auth tasks: {err}"),
+        )
+    })?;
+    let auth_failed_runs: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'
+             AND json_extract(result_json, '$.form_action_status') = 'failed'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count failed auth tasks: {err}"),
+        )
+    })?;
+    let auth_blocked_missing_contract: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'
+             AND json_extract(result_json, '$.form_action_status') = 'blocked'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count blocked auth tasks: {err}"),
+        )
+    })?;
+    let auth_transient_retries: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(CAST(json_extract(result_json, '$.form_action_retry_count') AS INTEGER)), 0)
+           FROM tasks
+           WHERE result_json IS NOT NULL
+             AND json_extract(result_json, '$.form_action_mode') = 'auth'"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count auth retries: {err}"),
+        )
+    })?;
+    let auth_inline_secret_unavailable: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM tasks
+           WHERE json_extract(form_input_redacted_json, '$.mode') = 'auth'
+             AND (
+                 COALESCE(error_message, '') LIKE '%inline_secret_unavailable%'
+                 OR COALESCE(json_extract(result_json, '$.message'), '') LIKE '%inline_secret_unavailable%'
+                 OR COALESCE(json_extract(result_json, '$.form_action_summary_json.failure_signal'), '') = 'inline_secret_unavailable'
+             )"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to count inline secret failures: {err}"),
+        )
+    })?;
+
+    Ok(AuthMetricsResponse {
+        auth_runs,
+        auth_success_runs,
+        auth_failed_runs,
+        auth_blocked_missing_contract,
+        auth_transient_retries,
+        auth_inline_secret_unavailable,
+    })
+}
+
+async fn load_proxy_site_metrics(
+    state: &AppState,
+) -> Result<super::dto::ProxySiteMetricsSummary, (StatusCode, String)> {
+    let tracked_sites: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT site_key) FROM proxy_site_stats WHERE site_key IS NOT NULL AND site_key != ''",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to count tracked proxy sites: {err}")))?;
+    let site_records: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM proxy_site_stats")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to count proxy site records: {err}"),
+            )
+        })?;
+    let top_failing_rows = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT site_key, SUM(failure_count) AS failures
+           FROM proxy_site_stats
+           GROUP BY site_key
+           HAVING failures > 0
+           ORDER BY failures DESC, site_key ASC
+           LIMIT 5"#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load top failing proxy sites: {err}"),
+        )
+    })?;
+    Ok(super::dto::ProxySiteMetricsSummary {
+        tracked_sites,
+        site_records,
+        top_failing_sites: top_failing_rows
+            .into_iter()
+            .map(|(site_key, failures)| format!("{site_key}:{failures}"))
+            .collect(),
+    })
+}
+
+pub async fn health(
+    State(state): State<AppState>,
+) -> Result<Json<HealthResponse>, (StatusCode, String)> {
+    let counts = load_counts(&state).await?;
+    Ok(Json(HealthResponse {
+        status: "ok".to_string(),
+        service: "PersonaPilot".to_string(),
+        queue_len: counts.queued as usize,
+        counts,
+    }))
+}
+
+pub async fn status(
+    State(state): State<AppState>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<StatusResponse>, (StatusCode, String)> {
+    let started = Instant::now();
+    let counts = load_counts(&state).await?;
+    let limit = sanitize_limit(query.limit, 5, 100);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            i32,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
+        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version,
+                  behavior_profile_id, behavior_profile_version, behavior_policy_json, result_json,
+                  started_at, finished_at
+           FROM tasks
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch latest tasks: {err}"),
+        )
+    })?;
+
+    let latest_tasks: Vec<TaskResponse> = rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                kind,
+                status,
+                priority,
+                fingerprint_profile_id,
+                fingerprint_profile_version,
+                behavior_profile_id,
+                behavior_profile_version,
+                behavior_policy_json,
+                result_json,
+                started_at,
+                finished_at,
+            )| {
+                let parsed = result_json
+                    .as_deref()
+                    .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+                let explainability = build_task_explainability(
+                    fingerprint_profile_id.as_deref(),
+                    fingerprint_profile_version,
+                    behavior_profile_id.as_deref(),
+                    behavior_profile_version,
+                    None,
+                    behavior_policy_json.as_deref(),
+                    result_json.as_deref(),
+                    Some(&id),
+                    Some(&kind),
+                    Some(&status),
+                    finished_at.as_deref().or(started_at.as_deref()),
+                );
+                TaskResponse {
+                    persona_id: None,
+                    platform_id: None,
+                    manual_gate_request_id: None,
+                    manual_gate_status: None,
+                    fingerprint_resolution_status: explainability.fingerprint_resolution_status,
+                    behavior_profile_id: explainability.behavior_profile_id,
+                    behavior_profile_version: explainability.behavior_profile_version,
+                    behavior_resolution_status: explainability.behavior_resolution_status,
+                    behavior_execution_mode: explainability.behavior_execution_mode,
+                    page_archetype: explainability.page_archetype,
+                    behavior_seed: explainability.behavior_seed,
+                    behavior_runtime_explain: explainability.behavior_runtime_explain,
+                    behavior_trace_summary: explainability.behavior_trace_summary,
+                    form_action_status: form_action_status_from_parsed(parsed.as_ref()),
+                    form_action_mode: form_action_mode_from_parsed(parsed.as_ref()),
+                    form_action_retry_count: form_action_retry_count_from_parsed(parsed.as_ref()),
+                    form_action_summary_json: form_action_summary_json_from_parsed(parsed.as_ref()),
+                    proxy_id: explainability.proxy_id,
+                    proxy_provider: explainability.proxy_provider,
+                    proxy_region: explainability.proxy_region,
+                    proxy_resolution_status: explainability.proxy_resolution_status,
+                    trust_score_total: explainability.trust_score_total,
+                    selection_reason_summary: explainability.selection_reason_summary,
+                    selection_explain: explainability.selection_explain,
+                    fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
+                    execution_identity: Some(explainability.execution_identity),
+                    identity_network_explain: explainability.identity_network_explain,
+                    winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
+                    failure_scope: explainability.failure_scope,
+                    browser_failure_signal: explainability.browser_failure_signal,
+                    summary_artifacts: explainability.summary_artifacts,
+                    title: content_string_field(parsed.as_ref(), "title"),
+                    final_url: content_string_field(parsed.as_ref(), "final_url"),
+                    content_preview: content_string_field(parsed.as_ref(), "content_preview"),
+                    content_length: content_i64_field(parsed.as_ref(), "content_length"),
+                    content_truncated: content_bool_field(parsed.as_ref(), "content_truncated"),
+                    content_kind: content_string_field(parsed.as_ref(), "content_kind"),
+                    content_source_action: content_string_field(
+                        parsed.as_ref(),
+                        "content_source_action",
+                    ),
+                    content_ready: content_bool_field(parsed.as_ref(), "content_ready"),
+                    id,
+                    kind,
+                    status,
+                    priority,
+                    started_at,
+                    finished_at,
+                    fingerprint_profile_id,
+                    fingerprint_profile_version,
+                }
+            },
+        )
+        .collect();
+
+    let fingerprint_metrics = build_fingerprint_metrics(&latest_tasks);
+    let proxy_metrics = build_proxy_metrics(&latest_tasks);
+    let verify_metrics = load_verify_metrics(&state).await?;
+    let proxy_pool_status = load_proxy_pool_status_summary(&state).await?;
+    let proxy_replenish_metrics = load_proxy_replenish_metrics(&state).await?;
+    let proxy_harvest_metrics = load_proxy_harvest_metrics(&state).await.map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load proxy harvest metrics: {err}"),
+        )
+    })?;
+    let proxy_site_metrics = load_proxy_site_metrics(&state).await?;
+    let identity_session_metrics = load_identity_session_metrics(&state).await?;
+    let behavior_metrics = load_behavior_metrics(&state).await?;
+    let auth_metrics = load_auth_metrics(&state).await?;
+    let latest_execution_summaries = latest_execution_summaries(&latest_tasks);
+    let latest_browser_tasks = latest_browser_ready_tasks(&latest_tasks, 3);
+
+    let response = StatusResponse {
+        service: "PersonaPilot".to_string(),
+        mode: state.proxy_runtime_mode.clone(),
+        queue_len: counts.queued as usize,
+        counts,
+        worker: WorkerStatusResponse {
+            worker_count: state.worker_count,
+            queue_mode: "db_first_with_memory_compat".to_string(),
+            reclaim_after_seconds: crate::runner::runner_reclaim_seconds_from_env(),
+            heartbeat_interval_seconds: crate::runner::runner_heartbeat_interval_seconds_from_env(),
+            claim_retry_limit: crate::runner::runner_claim_retry_limit_from_env(),
+            idle_backoff_min_ms: crate::runner::runner_idle_backoff_min_ms_from_env(),
+            idle_backoff_max_ms: crate::runner::runner_idle_backoff_max_ms_from_env(),
+            fingerprint_medium_max_concurrency: state.worker_count.max(2),
+            fingerprint_heavy_max_concurrency: state.worker_count.clamp(1, 2),
+        },
+        fingerprint_metrics,
+        proxy_metrics,
+        verify_metrics,
+        proxy_pool_status,
+        proxy_replenish_metrics,
+        proxy_harvest_metrics,
+        proxy_site_metrics,
+        identity_session_metrics,
+        behavior_metrics,
+        auth_metrics,
+        latest_execution_summaries,
+        latest_tasks,
+        latest_browser_tasks,
+    };
+    perf_probe_log(
+        "api_status",
+        &[
+            ("elapsed_ms", started.elapsed().as_millis().to_string()),
+            ("latest_task_count", response.latest_tasks.len().to_string()),
+            (
+                "latest_summary_count",
+                response.latest_execution_summaries.len().to_string(),
+            ),
+        ],
+    );
+    Ok(Json(response))
+}
+
+async fn load_cached_trust_score_row(
+    state: &AppState,
+    proxy_id: &str,
+) -> Result<Option<(Option<i64>, Option<String>)>, (StatusCode, String)> {
+    sqlx::query_as::<_, (Option<i64>, Option<String>)>(
+        "SELECT cached_trust_score, trust_score_cached_at FROM proxies WHERE id = ?",
+    )
+    .bind(proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load cached trust score: {err}"),
+        )
+    })
+}
+
+pub async fn check_proxy_trust_cache(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxyTrustCacheCheckResponse>, (StatusCode, String)> {
+    let now = now_ts_string();
+    let cached_row = load_cached_trust_score_row(&state, &proxy_id).await?;
+    let Some((cached_trust_score, cached_at)) = cached_row else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
+    };
+
+    let recomputed_trust_score = sqlx::query_scalar::<_, i64>(&format!(
+        "SELECT CAST(({}) AS INTEGER) FROM proxies WHERE id = ?",
+        crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(
+            &state.proxy_selection_tuning
+        )
+    ))
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .bind(&proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to recompute trust score: {err}"),
+        )
+    })?;
+
+    let delta = match (cached_trust_score, recomputed_trust_score) {
+        (Some(cached), Some(recomputed)) => Some(recomputed - cached),
+        _ => None,
+    };
+    let in_sync = delta.unwrap_or(0) == 0;
+
+    Ok(Json(ProxyTrustCacheCheckResponse {
+        proxy_id,
+        cached_trust_score,
+        recomputed_trust_score,
+        delta,
+        in_sync,
+        cached_at,
+    }))
+}
+
+async fn collect_trust_cache_scan_items(
+    state: &AppState,
+) -> Result<Vec<ProxyTrustCacheScanItem>, (StatusCode, String)> {
+    let now = now_ts_string();
+    let trust_sql = crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(
+        &state.proxy_selection_tuning,
+    );
+    let rows = sqlx::query_as::<_, (String, Option<String>, Option<i64>, Option<String>, Option<i64>)>(&format!(
+        "SELECT id, provider, cached_trust_score, trust_score_cached_at, CAST(({}) AS INTEGER) FROM proxies ORDER BY created_at ASC, id ASC",
+        trust_sql
+    ))
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to scan trust cache: {err}")))?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(proxy_id, provider, cached_trust_score, cached_at, recomputed_trust_score)| {
+                let delta = match (cached_trust_score, recomputed_trust_score) {
+                    (Some(cached), Some(recomputed)) => Some(recomputed - cached),
+                    _ => None,
+                };
+                let in_sync = delta.unwrap_or(0) == 0;
+                ProxyTrustCacheScanItem {
+                    proxy_id,
+                    provider,
+                    cached_trust_score,
+                    recomputed_trust_score,
+                    delta,
+                    in_sync,
+                    cached_at,
+                }
+            },
+        )
+        .collect())
+}
+
+fn apply_trust_cache_scan_filters(
+    mut items: Vec<ProxyTrustCacheScanItem>,
+    query: &ProxyTrustCacheScanQuery,
+) -> Vec<ProxyTrustCacheScanItem> {
+    if query.only_drifted.unwrap_or(false) {
+        items.retain(|item| !item.in_sync);
+    }
+    if let Some(provider) = query.provider.as_deref() {
+        items.retain(|item| item.provider.as_deref() == Some(provider));
+    }
+    if let Some(limit) = query.limit {
+        items.truncate(limit);
+    }
+    items
+}
+
+pub async fn scan_proxy_trust_cache(
+    State(state): State<AppState>,
+    Query(query): Query<ProxyTrustCacheScanQuery>,
+) -> Result<Json<ProxyTrustCacheScanResponse>, (StatusCode, String)> {
+    let items =
+        apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
+    let drifted = items.iter().filter(|item| !item.in_sync).count();
+    Ok(Json(ProxyTrustCacheScanResponse {
+        total: items.len(),
+        drifted,
+        items,
+    }))
+}
+
+pub async fn maintain_proxy_trust_cache(
+    State(state): State<AppState>,
+    Query(query): Query<ProxyTrustCacheScanQuery>,
+) -> Result<Json<ProxyTrustCacheMaintenanceResponse>, (StatusCode, String)> {
+    let before =
+        apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
+    let drifted_before = before.iter().filter(|item| !item.in_sync).count();
+    let mut repaired = 0usize;
+    for item in before.iter().filter(|item| !item.in_sync) {
+        refresh_cached_trust_score_for_proxy(&state.db, &item.proxy_id)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!(
+                        "failed to maintain cached trust score for {}: {err}",
+                        item.proxy_id
+                    ),
+                )
+            })?;
+        repaired += 1;
+    }
+    let after = collect_trust_cache_scan_items(&state).await?;
+    let remaining_drifted = after.iter().filter(|item| !item.in_sync).count();
+    Ok(Json(ProxyTrustCacheMaintenanceResponse {
+        scanned_before: before.len(),
+        drifted_before,
+        repaired,
+        remaining_drifted,
+        ok: remaining_drifted == 0,
+    }))
+}
+
+pub async fn repair_proxy_trust_cache_batch(
+    State(state): State<AppState>,
+    Query(query): Query<ProxyTrustCacheScanQuery>,
+) -> Result<Json<ProxyTrustCacheRepairBatchResponse>, (StatusCode, String)> {
+    let before =
+        apply_trust_cache_scan_filters(collect_trust_cache_scan_items(&state).await?, &query);
+    let mut repaired = 0usize;
+    for item in before.iter().filter(|item| !item.in_sync) {
+        refresh_cached_trust_score_for_proxy(&state.db, &item.proxy_id)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!(
+                        "failed to repair cached trust score for {}: {err}",
+                        item.proxy_id
+                    ),
+                )
+            })?;
+        repaired += 1;
+    }
+    let after = collect_trust_cache_scan_items(&state).await?;
+    let remaining_drifted = after.iter().filter(|item| !item.in_sync).count();
+    Ok(Json(ProxyTrustCacheRepairBatchResponse {
+        scanned: before.len(),
+        repaired,
+        remaining_drifted,
+        items: after,
+    }))
+}
+
+pub async fn repair_proxy_trust_cache(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxyTrustCacheRepairResponse>, (StatusCode, String)> {
+    let exists: Option<String> = sqlx::query_scalar("SELECT id FROM proxies WHERE id = ?")
+        .bind(&proxy_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to check proxy existence: {err}"),
+            )
+        })?;
+    if exists.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
+    }
+
+    refresh_cached_trust_score_for_proxy(&state.db, &proxy_id)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to refresh cached trust score: {err}"),
+            )
+        })?;
+
+    let now = now_ts_string();
+    let cached_row = load_cached_trust_score_row(&state, &proxy_id)
+        .await?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("proxy not found after repair: {proxy_id}"),
+            )
+        })?;
+
+    let recomputed_trust_score = sqlx::query_scalar::<_, i64>(&format!(
+        "SELECT CAST(({}) AS INTEGER) FROM proxies WHERE id = ?",
+        crate::network_identity::proxy_selection::proxy_trust_score_sql_with_tuning(
+            &state.proxy_selection_tuning
+        )
+    ))
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .bind(&proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to recompute trust score after repair: {err}"),
+        )
+    })?;
+
+    let delta = match (cached_row.0, recomputed_trust_score) {
+        (Some(cached), Some(recomputed)) => Some(recomputed - cached),
+        _ => None,
+    };
+    let in_sync = delta.unwrap_or(0) == 0;
+
+    Ok(Json(ProxyTrustCacheRepairResponse {
+        proxy_id,
+        cached_trust_score: cached_row.0,
+        recomputed_trust_score,
+        delta,
+        in_sync,
+        repaired: true,
+        cached_at: cached_row.1,
+    }))
+}
+
+pub async fn explain_proxy_selection(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxySelectionExplainResponse>, (StatusCode, String)> {
+    let started = Instant::now();
+    let now = now_ts_string();
+    let row = sqlx::query(
+        "SELECT id, provider, region, score, success_count, failure_count, last_verify_status, last_verify_geo_match_ok, last_smoke_upstream_ok, last_verify_at, last_verify_confidence, last_verify_score_delta, last_verify_source, last_anonymity_level, last_probe_latency_ms, last_probe_error_category, last_exit_region FROM proxies WHERE id = ?"
+    )
+    .bind(&proxy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to load proxy explain row: {err}")))?;
+    let Some(row) = row else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
+    };
+    let id: String = row.try_get("id").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode id: {err}"),
+        )
+    })?;
+    let provider: Option<String> = row.try_get("provider").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode provider: {err}"),
+        )
+    })?;
+    let region: Option<String> = row.try_get("region").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode region: {err}"),
+        )
+    })?;
+    let score: f64 = row.try_get("score").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode score: {err}"),
+        )
+    })?;
+    let success_count: i64 = row.try_get("success_count").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode success_count: {err}"),
+        )
+    })?;
+    let failure_count: i64 = row.try_get("failure_count").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode failure_count: {err}"),
+        )
+    })?;
+    let last_verify_status: Option<String> = row.try_get("last_verify_status").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_verify_status: {err}"),
+        )
+    })?;
+    let last_verify_geo_match_ok: Option<i64> =
+        row.try_get("last_verify_geo_match_ok").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_verify_geo_match_ok: {err}"),
+            )
+        })?;
+    let last_smoke_upstream_ok: Option<i64> =
+        row.try_get("last_smoke_upstream_ok").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_smoke_upstream_ok: {err}"),
+            )
+        })?;
+    let last_verify_at: Option<String> = row.try_get("last_verify_at").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_verify_at: {err}"),
+        )
+    })?;
+    let last_verify_confidence: Option<f64> =
+        row.try_get("last_verify_confidence").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_verify_confidence: {err}"),
+            )
+        })?;
+    let last_verify_score_delta: Option<i64> =
+        row.try_get("last_verify_score_delta").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_verify_score_delta: {err}"),
+            )
+        })?;
+    let last_verify_source: Option<String> = row.try_get("last_verify_source").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_verify_source: {err}"),
+        )
+    })?;
+    let last_anonymity_level: Option<String> =
+        row.try_get("last_anonymity_level").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_anonymity_level: {err}"),
+            )
+        })?;
+    let last_probe_latency_ms: Option<i64> =
+        row.try_get("last_probe_latency_ms").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_probe_latency_ms: {err}"),
+            )
+        })?;
+    let last_probe_error_category: Option<String> =
+        row.try_get("last_probe_error_category").map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode last_probe_error_category: {err}"),
+            )
+        })?;
+    let last_exit_region: Option<String> = row.try_get("last_exit_region").map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to decode last_exit_region: {err}"),
+        )
+    })?;
+
+    let provider_risk_hit: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM provider_risk_snapshots s JOIN proxies p ON p.provider = s.provider WHERE p.id = ? AND s.risk_hit != 0)")
+        .bind(&proxy_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to compute provider risk: {err}")))?;
+    let provider_region_cluster_hit: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM provider_region_risk_snapshots s JOIN proxies p ON p.provider = s.provider AND p.region = s.region WHERE p.id = ? AND s.risk_hit != 0)")
+        .bind(&proxy_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to compute provider region risk: {err}")))?;
+    let region_match_ok = match (last_exit_region.as_deref(), region.as_deref()) {
+        (Some(actual), Some(expected)) => Some(actual.eq_ignore_ascii_case(expected)),
+        _ => None,
+    };
+    refresh_proxy_trust_views_for_scope(
+        &state.db,
+        &proxy_id,
+        provider.as_deref(),
+        region.as_deref(),
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to refresh proxy trust views for explain: {err}"),
+        )
+    })?;
+    let now_ts = now.parse::<i64>().unwrap_or_default();
+    let components = super::super::runner::engine::computed_trust_score_components(
+        &state.proxy_selection_tuning,
+        score,
+        success_count,
+        failure_count,
+        last_verify_status.as_deref(),
+        last_verify_geo_match_ok.unwrap_or(0) != 0,
+        region_match_ok,
+        last_smoke_upstream_ok.unwrap_or(0) != 0,
+        last_verify_at
+            .as_ref()
+            .and_then(|v: &String| v.parse::<i64>().ok()),
+        last_verify_confidence,
+        last_verify_score_delta,
+        last_verify_source.as_deref(),
+        last_anonymity_level.as_deref(),
+        last_probe_latency_ms,
+        last_probe_error_category.as_deref(),
+        provider_risk_hit != 0,
+        provider_region_cluster_hit != 0,
+        now_ts,
+        None,
+    );
+    let cached_row = load_cached_trust_score_row(&state, &proxy_id).await?;
+    let trust_score_total = cached_row.as_ref().and_then(|row| row.0);
+    let candidate_rank_preview = crate::runner::engine::compute_candidate_preview_with_reasons(
+        &state,
+        &now,
+        provider.as_deref(),
+        region.as_deref(),
+        0.0_f64,
+        None,
+        None,
+    )
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to build candidate preview with reasons: {err}"),
+        )
+    })?;
+    let candidate_rank_preview = if candidate_rank_preview.is_empty() {
+        crate::runner::engine::compute_candidate_preview_with_reasons(
+            &state, &now, None, None, 0.0_f64, None, None,
+        )
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to build fallback candidate preview with reasons: {err}"),
+            )
+        })?
+    } else {
+        candidate_rank_preview
+    };
+
+    let cached_at = cached_row.as_ref().and_then(|row| row.1.clone());
+    let selection_reason_summary = format!(
+        "proxy {} currently scores {:?} (cache_at={:?}); verify_status={:?}, geo_match={}, upstream_ok={}, provider_risk={}, provider_region_cluster={}",
+        id,
+        trust_score_total,
+        cached_at,
+        last_verify_status,
+        last_verify_geo_match_ok.unwrap_or(0) != 0,
+        last_smoke_upstream_ok.unwrap_or(0) != 0,
+        provider_risk_hit != 0,
+        provider_region_cluster_hit != 0,
+    );
+
+    let winner_vs_runner_up_diff = candidate_rank_preview
+        .first()
+        .and_then(|item| item.winner_vs_runner_up_diff.clone());
+    let (provider_risk_version_current, provider_risk_version_seen, provider_risk_version_status) =
+        provider_risk_version_state_for_proxy(&state.db, &id)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to load provider risk version state: {err}"),
+                )
+            })?;
+    let response = ProxySelectionExplainResponse {
+        proxy_id: id,
+        trust_score_total,
+        trust_score_cached_at: cached_at,
+        explain_generated_at: now_ts.to_string(),
+        explain_source: "proxy_trust_cache+candidate_preview".to_string(),
+        provider_risk_version_current,
+        provider_risk_version_seen,
+        provider_risk_version_status,
+        selection_reason_summary,
+        trust_score_components: components,
+        candidate_rank_preview,
+        winner_vs_runner_up_diff,
+    };
+    perf_probe_log(
+        "api_proxy_explain",
+        &[
+            ("proxy_id", response.proxy_id.clone()),
+            ("elapsed_ms", started.elapsed().as_millis().to_string()),
+            (
+                "candidate_count",
+                response.candidate_rank_preview.len().to_string(),
+            ),
+        ],
+    );
+    Ok(Json(response))
+}
+
+fn normalize_execution_intent(payload: &CreateTaskRequest) -> RunnerExecutionIntent {
+    let base = RunnerExecutionIntent {
+        identity_profile_id: payload.identity_profile_id.clone(),
+        fingerprint_profile_id: payload.fingerprint_profile_id.clone(),
+        behavior_profile_id: payload.behavior_profile_id.clone(),
+        network_profile_id: payload.network_profile_id.clone(),
+        session_profile_id: payload.session_profile_id.clone(),
+        proxy_id: payload.proxy_id.clone(),
+    };
+
+    match payload.execution_intent.as_ref() {
+        Some(intent) => RunnerExecutionIntent {
+            identity_profile_id: intent
+                .identity_profile_id
+                .clone()
+                .or(base.identity_profile_id),
+            fingerprint_profile_id: intent
+                .fingerprint_profile_id
+                .clone()
+                .or(base.fingerprint_profile_id),
+            behavior_profile_id: intent
+                .behavior_profile_id
+                .clone()
+                .or(base.behavior_profile_id),
+            network_profile_id: intent
+                .network_profile_id
+                .clone()
+                .or(base.network_profile_id),
+            session_profile_id: intent
+                .session_profile_id
+                .clone()
+                .or(base.session_profile_id),
+            proxy_id: intent.proxy_id.clone().or(base.proxy_id),
+        },
+        None => base,
+    }
+}
+
+fn merge_json_object_values(
+    base: Option<Value>,
+    overlay: Option<Value>,
+    field_name: &str,
+) -> Result<Option<Value>, (StatusCode, String)> {
+    let normalize = |value: Option<Value>| -> Result<Option<serde_json::Map<String, Value>>, (StatusCode, String)> {
+        match value {
+            Some(Value::Object(map)) => Ok(Some(map)),
+            Some(Value::Null) | None => Ok(None),
+            Some(_) => Err((
+                StatusCode::BAD_REQUEST,
+                format!("{field_name} must be an object"),
+            )),
+        }
+    };
+
+    let mut merged = normalize(base)?.unwrap_or_default();
+    if let Some(overlay) = normalize(overlay)? {
+        for (key, value) in overlay {
+            merged.insert(key, value);
+        }
+    }
+
+    if merged.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(Value::Object(merged)))
+    }
+}
+
+async fn load_network_profile_policy_value(
+    state: &AppState,
+    network_profile_id: Option<&str>,
+) -> Result<Option<Value>, (StatusCode, String)> {
+    let Some(network_profile_id) = network_profile_id else {
+        return Ok(None);
+    };
+
+    let row = sqlx::query_scalar::<_, String>(
+        r#"SELECT network_policy_json FROM network_profiles WHERE id = ? AND status = 'active'"#,
+    )
+    .bind(network_profile_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to resolve network profile policy: {err}"),
+        )
+    })?;
+
+    let Some(raw_policy_json) = row else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("network profile not found or inactive: {network_profile_id}"),
+        ));
+    };
+
+    serde_json::from_str::<Value>(&raw_policy_json)
+        .map(Some)
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to decode network profile policy: {err}"),
+            )
+        })
+}
+
+async fn load_active_fingerprint_profile_version(
+    state: &AppState,
+    fingerprint_profile_id: Option<&str>,
+) -> Result<Option<i64>, (StatusCode, String)> {
+    let Some(fingerprint_profile_id) = fingerprint_profile_id else {
+        return Ok(None);
+    };
+
+    let version = sqlx::query_scalar::<_, i64>(
+        r#"SELECT version FROM fingerprint_profiles WHERE id = ? AND status = 'active'"#,
+    )
+    .bind(fingerprint_profile_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to resolve fingerprint profile version: {err}"),
+        )
+    })?;
+
+    if version.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("fingerprint profile not found or inactive: {fingerprint_profile_id}"),
+        ));
+    }
+
+    Ok(version)
+}
+
+fn behavior_compile_error(err: anyhow::Error) -> (StatusCode, String) {
+    let message = err.to_string();
+    let status = if message.contains("not found")
+        || message.contains("inactive")
+        || message.contains("must be")
+        || message.contains("invalid")
+        || message.contains("object")
+    {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (
+        status,
+        format!("failed to compile behavior plan: {message}"),
+    )
+}
+
+fn form_compile_error(err: anyhow::Error) -> (StatusCode, String) {
+    let message = err.to_string();
+    let status = if message.contains("form_input")
+        || message.contains("identity://")
+        || message.contains("missing")
+        || message.contains("must")
+        || message.contains("unsupported")
+        || message.contains("requires")
+        || message.contains("not found")
+        || message.contains("invalid")
+    {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (
+        status,
+        format!("failed to compile form action plan: {message}"),
+    )
+}
+
+fn form_action_status_from_parsed(parsed: Option<&Value>) -> Option<String> {
+    content_string_field(parsed, "form_action_status")
+}
+
+fn form_action_mode_from_parsed(parsed: Option<&Value>) -> Option<String> {
+    content_string_field(parsed, "form_action_mode")
+}
+
+fn form_action_retry_count_from_parsed(parsed: Option<&Value>) -> Option<i64> {
+    content_i64_field(parsed, "form_action_retry_count")
+}
+
+fn form_action_summary_json_from_parsed(parsed: Option<&Value>) -> Option<Value> {
+    parsed.and_then(|value| value.get("form_action_summary_json").cloned())
+}
+
+fn create_task_response_from_payload(
+    task_id: String,
+    payload: &CreateTaskRequest,
+    task_status: String,
+    platform_id: Option<String>,
+    manual_gate_request_id: Option<String>,
+    manual_gate_status: Option<String>,
+    execution_intent: &RunnerExecutionIntent,
+    fingerprint_profile_version: Option<i64>,
+    behavior_profile_id: Option<String>,
+    behavior_profile_version: Option<i64>,
+    behavior_resolution_status: String,
+    behavior_execution_mode: String,
+    page_archetype: Option<String>,
+    behavior_seed: Option<String>,
+    behavior_runtime_explain: crate::behavior::BehaviorRuntimeExplain,
+    behavior_trace_summary: crate::behavior::BehaviorTraceSummary,
+    form_action_status: String,
+    form_action_mode: Option<String>,
+    form_action_summary_json: Option<Value>,
+) -> (StatusCode, Json<TaskResponse>) {
+    let priority = payload.priority.unwrap_or(0);
+    (
+        StatusCode::CREATED,
+        Json(TaskResponse {
+            id: task_id,
+            kind: payload.kind.clone(),
+            status: task_status,
+            priority,
+            persona_id: payload.persona_id.clone(),
+            platform_id,
+            manual_gate_request_id,
+            manual_gate_status,
+            started_at: None,
+            finished_at: None,
+            summary_artifacts: Vec::new(),
+            fingerprint_profile_id: execution_intent.fingerprint_profile_id.clone(),
+            fingerprint_profile_version,
+            fingerprint_resolution_status: fingerprint_profile_version
+                .map(|_| "pending".to_string()),
+            behavior_profile_id,
+            behavior_profile_version,
+            behavior_resolution_status: Some(behavior_resolution_status),
+            behavior_execution_mode: Some(behavior_execution_mode),
+            page_archetype,
+            behavior_seed,
+            behavior_runtime_explain: Some(behavior_runtime_explain),
+            behavior_trace_summary: Some(behavior_trace_summary),
+            form_action_status: Some(form_action_status),
+            form_action_mode,
+            form_action_retry_count: Some(0),
+            form_action_summary_json,
+            proxy_id: None,
+            proxy_provider: None,
+            proxy_region: None,
+            proxy_resolution_status: payload
+                .network_policy_json
+                .as_ref()
+                .and_then(|v| v.get("mode"))
+                .and_then(|v| v.as_str())
+                .map(|mode| {
+                    if mode == "direct" {
+                        "direct".to_string()
+                    } else {
+                        "pending".to_string()
+                    }
+                }),
+            trust_score_total: None,
+            selection_reason_summary: None,
+            selection_explain: None,
+            fingerprint_runtime_explain: None,
+            execution_identity: None,
+            identity_network_explain: None,
+            winner_vs_runner_up_diff: None,
+            failure_scope: None,
+            browser_failure_signal: None,
+            title: None,
+            final_url: None,
+            content_preview: None,
+            content_length: None,
+            content_truncated: None,
+            content_kind: None,
+            content_source_action: None,
+            content_ready: None,
+        }),
+    )
+}
+
+async fn create_task_from_payload(
+    state: &AppState,
+    payload: CreateTaskRequest,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, String)> {
+    if payload.kind.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "kind is required".to_string()));
+    }
+    ensure_form_input_allowed_for_task(payload.kind.as_str(), payload.form_input.as_ref())?;
+
+    let mut payload = payload;
+    let resolved_persona = match payload.persona_id.as_deref() {
+        Some(persona_id) => Some(resolve_persona_bundle(state, persona_id).await?),
+        None => None,
+    };
+    if let Some(bundle) = resolved_persona.as_ref() {
+        if payload.fingerprint_profile_id.is_none() {
+            payload.fingerprint_profile_id = Some(bundle.fingerprint_profile_id.clone());
+        }
+        if payload.behavior_profile_id.is_none() {
+            payload.behavior_profile_id = bundle.behavior_profile_id.clone();
+        }
+        let final_network_policy = merge_json_objects(
+            bundle.network_policy.network_policy_json.clone(),
+            payload
+                .network_policy_json
+                .clone()
+                .unwrap_or_else(|| json!({})),
+        );
+        let mut final_network_policy = match final_network_policy {
+            Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        final_network_policy.insert("country_anchor".to_string(), json!(bundle.country_anchor));
+        final_network_policy.insert(
+            "region_anchor".to_string(),
+            bundle
+                .region_anchor
+                .as_ref()
+                .map_or(Value::Null, |value| json!(value)),
+        );
+        final_network_policy.insert(
+            "allow_same_country_fallback".to_string(),
+            json!(bundle.network_policy.allow_same_country_fallback),
+        );
+        final_network_policy.insert(
+            "allow_same_region_fallback".to_string(),
+            json!(bundle.network_policy.allow_same_region_fallback),
+        );
+        final_network_policy.insert(
+            "network_policy_id".to_string(),
+            json!(bundle.network_policy.id),
+        );
+        final_network_policy.insert(
+            "continuity_policy_id".to_string(),
+            json!(bundle.continuity_policy.id),
+        );
+        final_network_policy.insert("persona_id".to_string(), json!(bundle.persona_id));
+        final_network_policy.insert("store_id".to_string(), json!(bundle.store_id));
+        final_network_policy.insert("platform_id".to_string(), json!(bundle.platform_id));
+        if let Some(provider_preference) = bundle.network_policy.provider_preference.as_deref() {
+            final_network_policy
+                .entry("provider".to_string())
+                .or_insert_with(|| json!(provider_preference));
+        }
+        payload.network_policy_json = Some(Value::Object(final_network_policy));
+    }
+    let initial_execution_intent = normalize_execution_intent(&payload);
+    payload.proxy_id = initial_execution_intent.proxy_id.clone();
+    let network_profile_policy = load_network_profile_policy_value(
+        state,
+        initial_execution_intent.network_profile_id.as_deref(),
+    )
+    .await?;
+    payload.network_policy_json = merge_json_object_values(
+        network_profile_policy,
+        payload.network_policy_json.clone(),
+        "network_policy_json",
+    )?;
+    let payload = normalize_browser_task_request(payload)?;
+
+    let behavior_compile = compile_behavior_plan(
+        &state.db,
+        payload.kind.as_str(),
+        payload.url.as_deref(),
+        payload.timeout_seconds,
+        normalize_execution_intent(&payload),
+        payload.behavior_policy_json.clone(),
+    )
+    .await
+    .map_err(behavior_compile_error)?;
+
+    let fingerprint_profile_version = load_active_fingerprint_profile_version(
+        state,
+        behavior_compile
+            .execution_intent
+            .fingerprint_profile_id
+            .as_deref(),
+    )
+    .await?;
+    let form_compile = compile_form_action_plan(
+        &state.db,
+        payload.kind.as_str(),
+        payload.url.as_deref(),
+        behavior_compile.behavior_execution_mode.as_str(),
+        &behavior_compile.execution_intent,
+        payload.form_input.clone(),
+    )
+    .await
+    .map_err(form_compile_error)?;
+
+    let task_id = format!("task-{}", Uuid::new_v4());
+    let priority = payload.priority.unwrap_or(0);
+    let network_policy_value = payload.network_policy_json.clone();
+    let network_policy_json = network_policy_value.as_ref().map(Value::to_string);
+    let requested_region = network_policy_value
+        .as_ref()
+        .and_then(|value| value.get("region"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            network_policy_value
+                .as_ref()
+                .and_then(|value| value.get("region_anchor"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+    let typed_proxy_id = behavior_compile.execution_intent.proxy_id.clone();
+    let proxy_mode = if typed_proxy_id.is_some() || requested_region.is_some() {
+        Some(state.proxy_runtime_mode.clone())
+    } else {
+        None
+    };
+    let behavior_policy_json = Some(behavior_compile.behavior_policy_json.to_string());
+    let execution_intent_json = Some(behavior_compile.execution_intent_json.to_string());
+    let form_input_redacted_json = form_compile
+        .form_input_redacted_json
+        .as_ref()
+        .map(Value::to_string);
+    let platform_id = resolved_persona
+        .as_ref()
+        .map(|bundle| bundle.platform_id.clone());
+    let created_at = now_ts_string();
+    let mut manual_gate_request_id: Option<String> = None;
+    let mut manual_gate_status: Option<String> = None;
+    let mut task_status = TASK_STATUS_QUEUED.to_string();
+    let mut queued_at = Some(created_at.clone());
+    let platform_template_json = resolved_persona.as_ref().and_then(|bundle| {
+        bundle.platform_template.as_ref().map(|template| {
+            json!({
+                "id": template.id,
+                "platform_id": template.platform_id,
+                "readiness_level": template.readiness_level,
+                "warm_paths": template.warm_paths_json,
+                "revisit_paths": template.revisit_paths_json,
+                "stateful_paths": template.stateful_paths_json,
+                "write_operation_paths": template.write_operation_paths_json,
+                "high_risk_paths": template.high_risk_paths_json,
+                "continuity_checks": template.continuity_checks_json,
+                "identity_markers": template.identity_markers_json,
+                "identity_markers_source": template.identity_markers_source,
+                "login_loss_signals": template.login_loss_signals_json,
+                "recovery_steps": template.recovery_steps_json,
+            })
+        })
+    });
+    let force_manual_gate = matches!(
+        payload.manual_gate_policy.as_deref(),
+        Some("always" | "force" | "required")
+    ) || matches!(
+        payload.requested_operation_kind.as_deref(),
+        Some("high_risk_write" | "credential_change" | "security_change" | "billing_change")
+    );
+    if let Some(bundle) = resolved_persona.as_ref() {
+        let url_is_high_risk = match (payload.url.as_deref(), bundle.platform_template.as_ref()) {
+            (Some(url), Some(template)) => {
+                let high_risk_paths = path_patterns_from_value(&template.high_risk_paths_json);
+                url_matches_any_path(url, &high_risk_paths)
+            }
+            _ => false,
+        };
+        if force_manual_gate || url_is_high_risk {
+            manual_gate_request_id = Some(format!("gate-{}", Uuid::new_v4()));
+            manual_gate_status = Some("pending".to_string());
+            task_status = TASK_STATUS_PENDING.to_string();
+            queued_at = None;
+        }
+    }
+    let input_json = serde_json::json!({
+        "url": payload.url.clone(),
+        "script": payload.script.clone(),
+        "timeout_seconds": payload.timeout_seconds,
+        "persona_id": payload.persona_id.clone(),
+        "store_id": resolved_persona.as_ref().map(|bundle| bundle.store_id.clone()),
+        "platform_id": platform_id.clone(),
+        "identity_profile_id": behavior_compile.execution_intent.identity_profile_id.clone(),
+        "fingerprint_profile_id": behavior_compile.execution_intent.fingerprint_profile_id.clone(),
+        "fingerprint_profile_version": fingerprint_profile_version,
+        "behavior_profile_id": behavior_compile.behavior_profile_id.clone(),
+        "behavior_profile_version": behavior_compile.behavior_profile_version,
+        "network_profile_id": behavior_compile.execution_intent.network_profile_id.clone(),
+        "session_profile_id": behavior_compile.execution_intent.session_profile_id.clone(),
+        "proxy_id": behavior_compile.execution_intent.proxy_id.clone(),
+        "execution_intent": behavior_compile.execution_intent_json.clone(),
+        "behavior_policy_json": behavior_compile.behavior_policy_json.clone(),
+        "network_policy_json": network_policy_value,
+        "platform_template": platform_template_json,
+        "continuity_context": resolved_persona.as_ref().map(|bundle| json!({
+            "session_ttl_seconds": bundle.continuity_policy.session_ttl_seconds,
+            "heartbeat_interval_seconds": bundle.continuity_policy.heartbeat_interval_seconds,
+            "site_group_mode": bundle.continuity_policy.site_group_mode,
+            "recovery_enabled": bundle.continuity_policy.recovery_enabled,
+            "protect_on_login_loss": bundle.continuity_policy.protect_on_login_loss,
+        })),
+        "requested_operation_kind": payload.requested_operation_kind.clone(),
+        "manual_gate_policy": payload.manual_gate_policy.clone(),
+        "form_input": form_compile.form_input_redacted_json.clone(),
+    })
+    .to_string();
+
+    sqlx::query(
+        r#"
+        INSERT INTO tasks (
+            id, kind, status, input_json, network_policy_json, behavior_policy_json,
+            execution_intent_json, fingerprint_profile_json, fingerprint_profile_id,
+            fingerprint_profile_version, identity_profile_id, behavior_profile_id,
+            behavior_profile_version, network_profile_id, session_profile_id,
+            persona_id, platform_id, manual_gate_request_id, proxy_id, requested_region,
+            proxy_mode, form_input_redacted_json, priority,
+            created_at, queued_at, started_at, finished_at, result_json, error_message
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, NULL, NULL, NULL, NULL
+        )
+        "#,
+    )
+    .bind(&task_id)
+    .bind(&payload.kind)
+    .bind(&task_status)
+    .bind(&input_json)
+    .bind(&network_policy_json)
+    .bind(&behavior_policy_json)
+    .bind(&execution_intent_json)
+    .bind(&behavior_compile.execution_intent.fingerprint_profile_id)
+    .bind(fingerprint_profile_version)
+    .bind(&behavior_compile.execution_intent.identity_profile_id)
+    .bind(&behavior_compile.behavior_profile_id)
+    .bind(behavior_compile.behavior_profile_version)
+    .bind(&behavior_compile.execution_intent.network_profile_id)
+    .bind(&behavior_compile.execution_intent.session_profile_id)
+    .bind(&payload.persona_id)
+    .bind(&platform_id)
+    .bind(&manual_gate_request_id)
+    .bind(&typed_proxy_id)
+    .bind(&requested_region)
+    .bind(&proxy_mode)
+    .bind(&form_input_redacted_json)
+    .bind(priority)
+    .bind(&created_at)
+    .bind(&queued_at)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to insert task: {err}"),
+        )
+    })?;
+
+    if let Some(metadata_json) = behavior_compile.plan_artifact_metadata_json.as_ref() {
+        sqlx::query(
+            r#"INSERT INTO artifacts (id, task_id, run_id, kind, storage_path, metadata_json, created_at)
+               VALUES (?, ?, NULL, ?, ?, ?, ?)"#,
+        )
+        .bind(format!("artifact-{}", Uuid::new_v4()))
+        .bind(&task_id)
+        .bind("behavior_plan")
+        .bind("db://behavior_plan.json")
+        .bind(metadata_json.to_string())
+        .bind(&created_at)
+        .execute(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to persist behavior plan artifact: {err}"),
+            )
+        })?;
+    }
+    if let Some(metadata_json) = form_compile.artifact_metadata_json.as_ref() {
+        sqlx::query(
+            r#"INSERT INTO artifacts (id, task_id, run_id, kind, storage_path, metadata_json, created_at)
+               VALUES (?, ?, NULL, ?, ?, ?, ?)"#,
+        )
+        .bind(format!("artifact-{}", Uuid::new_v4()))
+        .bind(&task_id)
+        .bind("form_action_plan")
+        .bind("db://form_action_plan.redacted.json")
+        .bind(metadata_json.to_string())
+        .bind(&created_at)
+        .execute(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to persist form action plan artifact: {err}"),
+            )
+        })?;
+    }
+    if let Some(inline_secret_payload) = form_compile.inline_secret_payload.as_ref() {
+        let mut guard = state
+            .inline_secret_vault
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.insert(task_id.clone(), inline_secret_payload.clone());
+    }
+
+    if let Some(bundle) = resolved_persona.as_ref() {
+        append_continuity_event(
+            state,
+            Some(&bundle.persona_id),
+            Some(&bundle.store_id),
+            Some(&bundle.platform_id),
+            Some(&task_id),
+            None,
+            "persona_selected",
+            "info",
+            Some(&json!({
+                "fingerprint_profile_id": bundle.fingerprint_profile_id,
+                "network_policy_id": bundle.network_policy.id,
+                "continuity_policy_id": bundle.continuity_policy.id,
+            })),
+        )
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to record persona_selected event: {err}"),
+            )
+        })?;
+    }
+
+    if let (Some(bundle), Some(gate_id)) =
+        (resolved_persona.as_ref(), manual_gate_request_id.as_ref())
+    {
+        let requested_action_kind = manual_gate_category_from_inputs(
+            Some(&bundle.platform_id),
+            &payload.kind,
+            payload.requested_operation_kind.as_deref(),
+            payload.url.as_deref(),
+        );
+        sqlx::query(
+            r#"INSERT INTO manual_gate_requests (
+                   id, task_id, persona_id, store_id, platform_id, requested_action_kind,
+                   requested_url, reason_code, reason_summary, status, resolution_note,
+                   created_at, updated_at, resolved_at
+               )
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?, NULL)"#,
+        )
+        .bind(gate_id)
+        .bind(&task_id)
+        .bind(&bundle.persona_id)
+        .bind(&bundle.store_id)
+        .bind(&bundle.platform_id)
+        .bind(&requested_action_kind)
+        .bind(&payload.url)
+        .bind("high_risk_path")
+        .bind("requested path matched platform high_risk_paths and requires manual confirmation")
+        .bind(&created_at)
+        .bind(&created_at)
+        .execute(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to insert manual gate request: {err}"),
+            )
+        })?;
+
+        append_continuity_event(
+            state,
+            Some(&bundle.persona_id),
+            Some(&bundle.store_id),
+            Some(&bundle.platform_id),
+            Some(&task_id),
+            None,
+            "manual_gate_requested",
+            "warning",
+            Some(&json!({
+                "manual_gate_request_id": gate_id,
+                "requested_url": payload.url,
+                "requested_action_kind": requested_action_kind,
+            })),
+        )
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to record manual_gate_requested event: {err}"),
+            )
+        })?;
+    }
+
+    Ok(create_task_response_from_payload(
+        task_id,
+        &payload,
+        task_status,
+        platform_id,
+        manual_gate_request_id,
+        manual_gate_status,
+        &behavior_compile.execution_intent,
+        fingerprint_profile_version,
+        behavior_compile.behavior_profile_id,
+        behavior_compile.behavior_profile_version,
+        behavior_compile.behavior_resolution_status,
+        behavior_compile.behavior_execution_mode,
+        behavior_compile.page_archetype,
+        behavior_compile.behavior_seed,
+        behavior_compile.behavior_runtime_explain,
+        behavior_compile.behavior_trace_summary,
+        form_compile.form_action_status,
+        form_compile.form_action_mode,
+        form_compile.form_action_summary_json,
+    ))
+}
+
+pub async fn run_persona_heartbeat_tick(
+    state: &AppState,
+) -> Result<ContinuityHeartbeatTickResponse, (StatusCode, String)> {
+    let ticked_at = now_ts_string();
+    let now_ts = ticked_at.parse::<i64>().unwrap_or_default();
+    let candidates = sqlx::query_as::<_, HeartbeatPersonaCandidateRow>(
+        r#"
+        SELECT
+            p.id AS persona_id,
+            p.store_id,
+            p.platform_id,
+            cp.heartbeat_interval_seconds
+        FROM persona_profiles p
+        JOIN continuity_policies cp ON cp.id = p.continuity_policy_id
+        WHERE p.status IN ('active', 'degraded')
+          AND cp.status = 'active'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM manual_gate_requests mg
+              WHERE mg.persona_id = p.id
+                AND mg.status = 'pending'
+          )
+        ORDER BY
+            COALESCE((
+                SELECT MAX(CAST(e.created_at AS INTEGER))
+                FROM continuity_events e
+                WHERE e.persona_id = p.id
+                  AND e.event_type IN ('heartbeat_scheduled', 'heartbeat_failed', 'heartbeat_skipped')
+            ), 0) ASC,
+            p.platform_id ASC,
+            p.created_at ASC,
+            p.id ASC
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to load persona heartbeat candidates: {err}"),
+        )
+    })?;
+
+    let mut items = Vec::with_capacity(candidates.len());
+    let mut scheduled_count = 0_i64;
+    let mut skipped_count = 0_i64;
+    let platform_cap = heartbeat_platform_cap_from_env();
+    let mut scheduled_per_platform = std::collections::BTreeMap::<String, usize>::new();
+
+    for candidate in candidates {
+        let heartbeat_interval_seconds = candidate.heartbeat_interval_seconds.max(60);
+        let platform_scheduled = scheduled_per_platform
+            .get(&candidate.platform_id)
+            .copied()
+            .unwrap_or(0);
+        if platform_scheduled >= platform_cap {
+            let item = heartbeat_item(
+                candidate.persona_id.clone(),
+                candidate.store_id.clone(),
+                candidate.platform_id.clone(),
+                "skipped",
+                "platform_cap_reached",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &candidate.persona_id,
+                &candidate.store_id,
+                &candidate.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        }
+        if persona_has_inflight_task(state, &candidate.persona_id).await? {
+            let item = heartbeat_item(
+                candidate.persona_id.clone(),
+                candidate.store_id.clone(),
+                candidate.platform_id.clone(),
+                "skipped",
+                "persona_has_active_task",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &candidate.persona_id,
+                &candidate.store_id,
+                &candidate.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        }
+
+        if let Some(last_activity_ts) =
+            latest_persona_task_activity_ts(state, &candidate.persona_id).await?
+        {
+            let elapsed_seconds = now_ts.saturating_sub(last_activity_ts);
+            if elapsed_seconds < heartbeat_interval_seconds {
+                let item = heartbeat_item(
+                    candidate.persona_id.clone(),
+                    candidate.store_id.clone(),
+                    candidate.platform_id.clone(),
+                    "skipped",
+                    "recent_persona_activity",
+                    None,
+                    None,
+                    heartbeat_interval_seconds,
+                );
+                append_heartbeat_event(
+                    state,
+                    &candidate.persona_id,
+                    &candidate.store_id,
+                    &candidate.platform_id,
+                    None,
+                    "heartbeat_skipped",
+                    "info",
+                    &item.reason,
+                    heartbeat_interval_seconds,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await?;
+                items.push(item);
+                skipped_count += 1;
+                continue;
+            }
+        }
+
+        let bundle = match resolve_persona_bundle(state, &candidate.persona_id).await {
+            Ok(value) => value,
+            Err((status, message)) if status == StatusCode::BAD_REQUEST => {
+                let reason = if message.contains("not active") || message.contains("not found") {
+                    "persona_not_active"
+                } else {
+                    "resolve_persona_failed"
+                };
+                let item = heartbeat_item(
+                    candidate.persona_id.clone(),
+                    candidate.store_id.clone(),
+                    candidate.platform_id.clone(),
+                    "failed",
+                    reason,
+                    None,
+                    None,
+                    heartbeat_interval_seconds,
+                );
+                append_heartbeat_event(
+                    state,
+                    &candidate.persona_id,
+                    &candidate.store_id,
+                    &candidate.platform_id,
+                    None,
+                    "heartbeat_failed",
+                    "warning",
+                    &item.reason,
+                    heartbeat_interval_seconds,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await?;
+                items.push(item);
+                continue;
+            }
+            Err(err) => return Err(err),
+        };
+
+        let Some(template) = bundle.platform_template.as_ref() else {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "skipped",
+                "platform_template_missing",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                bundle.origin_source.as_deref(),
+                None,
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        };
+
+        let heartbeat_task_kind = heartbeat_task_kind_for_template(template);
+        let Some(target_path) = resolve_heartbeat_target_path(state, &bundle, template).await?
+        else {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "skipped",
+                "heartbeat_target_missing",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                None,
+                None,
+                bundle.origin_source.as_deref(),
+                Some(heartbeat_task_kind),
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        };
+
+        let high_risk_paths = path_patterns_from_value(&template.high_risk_paths_json);
+        if url_matches_any_path(&target_path, &high_risk_paths) {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "skipped",
+                "heartbeat_target_is_high_risk",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_skipped",
+                "info",
+                &item.reason,
+                heartbeat_interval_seconds,
+                Some(&target_path),
+                None,
+                bundle.origin_source.as_deref(),
+                Some(heartbeat_task_kind),
+            )
+            .await?;
+            items.push(item);
+            skipped_count += 1;
+            continue;
+        }
+
+        let Some((target_url, origin_source)) = resolve_heartbeat_target_url(&bundle, &target_path)
+        else {
+            let item = heartbeat_item(
+                bundle.persona_id.clone(),
+                bundle.store_id.clone(),
+                bundle.platform_id.clone(),
+                "failed",
+                "heartbeat_target_origin_unresolved",
+                None,
+                None,
+                heartbeat_interval_seconds,
+            );
+            append_heartbeat_event(
+                state,
+                &bundle.persona_id,
+                &bundle.store_id,
+                &bundle.platform_id,
+                None,
+                "heartbeat_failed",
+                "warning",
+                &item.reason,
+                heartbeat_interval_seconds,
+                Some(&target_path),
+                None,
+                bundle.origin_source.as_deref(),
+                Some(heartbeat_task_kind),
+            )
+            .await?;
+            items.push(item);
+            continue;
+        };
+
+        let task_payload = CreateTaskRequest {
+            kind: heartbeat_task_kind.to_string(),
+            url: Some(target_url.clone()),
+            script: None,
+            timeout_seconds: Some(45),
+            priority: Some(-10),
+            persona_id: Some(bundle.persona_id.clone()),
+            identity_profile_id: None,
+            fingerprint_profile_id: None,
+            behavior_profile_id: bundle.behavior_profile_id.clone(),
+            network_profile_id: None,
+            session_profile_id: None,
+            proxy_id: None,
+            execution_intent: None,
+            behavior_policy_json: None,
+            network_policy_json: None,
+            requested_operation_kind: Some("heartbeat_revisit".to_string()),
+            manual_gate_policy: None,
+            form_input: None,
+        };
+
+        let (_, Json(task_response)) = match create_task_from_payload(state, task_payload).await {
+            Ok(value) => value,
+            Err((status, _)) if status == StatusCode::BAD_REQUEST => {
+                let item = heartbeat_item(
+                    bundle.persona_id.clone(),
+                    bundle.store_id.clone(),
+                    bundle.platform_id.clone(),
+                    "failed",
+                    "heartbeat_task_create_failed",
+                    None,
+                    Some(target_url.clone()),
+                    heartbeat_interval_seconds,
+                );
+                append_heartbeat_event(
+                    state,
+                    &bundle.persona_id,
+                    &bundle.store_id,
+                    &bundle.platform_id,
+                    None,
+                    "heartbeat_failed",
+                    "warning",
+                    &item.reason,
+                    heartbeat_interval_seconds,
+                    Some(&target_path),
+                    Some(&target_url),
+                    Some(&origin_source),
+                    Some(heartbeat_task_kind),
+                )
+                .await?;
+                items.push(item);
+                continue;
+            }
+            Err(err) => return Err(err),
+        };
+
+        let scheduled_task_id = task_response.id.clone();
+        append_heartbeat_event(
+            state,
+            &bundle.persona_id,
+            &bundle.store_id,
+            &bundle.platform_id,
+            Some(&scheduled_task_id),
+            "heartbeat_scheduled",
+            "info",
+            "heartbeat_due",
+            heartbeat_interval_seconds,
+            Some(&target_path),
+            Some(&target_url),
+            Some(&origin_source),
+            Some(heartbeat_task_kind),
+        )
+        .await?;
+
+        scheduled_count += 1;
+        *scheduled_per_platform
+            .entry(candidate.platform_id.clone())
+            .or_insert(0) += 1;
+        items.push(heartbeat_item(
+            bundle.persona_id,
+            bundle.store_id,
+            bundle.platform_id,
+            "scheduled",
+            "heartbeat_due",
+            Some(task_response.id),
+            Some(target_url),
+            heartbeat_interval_seconds,
+        ));
+    }
+
+    let evaluated_count = i64::try_from(items.len()).unwrap_or(0);
+    Ok(ContinuityHeartbeatTickResponse {
+        ticked_at,
+        evaluated_count,
+        scheduled_count,
+        skipped_count,
+        items,
+    })
+}
+
+pub async fn create_task(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateTaskRequest>,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, String)> {
+    create_task_from_payload(&state, payload).await
+}
+
+pub async fn browser_open(
+    State(state): State<AppState>,
+    Json(payload): Json<BrowserOpenRequest>,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, String)> {
+    if payload.url.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
+    }
+    let task_payload = CreateTaskRequest {
+        kind: "open_page".to_string(),
+        url: Some(payload.url),
+        script: None,
+        timeout_seconds: payload.timeout_seconds,
+        priority: payload.priority,
+        persona_id: None,
+        identity_profile_id: payload.identity_profile_id,
+        fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
+        proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
+        network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
+        form_input: payload.form_input,
+    };
+    create_task_from_payload(&state, task_payload).await
+}
+
+pub async fn browser_get_html(
+    State(state): State<AppState>,
+    Json(payload): Json<BrowserGetHtmlRequest>,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, String)> {
+    if payload.url.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
+    }
+    ensure_form_input_allowed_for_task("get_html", payload.form_input.as_ref())?;
+    let task_payload = CreateTaskRequest {
+        kind: "get_html".to_string(),
+        url: Some(payload.url),
+        script: None,
+        timeout_seconds: payload.timeout_seconds,
+        priority: payload.priority,
+        persona_id: None,
+        identity_profile_id: payload.identity_profile_id,
+        fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
+        proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
+        network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
+        form_input: payload.form_input,
+    };
+    create_task_from_payload(&state, task_payload).await
+}
+
+pub async fn browser_get_title(
+    State(state): State<AppState>,
+    Json(payload): Json<BrowserGetTitleRequest>,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, String)> {
+    if payload.url.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
+    }
+    ensure_form_input_allowed_for_task("get_title", payload.form_input.as_ref())?;
+    let task_payload = CreateTaskRequest {
+        kind: "get_title".to_string(),
+        url: Some(payload.url),
+        script: None,
+        timeout_seconds: payload.timeout_seconds,
+        priority: payload.priority,
+        persona_id: None,
+        identity_profile_id: payload.identity_profile_id,
+        fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
+        proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
+        network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
+        form_input: payload.form_input,
+    };
+    create_task_from_payload(&state, task_payload).await
+}
+
+pub async fn browser_get_final_url(
+    State(state): State<AppState>,
+    Json(payload): Json<BrowserGetFinalUrlRequest>,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, String)> {
+    if payload.url.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
+    }
+    ensure_form_input_allowed_for_task("get_final_url", payload.form_input.as_ref())?;
+    let task_payload = CreateTaskRequest {
+        kind: "get_final_url".to_string(),
+        url: Some(payload.url),
+        script: None,
+        timeout_seconds: payload.timeout_seconds,
+        priority: payload.priority,
+        persona_id: None,
+        identity_profile_id: payload.identity_profile_id,
+        fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
+        proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
+        network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
+        form_input: payload.form_input,
+    };
+    create_task_from_payload(&state, task_payload).await
+}
+
+pub async fn browser_extract_text(
+    State(state): State<AppState>,
+    Json(payload): Json<BrowserExtractTextRequest>,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, String)> {
+    if payload.url.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "url is required".to_string()));
+    }
+    ensure_form_input_allowed_for_task("extract_text", payload.form_input.as_ref())?;
+    let task_payload = CreateTaskRequest {
+        kind: "extract_text".to_string(),
+        url: Some(payload.url),
+        script: None,
+        timeout_seconds: payload.timeout_seconds,
+        priority: payload.priority,
+        persona_id: None,
+        identity_profile_id: payload.identity_profile_id,
+        fingerprint_profile_id: payload.fingerprint_profile_id,
+        behavior_profile_id: payload.behavior_profile_id,
+        network_profile_id: payload.network_profile_id,
+        session_profile_id: payload.session_profile_id,
+        proxy_id: payload.proxy_id,
+        execution_intent: payload.execution_intent,
+        behavior_policy_json: payload.behavior_policy_json,
+        network_policy_json: payload.network_policy_json,
+        requested_operation_kind: None,
+        manual_gate_policy: None,
+        form_input: payload.form_input,
+    };
+    create_task_from_payload(&state, task_payload).await
+}
+
+pub async fn get_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<TaskResponse>, (StatusCode, String)> {
+    if task_id.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "task id is required".to_string()));
+    }
+
+    let row = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            i32,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
+        r#"SELECT id, kind, status, priority, fingerprint_profile_id, fingerprint_profile_version,
+                  behavior_profile_id, behavior_profile_version, behavior_policy_json, result_json,
+                  started_at, finished_at
+           FROM tasks
+           WHERE id = ?"#,
+    )
+    .bind(&task_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch task: {err}"),
+        )
+    })?;
+
+    match row {
+        Some((
+            id,
+            kind,
+            status,
+            priority,
+            fingerprint_profile_id,
+            fingerprint_profile_version,
+            behavior_profile_id,
+            behavior_profile_version,
+            behavior_policy_json,
+            result_json,
+            started_at,
+            finished_at,
+        )) => {
+            let parsed = result_json
+                .as_deref()
+                .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+            let explainability = build_task_explainability(
+                fingerprint_profile_id.as_deref(),
+                fingerprint_profile_version,
+                behavior_profile_id.as_deref(),
+                behavior_profile_version,
+                None,
+                behavior_policy_json.as_deref(),
+                result_json.as_deref(),
+                Some(&id),
+                Some(&kind),
+                Some(&status),
+                finished_at.as_deref().or(started_at.as_deref()),
+            );
+            Ok(Json(TaskResponse {
+                persona_id: None,
+                platform_id: None,
+                manual_gate_request_id: None,
+                manual_gate_status: None,
+                fingerprint_resolution_status: explainability.fingerprint_resolution_status,
+                behavior_profile_id: explainability.behavior_profile_id,
+                behavior_profile_version: explainability.behavior_profile_version,
+                behavior_resolution_status: explainability.behavior_resolution_status,
+                behavior_execution_mode: explainability.behavior_execution_mode,
+                page_archetype: explainability.page_archetype,
+                behavior_seed: explainability.behavior_seed,
+                behavior_runtime_explain: explainability.behavior_runtime_explain,
+                behavior_trace_summary: explainability.behavior_trace_summary,
+                form_action_status: form_action_status_from_parsed(parsed.as_ref()),
+                form_action_mode: form_action_mode_from_parsed(parsed.as_ref()),
+                form_action_retry_count: form_action_retry_count_from_parsed(parsed.as_ref()),
+                form_action_summary_json: form_action_summary_json_from_parsed(parsed.as_ref()),
+                proxy_id: explainability.proxy_id,
+                proxy_provider: explainability.proxy_provider,
+                proxy_region: explainability.proxy_region,
+                proxy_resolution_status: explainability.proxy_resolution_status,
+                trust_score_total: explainability.trust_score_total,
+                selection_reason_summary: explainability.selection_reason_summary,
+                selection_explain: explainability.selection_explain,
+                fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
+                execution_identity: Some(explainability.execution_identity),
+                identity_network_explain: explainability.identity_network_explain,
+                winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
+                failure_scope: explainability.failure_scope,
+                browser_failure_signal: explainability.browser_failure_signal,
+                summary_artifacts: explainability.summary_artifacts,
+                title: content_string_field(parsed.as_ref(), "title"),
+                final_url: content_string_field(parsed.as_ref(), "final_url"),
+                content_preview: content_string_field(parsed.as_ref(), "content_preview"),
+                content_length: content_i64_field(parsed.as_ref(), "content_length"),
+                content_truncated: content_bool_field(parsed.as_ref(), "content_truncated"),
+                content_kind: content_string_field(parsed.as_ref(), "content_kind"),
+                content_source_action: content_string_field(
+                    parsed.as_ref(),
+                    "content_source_action",
+                ),
+                content_ready: content_bool_field(parsed.as_ref(), "content_ready"),
+                id,
+                kind,
+                status,
+                priority,
+                started_at,
+                finished_at,
+                fingerprint_profile_id,
+                fingerprint_profile_version,
+            }))
+        }
+        None => Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}"))),
+    }
+}
+
+pub async fn get_task_runs(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<RunResponse>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            i32,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+        ),
+    >(
+        r#"SELECT r.id, r.task_id, r.status, r.attempt, r.runner_kind, r.started_at, r.finished_at,
+                  r.error_message, r.result_json, t.kind, t.status, t.fingerprint_profile_id,
+                  t.fingerprint_profile_version, t.behavior_profile_id, t.behavior_profile_version,
+                  t.behavior_policy_json
+           FROM runs r
+           LEFT JOIN tasks t ON t.id = r.task_id
+           WHERE r.task_id = ?
+           ORDER BY r.attempt DESC
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(&task_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch runs: {err}"),
+        )
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(
+                |(
+                    id,
+                    task_id,
+                    status,
+                    attempt,
+                    runner_kind,
+                    started_at,
+                    finished_at,
+                    error_message,
+                    result_json,
+                    task_kind,
+                    task_status,
+                    fingerprint_profile_id,
+                    fingerprint_profile_version,
+                    behavior_profile_id,
+                    behavior_profile_version,
+                    behavior_policy_json,
+                )| {
+                    let summary_timestamp = finished_at
+                        .as_deref()
+                        .or(started_at.as_deref())
+                        .map(|v| v.to_string());
+                    let explainability = build_task_explainability(
+                        fingerprint_profile_id.as_deref(),
+                        fingerprint_profile_version,
+                        behavior_profile_id.as_deref(),
+                        behavior_profile_version,
+                        None,
+                        behavior_policy_json.as_deref(),
+                        result_json.as_deref(),
+                        Some(&task_id),
+                        task_kind.as_deref(),
+                        task_status.as_deref(),
+                        summary_timestamp.as_deref(),
+                    );
+                    let parsed = result_json
+                        .as_deref()
+                        .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+                    RunResponse {
+                        id: id.clone(),
+                        task_id: task_id.clone(),
+                        status,
+                        attempt,
+                        runner_kind,
+                        started_at,
+                        finished_at,
+                        error_message,
+                        summary_artifacts: enrich_summary_artifacts(
+                            explainability.summary_artifacts,
+                            Some(&task_id),
+                            task_kind.as_deref(),
+                            task_status.as_deref(),
+                            Some(&id),
+                            Some(attempt),
+                            summary_timestamp.as_deref(),
+                        ),
+                        behavior_profile_id: explainability.behavior_profile_id,
+                        behavior_profile_version: explainability.behavior_profile_version,
+                        behavior_resolution_status: explainability.behavior_resolution_status,
+                        behavior_execution_mode: explainability.behavior_execution_mode,
+                        page_archetype: explainability.page_archetype,
+                        behavior_seed: explainability.behavior_seed,
+                        behavior_runtime_explain: explainability.behavior_runtime_explain,
+                        behavior_trace_summary: explainability.behavior_trace_summary,
+                        form_action_status: form_action_status_from_parsed(parsed.as_ref()),
+                        form_action_mode: form_action_mode_from_parsed(parsed.as_ref()),
+                        form_action_retry_count: form_action_retry_count_from_parsed(
+                            parsed.as_ref(),
+                        ),
+                        form_action_summary_json: form_action_summary_json_from_parsed(
+                            parsed.as_ref(),
+                        ),
+                        proxy_id: explainability.proxy_id,
+                        proxy_provider: explainability.proxy_provider,
+                        proxy_region: explainability.proxy_region,
+                        proxy_resolution_status: explainability.proxy_resolution_status,
+                        trust_score_total: explainability.trust_score_total,
+                        selection_reason_summary: explainability.selection_reason_summary,
+                        selection_explain: explainability.selection_explain,
+                        fingerprint_runtime_explain: explainability.fingerprint_runtime_explain,
+                        execution_identity: Some(explainability.execution_identity),
+                        identity_network_explain: explainability.identity_network_explain,
+                        winner_vs_runner_up_diff: explainability.winner_vs_runner_up_diff,
+                        failure_scope: explainability.failure_scope,
+                        browser_failure_signal: explainability.browser_failure_signal,
+                        title: content_string_field(parsed.as_ref(), "title"),
+                        final_url: content_string_field(parsed.as_ref(), "final_url"),
+                        content_preview: content_string_field(parsed.as_ref(), "content_preview"),
+                        content_length: content_i64_field(parsed.as_ref(), "content_length"),
+                        content_truncated: content_bool_field(parsed.as_ref(), "content_truncated"),
+                        content_kind: content_string_field(parsed.as_ref(), "content_kind"),
+                        content_source_action: content_string_field(
+                            parsed.as_ref(),
+                            "content_source_action",
+                        ),
+                        content_ready: content_bool_field(parsed.as_ref(), "content_ready"),
+                    }
+                },
+            )
+            .collect(),
+    ))
+}
+
+pub async fn get_task_logs(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<LogResponse>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 50, 500);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, (String, String, Option<String>, String, String, String)>(
+        r#"SELECT id, task_id, run_id, level, message, created_at FROM logs WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
+    )
+    .bind(&task_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch logs: {err}"),
+        )
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(
+                |(id, task_id, run_id, level, message, created_at)| LogResponse {
+                    id,
+                    task_id,
+                    run_id,
+                    level,
+                    message,
+                    created_at,
+                },
+            )
+            .collect(),
+    ))
+}
+
+pub async fn retry_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<RetryTaskResponse>, (StatusCode, String)> {
+    let current_status =
+        sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to read task status before retry: {err}"),
+                )
+            })?;
+
+    let Some(status) = current_status else {
+        return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
+    };
+
+    if status == TASK_STATUS_QUEUED {
+        return Ok(Json(RetryTaskResponse {
+            id: task_id,
+            status: TASK_STATUS_QUEUED.to_string(),
+            message: "task already queued; retry treated as idempotent".to_string(),
+        }));
+    }
+
+    if status != TASK_STATUS_FAILED && status != TASK_STATUS_TIMED_OUT {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("task status does not allow retry now: {status}"),
+        ));
+    }
+
+    let queued_at = now_ts_string();
+    let retry_sql = format!(
+        "UPDATE tasks SET status = ?, queued_at = ?, started_at = NULL, finished_at = NULL, runner_id = NULL, heartbeat_at = NULL, result_json = NULL, error_message = NULL WHERE id = ? AND status IN ('{}', '{}')",
+        TASK_STATUS_FAILED, TASK_STATUS_TIMED_OUT,
+    );
+    let result = sqlx::query(&retry_sql)
+        .bind(TASK_STATUS_QUEUED)
+        .bind(&queued_at)
+        .bind(&task_id)
+        .execute(&state.db)
+        .await;
+
+    let result = match result {
+        Ok(result) => result,
+        Err(err) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to retry task: {err}"),
+            ));
+        }
+    };
+
+    if result.rows_affected() == 0 {
+        let current_status =
+            sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+                .bind(&task_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|err| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to read task status after retry conflict: {err}"),
+                    )
+                })?;
+
+        let Some(status) = current_status else {
+            return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
+        };
+
+        if status == TASK_STATUS_QUEUED {
+            return Ok(Json(RetryTaskResponse {
+                id: task_id,
+                status: TASK_STATUS_QUEUED.to_string(),
+                message: "task already queued after retry race; treated as idempotent".to_string(),
+            }));
+        }
+
+        return Err((
+            StatusCode::CONFLICT,
+            format!("task status does not allow retry now: {status}"),
+        ));
+    }
+
+    let message = "task re-queued for retry".to_string();
+
+    Ok(Json(RetryTaskResponse {
+        id: task_id,
+        status: TASK_STATUS_QUEUED.to_string(),
+        message,
+    }))
+}
+
+pub async fn cancel_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<CancelTaskResponse>, (StatusCode, String)> {
+    let current_status =
+        sqlx::query_scalar::<_, String>(r#"SELECT status FROM tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to read task status: {err}"),
+                )
+            })?;
+
+    let Some(status) = current_status else {
+        return Err((StatusCode::NOT_FOUND, format!("task not found: {task_id}")));
+    };
+
+    if status == TASK_STATUS_QUEUED {
+        let finished_at = now_ts_string();
+        sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ?, runner_id = NULL, heartbeat_at = NULL, error_message = ? WHERE id = ?"#)
+            .bind(TASK_STATUS_CANCELLED)
+            .bind(&finished_at)
+            .bind("task cancelled while queued")
+            .bind(&task_id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to cancel task: {err}"),
+                )
+            })?;
+
+        insert_task_log(
+            &state,
+            &task_id,
+            None,
+            "warn",
+            "task cancelled while queued",
+        )
+        .await?;
+
+        return Ok(Json(CancelTaskResponse {
+            id: task_id,
+            status: TASK_STATUS_CANCELLED.to_string(),
+            message: "task cancelled while queued".to_string(),
+        }));
+    }
+
+    if status == TASK_STATUS_RUNNING {
+        let cancel = state.runner.cancel_running(&task_id).await;
+        if !cancel.accepted {
+            return Err((StatusCode::CONFLICT, cancel.message));
+        }
+
+        let finished_at = now_ts_string();
+        let cancel_result_json = serde_json::json!({
+            "runner": state.runner.name(),
+            "ok": false,
+            "status": "cancelled",
+            "error_kind": "runner_cancelled",
+            "failure_scope": "runner_cancelled",
+            "execution_stage": "action",
+            "task_id": task_id,
+            "message": "task cancelled while running"
+        })
+        .to_string();
+
+        sqlx::query(r#"UPDATE tasks SET status = ?, finished_at = ?, runner_id = NULL, heartbeat_at = NULL, result_json = ?, error_message = ? WHERE id = ?"#)
+            .bind(TASK_STATUS_CANCELLED)
+            .bind(&finished_at)
+            .bind(&cancel_result_json)
+            .bind("task cancelled while running")
+            .bind(&task_id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to mark running task as cancelled: {err}"),
+                )
+            })?;
+
+        let running_run_id = sqlx::query_scalar::<_, String>(&format!(
+            "SELECT id FROM runs WHERE task_id = ? AND status = '{}' ORDER BY attempt DESC LIMIT 1",
+            RUN_STATUS_RUNNING,
+        ))
+        .bind(&task_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to fetch running run for cancel: {err}"),
+            )
+        })?;
+
+        if let Some(run_id) = running_run_id.as_deref() {
+            sqlx::query(r#"UPDATE runs SET status = ?, finished_at = ?, error_message = ?, result_json = COALESCE(result_json, ?) WHERE id = ?"#)
+                .bind(RUN_STATUS_CANCELLED)
+                .bind(&finished_at)
+                .bind("task cancelled while running")
+                .bind(&cancel_result_json)
+                .bind(run_id)
+                .execute(&state.db)
+                .await
+                .map_err(|err| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to mark latest run as cancelled: {err}"),
+                    )
+                })?;
+
+            insert_task_log(
+                &state,
+                &task_id,
+                Some(run_id),
+                "warn",
+                &format!("task cancelled while running; {}", cancel.message),
+            )
+            .await?;
+        } else {
+            insert_task_log(
+                &state,
+                &task_id,
+                None,
+                "warn",
+                &format!("task cancelled while running; {}", cancel.message),
+            )
+            .await?;
+        }
+
+        return Ok(Json(CancelTaskResponse {
+            id: task_id,
+            status: TASK_STATUS_CANCELLED.to_string(),
+            message: cancel.message,
+        }));
+    }
+
+    Err((
+        StatusCode::BAD_REQUEST,
+        format!("task status does not allow cancel: {status}"),
+    ))
+}
+
+pub async fn create_fingerprint_profile(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateFingerprintProfileRequest>,
+) -> Result<(StatusCode, Json<FingerprintProfileResponse>), (StatusCode, String)> {
+    if payload.id.trim().is_empty() || payload.name.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "fingerprint profile id and name are required".to_string(),
+        ));
+    }
+
+    let now = now_ts_string();
+    let profile_json = payload.profile_json.to_string();
+
+    sqlx::query(
+        r#"
+        INSERT INTO fingerprint_profiles (id, name, version, status, tags_json, profile_json, created_at, updated_at)
+        VALUES (?, ?, 1, 'active', ?, ?, ?, ?)
+        "#,
+    )
+    .bind(&payload.id)
+    .bind(&payload.name)
+    .bind(&payload.tags_json)
+    .bind(&profile_json)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to create fingerprint profile: {err}")))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(build_fingerprint_profile_response(
+            payload.id,
+            payload.name,
+            1,
+            "active".to_string(),
+            payload.tags_json,
+            payload.profile_json,
+            now.clone(),
+            now,
+        )),
+    ))
+}
+
+pub async fn list_fingerprint_profiles(
+    State(state): State<AppState>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<FingerprintProfileResponse>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, (String, String, i64, String, Option<String>, String, String, String)>(
+        r#"SELECT id, name, version, status, tags_json, profile_json, created_at, updated_at FROM fingerprint_profiles ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to list fingerprint profiles: {err}")))?;
+
+    let items = rows
+        .into_iter()
+        .map(
+            |(id, name, version, status, tags_json, profile_json, created_at, updated_at)| {
+                let profile_json =
+                    serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
+                build_fingerprint_profile_response(
+                    id,
+                    name,
+                    version,
+                    status,
+                    tags_json,
+                    profile_json,
+                    created_at,
+                    updated_at,
+                )
+            },
+        )
+        .collect();
+
+    Ok(Json(items))
+}
+
+pub async fn get_fingerprint_profile(
+    State(state): State<AppState>,
+    Path(profile_id): Path<String>,
+) -> Result<Json<FingerprintProfileResponse>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, (String, String, i64, String, Option<String>, String, String, String)>(
+        r#"SELECT id, name, version, status, tags_json, profile_json, created_at, updated_at FROM fingerprint_profiles WHERE id = ?"#,
+    )
+    .bind(&profile_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to fetch fingerprint profile: {err}")))?;
+
+    match row {
+        Some((id, name, version, status, tags_json, profile_json, created_at, updated_at)) => {
+            let profile_json =
+                serde_json::from_str(&profile_json).unwrap_or_else(|_| serde_json::json!({}));
+            Ok(Json(build_fingerprint_profile_response(
+                id,
+                name,
+                version,
+                status,
+                tags_json,
+                profile_json,
+                created_at,
+                updated_at,
+            )))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("fingerprint profile not found: {profile_id}"),
+        )),
+    }
+}
+
+pub async fn create_proxy(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateProxyRequest>,
+) -> Result<(StatusCode, Json<ProxyResponse>), (StatusCode, String)> {
+    if payload.id.trim().is_empty()
+        || payload.scheme.trim().is_empty()
+        || payload.host.trim().is_empty()
+        || payload.port <= 0
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "proxy id/scheme/host/port are required".to_string(),
+        ));
+    }
+
+    if payload
+        .status
+        .as_deref()
+        .map(is_candidate_proxy_status)
+        .unwrap_or(false)
+    {
+        return create_or_refresh_candidate_proxy(&state, &payload).await;
+    }
+
+    let now = now_ts_string();
+    let status = payload.status.unwrap_or_else(|| "active".to_string());
+    let score = payload.score.unwrap_or(1.0);
+    sqlx::query(r#"INSERT INTO proxies (id, scheme, host, port, username, password, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)"#)
+        .bind(&payload.id).bind(&payload.scheme).bind(&payload.host).bind(payload.port)
+        .bind(&payload.username).bind(&payload.password).bind(&payload.region).bind(&payload.country).bind(&payload.provider)
+        .bind(&status).bind(score).bind(&now).bind(&now)
+        .execute(&state.db).await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to create proxy: {err}")))?;
+    Ok((
+        StatusCode::CREATED,
+        Json(ProxyResponse {
+            id: payload.id,
+            scheme: payload.scheme,
+            host: payload.host,
+            port: payload.port,
+            username: payload.username,
+            region: payload.region,
+            country: payload.country,
+            provider: payload.provider,
+            status,
+            score,
+            success_count: 0,
+            failure_count: 0,
+            last_checked_at: None,
+            last_used_at: None,
+            cooldown_until: None,
+            last_smoke_status: None,
+            last_smoke_protocol_ok: None,
+            last_smoke_upstream_ok: None,
+            last_exit_ip: None,
+            last_anonymity_level: None,
+            last_smoke_at: None,
+            last_verify_status: None,
+            last_verify_geo_match_ok: None,
+            last_exit_country: None,
+            last_exit_region: None,
+            last_verify_at: None,
+            last_probe_latency_ms: None,
+            last_probe_error: None,
+            last_probe_error_category: None,
+            last_verify_confidence: None,
+            last_verify_score_delta: None,
+            last_verify_source: None,
+            created_at: now.clone(),
+            updated_at: now,
+        }),
+    ))
+}
+
+pub async fn list_proxies(
+    State(state): State<AppState>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<ProxyResponse>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at FROM proxies ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to list proxies: {err}")))?;
+    Ok(Json(rows.into_iter().map(map_proxy_row).collect()))
+}
+
+pub async fn get_proxy(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxyResponse>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, ProxyRow>(r#"SELECT id, scheme, host, port, username, region, country, provider, status, score, success_count, failure_count, last_checked_at, last_used_at, cooldown_until, last_smoke_status, last_smoke_protocol_ok, last_smoke_upstream_ok, last_exit_ip, last_anonymity_level, last_smoke_at, last_verify_status, last_verify_geo_match_ok, last_exit_country, last_exit_region, last_verify_at, last_probe_latency_ms, last_probe_error, last_probe_error_category, last_verify_confidence, last_verify_score_delta, last_verify_source, created_at, updated_at FROM proxies WHERE id = ?"#)
+        .bind(&proxy_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to fetch proxy: {err}")))?;
+    match row {
+        Some(row) => Ok(Json(map_proxy_row(row))),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        )),
+    }
+}
+
+pub async fn smoke_test_proxy(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxySmokeResponse>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, (String, i64)>(r#"SELECT host, port FROM proxies WHERE id = ?"#)
+        .bind(&proxy_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to load proxy for smoke test: {err}"),
+            )
+        })?;
+
+    let Some((host, port)) = row else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("proxy not found: {proxy_id}"),
+        ));
+    };
+
+    let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("proxy address is invalid for smoke test: {err}"),
+        )
+    })?;
+
+    let started = Instant::now();
+    let mut stream = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::net::TcpStream::connect(addr),
+    )
+    .await
+    .ok()
+    .and_then(|result| result.ok());
+    let reachable = stream.is_some();
+    let mut protocol_ok = false;
+    let mut upstream_ok = false;
+    let mut exit_ip: Option<String> = None;
+    let mut anonymity_level: Option<String> = None;
+    let mut smoke_message = if reachable {
+        "tcp connect succeeded but proxy protocol not validated".to_string()
+    } else {
+        "tcp smoke test failed".to_string()
+    };
+
+    if let Some(stream_ref) = stream.as_mut() {
+        let probe = b"CONNECT example.com:443 HTTP/1.1
+Host: example.com:443
+
+";
+        if tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            stream_ref.write_all(probe),
+        )
+        .await
+        .ok()
+        .is_some()
+        {
+            let mut buf = [0_u8; 512];
+            if let Ok(Ok(n)) =
+                tokio::time::timeout(std::time::Duration::from_secs(3), stream_ref.read(&mut buf))
+                    .await
+            {
+                if n > 0 {
+                    let text = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let text_lower = text.to_ascii_lowercase();
+                    if text_lower.contains("http/1.1") || text_lower.contains("http/1.0") {
+                        protocol_ok = true;
+                        let has_via = text_lower.contains("via:");
+                        let has_forwarded = text_lower.contains("forwarded:")
+                            || text_lower.contains("x-forwarded-for:");
+                        anonymity_level = Some(if has_forwarded {
+                            "transparent".to_string()
+                        } else if has_via {
+                            "anonymous".to_string()
+                        } else {
+                            "elite".to_string()
+                        });
+                        if let Some(idx) = text.find("ip=") {
+                            let ip = text[idx + 3..]
+                                .lines()
+                                .next()
+                                .unwrap_or("")
+                                .trim()
+                                .to_string();
+                            if !ip.is_empty() {
+                                upstream_ok = true;
+                                exit_ip = Some(ip.clone());
+                                smoke_message =
+                                    format!("http proxy smoke test got upstream ip={ip}");
+                            }
+                        }
+                        if !upstream_ok {
+                            smoke_message =
+                                "http connect smoke test received proxy response".to_string();
+                        }
+                    } else {
+                        smoke_message = format!(
+                            "tcp connect ok but proxy response was not http-like: {text_lower}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    let latency_ms = Some(started.elapsed().as_millis());
+    let now = now_ts_string();
+
+    if reachable && protocol_ok {
+        sqlx::query(r#"UPDATE proxies SET last_checked_at = ?, cooldown_until = NULL, last_smoke_status = ?, last_smoke_protocol_ok = ?, last_smoke_upstream_ok = ?, last_exit_ip = ?, last_anonymity_level = ?, last_smoke_at = ?, updated_at = ? WHERE id = ?"#)
+            .bind(&now)
+            .bind("ok")
+            .bind(1_i64)
+            .bind(if upstream_ok { 1_i64 } else { 0_i64 })
+            .bind(&exit_ip)
+            .bind(&anonymity_level)
+            .bind(&now)
+            .bind(&now)
+            .bind(&proxy_id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to update proxy after smoke success: {err}")))?;
+
+        Ok(Json(ProxySmokeResponse {
+            id: proxy_id,
+            reachable: true,
+            protocol_ok: true,
+            upstream_ok,
+            exit_ip,
+            anonymity_level,
+            latency_ms,
+            status: "ok".to_string(),
+            message: smoke_message,
+        }))
+    } else {
+        let cooldown_until = (now.parse::<u64>().unwrap_or(0) + 60).to_string();
+        sqlx::query(r#"UPDATE proxies SET failure_count = failure_count + 1, last_checked_at = ?, cooldown_until = ?, last_smoke_status = ?, last_smoke_protocol_ok = ?, last_smoke_upstream_ok = ?, last_exit_ip = ?, last_anonymity_level = ?, last_smoke_at = ?, updated_at = ? WHERE id = ?"#)
+            .bind(&now)
+            .bind(&cooldown_until)
+            .bind("failed")
+            .bind(if protocol_ok { 1_i64 } else { 0_i64 })
+            .bind(if upstream_ok { 1_i64 } else { 0_i64 })
+            .bind(&exit_ip)
+            .bind(&anonymity_level)
+            .bind(&now)
+            .bind(&now)
+            .bind(&proxy_id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to update proxy after smoke failure: {err}")))?;
+
+        Ok(Json(ProxySmokeResponse {
+            id: proxy_id,
+            reachable,
+            protocol_ok,
+            upstream_ok,
+            exit_ip,
+            anonymity_level,
+            latency_ms,
+            status: "failed".to_string(),
+            message: smoke_message,
+        }))
+    }
+}
+
+pub async fn list_verify_batches(
+    State(state): State<AppState>,
+    Query(query): Query<VerifyBatchListQuery>,
+) -> Result<Json<Vec<VerifyBatchResponse>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, (String, String, i64, i64, i64, i64, i64, Option<String>, Option<String>, String, String)>(
+        r#"SELECT id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at
+           FROM verify_batches ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to list verify batches: {err}")))?;
+
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        items.push(
+            map_verify_batch_row(
+                &state, row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9,
+                row.10,
+            )
+            .await?,
+        );
+    }
+    Ok(Json(items))
+}
+
+pub async fn get_verify_batch(
+    State(state): State<AppState>,
+    Path(batch_id): Path<String>,
+) -> Result<Json<VerifyBatchResponse>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, (String, String, i64, i64, i64, i64, i64, Option<String>, Option<String>, String, String)>(
+        r#"SELECT id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at
+           FROM verify_batches WHERE id = ?"#,
+    )
+    .bind(&batch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to fetch verify batch: {err}")))?;
+
+    match row {
+        Some(row) => Ok(Json(
+            map_verify_batch_row(
+                &state, row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9,
+                row.10,
+            )
+            .await?,
+        )),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("verify batch not found: {batch_id}"),
+        )),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProxyReplenishBatchSummary {
+    pub batch_id: String,
+    pub reason: String,
+    pub target_region: Option<String>,
+    pub accepted: i64,
+    pub proxy_ids: Vec<String>,
+}
+
+async fn build_proxy_inventory_snapshot(
+    state: &AppState,
+    target_region: Option<&str>,
+) -> anyhow::Result<ProxyPoolInventorySnapshot> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM proxies")
+        .fetch_one(&state.db)
+        .await?;
+    let available: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+    )
+    .fetch_one(&state.db)
+    .await?;
+    let available_in_region: i64 = match target_region {
+        Some(region) => {
+            sqlx::query_scalar(
+                "SELECT COUNT(*) FROM proxies WHERE status = 'active' AND region = ? AND (cooldown_until IS NULL OR CAST(cooldown_until AS INTEGER) <= CAST(strftime('%s','now') AS INTEGER))",
+            )
+            .bind(region)
+            .fetch_one(&state.db)
+            .await?
+        }
+        None => 0,
+    };
+    let inflight_tasks: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status IN ('queued', 'running')")
+            .fetch_one(&state.db)
+            .await?;
+    Ok(ProxyPoolInventorySnapshot {
+        total,
+        available,
+        region: target_region.map(str::to_string),
+        available_in_region,
+        inflight_tasks,
+    })
+}
+
+async fn load_hot_browser_regions(state: &AppState) -> anyhow::Result<Vec<String>> {
+    let rows = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT COALESCE(
+                 requested_region,
+                 CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+                 CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+               ) AS region,
+               COUNT(*) AS demand
+           FROM tasks
+           WHERE kind IN ('open_page', 'get_html', 'get_title', 'get_final_url', 'extract_text')
+             AND status IN ('queued', 'running')
+             AND COALESCE(
+               requested_region,
+               CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+               CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+             ) IS NOT NULL
+             AND TRIM(COALESCE(
+               requested_region,
+               CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+               CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+             )) != ''
+           GROUP BY region
+           ORDER BY demand DESC, region ASC
+           LIMIT 3"#,
+    )
+    .fetch_all(&state.db)
+    .await?;
+    Ok(rows.into_iter().map(|(region, _)| region).collect())
+}
+
+async fn load_recent_hot_browser_regions(
+    state: &AppState,
+    window_seconds: i64,
+) -> anyhow::Result<Vec<(String, i64)>> {
+    let now = now_ts_string();
+    sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT region, COUNT(*) AS demand
+           FROM (
+             SELECT
+               COALESCE(
+                 requested_region,
+                 CAST(json_extract(input_json, '$.requested_region') AS TEXT),
+                 CAST(json_extract(input_json, '$.network_policy_json.region') AS TEXT)
+               ) AS region,
+               COALESCE(finished_at, started_at, queued_at, created_at, '0') AS event_ts
+             FROM tasks
+             WHERE kind IN ('open_page', 'get_html', 'get_title', 'get_final_url', 'extract_text')
+               AND status IN ('queued', 'running', 'succeeded')
+           )
+           WHERE region IS NOT NULL
+             AND TRIM(region) != ''
+             AND CAST(event_ts AS INTEGER) >= CAST(? AS INTEGER) - ?
+           GROUP BY region
+           ORDER BY demand DESC, region ASC
+           LIMIT 5"#,
+    )
+    .bind(&now)
+    .bind(window_seconds.max(60))
+    .fetch_all(&state.db)
+    .await
+    .map_err(Into::into)
+}
+
+async fn recent_replenish_batch_exists(
+    state: &AppState,
+    reason: &str,
+    target_region: Option<&str>,
+    now: &str,
+) -> anyhow::Result<bool> {
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM verify_batches
+           WHERE CAST(created_at AS INTEGER) >= CAST(? AS INTEGER) - 300
+             AND json_extract(filters_json, '$.reason') = ?
+             AND (
+               (? IS NULL AND json_extract(filters_json, '$.target_region') IS NULL)
+               OR json_extract(filters_json, '$.target_region') = ?
+             )"#,
+    )
+    .bind(now)
+    .bind(reason)
+    .bind(target_region)
+    .bind(target_region)
+    .fetch_one(&state.db)
+    .await?;
+    Ok(count > 0)
+}
+
+async fn select_replenish_candidate_rows(
+    state: &AppState,
+    target_region: Option<&str>,
+    limit: i64,
+) -> anyhow::Result<Vec<(String, Option<String>)>> {
+    let sql = if target_region.is_some() {
+        r#"SELECT p.id, p.provider
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status IN ('candidate', 'candidate_rejected')
+             AND p.region = ?
+             AND (p.cooldown_until IS NULL OR CAST(p.cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+           ORDER BY
+             CASE
+               WHEN p.provider IS NULL OR TRIM(p.provider) = '' OR p.region IS NULL OR TRIM(p.region) = '' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(s.health_score, 0.0) DESC,
+             CASE p.status WHEN 'candidate' THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN p.last_probe_error_category = 'connect_failed' THEN 2
+               WHEN p.last_probe_error_category = 'upstream_missing' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(CAST(p.last_seen_at AS INTEGER), CAST(p.created_at AS INTEGER)) DESC,
+             p.created_at DESC,
+             p.id ASC
+           LIMIT ?"#
+    } else {
+        r#"SELECT p.id, p.provider
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status IN ('candidate', 'candidate_rejected')
+             AND (p.cooldown_until IS NULL OR CAST(p.cooldown_until AS INTEGER) <= CAST(? AS INTEGER))
+           ORDER BY
+             CASE
+               WHEN p.provider IS NULL OR TRIM(p.provider) = '' OR p.region IS NULL OR TRIM(p.region) = '' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(s.health_score, 0.0) DESC,
+             CASE p.status WHEN 'candidate' THEN 0 ELSE 1 END ASC,
+             CASE
+               WHEN p.last_probe_error_category = 'connect_failed' THEN 2
+               WHEN p.last_probe_error_category = 'upstream_missing' THEN 1
+               ELSE 0
+             END ASC,
+             COALESCE(CAST(p.last_seen_at AS INTEGER), CAST(p.created_at AS INTEGER)) DESC,
+             p.created_at DESC,
+             p.id ASC
+           LIMIT ?"#
+    };
+    let now = now_ts_string();
+    let rows = if let Some(region) = target_region {
+        sqlx::query_as::<_, (String, Option<String>)>(sql)
+            .bind(region)
+            .bind(&now)
+            .bind(limit.max(1) * 4)
+            .fetch_all(&state.db)
+            .await?
+    } else {
+        sqlx::query_as::<_, (String, Option<String>)>(sql)
+            .bind(&now)
+            .bind(limit.max(1) * 4)
+            .fetch_all(&state.db)
+            .await?
+    };
+    Ok(rows)
+}
+
+async fn schedule_replenish_verify_batch(
+    state: &AppState,
+    proxy_rows: &[(String, Option<String>)],
+    reason: &str,
+    target_region: Option<&str>,
+    task_timeout_seconds: i64,
+) -> anyhow::Result<Option<ProxyReplenishBatchSummary>> {
+    if proxy_rows.is_empty() {
+        return Ok(None);
+    }
+
+    let now = now_ts_string();
+    let runtime_mode = state.proxy_runtime_mode.clone();
+    let batch_id = format!("verify-batch-{}", Uuid::new_v4());
+    let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
+    let mut proxy_ids = Vec::with_capacity(proxy_rows.len());
+    for (proxy_id, provider) in proxy_rows {
+        let task_id = format!("task-{}", Uuid::new_v4());
+        let created_at = now_ts_string();
+        let input_json = serde_json::json!({
+            "url": null,
+            "script": null,
+            "timeout_seconds": task_timeout_seconds,
+            "fingerprint_profile_id": null,
+            "fingerprint_profile_version": null,
+            "proxy_id": proxy_id,
+            "verify_batch_id": batch_id,
+            "network_policy_json": null,
+        })
+        .to_string();
+        sqlx::query(
+            r#"INSERT INTO tasks (
+                   id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
+                   priority, created_at, queued_at, started_at, finished_at, fingerprint_profile_id,
+                   fingerprint_profile_version, proxy_id, requested_region, proxy_mode,
+                   runner_id, heartbeat_at, result_json, error_message
+               ) VALUES (?, 'verify_proxy', ?, ?, NULL, NULL, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, NULL)"#,
+        )
+        .bind(&task_id)
+        .bind(TASK_STATUS_QUEUED)
+        .bind(&input_json)
+        .bind(&created_at)
+        .bind(&created_at)
+        .bind(proxy_id)
+        .bind(target_region)
+        .bind(&runtime_mode)
+        .execute(&state.db)
+        .await?;
+        let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
+        *per_provider_counts.entry(provider_key).or_insert(0) += 1;
+        proxy_ids.push(proxy_id.clone());
+    }
+
+    let provider_summary: Vec<ProxyVerifyBatchProviderSummary> = per_provider_counts
+        .into_iter()
+        .map(|(provider, accepted)| ProxyVerifyBatchProviderSummary {
+            provider,
+            accepted,
+            skipped_due_to_cap: 0,
+        })
+        .collect();
+    let provider_summary_json = serde_json::to_string(&provider_summary)?;
+    let filters_json = serde_json::json!({
+        "reason": reason,
+        "candidate_mode": true,
+        "target_region": target_region,
+        "limit": proxy_rows.len(),
+        "task_timeout_seconds": task_timeout_seconds,
+    })
+    .to_string();
+    let accepted = i64::try_from(proxy_rows.len()).unwrap_or(0);
+    sqlx::query(
+        r#"INSERT INTO verify_batches (id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at)
+           VALUES (?, 'scheduled', ?, ?, 0, 0, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&batch_id)
+    .bind(accepted)
+    .bind(accepted)
+    .bind(task_timeout_seconds)
+    .bind(&provider_summary_json)
+    .bind(&filters_json)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Some(ProxyReplenishBatchSummary {
+        batch_id,
+        reason: reason.to_string(),
+        target_region: target_region.map(str::to_string),
+        accepted,
+        proxy_ids,
+    }))
+}
+
+pub async fn run_proxy_replenish_mvp_tick(
+    state: &AppState,
+) -> anyhow::Result<Vec<ProxyReplenishBatchSummary>> {
+    let policy = proxy_pool_growth_policy_from_env();
+    let now = now_ts_string();
+    let mut scheduled_batches = Vec::new();
+    let mut reserved_proxy_ids = std::collections::HashSet::<String>::new();
+    let mut remaining_budget = proxy_replenish_total_batch_limit_from_env();
+    let region_batch_limit = proxy_replenish_region_batch_limit_from_env();
+    let global_batch_limit = proxy_replenish_global_batch_limit_from_env();
+
+    for region in load_hot_browser_regions(state).await? {
+        if remaining_budget <= 0 {
+            break;
+        }
+
+        let snapshot = build_proxy_inventory_snapshot(state, Some(region.as_str())).await?;
+        let health = assess_proxy_pool_health(&snapshot, &policy);
+        if !health.below_min_region {
+            continue;
+        }
+        if recent_replenish_batch_exists(state, "replenish_mvp", Some(region.as_str()), &now)
+            .await?
+        {
+            continue;
+        }
+
+        let selected = select_replenish_candidate_rows(
+            state,
+            Some(region.as_str()),
+            remaining_budget.min(region_batch_limit),
+        )
+        .await?
+        .into_iter()
+        .filter(|(proxy_id, _)| !reserved_proxy_ids.contains(proxy_id))
+        .take(remaining_budget.min(region_batch_limit) as usize)
+        .collect::<Vec<_>>();
+        if let Some(summary) = schedule_replenish_verify_batch(
+            state,
+            &selected,
+            "replenish_mvp",
+            Some(region.as_str()),
+            5,
+        )
+        .await?
+        {
+            remaining_budget -= summary.accepted;
+            reserved_proxy_ids.extend(summary.proxy_ids.iter().cloned());
+            scheduled_batches.push(summary);
+        }
+    }
+
+    if remaining_budget > 0 {
+        let snapshot = build_proxy_inventory_snapshot(state, None).await?;
+        let health = assess_proxy_pool_health(&snapshot, &policy);
+        if (health.below_min_ratio || health.below_min_total)
+            && !recent_replenish_batch_exists(state, "replenish_mvp", None, &now).await?
+        {
+            let selected = select_replenish_candidate_rows(
+                state,
+                None,
+                remaining_budget.min(global_batch_limit),
+            )
+            .await?
+            .into_iter()
+            .filter(|(proxy_id, _)| !reserved_proxy_ids.contains(proxy_id))
+            .take(remaining_budget.min(global_batch_limit) as usize)
+            .collect::<Vec<_>>();
+            if let Some(summary) =
+                schedule_replenish_verify_batch(state, &selected, "replenish_mvp", None, 5).await?
+            {
+                scheduled_batches.push(summary);
+            }
+        }
+    }
+
+    Ok(scheduled_batches)
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct PlatformTemplateCrudRow {
+    id: String,
+    platform_id: String,
+    name: String,
+    warm_paths_json: String,
+    revisit_paths_json: String,
+    stateful_paths_json: String,
+    write_operation_paths_json: String,
+    high_risk_paths_json: String,
+    allowed_regions_json: Option<String>,
+    preferred_locale: Option<String>,
+    preferred_timezone: Option<String>,
+    continuity_checks_json: Option<String>,
+    identity_markers_json: Option<String>,
+    login_loss_signals_json: Option<String>,
+    recovery_steps_json: Option<String>,
+    behavior_defaults_json: Option<String>,
+    event_chain_templates_json: Option<String>,
+    page_semantics_json: Option<String>,
+    readiness_level: String,
+    status: String,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct StorePlatformOverrideCrudRow {
+    id: String,
+    store_id: String,
+    platform_id: String,
+    admin_origin: Option<String>,
+    entry_origin: Option<String>,
+    entry_paths_json: Option<String>,
+    warm_paths_json: Option<String>,
+    revisit_paths_json: Option<String>,
+    stateful_paths_json: Option<String>,
+    high_risk_paths_json: Option<String>,
+    recovery_steps_json: Option<String>,
+    login_loss_signals_json: Option<String>,
+    identity_markers_json: Option<String>,
+    behavior_defaults_json: Option<String>,
+    event_chain_templates_json: Option<String>,
+    page_semantics_json: Option<String>,
+    status: String,
+    created_at: String,
+    updated_at: String,
+}
+
+fn normalize_non_empty_string_field(payload: &Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+}
+
+fn normalize_status_text(value: Option<&Value>, fallback: &str) -> String {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn map_platform_template_crud_row(row: PlatformTemplateCrudRow) -> Value {
+    json!({
+        "id": row.id,
+        "platform_id": row.platform_id,
+        "name": row.name,
+        "warm_paths_json": parse_json_text(Some(row.warm_paths_json), json!([])),
+        "revisit_paths_json": parse_json_text(Some(row.revisit_paths_json), json!([])),
+        "stateful_paths_json": parse_json_text(Some(row.stateful_paths_json), json!([])),
+        "write_operation_paths_json": parse_json_text(Some(row.write_operation_paths_json), json!([])),
+        "high_risk_paths_json": parse_json_text(Some(row.high_risk_paths_json), json!([])),
+        "allowed_regions_json": parse_json_text(row.allowed_regions_json, json!([])),
+        "preferred_locale": row.preferred_locale,
+        "preferred_timezone": row.preferred_timezone,
+        "continuity_checks_json": parse_optional_json_text(row.continuity_checks_json),
+        "identity_markers_json": parse_optional_json_text(row.identity_markers_json),
+        "login_loss_signals_json": parse_optional_json_text(row.login_loss_signals_json),
+        "recovery_steps_json": parse_optional_json_text(row.recovery_steps_json),
+        "behavior_defaults_json": parse_optional_json_text(row.behavior_defaults_json),
+        "event_chain_templates_json": parse_optional_json_text(row.event_chain_templates_json),
+        "page_semantics_json": parse_optional_json_text(row.page_semantics_json),
+        "readiness_level": row.readiness_level,
+        "status": row.status,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at
+    })
+}
+
+fn map_store_platform_override_crud_row(row: StorePlatformOverrideCrudRow) -> Value {
+    json!({
+        "id": row.id,
+        "store_id": row.store_id,
+        "platform_id": row.platform_id,
+        "admin_origin": row.admin_origin,
+        "entry_origin": row.entry_origin,
+        "entry_paths_json": parse_optional_json_text(row.entry_paths_json),
+        "warm_paths_json": parse_optional_json_text(row.warm_paths_json),
+        "revisit_paths_json": parse_optional_json_text(row.revisit_paths_json),
+        "stateful_paths_json": parse_optional_json_text(row.stateful_paths_json),
+        "high_risk_paths_json": parse_optional_json_text(row.high_risk_paths_json),
+        "recovery_steps_json": parse_optional_json_text(row.recovery_steps_json),
+        "login_loss_signals_json": parse_optional_json_text(row.login_loss_signals_json),
+        "identity_markers_json": parse_optional_json_text(row.identity_markers_json),
+        "behavior_defaults_json": parse_optional_json_text(row.behavior_defaults_json),
+        "event_chain_templates_json": parse_optional_json_text(row.event_chain_templates_json),
+        "page_semantics_json": parse_optional_json_text(row.page_semantics_json),
+        "status": row.status,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at
+    })
+}
+
+pub async fn create_platform_template(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, String)> {
+    let id = normalize_non_empty_string_field(&payload, "id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "platform template id is required".to_string(),
+    ))?;
+    let platform_id = normalize_non_empty_string_field(&payload, "platform_id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "platform template platform_id is required".to_string(),
+    ))?;
+    let name = normalize_non_empty_string_field(&payload, "name").ok_or((
+        StatusCode::BAD_REQUEST,
+        "platform template name is required".to_string(),
+    ))?;
+    let warm_paths_json = payload
+        .get("warm_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let revisit_paths_json = payload
+        .get("revisit_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let stateful_paths_json = payload
+        .get("stateful_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let write_operation_paths_json = payload
+        .get("write_operation_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let high_risk_paths_json = payload
+        .get("high_risk_paths_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let allowed_regions_json = payload
+        .get("allowed_regions_json")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let preferred_locale = normalize_non_empty_string_field(&payload, "preferred_locale");
+    let preferred_timezone = normalize_non_empty_string_field(&payload, "preferred_timezone");
+    let continuity_checks_json = payload.get("continuity_checks_json").cloned();
+    let identity_markers_json = payload.get("identity_markers_json").cloned();
+    let login_loss_signals_json = payload.get("login_loss_signals_json").cloned();
+    let recovery_steps_json = payload.get("recovery_steps_json").cloned();
+    let behavior_defaults_json = payload.get("behavior_defaults_json").cloned();
+    let event_chain_templates_json = payload.get("event_chain_templates_json").cloned();
+    let page_semantics_json = payload.get("page_semantics_json").cloned();
+    let readiness_level = normalize_status_text(payload.get("readiness_level"), "baseline");
+    let status = normalize_status_text(payload.get("status"), "active");
+    let now = now_ts_string();
+
+    sqlx::query(
+        r#"INSERT INTO platform_templates (
+               id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+               write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+               preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+               login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+               readiness_level, status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&id)
+    .bind(&platform_id)
+    .bind(&name)
+    .bind(warm_paths_json.to_string())
+    .bind(revisit_paths_json.to_string())
+    .bind(stateful_paths_json.to_string())
+    .bind(write_operation_paths_json.to_string())
+    .bind(high_risk_paths_json.to_string())
+    .bind(allowed_regions_json.to_string())
+    .bind(&preferred_locale)
+    .bind(&preferred_timezone)
+    .bind(continuity_checks_json.as_ref().map(Value::to_string))
+    .bind(identity_markers_json.as_ref().map(Value::to_string))
+    .bind(login_loss_signals_json.as_ref().map(Value::to_string))
+    .bind(recovery_steps_json.as_ref().map(Value::to_string))
+    .bind(behavior_defaults_json.as_ref().map(Value::to_string))
+    .bind(event_chain_templates_json.as_ref().map(Value::to_string))
+    .bind(page_semantics_json.as_ref().map(Value::to_string))
+    .bind(&readiness_level)
+    .bind(&status)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to create platform template: {err}"),
+        )
+    })?;
+
+    let row = sqlx::query_as::<_, PlatformTemplateCrudRow>(
+        r#"SELECT id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+                  preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+                  login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  readiness_level, status, created_at, updated_at
+           FROM platform_templates
+           WHERE id = ?"#,
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch created platform template: {err}"),
+        )
+    })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(map_platform_template_crud_row(row)),
+    ))
+}
+
+pub async fn list_platform_templates(
+    State(state): State<AppState>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<Value>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, PlatformTemplateCrudRow>(
+        r#"SELECT id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+                  preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+                  login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  readiness_level, status, created_at, updated_at
+           FROM platform_templates
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to list platform templates: {err}"),
+        )
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(map_platform_template_crud_row)
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub async fn get_platform_template(
+    State(state): State<AppState>,
+    Path(template_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, PlatformTemplateCrudRow>(
+        r#"SELECT id, platform_id, name, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  write_operation_paths_json, high_risk_paths_json, allowed_regions_json,
+                  preferred_locale, preferred_timezone, continuity_checks_json, identity_markers_json,
+                  login_loss_signals_json, recovery_steps_json, behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  readiness_level, status, created_at, updated_at
+           FROM platform_templates
+           WHERE id = ?"#,
+    )
+    .bind(&template_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch platform template: {err}"),
+        )
+    })?;
+
+    match row {
+        Some(row) => Ok(Json(map_platform_template_crud_row(row))),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("platform template not found: {template_id}"),
+        )),
+    }
+}
+
+pub async fn create_store_platform_override(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, String)> {
+    let id = normalize_non_empty_string_field(&payload, "id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "store platform override id is required".to_string(),
+    ))?;
+    let store_id = normalize_non_empty_string_field(&payload, "store_id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "store platform override store_id is required".to_string(),
+    ))?;
+    let platform_id = normalize_non_empty_string_field(&payload, "platform_id").ok_or((
+        StatusCode::BAD_REQUEST,
+        "store platform override platform_id is required".to_string(),
+    ))?;
+    let admin_origin = normalize_non_empty_string_field(&payload, "admin_origin");
+    let entry_origin = normalize_non_empty_string_field(&payload, "entry_origin");
+    let entry_paths_json = payload.get("entry_paths_json").cloned();
+    let warm_paths_json = payload.get("warm_paths_json").cloned();
+    let revisit_paths_json = payload.get("revisit_paths_json").cloned();
+    let stateful_paths_json = payload.get("stateful_paths_json").cloned();
+    let high_risk_paths_json = payload.get("high_risk_paths_json").cloned();
+    let recovery_steps_json = payload.get("recovery_steps_json").cloned();
+    let login_loss_signals_json = payload.get("login_loss_signals_json").cloned();
+    let identity_markers_json = payload.get("identity_markers_json").cloned();
+    let behavior_defaults_json = payload.get("behavior_defaults_json").cloned();
+    let event_chain_templates_json = payload.get("event_chain_templates_json").cloned();
+    let page_semantics_json = payload.get("page_semantics_json").cloned();
+    let status = normalize_status_text(payload.get("status"), "active");
+    let now = now_ts_string();
+
+    sqlx::query(
+        r#"INSERT INTO store_platform_overrides (
+               id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+               high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+               behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+               status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&id)
+    .bind(&store_id)
+    .bind(&platform_id)
+    .bind(&admin_origin)
+    .bind(&entry_origin)
+    .bind(entry_paths_json.as_ref().map(Value::to_string))
+    .bind(warm_paths_json.as_ref().map(Value::to_string))
+    .bind(revisit_paths_json.as_ref().map(Value::to_string))
+    .bind(stateful_paths_json.as_ref().map(Value::to_string))
+    .bind(high_risk_paths_json.as_ref().map(Value::to_string))
+    .bind(recovery_steps_json.as_ref().map(Value::to_string))
+    .bind(login_loss_signals_json.as_ref().map(Value::to_string))
+    .bind(identity_markers_json.as_ref().map(Value::to_string))
+    .bind(behavior_defaults_json.as_ref().map(Value::to_string))
+    .bind(event_chain_templates_json.as_ref().map(Value::to_string))
+    .bind(page_semantics_json.as_ref().map(Value::to_string))
+    .bind(&status)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to create store platform override: {err}"),
+        )
+    })?;
+
+    let row = sqlx::query_as::<_, StorePlatformOverrideCrudRow>(
+        r#"SELECT id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+                  behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  status, created_at, updated_at
+           FROM store_platform_overrides
+           WHERE id = ?"#,
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch created store platform override: {err}"),
+        )
+    })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(map_store_platform_override_crud_row(row)),
+    ))
+}
+
+pub async fn list_store_platform_overrides(
+    State(state): State<AppState>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<Vec<Value>>, (StatusCode, String)> {
+    let limit = sanitize_limit(query.limit, 20, 200);
+    let offset = sanitize_offset(query.offset);
+    let rows = sqlx::query_as::<_, StorePlatformOverrideCrudRow>(
+        r#"SELECT id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+                  behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  status, created_at, updated_at
+           FROM store_platform_overrides
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to list store platform overrides: {err}"),
+        )
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(map_store_platform_override_crud_row)
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub async fn get_store_platform_override(
+    State(state): State<AppState>,
+    Path(override_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, StorePlatformOverrideCrudRow>(
+        r#"SELECT id, store_id, platform_id, admin_origin, entry_origin, entry_paths_json, warm_paths_json, revisit_paths_json, stateful_paths_json,
+                  high_risk_paths_json, recovery_steps_json, login_loss_signals_json, identity_markers_json,
+                  behavior_defaults_json, event_chain_templates_json, page_semantics_json,
+                  status, created_at, updated_at
+           FROM store_platform_overrides
+           WHERE id = ?"#,
+    )
+    .bind(&override_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to fetch store platform override: {err}"),
+        )
+    })?;
+
+    match row {
+        Some(row) => Ok(Json(map_store_platform_override_crud_row(row))),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("store platform override not found: {override_id}"),
+        )),
+    }
+}
+
+pub async fn verify_batch_proxies(
+    State(state): State<AppState>,
+    Json(payload): Json<ProxyVerifyBatchRequest>,
+) -> Result<(StatusCode, Json<ProxyVerifyBatchResponse>), (StatusCode, String)> {
+    let requested = sanitize_limit(payload.limit, 20, 200);
+    let min_score = payload.min_score.unwrap_or(0.0);
+    let only_stale = payload.only_stale.unwrap_or(true);
+    let stale_after_seconds = payload.stale_after_seconds.unwrap_or(3600).max(60);
+    let task_timeout_seconds = payload.task_timeout_seconds.unwrap_or(5).max(1);
+    let recently_used_within_seconds = payload.recently_used_within_seconds.unwrap_or(0).max(0);
+    let failed_only = payload.failed_only.unwrap_or(false);
+    let max_per_provider = payload.max_per_provider.unwrap_or(requested).max(1);
+    let runtime_mode = state.proxy_runtime_mode.clone();
+    let now = now_ts_string();
+    let batch_id = format!("verify-batch-{}", Uuid::new_v4());
+    let fetch_verify_batch_rows = |mode_filter: String| {
+        let mode_filter_other = mode_filter.clone();
+        sqlx::query_as::<
+            _,
+            (
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                String,
+            ),
+        >(
+            r#"SELECT p.id, p.provider, p.source_label, p.last_verify_status, p.last_verify_at, p.created_at
+           FROM proxies p
+           LEFT JOIN proxy_harvest_sources s ON s.source_label = p.source_label
+           WHERE p.status = 'active'
+             AND (? IS NULL OR p.provider = ?)
+             AND (? IS NULL OR p.region = ?)
+             AND p.score >= ?
+             AND (
+               ? = 0
+               OR p.last_verify_at IS NULL
+               OR p.last_verify_status IS NULL
+               OR p.last_verify_status != 'ok'
+               OR CAST(p.last_verify_at AS INTEGER) <= CAST(? AS INTEGER) - ?
+             )
+             AND (
+               ? = 0
+               OR CAST(COALESCE(p.last_used_at, '0') AS INTEGER) >= CAST(? AS INTEGER) - ?
+             )
+             AND (
+               ? = 0
+               OR p.last_verify_status = 'failed'
+             )
+             AND (
+               (? = 'prod_live' AND COALESCE(s.for_prod, CASE WHEN p.source_label IS NULL OR TRIM(p.source_label) = '' THEN 1 ELSE 0 END) = 1)
+               OR (? != 'prod_live' AND COALESCE(s.for_demo, 1) = 1)
+             )
+           ORDER BY
+             CASE WHEN p.last_verify_status = 'ok' THEN 1 ELSE 0 END ASC,
+             COALESCE(p.last_verify_at, '0') ASC,
+               p.created_at ASC,
+               p.id ASC
+           LIMIT ?"#,
+        )
+        .bind(&payload.provider)
+        .bind(&payload.provider)
+        .bind(&payload.region)
+        .bind(&payload.region)
+        .bind(min_score)
+        .bind(if only_stale { 1_i64 } else { 0_i64 })
+        .bind(&now)
+        .bind(stale_after_seconds)
+        .bind(if recently_used_within_seconds > 0 {
+            1_i64
+        } else {
+            0_i64
+        })
+        .bind(&now)
+        .bind(recently_used_within_seconds)
+        .bind(if failed_only { 1_i64 } else { 0_i64 })
+        .bind(mode_filter)
+        .bind(mode_filter_other)
+        .bind(requested.saturating_mul(50).max(50).min(1000))
+        .fetch_all(&state.db)
+    };
+    let mut rows = fetch_verify_batch_rows(runtime_mode.clone())
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to select proxies for verify batch: {err}"),
+            )
+        })?;
+    if rows.is_empty() && runtime_mode != "prod_live" {
+        rows = fetch_verify_batch_rows("prod_live".to_string())
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to select fallback prod-live proxies for verify batch: {err}"),
+                )
+            })?;
+    }
+    let mut source_inventory = std::collections::BTreeMap::<String, i64>::new();
+    let mut provider_inventory = std::collections::BTreeMap::<String, i64>::new();
+    for (_, provider, source_label, _, _, _) in &rows {
+        let source_key = source_label
+            .clone()
+            .unwrap_or_else(|| "__none__".to_string());
+        let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
+        *source_inventory.entry(source_key).or_insert(0) += 1;
+        *provider_inventory.entry(provider_key).or_insert(0) += 1;
+    }
+    let parse_ts = |value: Option<&String>| {
+        value
+            .and_then(|raw| raw.parse::<i64>().ok())
+            .unwrap_or_default()
+    };
+    rows.sort_by(|left, right| {
+        let left_source_key = left.2.clone().unwrap_or_else(|| "__none__".to_string());
+        let right_source_key = right.2.clone().unwrap_or_else(|| "__none__".to_string());
+        let left_provider_key = left.1.clone().unwrap_or_else(|| "__none__".to_string());
+        let right_provider_key = right.1.clone().unwrap_or_else(|| "__none__".to_string());
+        source_inventory[&left_source_key]
+            .cmp(&source_inventory[&right_source_key])
+            .then_with(|| {
+                provider_inventory[&left_provider_key].cmp(&provider_inventory[&right_provider_key])
+            })
+            .then_with(|| {
+                let left_verified_ok = i32::from(left.3.as_deref() == Some("ok"));
+                let right_verified_ok = i32::from(right.3.as_deref() == Some("ok"));
+                left_verified_ok.cmp(&right_verified_ok)
+            })
+            .then_with(|| parse_ts(left.4.as_ref()).cmp(&parse_ts(right.4.as_ref())))
+            .then_with(|| left.5.cmp(&right.5))
+            .then_with(|| left.0.cmp(&right.0))
+    });
+
+    let mut accepted = 0_i64;
+    let mut per_provider_counts = std::collections::BTreeMap::<String, i64>::new();
+    let mut per_provider_skipped = std::collections::BTreeMap::<String, i64>::new();
+    for (proxy_id, provider, _, _, _, _) in &rows {
+        if accepted >= requested {
+            break;
+        }
+        let provider_key = provider.clone().unwrap_or_else(|| "__none__".to_string());
+        let current = *per_provider_counts.get(&provider_key).unwrap_or(&0);
+        if current >= max_per_provider {
+            *per_provider_skipped.entry(provider_key).or_insert(0) += 1;
+            continue;
+        }
+        let task_id = format!("task-{}", Uuid::new_v4());
+        let created_at = now_ts_string();
+        let input_json = serde_json::json!({
+            "url": null,
+            "script": null,
+            "timeout_seconds": task_timeout_seconds,
+            "fingerprint_profile_id": null,
+            "fingerprint_profile_version": null,
+            "proxy_id": proxy_id,
+            "verify_batch_id": batch_id,
+            "network_policy_json": null,
+        })
+        .to_string();
+        sqlx::query(
+            r#"INSERT INTO tasks (
+                id, kind, status, input_json, network_policy_json, fingerprint_profile_json,
+                priority, created_at, queued_at, started_at, finished_at, fingerprint_profile_id,
+                fingerprint_profile_version, proxy_id, requested_region, proxy_mode,
+                runner_id, heartbeat_at, result_json, error_message
+            ) VALUES (?, 'verify_proxy', ?, ?, NULL, NULL, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, NULL)"#,
+        )
+        .bind(&task_id)
+        .bind(TASK_STATUS_QUEUED)
+        .bind(&input_json)
+        .bind(&created_at)
+        .bind(&created_at)
+        .bind(proxy_id)
+        .bind(&payload.region)
+        .bind(&runtime_mode)
+        .execute(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to enqueue verify task: {err}")))?;
+        accepted += 1;
+        per_provider_counts.insert(provider_key, current + 1);
+    }
+
+    let provider_summary: Vec<ProxyVerifyBatchProviderSummary> = per_provider_counts
+        .into_iter()
+        .map(|(provider, accepted)| ProxyVerifyBatchProviderSummary {
+            skipped_due_to_cap: per_provider_skipped.get(&provider).copied().unwrap_or(0),
+            provider,
+            accepted,
+        })
+        .collect();
+    let provider_summary_json = serde_json::to_string(&provider_summary).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to encode provider summary: {err}"),
+        )
+    })?;
+    let filters_json = serde_json::json!({
+        "provider": payload.provider,
+        "region": payload.region,
+        "limit": requested,
+        "only_stale": only_stale,
+        "min_score": min_score,
+        "stale_after_seconds": stale_after_seconds,
+        "task_timeout_seconds": task_timeout_seconds,
+        "recently_used_within_seconds": recently_used_within_seconds,
+        "failed_only": failed_only,
+        "max_per_provider": max_per_provider,
+        "mode": runtime_mode,
+    })
+    .to_string();
+    sqlx::query(r#"INSERT INTO verify_batches (id, status, requested_count, accepted_count, skipped_count, stale_after_seconds, task_timeout_seconds, provider_summary_json, filters_json, created_at, updated_at)
+                   VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?)"#)
+        .bind(&batch_id)
+        .bind(requested)
+        .bind(accepted)
+        .bind(requested - accepted)
+        .bind(stale_after_seconds)
+        .bind(task_timeout_seconds)
+        .bind(&provider_summary_json)
+        .bind(&filters_json)
+        .bind(&now)
+        .bind(&now)
+        .execute(&state.db)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to persist verify batch: {err}")))?;
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(ProxyVerifyBatchResponse {
+            batch_id,
+            created_at: now,
+            requested,
+            accepted,
+            skipped: requested - accepted,
+            stale_after_seconds,
+            task_timeout_seconds,
+            provider_summary,
+            status: "scheduled".to_string(),
+        }),
+    ))
+}
+
+pub async fn verify_proxy(
+    State(state): State<AppState>,
+    Path(proxy_id): Path<String>,
+) -> Result<Json<ProxyVerifyResponse>, (StatusCode, String)> {
+    Ok(Json(run_proxy_verify_probe(&state, &proxy_id).await?))
+}

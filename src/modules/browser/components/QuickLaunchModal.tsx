@@ -53,7 +53,7 @@ function sortProfiles(a: BrowserProfile, b: BrowserProfile): number {
 
 function pickPrimaryTag(profile: BrowserProfile): string {
   const tags = (profile.tags || []).map(t => t.trim()).filter(Boolean)
-  return tags.length > 0 ? tags[0] : UNTAGGED_LABEL
+  return tags.length > 0 ? tags[0]! : UNTAGGED_LABEL
 }
 
 export function QuickLaunchModal({ open, onClose }: QuickLaunchModalProps) {
@@ -214,7 +214,7 @@ export function QuickLaunchModal({ open, onClose }: QuickLaunchModalProps) {
       return
     }
     if (!activeTag || !tagSections.some(s => s.tag === activeTag)) {
-      setActiveTag(tagSections[0].tag)
+      setActiveTag(tagSections[0]!.tag)
     }
   }, [tagSections, activeTag])
 
@@ -241,7 +241,7 @@ export function QuickLaunchModal({ open, onClose }: QuickLaunchModalProps) {
 
       const containerRect = container.getBoundingClientRect()
       const anchorTop = containerRect.top + 16
-      let nextActiveTag = tagSections[0].tag
+      let nextActiveTag = tagSections[0]!.tag
 
       for (const section of tagSections) {
         const el = sectionRefs.current[section.tag]
@@ -254,7 +254,7 @@ export function QuickLaunchModal({ open, onClose }: QuickLaunchModalProps) {
       }
 
       if (container.scrollTop + container.clientHeight >= container.scrollHeight - 4) {
-        nextActiveTag = tagSections[tagSections.length - 1].tag
+        nextActiveTag = tagSections[tagSections.length - 1]!.tag
       }
 
       setActiveTag((prev) => (prev === nextActiveTag ? prev : nextActiveTag))
@@ -285,7 +285,7 @@ export function QuickLaunchModal({ open, onClose }: QuickLaunchModalProps) {
       toast.success(profile?.running ? `实例「${profile.profileName}」已在运行` : `实例「${profile?.profileName || normalized}」已启动`)
       onClose()
       return true
-    } catch (error: any) {
+    } catch (error: unknown) {
       const feedback = resolveActionFeedback(error, '按 Code 启动失败')
       if (feedback.tone === 'warning') {
         toast.warning(feedback.message)

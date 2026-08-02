@@ -34,7 +34,7 @@ export function TagInput({ value, onChange, suggestions = [], placeholder = '输
       e.preventDefault()
       addTag(input)
     } else if (e.key === 'Backspace' && !input && value.length > 0) {
-      removeTag(value[value.length - 1])
+      removeTag(value[value.length - 1]!)
     } else if (e.key === 'Escape') {
       setShowSuggestions(false)
     }

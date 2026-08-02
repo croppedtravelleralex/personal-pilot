@@ -1,0 +1,13 @@
+id: feed-scrape-v1
+version: 1
+description: Feed 滚动采集（只读，humanize scroll）
+steps:
+  - type: navigate
+    url: "{{platform.urls.home}}"
+  - type: wait-for-selector
+    selector: "{{platform.selectors.feed.scrollContainer}}"
+    waitTimeoutMs: 10000
+  - type: scroll
+    direction: down
+    distance: 800
+    humanizationLevel: high

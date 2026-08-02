@@ -1,0 +1,1929 @@
+param(
+  [string]$OutputDir = "data/reports/m4-acceptance",
+  [switch]$SkipLiveTruthRefresh,
+  [switch]$SkipProviderPreflightRefresh
+)
+
+$ErrorActionPreference = "Stop"
+
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$absoluteOutputDir = Join-Path $projectRoot $OutputDir
+New-Item -ItemType Directory -Force -Path $absoluteOutputDir | Out-Null
+
+function Get-Field([object]$Value, [string]$Name) {
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [System.Collections.IDictionary]) {
+    if ($Value.Contains($Name)) { return $Value[$Name] }
+    return $null
+  }
+  $property = $Value.PSObject.Properties[$Name]
+  if ($null -eq $property) { return $null }
+  return $property.Value
+}
+
+function ConvertTo-ReportSortKey([object]$Value, [datetime]$Fallback) {
+  if ($null -ne $Value) {
+    $text = [string]$Value
+    $epochMs = 0L
+    if ([Int64]::TryParse($text, [ref]$epochMs)) {
+      return [DateTimeOffset]::FromUnixTimeMilliseconds($epochMs).UtcDateTime
+    }
+
+    try {
+      return ([DateTimeOffset]::Parse($text)).UtcDateTime
+    } catch {}
+  }
+
+  return $Fallback.ToUniversalTime()
+}
+
+function Test-ReportProjectRootMatches([object]$Report) {
+  $reportProjectRoot = [string](Get-Field $Report "projectRoot")
+  if ([string]::IsNullOrWhiteSpace($reportProjectRoot)) { return $true }
+  $left = $reportProjectRoot.TrimEnd('\', '/')
+  $right = $projectRoot.TrimEnd('\', '/')
+  return $left.Equals($right, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-LatestReport([string]$DirName, [string]$Pattern) {
+  $dir = Join-Path $projectRoot (Join-Path "data\reports" $DirName)
+  if (-not (Test-Path $dir)) { return $null }
+
+  $items = @()
+  Get-ChildItem -Path $dir -Filter $Pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      $value = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+      if (Test-ReportProjectRootMatches $value) {
+        $items += [pscustomobject]@{
+          path = $_.FullName
+          generatedAt = Get-Field $value "generatedAt"
+          sortKey = ConvertTo-ReportSortKey (Get-Field $value "generatedAt") $_.LastWriteTimeUtc
+          value = $value
+        }
+      }
+    } catch {
+      $items += [pscustomobject]@{
+        path = $_.FullName
+        generatedAt = $null
+        sortKey = $_.LastWriteTimeUtc
+        value = $null
+        parseError = $_.Exception.Message
+      }
+    }
+  }
+
+  $sorted = @($items | Sort-Object -Property sortKey -Descending)
+  if ($sorted.Count -eq 0) { return $null }
+  return $sorted[0]
+}
+
+function New-GateResult(
+  [string]$Id,
+  [string]$Status,
+  [object]$ReportItem,
+  [string]$Classification,
+  [string]$Reason,
+  [string[]]$Failures,
+  [string[]]$ExpectedBlockers
+) {
+  $report = if ($null -ne $ReportItem) { Get-Field $ReportItem "value" } else { $null }
+  return [ordered]@{
+    id = $Id
+    status = $Status
+    classification = $Classification
+    reportPath = if ($null -ne $ReportItem) { Get-Field $ReportItem "path" } else { $null }
+    generatedAt = if ($null -ne $ReportItem) { Get-Field $ReportItem "generatedAt" } else { $null }
+    schemaVersion = if ($null -ne $report) { Get-Field $report "schemaVersion" } else { $null }
+    reason = $Reason
+    failures = @($Failures)
+    expectedBlockers = @($ExpectedBlockers)
+  }
+}
+
+function Get-NonPassedRequiredGateIds([object]$GateResults) {
+  if ($null -eq $GateResults) { return @() }
+  return @($GateResults | Where-Object {
+    (Get-Field $_ "requiredForLocalRestore") -eq $true -and [string](Get-Field $_ "status") -ne "passed"
+  } | ForEach-Object { [string](Get-Field $_ "id") })
+}
+
+function Get-ProviderBlockedItemIds([object]$Items) {
+  if ($null -eq $Items) { return @() }
+  return @($Items | Where-Object {
+    [string](Get-Field $_ "acceptanceStatus") -ne "accepted" -or @((Get-Field $_ "blockers")).Count -gt 0
+  } | ForEach-Object {
+    $domain = [string](Get-Field $_ "domain")
+    if ([string]::IsNullOrWhiteSpace($domain)) { "provider_item" } else { $domain }
+  })
+}
+
+function Get-ProviderDryRunContractFailures([object]$Report) {
+  $failures = @()
+  if ($null -eq $Report) {
+    return @("provider dry-run report is missing")
+  }
+
+  $items = @((Get-Field $Report "items"))
+  if ($items.Count -eq 0) {
+    $failures += "provider report has no items"
+  }
+
+  $topDryRunStatus = [string](Get-Field $Report "dryRunStatus")
+  $topTaxonomyStatus = [string](Get-Field $Report "failureTaxonomyStatus")
+  if ([string]::IsNullOrWhiteSpace($topDryRunStatus)) {
+    $failures += "provider report missing top-level dryRunStatus"
+  }
+  if ([string]::IsNullOrWhiteSpace($topTaxonomyStatus)) {
+    $failures += "provider report missing top-level failureTaxonomyStatus"
+  }
+
+  foreach ($item in $items) {
+    $domain = [string](Get-Field $item "domain")
+    if ([string]::IsNullOrWhiteSpace($domain)) { $domain = "provider_item" }
+
+    $dryRunStatus = [string](Get-Field $item "dryRunStatus")
+    $dryRunAvailable = (Get-Field $item "dryRunAvailable") -eq $true
+    $dryRunContract = @((Get-Field $item "dryRunContract") | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $dryRunNextAction = [string](Get-Field $item "dryRunNextAction")
+    $failureTaxonomyStatus = [string](Get-Field $item "failureTaxonomyStatus")
+    $failureTaxonomy = @((Get-Field $item "failureTaxonomy") | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+
+    if ([string]::IsNullOrWhiteSpace($dryRunStatus)) {
+      $failures += "$domain missing dryRunStatus"
+    }
+    if (-not $dryRunAvailable) {
+      $failures += "$domain dryRunAvailable is not true"
+    }
+    if ($dryRunContract.Count -eq 0) {
+      $failures += "$domain missing dryRunContract"
+    }
+    if ([string]::IsNullOrWhiteSpace($dryRunNextAction)) {
+      $failures += "$domain missing dryRunNextAction"
+    }
+    if ([string]::IsNullOrWhiteSpace($failureTaxonomyStatus)) {
+      $failures += "$domain missing failureTaxonomyStatus"
+    }
+    if ($failureTaxonomy.Count -eq 0) {
+      $failures += "$domain missing failureTaxonomy"
+    }
+  }
+
+  return $failures
+}
+
+function Invoke-LiveTruthGuard {
+  if ($SkipLiveTruthRefresh) { return }
+
+  $script = Join-Path $PSScriptRoot "live_truth_guard.ps1"
+  if (-not (Test-Path $script)) { return }
+
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $script | Out-Host
+  $script:liveTruthExitCode = $LASTEXITCODE
+}
+
+function Invoke-ProviderAcceptancePreflight {
+  if ($SkipProviderPreflightRefresh) { return }
+
+  $script = Join-Path $PSScriptRoot "provider_acceptance_preflight.ps1"
+  if (-not (Test-Path $script)) { return }
+
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $script | Out-Host
+  $script:providerPreflightExitCode = $LASTEXITCODE
+}
+
+function New-LocalGateResult(
+  [string]$Id,
+  [string]$Status,
+  [string]$Classification,
+  [string]$Reason,
+  [string[]]$Failures
+) {
+  return [ordered]@{
+    id = $Id
+    status = $Status
+    classification = $Classification
+    reportPath = $null
+    generatedAt = (Get-Date).ToString("o")
+    schemaVersion = "local_source_contract_v1"
+    reason = $Reason
+    failures = @($Failures)
+    expectedBlockers = @()
+  }
+}
+
+function Test-AutomationPrimitiveContract {
+  $runnerPath = Join-Path $projectRoot "backend\internal\scheduler\cdp_runner.go"
+  $testPath = Join-Path $projectRoot "backend\internal\scheduler\cdp_runner_test.go"
+  $failures = @()
+
+  if (-not (Test-Path $runnerPath)) {
+    $failures += "missing cdp_runner.go"
+  }
+  if (-not (Test-Path $testPath)) {
+    $failures += "missing cdp_runner_test.go"
+  }
+
+  $runnerText = if (Test-Path $runnerPath) { Get-Content -LiteralPath $runnerPath -Raw -Encoding UTF8 } else { "" }
+  $testText = if (Test-Path $testPath) { Get-Content -LiteralPath $testPath -Raw -Encoding UTF8 } else { "" }
+  $requiredActions = @("select", "dialog", "download", "upload", "iframe", "tab")
+  foreach ($action in $requiredActions) {
+    if ($runnerText -notmatch ("case `"{0}`"" -f [regex]::Escape($action))) {
+      $failures += "missing typed runner action: $action"
+    }
+    if ($testText -notmatch [regex]::Escape($action)) {
+      $failures += "missing typed runner test coverage marker: $action"
+    }
+  }
+  if ($testText -notmatch "TestCDPTaskRunner_TypedM4PrimitiveActions") {
+    $failures += "missing typed primitive test function"
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "automation_primitives_contract" "missing_coverage" "failed" "M4.3 typed primitive source/test contract is incomplete" $failures
+  }
+  return New-LocalGateResult "automation_primitives_contract" "passed" "passed" "M4.3 typed primitive source/test contract is present; run go test for behavioral proof" @()
+}
+
+function Test-ProviderDryRunContract {
+  $item = Get-LatestReport "provider-acceptance" "provider-acceptance-preflight-*.json"
+  $report = if ($null -ne $item) { Get-Field $item "value" } else { $null }
+  $failures = Get-ProviderDryRunContractFailures $report
+  if ($providerPreflightExitCode -ne $null -and $providerPreflightExitCode -notin @(0, 2)) {
+    $failures += "provider_acceptance_preflight script exited $providerPreflightExitCode"
+  }
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "provider_dry_run_contract" "missing_coverage" "failed" "M4.4 provider dry-run/failure taxonomy contract is incomplete" $failures
+  }
+  return New-LocalGateResult "provider_dry_run_contract" "passed" "passed" "M4.4 provider dry-run/failure taxonomy report contract is present; real smoke remains externally blocked" @()
+}
+
+function Test-SessionBundleOperatorContract {
+  $settingsPath = Join-Path $projectRoot "src\modules\settings\SettingsPage.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $desktopTypesPath = Join-Path $projectRoot "src\types\desktop.ts"
+  $rustDesktopPath = Join-Path $projectRoot "src\desktop\mod.rs"
+  $failures = @()
+
+  foreach ($path in @($settingsPath, $desktopServicePath, $desktopTypesPath, $rustDesktopPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $settingsText = if (Test-Path $settingsPath) { Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $desktopTypesText = if (Test-Path $desktopTypesPath) { Get-Content -LiteralPath $desktopTypesPath -Raw -Encoding UTF8 } else { "" }
+  $rustDesktopText = if (Test-Path $rustDesktopPath) { Get-Content -LiteralPath $rustDesktopPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "SessionBundle",
+      "exportSessionBundle",
+      "preflightSessionBundleImport",
+      "restoreSessionBundle",
+      "Dry-run",
+      "handleSessionBundleRestore",
+      "writePerformed",
+      "restart continuity",
+      "allowProfileOverwrite",
+      "confirm("
+    )) {
+    if ($settingsText -notmatch [regex]::Escape($token)) {
+      $failures += "Settings SessionBundle operator UI missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("export_session_bundle", "preflight_session_bundle_import", "restore_session_bundle")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing SessionBundle command wrapper: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "DesktopSessionBundleExport",
+      "DesktopSessionBundleImportPreflight",
+      "DesktopSessionBundleRestoreResult",
+      "restoreSupported",
+      "writePerformed"
+    )) {
+    if ($desktopTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop types missing SessionBundle type marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "export_desktop_session_bundle",
+      "preflight_desktop_session_bundle_import",
+      "restore_desktop_session_bundle",
+      "session_bundle_import_preflight_and_restore_write_confirmed_copy"
+    )) {
+    if ($rustDesktopText -notmatch [regex]::Escape($token)) {
+      $failures += "Rust desktop SessionBundle implementation/test marker missing: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "session_bundle_operator_contract" "missing_coverage" "failed" "M4.6 SessionBundle operator source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "session_bundle_operator_contract" "passed" "passed" "M4.6 local-only SessionBundle export/preflight/dry-run/confirmed restore operator loop is wired in UI/API" @()
+}
+
+function Test-TypedFacadeShrinkContract {
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $desktopTypesPath = Join-Path $projectRoot "src\types\desktop.ts"
+  $syncApiPath = Join-Path $projectRoot "src\modules\synchronizer\api.ts"
+  $browserApiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $failures = @()
+
+  foreach ($path in @($desktopServicePath, $desktopTypesPath, $syncApiPath, $browserApiPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $desktopTypesText = if (Test-Path $desktopTypesPath) { Get-Content -LiteralPath $desktopTypesPath -Raw -Encoding UTF8 } else { "" }
+  $syncApiText = if (Test-Path $syncApiPath) { Get-Content -LiteralPath $syncApiPath -Raw -Encoding UTF8 } else { "" }
+  $browserApiText = if (Test-Path $browserApiPath) { Get-Content -LiteralPath $browserApiPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "DesktopCoreSyncGroup",
+      "DesktopCoreSyncOperation",
+      "DesktopCoreSyncWindowPlacement",
+      "DesktopCoreWorkbenchTask",
+      "DesktopCoreWorkbenchDetectionResult",
+      "DesktopCoreWorkbenchUiState",
+      "DesktopCoreWorkbenchDetectorSite",
+      "DesktopBrowserProfile",
+      "DesktopCoreWorkbenchFingerprintSnapshot",
+      "DesktopCoreWorkbenchFingerprintHealthProfile",
+      "DesktopCoreWorkbenchIdentityStrengthReport"
+    )) {
+    if ($desktopTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop shared type missing: $token"
+    }
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service wrapper does not use shared type: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "synchronizerListGroups = (): Promise<unknown[]>",
+      "synchronizerArrangeProfiles = (`r`n  profileIds: string[],`r`n  layout: `"grid`" | `"main-left`",`r`n): Promise<unknown[]>",
+      "synchronizerGetOperationLog = (limit = 50): Promise<unknown[]>",
+      "synchronizerListTasks = (limit = 200): Promise<unknown[]>",
+      "workbenchListDetectionResults = (`r`n  profileId = `"`",`r`n  kind = `"`",`r`n  limit = 50,`r`n): Promise<unknown[]>",
+      "workbenchGetUiState = (): Promise<unknown>",
+      "workbenchSaveUiState = (state: unknown): Promise<void>",
+      "workbenchListDetectorSites = (): Promise<unknown[]>",
+      "workbenchRunDetectorSite = (`r`n  profileId: string,`r`n  detectorId: string,`r`n): Promise<unknown>",
+      "browserInstanceStatus = (profileId: string): Promise<unknown | null>",
+      "workbenchFingerprintHealthProfile = (profileId: string): Promise<unknown>",
+      "workbenchFingerprintProfile = (profileId: string): Promise<unknown>",
+      "identityReportProfile = (profileId: string): Promise<unknown>"
+    )) {
+    if ($desktopServiceText -match [regex]::Escape($token)) {
+      $failures += "desktop service still exposes unknown typed synchronizer facade: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "synchronizerListGroups() as Promise<SyncGroup[]>",
+      "synchronizerArrangeProfiles(profileIds, layout) as Promise<SyncWindowPlacement[]>",
+      "synchronizerGetOperationLog(limit ?? 50) as Promise<SyncOperation[]>",
+      "synchronizerListTasks(limit ?? 200) as Promise<WorkbenchTask[]>",
+      "browserInstanceStatus(profileId) as Promise<BrowserProfile | null>",
+      "workbenchFingerprintProfile(profileId) as WorkbenchFingerprintSnapshot",
+      "Array.isArray(results) ? results.map(normalizeDetectionResult) : []",
+      "Array.isArray(results)`r`n    ? results.map((item) =>"
+    )) {
+    if ($syncApiText -match [regex]::Escape($token)) {
+      $failures += "synchronizer API still casts high-traffic facade result: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "type BrowserNativeBindings = Partial<{",
+      "BrowserProfileList: () => Promise<BrowserProfile[]>",
+      "BrowserInstanceStart: (profileId: string) => Promise<BrowserProfile>",
+      "BrowserGetCookies: (profileId: string) => Promise<CookieInfo[]>",
+      "BehaviorRecordingSummaryList: () => Promise<RecordingSummary[]>",
+      "LLMExecuteTask: (profileId: string, taskDescription: string) => Promise<void>",
+      "const getBindings = async () =>",
+      "const bindings = await getBindings()"
+    )) {
+    if ($browserApiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API missing typed Wails binding marker: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any = await getBindings()", "const goApp = (window as any).go?.main?.App")) {
+    if ($browserApiText -match [regex]::Escape($token)) {
+      $failures += "browser API still uses dynamic Wails binding marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "typed_facade_shrink_contract" "missing_coverage" "failed" "M4.8 typed facade shrink source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "typed_facade_shrink_contract" "passed" "passed" "M4.8 synchronizer/workbench/report DTOs and browser Wails bindings have typed source contracts; Wails bridge remains transitional" @()
+}
+
+function Test-BridgeCompatTypeContract {
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $bridgePath = Join-Path $projectRoot "src\services\tauriWailsBridge.ts"
+  $failures = @()
+
+  foreach ($path in @($desktopServicePath, $bridgePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $bridgeText = if (Test-Path $bridgePath) { Get-Content -LiteralPath $bridgePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "export type DesktopRpcArg = unknown",
+      "export type DesktopRpcArgs = Array<DesktopRpcArg>",
+      "function buildRpcArgs(command: string, args: DesktopRpcArgs): InvokeArgs",
+      "args: DesktopRpcArgs = []"
+    )) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop RPC argument boundary missing marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "import type { DesktopRpcArgs } from './desktop'",
+      "type BridgeEventData = Array<unknown>",
+      "type BridgeRpcResult = unknown",
+      "type BridgeRpcMethod = (...args: DesktopRpcArgs) => Promise<BridgeRpcResult>",
+      "type BridgeAppProxy = Record<string, BridgeRpcMethod>",
+      "function createAppProxy(): BridgeAppProxy",
+      "return (...args: DesktopRpcArgs) => desktopRpc(property, args)"
+    )) {
+    if ($bridgeText -notmatch [regex]::Escape($token)) {
+      $failures += "tauriWailsBridge typed compat marker missing: $token"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "desktop service"; text = $desktopServiceText },
+      @{ name = "tauriWailsBridge"; text = $bridgeText }
+    )) {
+    foreach ($patternAndReason in @(
+        @{ pattern = "\bunknown\[\]"; reason = "bare unknown array" },
+        @{ pattern = "Promise\s*<\s*unknown\s*>"; reason = "bare Promise<unknown>" },
+        @{ pattern = "Record\s*<\s*string\s*,\s*\(\.\.\.args:\s*unknown\[\]\)\s*=>\s*Promise\s*<\s*unknown\s*>\s*>"; reason = "raw bridge app proxy type" }
+      )) {
+      if ($textAndName.text -match $patternAndReason.pattern) {
+        $failures += "$($textAndName.name) still has weak bridge type marker: $($patternAndReason.reason)"
+      }
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "bridge_compat_type_contract" "missing_coverage" "failed" "M4.8 bridge compatibility type source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "bridge_compat_type_contract" "passed" "passed" "M4.8 desktopRpc and tauriWailsBridge compatibility arguments use named source-level type boundaries; the transitional bridge remains in place" @()
+}
+
+function Test-BrowserWindowGoFallbackContract {
+  $apiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $failures = @()
+
+  foreach ($path in @($apiPath, $desktopServicePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $apiText = if (Test-Path $apiPath) { Get-Content -LiteralPath $apiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "export interface DesktopBrowserProxySubscriptionImportResult",
+      "export interface DesktopBrowserProxyNameFixResult",
+      "export interface DesktopBrowserProxyClashImportResult",
+      "export interface DesktopLaunchServerInfoResponse",
+      "export const importBrowserProxySubscriptionFromDesktop =",
+      '"BrowserProxyImportSubscriptionByURL"',
+      "export const fixBrowserProxyNamesFromDesktop =",
+      '"BrowserProxyFixNames"',
+      "export const fetchBrowserProxyClashFromDesktop =",
+      '"BrowserProxyFetchClashByURL"',
+      "export const readLaunchServerInfoFromDesktop =",
+      '"GetLaunchServerInfo"'
+    )) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop browser fallback wrapper marker missing: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "importBrowserProxySubscriptionFromDesktop",
+      "fixBrowserProxyNamesFromDesktop",
+      "fetchBrowserProxyClashFromDesktop",
+      "readLaunchServerInfoFromDesktop",
+      "const result = await importBrowserProxySubscriptionFromDesktop(targetURL, groupName)",
+      "const result = await fixBrowserProxyNamesFromDesktop()",
+      "const result = await fetchBrowserProxyClashFromDesktop(targetURL)",
+      "const launchServerInfo = await readLaunchServerInfoFromDesktop()"
+    )) {
+    if ($apiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API desktop fallback wrapper usage missing: $token"
+    }
+  }
+
+  foreach ($token in @("function getWindowGoApp", "getWindowGoApp()", "go?.main?.App", "BrowserNativeWindow", "window.go")) {
+    if ($apiText -match [regex]::Escape($token)) {
+      $failures += "browser API still has direct window.go fallback marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_window_go_fallback_contract" "missing_coverage" "failed" "M4.8 browser window.go fallback source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_window_go_fallback_contract" "passed" "passed" "M4.8 browser proxy/import and launch-server fallbacks use typed desktop service wrappers; the transitional bridge remains in place" @()
+}
+
+function Test-BrowserSettingsCoreProxyFacadeContract {
+  $apiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $bridgePath = Join-Path $projectRoot "src\services\tauriWailsBridge.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($apiPath, $desktopServicePath, $bridgePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $apiText = if (Test-Path $apiPath) { Get-Content -LiteralPath $apiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $bridgeText = if (Test-Path $bridgePath) { Get-Content -LiteralPath $bridgePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "readBrowserSettingsFromDesktop",
+      "saveBrowserSettingsFromDesktop",
+      "listBrowserCoresFromDesktop",
+      "saveBrowserCoreFromDesktop",
+      "deleteBrowserCoreFromDesktop",
+      "setDefaultBrowserCoreFromDesktop",
+      "validateBrowserCoreForKindFromDesktop",
+      "listBrowserProxiesFromDesktop",
+      "saveBrowserProxiesFromDesktop",
+      "browserProxyCheckIPHealthFromDesktop",
+      "openUserDataDirFromDesktop",
+      "openCorePathFromDesktop"
+    )) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing browser settings/core/proxy wrapper marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "tryDesktop(() => readBrowserSettingsFromDesktop())",
+      "tryDesktopVoid(() => saveBrowserSettingsFromDesktop(settings))",
+      "tryDesktop(() => listBrowserCoresFromDesktop())",
+      "tryDesktopVoid(() => saveBrowserCoreFromDesktop(input))",
+      "tryDesktop(() => listBrowserProxiesFromDesktop())",
+      "tryDesktopVoid(() => saveBrowserProxiesFromDesktop(proxies))",
+      "tryDesktop(() => browserProxyCheckIPHealthFromDesktop(proxyId))"
+    )) {
+    if ($apiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API missing settings/core/proxy desktop wrapper usage marker: $token"
+    }
+  }
+
+  $settingsSection = ""
+  $coreSection = ""
+  $proxySection = ""
+  $settingsStart = $apiText.IndexOf("// Settings API")
+  $coreStart = $apiText.IndexOf("// Core API")
+  $proxyStart = $apiText.IndexOf("// Proxy API")
+  $cookieStart = $apiText.IndexOf("// Cookie API")
+  if ($settingsStart -ge 0 -and $coreStart -gt $settingsStart) {
+    $settingsSection = $apiText.Substring($settingsStart, $coreStart - $settingsStart)
+  }
+  if ($coreStart -ge 0 -and $proxyStart -gt $coreStart) {
+    $coreSection = $apiText.Substring($coreStart, $proxyStart - $coreStart)
+  }
+  if ($proxyStart -ge 0 -and $cookieStart -gt $proxyStart) {
+    $proxySection = $apiText.Substring($proxyStart, $cookieStart - $proxyStart)
+  }
+  foreach ($sectionAndName in @(
+      @{ name = "Settings section"; text = $settingsSection },
+      @{ name = "Core section"; text = $coreSection },
+      @{ name = "Proxy section"; text = $proxySection }
+    )) {
+    foreach ($token in @("getBindings()", "bindings?.")) {
+      if ($sectionAndName.text -match [regex]::Escape($token)) {
+        $failures += "$($sectionAndName.name) still uses dynamic binding marker: $token"
+      }
+    }
+  }
+
+  $bindingBlock = ""
+  $bindingStart = $apiText.IndexOf("type BrowserNativeBindings = Partial<{")
+  $bindingEnd = if ($bindingStart -ge 0) { $apiText.IndexOf("}>", $bindingStart) } else { -1 }
+  if ($bindingStart -ge 0 -and $bindingEnd -gt $bindingStart) {
+    $bindingBlock = $apiText.Substring($bindingStart, $bindingEnd - $bindingStart)
+  }
+  foreach ($token in @(
+      "GetBrowserSettings:",
+      "SaveBrowserSettings:",
+      "BrowserCoreList:",
+      "BrowserCoreSave:",
+      "BrowserProxyList:",
+      "SaveBrowserProxies:",
+      "BrowserProxyCheckIPHealth:",
+      "OpenUserDataDir:",
+      "OpenCorePath:"
+    )) {
+    if ($bindingBlock -match [regex]::Escape($token)) {
+      $failures += "BrowserNativeBindings still advertises retired settings/core/proxy method: $token"
+    }
+  }
+
+  foreach ($token in @("const BRIDGE_RPC_METHOD_NAMES = new Set<string>", "BRIDGE_RPC_METHOD_NAMES.has(property)", "if (property === 'then') return undefined", "return undefined")) {
+    if ($bridgeText -notmatch [regex]::Escape($token)) {
+      $failures += "tauriWailsBridge explicit allowlist marker missing: $token"
+    }
+  }
+
+  foreach ($token in @("m4_browser_settings_core_proxy_facade", "M4 Browser Facade")) {
+    if ($dashboardText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing browser settings/core/proxy facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_settings_core_proxy_facade_contract" "missing_coverage" "failed" "M4.8 browser settings/core/proxy facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_settings_core_proxy_facade_contract" "passed" "passed" "M4.8 browser settings/core/proxy APIs use typed desktop wrappers and tauriWailsBridge has an explicit App RPC allowlist; the transitional bridge remains in place" @()
+}
+
+function Test-BrowserPayloadSchemaContract {
+  $apiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $typesPath = Join-Path $projectRoot "src\modules\browser\types.ts"
+  $listPagePath = Join-Path $projectRoot "src\modules\browser\pages\BrowserListPage.tsx"
+  $detailPagePath = Join-Path $projectRoot "src\modules\browser\pages\BrowserDetailPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($apiPath, $typesPath, $listPagePath, $detailPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $apiText = if (Test-Path $apiPath) { Get-Content -LiteralPath $apiPath -Raw -Encoding UTF8 } else { "" }
+  $typesText = if (Test-Path $typesPath) { Get-Content -LiteralPath $typesPath -Raw -Encoding UTF8 } else { "" }
+  $listText = if (Test-Path $listPagePath) { Get-Content -LiteralPath $listPagePath -Raw -Encoding UTF8 } else { "" }
+  $detailText = if (Test-Path $detailPagePath) { Get-Content -LiteralPath $detailPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("BrowserRuntimeEventPayload", "profileId", "error")) {
+    if ($typesText -notmatch [regex]::Escape($token)) {
+      $failures += "browser runtime event payload type missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("normalizeBrowserRuntimeEventPayload", "BrowserRuntimeEventPayload", "profile_id", "lastError", "onBrowserInstanceRuntimeEvents")) {
+    if ($apiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser runtime event normalizer missing marker: $token"
+    }
+  }
+
+  foreach ($textAndName in @(
+      [pscustomobject]@{ text = $listText; name = "BrowserListPage" },
+      [pscustomobject]@{ text = $detailText; name = "BrowserDetailPage" }
+    )) {
+    $usesPageNormalizer = $textAndName.text -match [regex]::Escape("normalizeBrowserRuntimeEventPayload")
+    $usesRuntimeFacade = $textAndName.text -match [regex]::Escape("onBrowserInstanceRuntimeEvents")
+    if (-not ($usesPageNormalizer -or $usesRuntimeFacade)) {
+      $failures += "$($textAndName.name) does not use browser runtime payload normalizer or typed runtime facade"
+    }
+  }
+
+  foreach ($textAndName in @(
+      [pscustomobject]@{ text = $listText; name = "BrowserListPage" },
+      [pscustomobject]@{ text = $detailText; name = "BrowserDetailPage" }
+    )) {
+    if ($textAndName.text -match [regex]::Escape("payload: any")) {
+      $failures += "$($textAndName.name) still uses payload:any for runtime events"
+    }
+  }
+
+  foreach ($token in @("normalizeLaunchServerInfo(payload: any)", "normalizeRecordingDetail(payload: any")) {
+    if ($apiText -match [regex]::Escape($token)) {
+      $failures += "browser api normalizer still accepts any: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_payload_schema_contract" "missing_coverage" "failed" "M4.8 browser payload schema source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_payload_schema_contract" "passed" "passed" "M4.8 browser runtime event payload is normalized through a shared type; this does not remove every bridge compatibility path" @()
+}
+
+function Test-DashboardFacadeContract {
+  $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $failures = @()
+
+  foreach ($path in @($dashboardApiPath, $dashboardPagePath, $desktopServicePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $dashboardApiText = if (Test-Path $dashboardApiPath) { Get-Content -LiteralPath $dashboardApiPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("readDashboardStats", "readLicenseStatus", "reloadDesktopConfig", "generateDesktopCdKeys")) {
+    if ($dashboardApiText -notmatch [regex]::Escape($token)) {
+      $failures += "dashboard API does not use typed desktop wrapper: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any", "import('../../wailsjs/go/main/App')", "bindings.", "getBindings")) {
+    if ($dashboardApiText -match [regex]::Escape($token)) {
+      $failures += "dashboard API still uses raw Wails/dashboard command marker: $token"
+    }
+  }
+
+  foreach ($token in @("readDashboardStats", "readLicenseStatus", "reloadDesktopConfig", "generateDesktopCdKeys", "DesktopDashboardStatsResponse", "DesktopLicenseStatusResponse")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing dashboard typed facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchDashboardStats", "fetchEvidenceReportHistory", "fetchReleaseSmokeContract", "M4 Payload", "Runtime Adapter")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing expected evidence/stat marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "dashboard_facade_contract" "missing_coverage" "failed" "M4.8 Dashboard facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "dashboard_facade_contract" "passed" "passed" "M4.8 Dashboard API uses typed desktop service wrappers while preserving evidence rows; Wails bridge remains transitional" @()
+}
+
+function Test-SettingsLogsFacadeContract {
+  $settingsApiPath = Join-Path $projectRoot "src\modules\settings\api.ts"
+  $logsPagePath = Join-Path $projectRoot "src\modules\browser\pages\BrowserLogsPage.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $bridgePath = Join-Path $projectRoot "src\services\tauriWailsBridge.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($settingsApiPath, $logsPagePath, $desktopServicePath, $bridgePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $settingsApiText = if (Test-Path $settingsApiPath) { Get-Content -LiteralPath $settingsApiPath -Raw -Encoding UTF8 } else { "" }
+  $logsPageText = if (Test-Path $logsPagePath) { Get-Content -LiteralPath $logsPagePath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $bridgeText = if (Test-Path $bridgePath) { Get-Content -LiteralPath $bridgePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("initializeSystemDataFromDesktop", "exportSystemConfigFromDesktop", "importSystemConfigFromDesktop", "DesktopBackupActionResult")) {
+    if ($settingsApiText -notmatch [regex]::Escape($token)) {
+      $failures += "settings API does not use typed backup wrapper marker: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any", "import('../../wailsjs/go/main/App')", "bindings.", "getBindings")) {
+    if ($settingsApiText -match [regex]::Escape($token)) {
+      $failures += "settings API still uses raw Wails binding marker: $token"
+    }
+  }
+
+  foreach ($token in @("getAppLogs", "clearAppLogs", "DesktopJsonValue")) {
+    if ($logsPageText -notmatch [regex]::Escape($token)) {
+      $failures += "BrowserLogsPage missing typed log wrapper marker: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any", "import('../../../wailsjs/go/main/App')", "bindings.")) {
+    if ($logsPageText -match [regex]::Escape($token)) {
+      $failures += "BrowserLogsPage still uses raw Wails binding marker: $token"
+    }
+  }
+
+  foreach ($token in @("DesktopBackupActionResult", "DesktopDestructivePreflight", "initializeSystemData", "exportSystemConfig", "importSystemConfig", "getAppLogs", "clearAppLogs", "confirmDestructivePreflight")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing settings/logs typed facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("BackupInitializeSystem", "BackupExportPackage", "BackupImportPackage", "GetAppLogs", "ClearAppLogs")) {
+    if ($bridgeText -notmatch [regex]::Escape($token)) {
+      $failures += "tauriWailsBridge missing compatibility proxy marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_settings_logs_facade", "M4 Settings/Logs")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing settings/logs evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "settings_logs_facade_contract" "missing_coverage" "failed" "M4.8 Settings/logs facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "settings_logs_facade_contract" "passed" "passed" "M4.8 Settings backup and Browser logs use typed desktop service wrappers while preserving the transitional bridge" @()
+}
+
+function Test-ProfileFacadeContract {
+  $profileApiPath = Join-Path $projectRoot "src\modules\profile\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($profileApiPath, $desktopServicePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $profileApiText = if (Test-Path $profileApiPath) { Get-Content -LiteralPath $profileApiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("fetchRemoteAuthorProfileFromDesktop", "Record<string, unknown>", "normalizeChannel(value: unknown)", "errorMessage(error)")) {
+    if ($profileApiText -notmatch [regex]::Escape($token)) {
+      $failures += "profile API does not use typed profile facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("const bindings: any", "import('../../wailsjs/go/main/App')", "getBindings", "(window as any).go?.main?.App", "Record<string, any>", "normalizeChannel(value: any)")) {
+    if ($profileApiText -match [regex]::Escape($token)) {
+      $failures += "profile API still uses raw Wails/any marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchRemoteAuthorPayloadViaBrowser", "fetch(authorURL", "AbortController", "Accept: 'application/json'")) {
+    if ($profileApiText -notmatch [regex]::Escape($token)) {
+      $failures += "profile API browser preview fallback missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchRemoteAuthorProfileFromDesktop", "FetchRemoteAuthorProfile", "Promise<Record<string, unknown>>")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing profile typed facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_profile_facade", "M4 Profile")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing profile facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "profile_facade_contract" "missing_coverage" "failed" "M4.8 Profile facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "profile_facade_contract" "passed" "passed" "M4.8 Profile remote author loading uses the typed desktop service wrapper while preserving browser preview fallback" @()
+}
+
+function Test-BehaviorPresetFacadeContract {
+  $fingerprintPanelPath = Join-Path $projectRoot "src\modules\browser\components\FingerprintPanel.tsx"
+  $browserApiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($fingerprintPanelPath, $browserApiPath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $fingerprintPanelText = if (Test-Path $fingerprintPanelPath) { Get-Content -LiteralPath $fingerprintPanelPath -Raw -Encoding UTF8 } else { "" }
+  $browserApiText = if (Test-Path $browserApiPath) { Get-Content -LiteralPath $browserApiPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("import { fetchBehaviorPresets } from '../api'", "fetchBehaviorPresets().then(setBehaviorPresets)")) {
+    if ($fingerprintPanelText -notmatch [regex]::Escape($token)) {
+      $failures += "FingerprintPanel does not use browser API behavior preset facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("../../../wailsjs/go/main/App", "wailsjs/go/main/App", "import { BehaviorPresetList", "BehaviorPresetList()")) {
+    if ($fingerprintPanelText -match [regex]::Escape($token)) {
+      $failures += "FingerprintPanel still uses raw behavior preset Wails marker: $token"
+    }
+  }
+
+  foreach ($token in @("BehaviorPresetList: () => Promise", "export async function fetchBehaviorPresets", "bindings?.BehaviorPresetList", "bindings.BehaviorPresetList()")) {
+    if ($browserApiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API missing behavior preset facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_behavior_preset_facade", "M4 Behavior")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing behavior preset facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "behavior_preset_facade_contract" "missing_coverage" "failed" "M4.8 Behavior preset facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "behavior_preset_facade_contract" "passed" "passed" "M4.8 FingerprintPanel behavior preset loading uses the browser module API facade instead of direct Wails imports" @()
+}
+
+function Test-AutomationFacadeContract {
+  $automationPagePath = Join-Path $projectRoot "src\modules\browser\pages\AutomationPage.tsx"
+  $browserApiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($automationPagePath, $browserApiPath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $automationPageText = if (Test-Path $automationPagePath) { Get-Content -LiteralPath $automationPagePath -Raw -Encoding UTF8 } else { "" }
+  $browserApiText = if (Test-Path $browserApiPath) { Get-Content -LiteralPath $browserApiPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("fetchSchedulerTasks", "createSchedulerTask", "deleteSchedulerTask", "runSchedulerTaskNow", "fetchAutomationRules", "createAutomationRule", "deleteAutomationRule", "toggleAutomationRule", "testFireAutomationRule")) {
+    if ($automationPageText -notmatch [regex]::Escape($token)) {
+      $failures += "AutomationPage does not use browser API automation facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("../../../wailsjs/go/main/App", "../../../wailsjs/go/models", "SchedulerListTasks", "SchedulerAddTask", "SchedulerRemoveTask", "SchedulerRunTaskNow", "AutomationRuleList", "AutomationRuleCreate", "AutomationRuleDelete", "AutomationRuleToggle", "AutomationRuleTestFire", "new backend.")) {
+    if ($automationPageText -match [regex]::Escape($token)) {
+      $failures += "AutomationPage still uses raw scheduler/rule Wails marker: $token"
+    }
+  }
+
+  foreach ($token in @("export interface SchedulerTaskInput", "export interface SchedulerTaskInfo", "export interface AutomationRuleInput", "export interface AutomationRuleInfo", "export async function fetchSchedulerTasks", "export async function createSchedulerTask", "export async function fetchAutomationRules", "export async function createAutomationRule")) {
+    if ($browserApiText -notmatch [regex]::Escape($token)) {
+      $failures += "browser API missing automation facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_automation_facade", "M4 Automation")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing automation facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "automation_facade_contract" "missing_coverage" "failed" "M4.8 Automation facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "automation_facade_contract" "passed" "passed" "M4.8 AutomationPage scheduler/rule calls use the browser module API facade instead of direct Wails imports" @()
+}
+
+function Test-AppShellFacadeContract {
+  $appPath = Join-Path $projectRoot "src\App.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($appPath, $desktopServicePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $appText = if (Test-Path $appPath) { Get-Content -LiteralPath $appPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("desktopRuntimeListen", "desktopEnvironment", "desktopQuitAppOnly", "desktopQuitFull", "desktopQuit()", "desktopWindowHide", "desktopWindowMinimize")) {
+    if ($appText -notmatch [regex]::Escape($token)) {
+      $failures += "App shell does not use desktop facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("./wailsjs/go/main/App", "./wailsjs/runtime/runtime", "ForceQuit as ForceQuitApp", "QuitAppOnly as QuitAppOnlyApp", "Environment, Quit", "(window as any).runtime")) {
+    if ($appText -match [regex]::Escape($token)) {
+      $failures += "App shell still uses raw Wails/runtime marker: $token"
+    }
+  }
+
+  foreach ($token in @("export function desktopRuntimeListen", "export function desktopEnvironment", "export function desktopQuit", "export function desktopQuitAppOnly", "export function desktopQuitFull", "export function desktopWindowHide", "export function desktopWindowMinimize")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing app shell facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_app_shell_facade", "M4 App Shell")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing app shell facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "app_shell_facade_contract" "missing_coverage" "failed" "M4.8 app shell facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "app_shell_facade_contract" "passed" "passed" "M4.8 App shell close/notification/runtime calls use typed desktop service wrappers instead of direct Wails imports" @()
+}
+
+function Test-MonitorFacadeContract {
+  $monitorPagePath = Join-Path $projectRoot "src\modules\monitor\EventMonitorPage.tsx"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($monitorPagePath, $desktopServicePath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $monitorPageText = if (Test-Path $monitorPagePath) { Get-Content -LiteralPath $monitorPagePath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("desktopRuntimeListen", "queryEventLog", "countEventLog", "exportEventLog", "pruneEventLog", "DesktopEventLogQueryInput", "DesktopEventLogEntry")) {
+    if ($monitorPageText -notmatch [regex]::Escape($token)) {
+      $failures += "EventMonitorPage does not use monitor desktop facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("../../wailsjs/go/main/App", "../../wailsjs/go/models", "EventLogQuery(q)", "EventLogCount(q)", "EventLogPrune(before)", "EventLogExport(q)", "(window as any).runtime", "runtime.EventsOn", "catch (e: any)")) {
+    if ($monitorPageText -match [regex]::Escape($token)) {
+      $failures += "EventMonitorPage still uses raw Wails/runtime marker: $token"
+    }
+  }
+
+  foreach ($token in @("export function desktopRuntimeListen", "export interface DesktopEventLogQueryInput", "export interface DesktopEventLogEntry", "export const queryEventLog", "export const countEventLog", "export const pruneEventLog", "export const exportEventLog")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing monitor facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4_monitor_facade", "M4 Monitor")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing monitor facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "monitor_facade_contract" "missing_coverage" "failed" "M4.8 monitor facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "monitor_facade_contract" "passed" "passed" "M4.8 EventMonitor runtime subscriptions and event-log history calls use typed desktop service wrappers instead of direct Wails/runtime access" @()
+}
+
+function Test-BrowserRuntimeFacadeContract {
+  $browserApiPath = Join-Path $projectRoot "src\modules\browser\api.ts"
+  $browserTypesPath = Join-Path $projectRoot "src\modules\browser\types.ts"
+  $browserListPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserListPage.tsx"
+  $browserDetailPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserDetailPage.tsx"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $failures = @()
+
+  foreach ($path in @($browserApiPath, $browserTypesPath, $browserListPath, $browserDetailPath, $dashboardPagePath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $browserApiText = if (Test-Path $browserApiPath) { Get-Content -LiteralPath $browserApiPath -Raw -Encoding UTF8 } else { "" }
+  $browserTypesText = if (Test-Path $browserTypesPath) { Get-Content -LiteralPath $browserTypesPath -Raw -Encoding UTF8 } else { "" }
+  $browserListText = if (Test-Path $browserListPath) { Get-Content -LiteralPath $browserListPath -Raw -Encoding UTF8 } else { "" }
+  $browserDetailText = if (Test-Path $browserDetailPath) { Get-Content -LiteralPath $browserDetailPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("desktopRuntimeListen", "onBrowserInstanceRuntimeEvents", "BROWSER_INSTANCE_RUNTIME_EVENT_NAMES", "normalizeBrowserRuntimeEventPayload")) {
+    if ($browserApiText -notmatch [regex]::Escape($token)) {
+      $failures += "Browser API missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("import { EventsOn } from '../../wailsjs/runtime'", "EventsOn(")) {
+    if ($browserApiText -match [regex]::Escape($token)) {
+      $failures += "Browser API still uses raw Wails runtime marker: $token"
+    }
+  }
+
+  foreach ($token in @("BrowserInstanceRuntimeEventName", "BrowserInstanceRuntimeEvent", "BrowserRuntimeEventPayload", "rawPayload")) {
+    if ($browserTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "Browser types missing runtime event contract marker: $token"
+    }
+  }
+
+  foreach ($pathAndText in @(
+      @{ name = "BrowserListPage"; text = $browserListText },
+      @{ name = "BrowserDetailPage"; text = $browserDetailText }
+    )) {
+    if ($pathAndText.text -notmatch [regex]::Escape("onBrowserInstanceRuntimeEvents")) {
+      $failures += "$($pathAndText.name) does not use browser runtime facade"
+    }
+    foreach ($token in @("../../../wailsjs/runtime/runtime", "../../wailsjs/runtime", "import { EventsOn }", "EventsOn(")) {
+      if ($pathAndText.text -match [regex]::Escape($token)) {
+        $failures += "$($pathAndText.name) still uses raw Wails runtime marker: $token"
+      }
+    }
+  }
+
+  foreach ($token in @("m4_browser_runtime_facade", "M4 Browser Runtime")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing browser runtime facade evidence marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "browser_runtime_facade_contract" "missing_coverage" "failed" "M4.8 browser runtime facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "browser_runtime_facade_contract" "passed" "passed" "M4.8 Browser List/Detail runtime subscriptions use browser module facade and desktopRuntimeListen instead of direct Wails EventsOn imports" @()
+}
+
+function Test-RuntimeFacadeContract {
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $settingsPagePath = Join-Path $projectRoot "src\modules\settings\SettingsPage.tsx"
+  $corePagePath = Join-Path $projectRoot "src\modules\browser\pages\CoreManagementPage.tsx"
+  $proxyPickerPath = Join-Path $projectRoot "src\modules\browser\components\ProxyPickerModal.tsx"
+  $proxyPoolPath = Join-Path $projectRoot "src\modules\browser\pages\ProxyPoolPage.tsx"
+  $launchDocsPath = Join-Path $projectRoot "src\modules\browser\pages\LaunchApiDocsPage.tsx"
+  $tutorialPath = Join-Path $projectRoot "src\modules\browser\pages\UsageTutorialPage.tsx"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $desktopRustPath = Join-Path $projectRoot "src\desktop\mod.rs"
+  $failures = @()
+
+  foreach ($path in @($desktopServicePath, $settingsPagePath, $corePagePath, $proxyPickerPath, $proxyPoolPath, $launchDocsPath, $tutorialPath, $dashboardPagePath, $desktopRustPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $settingsText = if (Test-Path $settingsPagePath) { Get-Content -LiteralPath $settingsPagePath -Raw -Encoding UTF8 } else { "" }
+  $coreText = if (Test-Path $corePagePath) { Get-Content -LiteralPath $corePagePath -Raw -Encoding UTF8 } else { "" }
+  $proxyPickerText = if (Test-Path $proxyPickerPath) { Get-Content -LiteralPath $proxyPickerPath -Raw -Encoding UTF8 } else { "" }
+  $proxyPoolText = if (Test-Path $proxyPoolPath) { Get-Content -LiteralPath $proxyPoolPath -Raw -Encoding UTF8 } else { "" }
+  $launchDocsText = if (Test-Path $launchDocsPath) { Get-Content -LiteralPath $launchDocsPath -Raw -Encoding UTF8 } else { "" }
+  $tutorialText = if (Test-Path $tutorialPath) { Get-Content -LiteralPath $tutorialPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+  $desktopRustText = if (Test-Path $desktopRustPath) { Get-Content -LiteralPath $desktopRustPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("export function desktopRuntimeListen", "export function desktopOpenExternalUrl", "desktopWindow.runtime?.EventsOn", "desktopWindow.runtime?.BrowserOpenURL")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing runtime facade wrapper marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen<BackupExportProgress>", "backup:export:progress", "backup:import:progress")) {
+    if ($settingsText -notmatch [regex]::Escape($token)) {
+      $failures += "SettingsPage missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen", "download:progress", "desktopOpenExternalUrl")) {
+    if ($coreText -notmatch [regex]::Escape($token)) {
+      $failures += "CoreManagementPage missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen", "proxy:speed:result")) {
+    if ($proxyPickerText -notmatch [regex]::Escape($token)) {
+      $failures += "ProxyPickerModal missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($token in @("desktopRuntimeListen", "proxy:speed:result", "proxy:iphealth:result")) {
+    if ($proxyPoolText -notmatch [regex]::Escape($token)) {
+      $failures += "ProxyPoolPage missing runtime facade marker: $token"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "LaunchApiDocsPage"; text = $launchDocsText },
+      @{ name = "UsageTutorialPage"; text = $tutorialText }
+    )) {
+    if ($textAndName.text -notmatch [regex]::Escape("desktopOpenExternalUrl")) {
+      $failures += "$($textAndName.name) missing external URL facade marker"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "SettingsPage"; text = $settingsText },
+      @{ name = "CoreManagementPage"; text = $coreText },
+      @{ name = "ProxyPickerModal"; text = $proxyPickerText },
+      @{ name = "ProxyPoolPage"; text = $proxyPoolText },
+      @{ name = "LaunchApiDocsPage"; text = $launchDocsText },
+      @{ name = "UsageTutorialPage"; text = $tutorialText }
+    )) {
+    foreach ($token in @("wailsjs/runtime/runtime", "import { EventsOn", "import { EventsOff", "import { BrowserOpenURL", "EventsOn(", "EventsOff(", "BrowserOpenURL(")) {
+      if ($textAndName.text -match [regex]::Escape($token)) {
+        $failures += "$($textAndName.name) still uses raw Wails runtime marker: $token"
+      }
+    }
+  }
+
+  foreach ($token in @("m4_runtime_facade", "M4 Runtime")) {
+    if ($dashboardPageText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard page missing runtime facade evidence marker: $token"
+    }
+  }
+
+  foreach ($token in @("m4-runtime-facade", "m4_runtime_facade", "passed_runtime_facade_contract", "runtimeFacadeUsage")) {
+    if ($desktopRustText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop evidence history missing runtime facade marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "runtime_facade_contract" "missing_coverage" "failed" "M4.8 page-level runtime facade source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "runtime_facade_contract" "passed" "passed" "M4.8 selected Settings/Core/Proxy/Docs runtime EventsOn/EventsOff/BrowserOpenURL calls use typed desktop facade wrappers; tauriWailsBridge remains transitional" @()
+}
+
+function Test-UiErrorBoundaryContract {
+  $sharedErrorPath = Join-Path $projectRoot "src\shared\errors.ts"
+  $dashboardPagePath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
+  $settingsPagePath = Join-Path $projectRoot "src\modules\settings\SettingsPage.tsx"
+  $automationPagePath = Join-Path $projectRoot "src\modules\browser\pages\AutomationPage.tsx"
+  $naturalLanguageTaskPath = Join-Path $projectRoot "src\modules\browser\components\NaturalLanguageTask.tsx"
+  $tagManagementPath = Join-Path $projectRoot "src\modules\browser\pages\TagManagementPage.tsx"
+  $recordingDetailPath = Join-Path $projectRoot "src\modules\browser\components\RecordingDetailModal.tsx"
+  $recordingPanelPath = Join-Path $projectRoot "src\modules\browser\components\RecordingPanel.tsx"
+  $launchDocsPath = Join-Path $projectRoot "src\modules\browser\pages\LaunchApiDocsPage.tsx"
+  $browserListPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserListPage.tsx"
+  $browserDetailPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserDetailPage.tsx"
+  $browserEditPath = Join-Path $projectRoot "src\modules\browser\pages\BrowserEditPage.tsx"
+  $browserSettingsModalPath = Join-Path $projectRoot "src\modules\browser\components\BrowserSettingsModal.tsx"
+  $quickLaunchModalPath = Join-Path $projectRoot "src\modules\browser\components\QuickLaunchModal.tsx"
+  $coreManagementPath = Join-Path $projectRoot "src\modules\browser\pages\CoreManagementPage.tsx"
+  $proxyPoolPath = Join-Path $projectRoot "src\modules\browser\pages\ProxyPoolPage.tsx"
+  $failures = @()
+
+  $paths = @(
+    $sharedErrorPath,
+    $dashboardPagePath,
+    $dashboardApiPath,
+    $settingsPagePath,
+    $automationPagePath,
+    $naturalLanguageTaskPath,
+    $tagManagementPath,
+    $recordingDetailPath,
+    $recordingPanelPath,
+    $launchDocsPath,
+    $browserListPath,
+    $browserDetailPath,
+    $browserEditPath,
+    $browserSettingsModalPath,
+    $quickLaunchModalPath,
+    $coreManagementPath,
+    $proxyPoolPath
+  )
+
+  foreach ($path in $paths) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $sharedErrorText = if (Test-Path $sharedErrorPath) { Get-Content -LiteralPath $sharedErrorPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardPageText = if (Test-Path $dashboardPagePath) { Get-Content -LiteralPath $dashboardPagePath -Raw -Encoding UTF8 } else { "" }
+  $dashboardApiText = if (Test-Path $dashboardApiPath) { Get-Content -LiteralPath $dashboardApiPath -Raw -Encoding UTF8 } else { "" }
+  $settingsText = if (Test-Path $settingsPagePath) { Get-Content -LiteralPath $settingsPagePath -Raw -Encoding UTF8 } else { "" }
+  $automationText = if (Test-Path $automationPagePath) { Get-Content -LiteralPath $automationPagePath -Raw -Encoding UTF8 } else { "" }
+  $naturalLanguageText = if (Test-Path $naturalLanguageTaskPath) { Get-Content -LiteralPath $naturalLanguageTaskPath -Raw -Encoding UTF8 } else { "" }
+  $tagText = if (Test-Path $tagManagementPath) { Get-Content -LiteralPath $tagManagementPath -Raw -Encoding UTF8 } else { "" }
+  $recordingDetailText = if (Test-Path $recordingDetailPath) { Get-Content -LiteralPath $recordingDetailPath -Raw -Encoding UTF8 } else { "" }
+  $recordingPanelText = if (Test-Path $recordingPanelPath) { Get-Content -LiteralPath $recordingPanelPath -Raw -Encoding UTF8 } else { "" }
+  $launchDocsText = if (Test-Path $launchDocsPath) { Get-Content -LiteralPath $launchDocsPath -Raw -Encoding UTF8 } else { "" }
+  $browserListText = if (Test-Path $browserListPath) { Get-Content -LiteralPath $browserListPath -Raw -Encoding UTF8 } else { "" }
+  $browserDetailText = if (Test-Path $browserDetailPath) { Get-Content -LiteralPath $browserDetailPath -Raw -Encoding UTF8 } else { "" }
+  $browserEditText = if (Test-Path $browserEditPath) { Get-Content -LiteralPath $browserEditPath -Raw -Encoding UTF8 } else { "" }
+  $browserSettingsModalText = if (Test-Path $browserSettingsModalPath) { Get-Content -LiteralPath $browserSettingsModalPath -Raw -Encoding UTF8 } else { "" }
+  $quickLaunchModalText = if (Test-Path $quickLaunchModalPath) { Get-Content -LiteralPath $quickLaunchModalPath -Raw -Encoding UTF8 } else { "" }
+  $coreManagementText = if (Test-Path $coreManagementPath) { Get-Content -LiteralPath $coreManagementPath -Raw -Encoding UTF8 } else { "" }
+  $proxyPoolText = if (Test-Path $proxyPoolPath) { Get-Content -LiteralPath $proxyPoolPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @("export function messageFromUnknownError(error: unknown", "error instanceof Error", "typeof error === 'string'", "return fallback")) {
+    if ($sharedErrorText -notmatch [regex]::Escape($token)) {
+      $failures += "shared error helper missing marker: $token"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "DashboardPage"; text = $dashboardPageText },
+      @{ name = "DashboardApi"; text = $dashboardApiText },
+      @{ name = "SettingsPage"; text = $settingsText },
+      @{ name = "AutomationPage"; text = $automationText },
+      @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
+      @{ name = "TagManagementPage"; text = $tagText },
+      @{ name = "RecordingDetailModal"; text = $recordingDetailText },
+      @{ name = "RecordingPanel"; text = $recordingPanelText },
+      @{ name = "BrowserListPage"; text = $browserListText },
+      @{ name = "BrowserEditPage"; text = $browserEditText },
+      @{ name = "BrowserSettingsModal"; text = $browserSettingsModalText },
+      @{ name = "CoreManagementPage"; text = $coreManagementText },
+      @{ name = "ProxyPoolPage"; text = $proxyPoolText }
+    )) {
+    if ($textAndName.text -notmatch [regex]::Escape("messageFromUnknownError")) {
+      $failures += "$($textAndName.name) missing shared unknown-error helper usage"
+    }
+  }
+
+  $unknownErrorFallbackText = -join @([char]0x672A, [char]0x77E5, [char]0x9519, [char]0x8BEF)
+  foreach ($marker in @(
+      "return messageFromUnknownError(error, '$unknownErrorFallbackText')",
+      "const message = getErrorMessage(error)",
+      "setPlaybackError(message)"
+    )) {
+    if ($recordingPanelText -notmatch [regex]::Escape($marker)) {
+      $failures += "RecordingPanel missing shared error-message flow marker: $marker"
+    }
+  }
+
+  foreach ($patternAndReason in @(
+      @{ pattern = "String\s*\(\s*error\s*\)"; reason = "String(error) fallback" },
+      @{ pattern = "\berror\s*\??\.\s*message\b"; reason = "direct error.message access" }
+    )) {
+    if ($recordingPanelText -match $patternAndReason.pattern) {
+      $failures += "RecordingPanel still has weak error-message marker: $($patternAndReason.reason)"
+    }
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "BrowserListPage"; text = $browserListText; markers = @("resolveActionFeedback(error", "resolveActionErrorMessage(error") },
+      @{ name = "BrowserDetailPage"; text = $browserDetailText; markers = @("resolveActionFeedback(error", "resolveActionErrorMessage(error") },
+      @{ name = "QuickLaunchModal"; text = $quickLaunchModalText; markers = @("resolveActionFeedback(error") }
+    )) {
+    foreach ($marker in $textAndName.markers) {
+      if ($textAndName.text -notmatch [regex]::Escape($marker)) {
+        $failures += "$($textAndName.name) missing action error helper marker: $marker"
+      }
+    }
+  }
+
+  $browserStartFailedText = -join @([char]0x5B9E, [char]0x4F8B, [char]0x542F, [char]0x52A8, [char]0x5931, [char]0x8D25)
+  $browserStopFailedText = -join @([char]0x5B9E, [char]0x4F8B, [char]0x505C, [char]0x6B62, [char]0x5931, [char]0x8D25)
+  $browserRestartFailedText = -join @([char]0x5B9E, [char]0x4F8B, [char]0x91CD, [char]0x542F, [char]0x5931, [char]0x8D25)
+  $quickLaunchCodeFailedText = (-join @([char]0x6309)) + " Code " + (-join @([char]0x542F, [char]0x52A8, [char]0x5931, [char]0x8D25))
+  $browserListStartMojibakeText = -join @([char]0x7039, [char]0x70B0, [char]0x7DE5, [char]0x5BB8, [char]0x63D2, [char]0x60CE, [char]0x9354)
+  $browserListFailureMojibakeText = -join @([char]0x7039, [char]0x70B0, [char]0x7DE5, [char]0x935A)
+  $recordingPlaybackMojibakeText = -join @([char]0x9365, [char]0x70B4, [char]0x6581, [char]0x6FB6, [char]0x8FAB, [char]0x89E6)
+
+  foreach ($token in @(
+      "toast.error(resolveActionErrorMessage(error, '$browserStartFailedText'))",
+      "toast.error(resolveActionErrorMessage(error, '$browserStopFailedText'))",
+      "const feedback = resolveActionFeedback(error, '$browserRestartFailedText')",
+      "const feedback = resolveActionFeedback(error, '$browserStartFailedText')"
+    )) {
+    if ($browserListText -notmatch [regex]::Escape($token)) {
+      $failures += "BrowserListPage missing action-specific error marker: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "const feedback = resolveActionFeedback(error, '$browserStartFailedText')",
+      "toast.error(resolveActionErrorMessage(error, '$browserStopFailedText'))",
+      "const feedback = resolveActionFeedback(error, '$browserRestartFailedText')"
+    )) {
+    if ($browserDetailText -notmatch [regex]::Escape($token)) {
+      $failures += "BrowserDetailPage missing action-specific error marker: $token"
+    }
+  }
+
+  if ($quickLaunchModalText -notmatch [regex]::Escape("const feedback = resolveActionFeedback(error, '$quickLaunchCodeFailedText')")) {
+    $failures += "QuickLaunchModal missing action-specific error marker: resolveActionFeedback(error, '$quickLaunchCodeFailedText')"
+  }
+
+  foreach ($token in @($browserListStartMojibakeText, $browserListFailureMojibakeText)) {
+    if ($browserListText -match [regex]::Escape($token)) {
+      $failures += "BrowserListPage still has mojibake operator text marker: $token"
+    }
+  }
+  if ($recordingPanelText -match [regex]::Escape($recordingPlaybackMojibakeText)) {
+    $failures += "RecordingPanel still has playback failure mojibake operator text marker"
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "DashboardPage"; text = $dashboardPageText },
+      @{ name = "DashboardApi"; text = $dashboardApiText },
+      @{ name = "SettingsPage"; text = $settingsText },
+      @{ name = "AutomationPage"; text = $automationText },
+      @{ name = "NaturalLanguageTask"; text = $naturalLanguageText },
+      @{ name = "TagManagementPage"; text = $tagText },
+      @{ name = "RecordingDetailModal"; text = $recordingDetailText },
+      @{ name = "RecordingPanel"; text = $recordingPanelText },
+      @{ name = "LaunchApiDocsPage"; text = $launchDocsText },
+      @{ name = "BrowserListPage"; text = $browserListText },
+      @{ name = "BrowserDetailPage"; text = $browserDetailText },
+      @{ name = "BrowserEditPage"; text = $browserEditText },
+      @{ name = "BrowserSettingsModal"; text = $browserSettingsModalText },
+      @{ name = "QuickLaunchModal"; text = $quickLaunchModalText },
+      @{ name = "CoreManagementPage"; text = $coreManagementText },
+      @{ name = "ProxyPoolPage"; text = $proxyPoolText }
+    )) {
+    foreach ($patternAndReason in @(
+        @{ pattern = "(?<!\.)\bcatch\s*\([^)]*:\s*any\b"; reason = "typed any catch" },
+        @{ pattern = "(?<!\.)\bcatch\s*\((?!\s*[A-Za-z_$][A-Za-z0-9_$]*\s*:\s*unknown\s*\))"; reason = "selected catch must use explicit unknown type" },
+        @{ pattern = "\bas\s+any\b"; reason = "as any cast" },
+        @{ pattern = "Record\s*<\s*string\s*,\s*any\s*>"; reason = "Record<string, any>" },
+        @{ pattern = "\[\s*key\s*:\s*string\s*\]\s*:\s*any\b"; reason = "string index any" }
+      )) {
+      if ($textAndName.text -match $patternAndReason.pattern) {
+        $failures += "$($textAndName.name) still has weak UI error boundary marker: $($patternAndReason.reason)"
+      }
+    }
+  }
+
+  foreach ($token in @("readMarkdownCodeBlock", "isValidElement<MarkdownCodeElementProps>")) {
+    if ($launchDocsText -notmatch [regex]::Escape($token)) {
+      $failures += "LaunchApiDocsPage missing typed markdown code block marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "ui_error_boundary_contract" "missing_coverage" "failed" "M4.8 selected UI error boundary source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "ui_error_boundary_contract" "passed" "passed" "M4.8 selected Dashboard/Settings/Automation/Tag/Recording panel/Docs, Browser instance, Core management, and Proxy pool UI error boundaries use unknown guards; legacy pages remain separate work" @()
+}
+
+function Test-GenericAnyResidueContract {
+  $tablePath = Join-Path $projectRoot "src\shared\components\Table.tsx"
+  $browserTypesPath = Join-Path $projectRoot "src\modules\browser\types.ts"
+  $proxyPoolTypesPath = Join-Path $projectRoot "src\modules\browser\pages\ProxyPoolPage\types.ts"
+  $failures = @()
+
+  foreach ($path in @($tablePath, $browserTypesPath, $proxyPoolTypesPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $tableText = if (Test-Path $tablePath) { Get-Content -LiteralPath $tablePath -Raw -Encoding UTF8 } else { "" }
+  $browserTypesText = if (Test-Path $browserTypesPath) { Get-Content -LiteralPath $browserTypesPath -Raw -Encoding UTF8 } else { "" }
+  $proxyPoolTypesText = if (Test-Path $proxyPoolTypesPath) { Get-Content -LiteralPath $proxyPoolTypesPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($marker in @("export function Table<T extends object>", "Record<string, unknown>)[rowKey]", "Record<string, unknown>)[column.key]")) {
+    if ($tableText -notmatch [regex]::Escape($marker)) {
+      $failures += "Table missing generic-any shrink marker: $marker"
+    }
+  }
+  if ($browserTypesText -notmatch [regex]::Escape("rawData: Record<string, unknown>")) {
+    $failures += "Browser types still missing unknown rawData marker"
+  }
+  if ($proxyPoolTypesText -notmatch [regex]::Escape("[key: string]: unknown")) {
+    $failures += "ProxyPoolPage types still missing unknown index marker"
+  }
+
+  foreach ($textAndName in @(
+      @{ name = "Table"; text = $tableText },
+      @{ name = "BrowserTypes"; text = $browserTypesText },
+      @{ name = "ProxyPoolPageTypes"; text = $proxyPoolTypesText }
+    )) {
+    foreach ($patternAndReason in @(
+        @{ pattern = "Record\s*<\s*string\s*,\s*any\s*>"; reason = "Record<string, any>" },
+        @{ pattern = "\[\s*key\s*:\s*string\s*\]\s*:\s*any\b"; reason = "string index any" }
+      )) {
+      if ($textAndName.text -match $patternAndReason.pattern) {
+        $failures += "$($textAndName.name) still has generic any marker: $($patternAndReason.reason)"
+      }
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "generic_any_residue_contract" "missing_coverage" "failed" "M4.8 selected generic any residue source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "generic_any_residue_contract" "passed" "passed" "M4.8 selected generic any residue is narrowed in shared Table, browser IP health rawData, and ProxyPoolPage types" @()
+}
+
+function Test-RuntimeAdapterOperatorContract {
+  $dashboardPath = Join-Path $projectRoot "src\modules\dashboard\DashboardPage.tsx"
+  $dashboardApiPath = Join-Path $projectRoot "src\modules\dashboard\api.ts"
+  $desktopServicePath = Join-Path $projectRoot "src\services\desktop.ts"
+  $desktopTypesPath = Join-Path $projectRoot "src\types\desktop.ts"
+  $failures = @()
+
+  foreach ($path in @($dashboardPath, $dashboardApiPath, $desktopServicePath, $desktopTypesPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $dashboardText = if (Test-Path $dashboardPath) { Get-Content -LiteralPath $dashboardPath -Raw -Encoding UTF8 } else { "" }
+  $dashboardApiText = if (Test-Path $dashboardApiPath) { Get-Content -LiteralPath $dashboardApiPath -Raw -Encoding UTF8 } else { "" }
+  $desktopServiceText = if (Test-Path $desktopServicePath) { Get-Content -LiteralPath $desktopServicePath -Raw -Encoding UTF8 } else { "" }
+  $desktopTypesText = if (Test-Path $desktopTypesPath) { Get-Content -LiteralPath $desktopTypesPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "Runtime Adapter",
+      "fetchReleaseSmokeContract",
+      "DesktopRuntimeAdapterContractItem",
+      "DesktopReleaseSmokeContract",
+      "runtimeAdapterEvidenceScore",
+      "rankedRuntimeAdapters",
+      "adapter.blockers.slice(0, 2)",
+      "profileRuntimeEvidence",
+      "fingerprintRuntimeDepth",
+      "releaseContract"
+    )) {
+    if ($dashboardText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard runtime adapter operator UI missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("fetchReleaseSmokeContract", "readReleaseSmokeContract", "DesktopReleaseSmokeContract")) {
+    if ($dashboardApiText -notmatch [regex]::Escape($token)) {
+      $failures += "Dashboard API missing runtime adapter contract marker: $token"
+    }
+  }
+
+  foreach ($token in @("readReleaseSmokeContract", "read_release_smoke_contract")) {
+    if ($desktopServiceText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop service missing release smoke contract wrapper: $token"
+    }
+  }
+
+  foreach ($token in @(
+      "DesktopRuntimeAdapterContractItem",
+      "DesktopReleaseSmokeContract",
+      "adapterContracts",
+      "profileRuntimeEvidence",
+      "fingerprintRuntimeDepth",
+      "blockers"
+    )) {
+    if ($desktopTypesText -notmatch [regex]::Escape($token)) {
+      $failures += "desktop shared type missing runtime adapter marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "runtime_adapter_operator_contract" "missing_coverage" "failed" "M4.7 runtime adapter operator source contract is incomplete" $failures
+  }
+  return New-LocalGateResult "runtime_adapter_operator_contract" "passed" "passed" "M4.7 runtime adapter evidence is visible and ranked in Dashboard; full headed realism remains externally blocked" @()
+}
+
+function Test-SafetyLoggingContract {
+  $redactionPath = Join-Path $projectRoot "backend\internal\logger\redaction.go"
+  $redactionTestPath = Join-Path $projectRoot "backend\internal\logger\redaction_test.go"
+  $loggerPath = Join-Path $projectRoot "backend\internal\logger\logger.go"
+  $formatterPath = Join-Path $projectRoot "backend\internal\logger\formatter.go"
+  $configPath = Join-Path $projectRoot "backend\internal\config\config.go"
+  $failures = @()
+
+  foreach ($path in @($redactionPath, $redactionTestPath, $loggerPath, $formatterPath, $configPath)) {
+    if (-not (Test-Path $path)) {
+      $failures += "missing source file: $path"
+    }
+  }
+
+  $redactionText = if (Test-Path $redactionPath) { Get-Content -LiteralPath $redactionPath -Raw -Encoding UTF8 } else { "" }
+  $redactionTestText = if (Test-Path $redactionTestPath) { Get-Content -LiteralPath $redactionTestPath -Raw -Encoding UTF8 } else { "" }
+  $loggerText = if (Test-Path $loggerPath) { Get-Content -LiteralPath $loggerPath -Raw -Encoding UTF8 } else { "" }
+  $formatterText = if (Test-Path $formatterPath) { Get-Content -LiteralPath $formatterPath -Raw -Encoding UTF8 } else { "" }
+  $configText = if (Test-Path $configPath) { Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 } else { "" }
+
+  foreach ($token in @(
+      "DefaultSensitiveFieldNames",
+      "IsSensitiveLogField",
+      "RedactText",
+      "RedactValueForKey",
+      "RedactLogEntry",
+      "password",
+      "token",
+      "api_key",
+      "authorization",
+      "credential",
+      "secret",
+      "cookie"
+    )) {
+    if ($redactionText -notmatch [regex]::Escape($token)) {
+      $failures += "logger redaction source missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("RedactText(msg)", "RedactValueForKey(field.Key, field.Value)", "RedactLogEntry(entry)")) {
+    if ($loggerText -notmatch [regex]::Escape($token)) {
+      $failures += "logger write path missing redaction marker: $token"
+    }
+  }
+
+  if (@([regex]::Matches($formatterText, [regex]::Escape("RedactLogEntry(entry)"))).Count -lt 2) {
+    $failures += "text/json formatters do not both redact log entries"
+  }
+
+  foreach ($token in @(
+      "TestM4SafetyLoggingContract_RedactsCredentialFields",
+      "TestM4SafetyLoggingContract_FormattersDoNotEmitSecrets",
+      "plain-password",
+      "plain-api-key",
+      "plain-bearer-token",
+      "plain-json-token"
+    )) {
+    if ($redactionTestText -notmatch [regex]::Escape($token)) {
+      $failures += "logger redaction test missing marker: $token"
+    }
+  }
+
+  foreach ($token in @("api_key", "authorization", "credential", "client_secret", "cookie")) {
+    if ($configText -notmatch [regex]::Escape($token)) {
+      $failures += "default logger sensitive field config missing marker: $token"
+    }
+  }
+
+  if ($failures.Count -gt 0) {
+    return New-LocalGateResult "safety_logging_contract" "missing_coverage" "failed" "M4.9 safety/logging source-test contract is incomplete" $failures
+  }
+  return New-LocalGateResult "safety_logging_contract" "passed" "passed" "M4.9 logger redaction source/test contract is present; this is local safety evidence, not real credential smoke" @()
+}
+
+$liveTruthExitCode = $null
+$providerPreflightExitCode = $null
+Invoke-LiveTruthGuard
+Invoke-ProviderAcceptancePreflight
+
+$gateSpecs = @(
+  [ordered]@{ id = "live_truth_guard"; dir = "governance"; pattern = "live-truth-guard-*.json" },
+  [ordered]@{ id = "runtime_adapter_evidence_gate"; dir = "runtime-adapter"; pattern = "runtime-adapter-evidence-gate-*.json" },
+  [ordered]@{ id = "provider_acceptance_preflight"; dir = "provider-acceptance"; pattern = "provider-acceptance-preflight-*.json" },
+  [ordered]@{ id = "session_bundle_portability_smoke"; dir = "session-portability"; pattern = "session-bundle-portability-smoke-*.json" },
+  [ordered]@{ id = "profile_browser_comparison_gate"; dir = "profile-browser-comparison"; pattern = "profile-browser-comparison-*.json" }
+)
+
+$gates = @()
+foreach ($spec in $gateSpecs) {
+  $item = Get-LatestReport $spec.dir $spec.pattern
+  if ($null -eq $item) {
+    $gates += New-GateResult $spec.id "missing" $null "failed" "critical report is missing" @("missing critical report: $($spec.id)") @()
+    continue
+  }
+
+  $report = Get-Field $item "value"
+  if ($null -eq $report) {
+    $gates += New-GateResult $spec.id "unreadable" $item "failed" "latest critical report cannot be parsed" @("unreadable critical report: $($spec.id)") @()
+    continue
+  }
+
+  $status = [string](Get-Field $report "status")
+  $classification = "failed"
+  $reason = ""
+  $failures = @()
+  $expectedBlockers = @()
+
+  switch ($spec.id) {
+    "live_truth_guard" {
+      $failedChecks = @((Get-Field $report "checks") | Where-Object { [string](Get-Field $_ "status") -ne "passed" } | ForEach-Object { [string](Get-Field $_ "id") })
+      if ($liveTruthExitCode -ne $null -and $liveTruthExitCode -ne 0) {
+        $failures += "live_truth_guard script exited $liveTruthExitCode"
+      }
+      if ($status -ne "passed") {
+        $failures += "live truth drift status: $status"
+      }
+      if ($failedChecks.Count -gt 0) {
+        $failures += "live truth failed checks: $($failedChecks -join ', ')"
+      }
+      if ($failures.Count -eq 0) {
+        $classification = "passed"
+        $reason = "live truth guard passed"
+      } else {
+        $classification = "failed"
+        $reason = "live truth drift detected"
+      }
+    }
+    "runtime_adapter_evidence_gate" {
+      $b1b5 = Get-Field $report "b1b5Evidence"
+      $b1b5Blocked = @()
+      $b1b5Properties = @()
+      if ($null -ne $b1b5) {
+        $b1b5Properties = @($b1b5.PSObject.Properties)
+        foreach ($property in $b1b5Properties) {
+          $value = [string]$property.Value
+          if ($value -like "blocked*" -or $value -like "deferred*") {
+            $b1b5Blocked += "$($property.Name)=$value"
+          }
+        }
+      }
+      $adspower = [string](Get-Field $report "adspowerRefreshStatus")
+      if ($status -in @("passed", "passed_local_self_use")) {
+        if ($b1b5Properties.Count -eq 0 -or $b1b5Blocked.Count -gt 0 -or $adspower -eq "deferred_by_evidence_gate") {
+          $classification = "failed"
+          $reason = "runtime adapter report is marked passed while blockers remain"
+          $failures += "blocked or missing local evidence misreported as passed: $($b1b5Blocked -join ', ') adspowerRefreshStatus=$adspower b1b5PropertyCount=$($b1b5Properties.Count)"
+        } else {
+          $classification = "passed"
+          $reason = if ($status -eq "passed_local_self_use") { "runtime adapter local self-use evidence gate passed" } else { "runtime adapter evidence gate passed" }
+        }
+      } elseif ($status -eq "blocked_evidence_required") {
+        $classification = "expected_blocked"
+        $reason = "runtime adapter local self-use evidence remains incomplete"
+        $expectedBlockers += @($b1b5Blocked)
+      } else {
+        $classification = "failed"
+        $reason = "unexpected runtime adapter status"
+        $failures += "unexpected status: $status"
+      }
+    }
+    "provider_acceptance_preflight" {
+      $providerItems = @((Get-Field $report "items"))
+      $blockedItems = Get-ProviderBlockedItemIds $providerItems
+      $acceptedCount = [int](Get-Field $report "acceptedCount")
+      $dryRunFailures = Get-ProviderDryRunContractFailures $report
+      if ($providerPreflightExitCode -ne $null -and $providerPreflightExitCode -notin @(0, 2)) {
+        $dryRunFailures += "provider_acceptance_preflight script exited $providerPreflightExitCode"
+      }
+      if ($status -eq "accepted") {
+        if ($providerItems.Count -eq 0 -or $acceptedCount -ne $providerItems.Count -or $blockedItems.Count -gt 0 -or $dryRunFailures.Count -gt 0) {
+          $classification = "failed"
+          $reason = "provider report is marked accepted while item blockers remain"
+          $failures += "blocked or missing provider acceptance misreported as accepted: $($blockedItems -join ', ') acceptedCount=$acceptedCount itemCount=$($providerItems.Count)"
+          $failures += $dryRunFailures
+        } else {
+          $classification = "passed"
+          $reason = "provider acceptance preflight accepted"
+        }
+      } elseif ($status -in @("blocked_missing_credentials", "credential_ready_but_runtime_closure_required")) {
+        if ($dryRunFailures.Count -gt 0) {
+          $classification = "failed"
+          $reason = "provider dry-run/failure taxonomy fields are missing"
+          $failures += $dryRunFailures
+        } else {
+          $classification = "expected_blocked"
+          $reason = "provider acceptance requires credentials and real smoke evidence"
+          $expectedBlockers += if ($blockedItems.Count -gt 0) { $blockedItems } else { $status }
+        }
+      } else {
+        $classification = "failed"
+        $reason = "unexpected provider acceptance status"
+        $failures += "unexpected status: $status"
+      }
+    }
+    "session_bundle_portability_smoke" {
+      $sessionGateResults = @((Get-Field $report "gateResults"))
+      $missingLocalGateIds = Get-NonPassedRequiredGateIds $sessionGateResults
+      if ($status -in @("local_restore_verified", "local_contract_passed", "cross_machine_passed")) {
+        if ($sessionGateResults.Count -gt 0 -and $missingLocalGateIds.Count -gt 0) {
+          $classification = "failed"
+          $reason = "SessionBundle local restore report has blocked local gates"
+          $failures += "blocked or missing local SessionBundle restore gates: $($missingLocalGateIds -join ', ')"
+        } else {
+          $classification = "passed"
+          $reason = "SessionBundle local-only restore contract is usable"
+        }
+      } elseif ($status -eq "failed_local_restore_contract") {
+        $classification = "failed"
+        $reason = "SessionBundle local restore contract failed"
+        $failures += "local SessionBundle restore contract failed"
+      } elseif ($status -eq "blocked_requires_second_machine_evidence") {
+        $classification = "passed"
+        $reason = "legacy second-machine blocker is ignored because current scope is local-only"
+      } else {
+        $classification = "failed"
+        $reason = "unexpected SessionBundle portability status"
+        $failures += "unexpected status: $status"
+      }
+    }
+    "profile_browser_comparison_gate" {
+      $desktopSignalCount = [int](Get-Field $report "desktopSignalCount")
+      $profileSignalCount = [int](Get-Field $report "profileBrowserSignalCount")
+      $comparableCategoryCount = [int](Get-Field $report "comparableCategoryCount")
+      $categoryComparisonCount = @((Get-Field $report "categoryComparison")).Count
+      if ($status -eq "passed") {
+        if ($desktopSignalCount -le 0 -or $profileSignalCount -le 0 -or $categoryComparisonCount -eq 0 -or $comparableCategoryCount -ne $categoryComparisonCount) {
+          $classification = "failed"
+          $reason = "profile/browser comparison is marked passed without comparable evidence"
+          $failures += "blocked or incomplete comparison misreported as passed: desktop=$desktopSignalCount profile=$profileSignalCount comparable=$comparableCategoryCount categoryComparisonCount=$categoryComparisonCount"
+        } else {
+          $classification = "passed"
+          $reason = "profile/browser comparison passed"
+        }
+      } elseif ($status -in @("blocked_missing_validation_report", "blocked_missing_desktop_webview_report", "blocked_missing_profile_browser_report", "blocked_stale_comparison_pair", "partial_comparison_only")) {
+        $classification = "expected_blocked"
+        $reason = "profile/browser comparison evidence is incomplete"
+        $expectedBlockers += $status
+      } else {
+        $classification = "failed"
+        $reason = "unexpected profile/browser comparison status"
+        $failures += "unexpected status: $status"
+      }
+    }
+  }
+
+  $gates += New-GateResult $spec.id $status $item $classification $reason $failures $expectedBlockers
+}
+
+$gates += Test-AutomationPrimitiveContract
+$gates += Test-ProviderDryRunContract
+$gates += Test-SessionBundleOperatorContract
+$gates += Test-TypedFacadeShrinkContract
+$gates += Test-BridgeCompatTypeContract
+$gates += Test-BrowserWindowGoFallbackContract
+$gates += Test-BrowserSettingsCoreProxyFacadeContract
+$gates += Test-BrowserPayloadSchemaContract
+$gates += Test-DashboardFacadeContract
+$gates += Test-SettingsLogsFacadeContract
+$gates += Test-ProfileFacadeContract
+$gates += Test-BehaviorPresetFacadeContract
+$gates += Test-AutomationFacadeContract
+$gates += Test-AppShellFacadeContract
+$gates += Test-MonitorFacadeContract
+$gates += Test-BrowserRuntimeFacadeContract
+$gates += Test-RuntimeFacadeContract
+$gates += Test-UiErrorBoundaryContract
+$gates += Test-GenericAnyResidueContract
+$gates += Test-RuntimeAdapterOperatorContract
+$gates += Test-SafetyLoggingContract
+
+$failedGates = @($gates | Where-Object { $_.classification -eq "failed" })
+$expectedBlockedGates = @($gates | Where-Object { $_.classification -eq "expected_blocked" })
+$passedGates = @($gates | Where-Object { $_.classification -eq "passed" })
+
+$gateClassificationStatus = if ($failedGates.Count -gt 0) {
+  "failed"
+} elseif ($expectedBlockedGates.Count -gt 0) {
+  "expected_blocked"
+} else {
+  "passed"
+}
+
+$operatorStatus = if ($failedGates.Count -gt 0) {
+  "failed"
+} elseif ($expectedBlockedGates.Count -gt 0) {
+  "passed_with_expected_external_blockers"
+} else {
+  "passed"
+}
+
+$report = [ordered]@{
+  schemaVersion = "m4_acceptance_gate_v30"
+  generatedAt = (Get-Date).ToString("o")
+  status = $operatorStatus
+  gateClassificationStatus = $gateClassificationStatus
+  operatorStatus = $operatorStatus
+  projectRoot = $projectRoot
+  summary = [ordered]@{
+    passed = $passedGates.Count
+    expectedBlocked = $expectedBlockedGates.Count
+    failed = $failedGates.Count
+    total = $gates.Count
+  }
+  gates = $gates
+  failureReason = if ($failedGates.Count -eq 0) { "" } else { @($failedGates | ForEach-Object { "$($_.id): $($_.reason)" }) -join "; " }
+  expectedBlockedReason = if ($expectedBlockedGates.Count -eq 0) { "" } else { @($expectedBlockedGates | ForEach-Object { "$($_.id): $($_.reason)" }) -join "; " }
+  m4TotalGate = [ordered]@{
+    status = $operatorStatus
+    gateClassificationStatus = $gateClassificationStatus
+    localContractStatus = if ($failedGates.Count -eq 0) { "passed" } else { "failed" }
+    externalBlockerCount = $expectedBlockedGates.Count
+    failedGateIds = @($failedGates | ForEach-Object { $_.id })
+    expectedBlockedGateIds = @($expectedBlockedGates | ForEach-Object { $_.id })
+    passedGateIds = @($passedGates | ForEach-Object { $_.id })
+    nextAction = if ($failedGates.Count -gt 0) {
+      "Fix failed local gates before promoting M4."
+    } elseif ($expectedBlockedGates.Count -gt 0) {
+      "M4 local contracts are usable; only provider credential-backed smoke remains expected-blocked when runtime local self-use evidence is passed."
+    } else {
+      "M4 local and active evidence gates are passed; continue with local runtime depth, observed coverage, replay runtime, and browser process cleanup proof."
+    }
+  }
+  notes = @(
+    "External blockers are allowed only as expected_blocked.",
+    "Live truth drift, missing critical reports, unreadable reports, and passed reports with remaining blockers fail this gate.",
+    "This gate refreshes live_truth_guard unless -SkipLiveTruthRefresh is set and refreshes provider acceptance preflight unless -SkipProviderPreflightRefresh is set; external gates are aggregated from latest reports.",
+    "Local automation primitive contract checks source/test coverage markers only; behavioral proof still comes from go test.",
+    "Provider dry-run contract is local report schema evidence only; provider acceptance remains expected_blocked until credential-backed real smoke passes.",
+    "SessionBundle operator contract is local UI/API source evidence only; second-machine portability is cancelled under the local-only scope.",
+    "Typed facade shrink contract is source-level evidence only; it narrows high-traffic synchronizer/workbench/report DTOs and browser Wails bindings without removing the transitional bridge.",
+    "Bridge compatibility type contract is source-level evidence only; it gives desktopRpc and tauriWailsBridge compatibility arguments named type boundaries without removing tauriWailsBridge.",
+    "Browser settings/core/proxy facade contract is source-level evidence only; it routes settings, browser core, and proxy APIs through typed desktop service wrappers while keeping the transitional bridge explicitly allowlisted.",
+    "Browser payload schema contract is source-level evidence only; it normalizes browser runtime event payloads and selected browser API normalizer inputs without removing every bridge compatibility path.",
+    "Dashboard facade contract is source-level evidence only; it routes Dashboard stats/license/config/CD key calls through typed desktop service wrappers without removing every bridge compatibility path.",
+    "Settings/logs facade contract is source-level evidence only; it routes Settings backup and Browser logs through typed desktop service wrappers while preserving the transitional compatibility bridge.",
+    "Profile facade contract is source-level evidence only; it routes Profile remote author loading through a typed desktop service wrapper while preserving browser preview fallback.",
+    "Behavior preset facade contract is source-level evidence only; it routes FingerprintPanel behavior preset loading through the browser module API facade without removing every browser bridge compatibility path.",
+    "Automation facade contract is source-level evidence only; it routes AutomationPage scheduler/rule calls through the browser module API facade without removing every browser/app shell/monitor bridge compatibility path.",
+    "App shell facade contract is source-level evidence only; it routes close confirmation, notification subscriptions, environment lookup, tray/minimize, and quit actions through typed desktop service wrappers without removing the transitional bridge.",
+    "Monitor facade contract is source-level evidence only; it routes EventMonitor runtime subscriptions and event-log history calls through typed desktop service wrappers without removing the transitional bridge.",
+    "Browser runtime facade contract is source-level evidence only; it routes Browser List/Detail runtime subscriptions through the browser module API facade and desktopRuntimeListen without removing the transitional bridge or closing settings/core/proxy/workbench bridge APIs.",
+    "Runtime facade contract is source-level evidence only; it routes selected Settings/Core/Proxy/Docs page-level runtime event and external URL calls through typed desktop service wrappers without removing tauriWailsBridge or closing every core/proxy/settings API.",
+    "UI error boundary contract is source-level evidence only; it confirms selected Dashboard/Settings/Automation/Tag/Recording panel/Docs, Browser instance, Core management, and Proxy pool surfaces use unknown error guards without claiming all legacy UI any-catches are gone.",
+    "Generic any residue contract is source-level evidence only; it narrows selected shared/browser generic any markers without claiming every explicit any in the repository is gone.",
+    "Runtime adapter operator contract is source-level UI/API evidence only; runtime_adapter_evidence_gate carries the current local self-use proof.",
+    "Safety logging contract is local source/test evidence only; CAPTCHA/SMS/Email credential-backed provider smoke still requires real account evidence.",
+    "M4 total gate reports passed_with_expected_external_blockers when local gates pass and only expected external blockers remain; gateClassificationStatus preserves the lower-level expected_blocked classification."
+  )
+}
+
+$reportPath = Join-Path $absoluteOutputDir ("m4-acceptance-gate-{0}.json" -f ([DateTimeOffset]::Now.ToUnixTimeMilliseconds()))
+$report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $reportPath -Encoding UTF8
+
+Write-Host "M4 acceptance gate report: $reportPath"
+Write-Host "Status: $operatorStatus"
+Write-Host "Gate classification: $gateClassificationStatus"
+Write-Host "Summary: passed=$($passedGates.Count), expected_blocked=$($expectedBlockedGates.Count), failed=$($failedGates.Count)"
+if ($report.failureReason) { Write-Host "Failure reason: $($report.failureReason)" }
+if ($report.expectedBlockedReason) { Write-Host "Expected blocked: $($report.expectedBlockedReason)" }
+
+if ($gateClassificationStatus -eq "failed") { exit 1 }
+exit 0

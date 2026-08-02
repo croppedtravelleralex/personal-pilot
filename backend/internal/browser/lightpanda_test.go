@@ -178,8 +178,16 @@ func TestCoreExecutableCandidatesForKind(t *testing.T) {
 		t.Fatal("lightpanda candidates should not be empty")
 	}
 
-	// The two lists should differ
+	cfCandidates := CoreExecutableCandidatesForKind("camoufox")
+	if len(cfCandidates) == 0 {
+		t.Fatal("camoufox candidates should not be empty")
+	}
+
+	// The engine-specific lists should differ from the Chromium defaults.
 	if len(chromiumCandidates) == len(lpCandidates) && chromiumCandidates[0] == lpCandidates[0] {
 		t.Fatal("chromium and lightpanda candidates should differ")
+	}
+	if len(chromiumCandidates) == len(cfCandidates) && chromiumCandidates[0] == cfCandidates[0] {
+		t.Fatal("chromium and camoufox candidates should differ")
 	}
 }

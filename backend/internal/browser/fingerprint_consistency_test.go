@@ -184,3 +184,154 @@ func TestAssessFingerprintConsistency_StatusInconsistent(t *testing.T) {
 		t.Fatalf("Status = %q, want 'inconsistent' with multiple hard mismatches. Score=%d", result.Status, result.CoherenceScore)
 	}
 }
+
+func TestEnforceFingerprintConsistency_WarnNeverBlocks(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{
+		Status:       "inconsistent",
+		HardFailures: 3,
+		RiskReasons:  []string{"[HARD] mismatch"},
+	}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceWarn); err != nil {
+		t.Fatalf("warn mode should not block: %v", err)
+	}
+}
+
+func TestEnforceFingerprintConsistency_BlockOnInconsistent(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{
+		Status:       "inconsistent",
+		HardFailures: 2,
+		RiskReasons:  []string{"[HARD] locale mismatch"},
+	}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceBlock); err == nil {
+		t.Fatal("block mode should reject inconsistent assessment")
+	}
+}
+
+func TestEnforceFingerprintConsistency_BlockOnHardFailures(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{
+		Status:       "suspicious",
+		HardFailures: 1,
+		RiskReasons:  []string{"[HARD] proxy region mismatch"},
+	}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceBlock); err == nil {
+		t.Fatal("block mode should reject hard failures even when status is suspicious")
+	}
+}
+
+func TestEnforceFingerprintConsistency_BlockAllowsCoherent(t *testing.T) {
+	assessment := FingerprintConsistencyAssessment{Status: "coherent", HardFailures: 0}
+	if err := EnforceFingerprintConsistency(assessment, CoherenceBlock); err != nil {
+		t.Fatalf("coherent assessment should pass block mode: %v", err)
+	}
+}
+
+func TestBuildConsistencyInputFromArgs(t *testing.T) {
+	fp := []string{
+		"--timezone=America/New_York",
+		"--lang=en-US",
+		"--accept-lang=en-US,en;q=0.9",
+		"--fingerprint-platform=windows",
+		"--fingerprint-webgl-vendor=Intel Inc.",
+		"--fingerprint-webgl-renderer=Intel Iris",
+		"--fingerprint-hardware-concurrency=8",
+		"--window-size=1920,1080",
+	}
+	launch := []string{"--disable-sync"}
+	input := BuildConsistencyInputFromArgs(fp, launch, "US")
+	if input.Timezone != "America/New_York" || input.Locale != "en-US" {
+		t.Fatalf("locale/tz not parsed: %+v", input)
+	}
+	if input.AcceptLanguage != "en-US,en;q=0.9" || input.Platform != "Win32" {
+		t.Fatalf("accept/platform not parsed: %+v", input)
+	}
+	if input.GPUVendor != "Intel Inc." || input.HardwareConcurrency != 8 {
+		t.Fatalf("gpu/concurrency not parsed: %+v", input)
+	}
+	if input.ScreenWidth != 1920 || input.ScreenHeight != 1080 {
+		t.Fatalf("window size not parsed: %+v", input)
+	}
+	if input.ProxyRegion != "US" {
+		t.Fatalf("proxy region=%q want US", input.ProxyRegion)
+	}
+}
+
+func TestParseCoherenceEnforceMode(t *testing.T) {
+	if ParseCoherenceEnforceMode("block") != CoherenceBlock {
+		t.Fatal("expected block mode")
+	}
+	if ParseCoherenceEnforceMode("BLOCK") != CoherenceBlock {
+		t.Fatal("expected case-insensitive block")
+	}
+	if ParseCoherenceEnforceMode("") != CoherenceWarn {
+		t.Fatal("expected default warn")
+	}
+}
+
+func TestCheckProxyVsExitRegion_MatchAndMismatch(t *testing.T) {
+	match := AssessFingerprintConsistency(&FingerprintConsistencyInput{
+		ProxyRegion: "JP",
+		ExitRegion:  "Japan",
+	})
+	for _, ch := range match.CheckItems {
+		if ch.Dimension == "proxy_vs_exit_region" {
+			if !ch.Passed {
+				t.Fatalf("expected proxy/exit match, detail=%s", ch.Detail)
+			}
+		}
+	}
+
+	mismatch := AssessFingerprintConsistency(&FingerprintConsistencyInput{
+		ProxyRegion: "US",
+		ExitRegion:  "JP",
+	})
+	foundFail := false
+	for _, ch := range mismatch.CheckItems {
+		if ch.Dimension == "proxy_vs_exit_region" && !ch.Passed {
+			foundFail = true
+		}
+	}
+	if !foundFail {
+		t.Fatal("expected proxy_vs_exit_region hard mismatch")
+	}
+	if mismatch.HardFailures == 0 {
+		t.Fatal("expected hard failure count > 0")
+	}
+}
+
+func TestCheckProxyVsExitRegion_SkipWhenMissing(t *testing.T) {
+	result := AssessFingerprintConsistency(&FingerprintConsistencyInput{
+		ProxyRegion: "US",
+	})
+	for _, ch := range result.CheckItems {
+		if ch.Dimension == "proxy_vs_exit_region" {
+			if !ch.Passed {
+				t.Fatalf("missing exit should skip, detail=%s", ch.Detail)
+			}
+			if ch.Detail == "" || ch.Detail == "deferred (requires IP geolocation)" {
+				t.Fatalf("unexpected deferred placeholder detail: %q", ch.Detail)
+			}
+		}
+	}
+}
+
+func TestInferRegionFromProxyMeta(t *testing.T) {
+	if got := InferRegionFromProxyMeta("clash-jp-01", "airport"); got != "JP" {
+		t.Fatalf("got %q want JP", got)
+	}
+	if got := InferRegionFromProxyMeta("住宅节点", "美国"); got != "US" {
+		t.Fatalf("got %q want US", got)
+	}
+	if got := InferRegionFromProxyMeta("node", "misc"); got != "" {
+		t.Fatalf("got %q want empty", got)
+	}
+}
+
+func TestNormalizeRegionCode(t *testing.T) {
+	if got := NormalizeRegionCode("Japan"); got != "JP" {
+		t.Fatalf("got %q", got)
+	}
+	if got := NormalizeRegionCode("us"); got != "US" {
+		t.Fatalf("got %q", got)
+	}
+}
+

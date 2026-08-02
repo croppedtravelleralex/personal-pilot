@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"strings"
 	"personal-pilot/backend/internal/events"
 	"personal-pilot/backend/internal/scheduler"
 	"time"
@@ -132,6 +133,17 @@ func (a *App) SchedulerRunTaskNow(id string) {
 	if a.scheduler == nil {
 		return
 	}
+	task, err := a.taskStore.Get(id)
+	if err == nil && task != nil && strings.TrimSpace(task.ProfileID) != "" {
+		if gate, gErr := a.AsymmetricShouldExecute(task.ProfileID); gErr == nil {
+			if allowed, ok := gate["allowed"].(bool); ok && !allowed {
+				a.emit(events.EventAutomationTaskFailed, map[string]interface{}{
+					"taskId": id, "reason": "asymmetric_gate_blocked", "gate": gate,
+				})
+				return
+			}
+		}
+	}
 	a.scheduler.RunTaskNow(id)
 }
 
@@ -184,5 +196,7 @@ func taskToInfo(t *scheduler.TaskDef) SchedulerTaskInfo {
 		CreatedAt:  t.CreatedAt.Format(time.RFC3339),
 		Status:     string(t.Status()),
 		LastRunAt:  lastRunAt,
+		LastError:  t.LastError(),
+		RetryCount: t.RetryCount(),
 	}
 }

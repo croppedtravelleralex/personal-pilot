@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"personal-pilot/backend/internal/browser"
 	"personal-pilot/backend/internal/events"
 	"personal-pilot/backend/internal/logger"
 )
@@ -57,6 +58,7 @@ func browserInstanceEventPayload(profile *BrowserProfile, reused bool) map[strin
 		"profileName":    profile.ProfileName,
 		"debugPort":      profile.DebugPort,
 		"debugReady":     profile.DebugReady,
+		"injectionReady": profile.InjectionReady,
 		"pid":            profile.Pid,
 		"reused":         reused,
 		"running":        profile.Running,
@@ -85,6 +87,7 @@ func (a *App) markProfileRunningLocked(profileId string, profile *BrowserProfile
 	profile.Running = true
 	profile.DebugPort = debugPort
 	profile.DebugReady = debugReady
+	profile.InjectionReady = false
 	profile.Pid = pid
 	profile.LastStartAt = time.Now().Format(time.RFC3339)
 	profile.RuntimeWarning = runtimeWarning
@@ -172,6 +175,7 @@ func (a *App) waitBrowserDebugReadyAsync(profileId string, debugPort int, timeou
 		logger.F("profile_id", profileId),
 		logger.F("debug_port", debugPort),
 	)
+	go a.applyProfileEnvironmentInjectionAsync(profileId, debugPort)
 	a.emitBrowserInstanceUpdated(snapshot)
 }
 
@@ -182,7 +186,7 @@ func (a *App) validateProfileCDPOwnership(profile *BrowserProfile) error {
 	return a.browserMgr.ValidateProfileLaunchAudit(profile)
 }
 
-func shouldKeepBrowserRunningPendingDebugReady(debugPort int, monitor *browserProcessMonitor) bool {
+func shouldKeepBrowserRunningPendingDebugReady(debugPort int, monitor *browser.BrowserProcessMonitor) bool {
 	return debugPort > 0 && monitor != nil && !monitor.HasExited()
 }
 

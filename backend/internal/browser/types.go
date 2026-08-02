@@ -28,9 +28,11 @@ type Profile struct {
 	LaunchCode           string                 `json:"launchCode"`
 	BehaviorProfileID    string                 `json:"behaviorProfileId"`
 	HumanizeSeed         string                 `json:"humanizeSeed"`
+	PersonaID            string                 `json:"personaId,omitempty"`
 	Running              bool                   `json:"running"`
 	DebugPort            int                    `json:"debugPort"`
 	DebugReady           bool                   `json:"debugReady"`
+	InjectionReady       bool                   `json:"injectionReady"`
 	Pid                  int                    `json:"pid"`
 	RuntimeWarning       string                 `json:"runtimeWarning"`
 	LastError            string                 `json:"lastError"`
@@ -56,6 +58,7 @@ type ProfileInput struct {
 	GroupId              string                 `json:"groupId"` // 所属分组ID
 	BehaviorProfileID    string                 `json:"behaviorProfileId"`
 	HumanizeSeed         string                 `json:"humanizeSeed"`
+	PersonaID            string                 `json:"personaId,omitempty"`
 }
 
 // Tab 浏览器标签页
@@ -74,6 +77,7 @@ type Settings struct {
 	DefaultProxy           string   `json:"defaultProxy"`
 	StartReadyTimeoutMs    int      `json:"startReadyTimeoutMs"`
 	StartStableWindowMs    int      `json:"startStableWindowMs"`
+	ShowMousePointerDefault bool    `json:"showMousePointerDefault"`
 }
 
 // CoreInput 内核配置输入
@@ -81,6 +85,7 @@ type CoreInput struct {
 	CoreId    string `json:"coreId"`
 	CoreName  string `json:"coreName"`
 	CorePath  string `json:"corePath"`
+	Kind      string `json:"kind,omitempty"`
 	IsDefault bool   `json:"isDefault"`
 }
 

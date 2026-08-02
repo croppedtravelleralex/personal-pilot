@@ -2,13 +2,16 @@ package launchcode
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"personal-pilot/backend/internal/browser"
+	"personal-pilot/backend/internal/config"
 	"personal-pilot/backend/internal/logger"
+	"personal-pilot/backend/internal/proxy"
 )
 
 // ProfileWriteRequest 用于创建/更新实例配置。
@@ -18,6 +21,18 @@ type ProfileWriteRequest struct {
 	LaunchCode string                `json:"launchCode"`
 	AutoLaunch bool                  `json:"autoLaunch"`
 	Start      *LaunchRequestParams  `json:"start"`
+}
+
+// ProfileCloneRequest POST /api/profiles/clone 的请求体
+type ProfileCloneRequest struct {
+	ProfileID string `json:"profileId"`
+	NewName   string `json:"newName"`
+}
+
+// ProfileProxySwitchRequest PUT /api/profiles/{id}/proxy 的请求体
+type ProfileProxySwitchRequest struct {
+	ProxyID     string `json:"proxyId"`
+	ProxyConfig string `json:"proxyConfig"`
 }
 
 type profileCreator interface {
@@ -47,7 +62,51 @@ func (s *LaunchServer) handleProfiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *LaunchServer) handleProfileByID(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := parseProfilePathID(r.URL.Path)
+	path := r.URL.Path
+
+	// Check for /clone suffix on /api/profiles/{id}/clone
+	if strings.HasSuffix(path, "/clone") {
+		profileID, ok := parseProfilePathID(strings.TrimSuffix(path, "/clone"))
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]interface{}{
+				"ok":    false,
+				"error": "profile not found",
+			})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
+				"ok":    false,
+				"error": "method not allowed",
+			})
+			return
+		}
+		s.handleProfileCloneByID(w, r, profileID)
+		return
+	}
+
+	// Check for /proxy suffix on /api/profiles/{id}/proxy
+	if strings.HasSuffix(path, "/proxy") {
+		profileID, ok := parseProfilePathID(strings.TrimSuffix(path, "/proxy"))
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]interface{}{
+				"ok":    false,
+				"error": "profile not found",
+			})
+			return
+		}
+		if r.Method != http.MethodPut {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
+				"ok":    false,
+				"error": "method not allowed",
+			})
+			return
+		}
+		s.handleProfileProxySwitch(w, r, profileID)
+		return
+	}
+
+	profileID, ok := parseProfilePathID(path)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]interface{}{
 			"ok":    false,
@@ -69,6 +128,151 @@ func (s *LaunchServer) handleProfileByID(w http.ResponseWriter, r *http.Request)
 			"error": "method not allowed",
 		})
 	}
+}
+
+// handleProfileClone POST /api/profiles/clone (via body profileId)
+func (s *LaunchServer) handleProfileClone(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
+			"ok":    false,
+			"error": "method not allowed",
+		})
+		return
+	}
+
+	var req ProfileCloneRequest
+	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok":    false,
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	if strings.TrimSpace(req.ProfileID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok":    false,
+			"error": "profileId is required",
+		})
+		return
+	}
+
+	s.cloneProfileAndRespond(w, strings.TrimSpace(req.ProfileID), strings.TrimSpace(req.NewName))
+}
+
+// handleProfileCloneByID POST /api/profiles/{id}/clone
+func (s *LaunchServer) handleProfileCloneByID(w http.ResponseWriter, r *http.Request, profileID string) {
+	var req struct {
+		NewName string `json:"newName"`
+	}
+	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		// Allow empty body - just use empty newName
+	}
+
+	s.cloneProfileAndRespond(w, profileID, strings.TrimSpace(req.NewName))
+}
+
+func (s *LaunchServer) cloneProfileAndRespond(w http.ResponseWriter, profileID, newName string) {
+	if s.browserMgr == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"ok":    false,
+			"error": "browser manager not available",
+		})
+		return
+	}
+
+	profile, err := s.browserMgr.Copy(profileID, newName)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":          true,
+		"profileId":   profile.ProfileId,
+		"profileName": profile.ProfileName,
+		"profile":     profile,
+	})
+}
+
+// handleProfileProxySwitch PUT /api/profiles/{id}/proxy
+func (s *LaunchServer) handleProfileProxySwitch(w http.ResponseWriter, r *http.Request, profileID string) {
+	var req ProfileProxySwitchRequest
+	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok":    false,
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	if s.browserMgr == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"ok":    false,
+			"error": "browser manager not available",
+		})
+		return
+	}
+
+	s.browserMgr.Mutex.Lock()
+	profile, exists := s.browserMgr.Profiles[profileID]
+	s.browserMgr.Mutex.Unlock()
+
+	if !exists || profile == nil {
+		writeJSON(w, http.StatusNotFound, map[string]interface{}{
+			"ok":    false,
+			"error": fmt.Sprintf("profile not found: %s", profileID),
+		})
+		return
+	}
+
+	proxies := []config.BrowserProxy{}
+	if s.browserMgr != nil && s.browserMgr.Config != nil {
+		proxies = s.browserMgr.Config.Browser.Proxies
+	}
+	allowDirectFallback := false
+	for _, tag := range profile.Tags {
+		if strings.EqualFold(strings.TrimSpace(tag), proxy.DirectProxyTagAllowFallback) {
+			allowDirectFallback = true
+			break
+		}
+	}
+	if err := proxy.ValidateDirectFallbackSwitch(
+		profile.ProxyConfig,
+		proxies,
+		profile.ProxyId,
+		req.ProxyID,
+		req.ProxyConfig,
+		allowDirectFallback,
+	); err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	proxyItem := browser.Proxy{
+		ProxyId:     req.ProxyID,
+		ProxyConfig: req.ProxyConfig,
+	}
+
+	changed := browser.BindProfileToProxy(profile, proxyItem, true)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":            true,
+		"profileId":     profileID,
+		"proxyChanged":  changed,
+	})
 }
 
 // handleCreateProfile POST /api/profiles

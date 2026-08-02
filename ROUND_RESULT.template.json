@@ -1,0 +1,15 @@
+{
+  "roundId": 0,
+  "cycleId": 0,
+  "roundType": "plan",
+  "status": "completed",
+  "startedAt": "2026-03-26T00:00:00+08:00",
+  "finishedAt": "2026-03-26T00:05:00+08:00",
+  "currentObjective": "示例目标",
+  "changedFiles": [],
+  "verificationActions": [],
+  "summary": "本轮总结",
+  "issues": [],
+  "nextStep": "下一步动作",
+  "pendingRecovery": false
+}

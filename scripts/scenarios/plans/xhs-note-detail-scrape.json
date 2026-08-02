@@ -1,0 +1,21 @@
+{
+  "schema": "behavior_primitive_plan_v1",
+  "name": "xhs-note-detail-scrape",
+  "description": "打开示例笔记页并抽取标题/正文",
+  "variables": {
+    "noteUrl": "https://www.xiaohongshu.com/explore"
+  },
+  "steps": [
+    { "primitive": "open_url", "params": { "url": "{{noteUrl}}" } },
+    { "primitive": "wait_for_navigation", "params": { "timeoutMs": 25000 } },
+    { "primitive": "wait_for_content_stable", "params": { "timeoutMs": 6000 } },
+    { "primitive": "dom_snapshot", "params": { "label": "note_detail" } },
+    { "primitive": "get_element_text", "params": { "selector": "h1, [class*='title'], [class*='note']", "label": "title" } },
+    { "primitive": "get_element_text", "params": { "selector": "[class*='desc'], [class*='content'], article", "label": "body" } },
+    { "primitive": "capture_screenshot", "params": { "label": "note_screenshot" } }
+  ],
+  "passCriteria": {
+    "titleNonEmpty": true,
+    "bodyTextMinLen": 20
+  }
+}

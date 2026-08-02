@@ -1,0 +1,303 @@
+{
+  "schemaVersion": "behavior_event_taxonomy_v1",
+  "generatedAt": "2026-05-23",
+  "status": "taxonomy_seed_not_full_replay_runtime",
+  "shippedPrimitiveCount": 13,
+  "pageArchetypeCount": 8,
+  "targetEventCount": 450,
+  "rules": [
+    "Only primitives implemented in runtime count as shipped primitives.",
+    "Generated event families are taxonomy targets until replay, debug, manual gate, and recovery evidence exists.",
+    "Every promoted event must define replay semantics, audit payload, failure states, and recovery behavior."
+  ],
+  "dimensions": {
+    "pageArchetypes": [
+      "article",
+      "search_results",
+      "listing",
+      "product",
+      "form",
+      "auth",
+      "dashboard",
+      "generic"
+    ],
+    "phases": [
+      "readiness",
+      "settle",
+      "scan",
+      "focus",
+      "input",
+      "consume",
+      "persist",
+      "recover",
+      "manual_gate",
+      "audit"
+    ],
+    "outcomes": [
+      "planned",
+      "executed",
+      "skipped",
+      "failed",
+      "aborted",
+      "recovered"
+    ]
+  },
+  "families": [
+    {
+      "id": "readiness_wait",
+      "targetCount": 40,
+      "evidenceStatus": "primitive_backed",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan",
+      "replaySemantics": "wait until DOM/task readiness predicate or timeout reserve is reached",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "timeout_ms",
+        "status"
+      ],
+      "failureStates": [
+        "timeout",
+        "predicate_unavailable"
+      ],
+      "recoveryBehavior": "soft_abort_if_budget_exceeded or continue in shadow mode",
+      "currentEvidence": "wait_for_readiness primitive"
+    },
+    {
+      "id": "settle_idle",
+      "targetCount": 38,
+      "evidenceStatus": "primitive_backed",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan",
+      "replaySemantics": "insert deterministic idle or stable-content wait based on seed and page archetype",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "duration_ms",
+        "stable_window_ms",
+        "seed"
+      ],
+      "failureStates": [
+        "budget_clipped",
+        "timer_interrupted"
+      ],
+      "recoveryBehavior": "clip to timeout budget and preserve warning",
+      "currentEvidence": "idle and wait_for_content_stable primitives"
+    },
+    {
+      "id": "scroll_scan",
+      "targetCount": 48,
+      "evidenceStatus": "primitive_backed",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan",
+      "replaySemantics": "perform deterministic progressive scroll or ratio scroll for scan phases",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "segments",
+        "ratio",
+        "seed"
+      ],
+      "failureStates": [
+        "scroll_target_unavailable",
+        "budget_exceeded"
+      ],
+      "recoveryBehavior": "record skipped step or soft abort",
+      "currentEvidence": "scroll_progressive and scroll_to_ratio primitives"
+    },
+    {
+      "id": "hover_focus",
+      "targetCount": 42,
+      "evidenceStatus": "primitive_backed",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan",
+      "replaySemantics": "focus, blur, or hover candidate elements selected by page archetype",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "target",
+        "selector_hint",
+        "status"
+      ],
+      "failureStates": [
+        "target_missing",
+        "focus_rejected"
+      ],
+      "recoveryBehavior": "skip target-specific step and preserve audit warning",
+      "currentEvidence": "hover_candidate, focus_element, blur_element primitives"
+    },
+    {
+      "id": "typing_input",
+      "targetCount": 44,
+      "evidenceStatus": "primitive_backed",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan",
+      "replaySemantics": "type with rhythm and optional correction events inside form/auth archetypes",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "profile",
+        "max_corrections",
+        "status"
+      ],
+      "failureStates": [
+        "input_missing",
+        "typing_interrupted",
+        "correction_budget_exceeded"
+      ],
+      "recoveryBehavior": "manual gate or fail with field-level reason",
+      "currentEvidence": "type_with_rhythm and clear_with_corrections primitives"
+    },
+    {
+      "id": "content_pause",
+      "targetCount": 36,
+      "currentEvidence": "pause_on_content primitive",
+      "evidenceStatus": "primitive_backed_taxonomy_defined",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan",
+      "replaySemantics": "pause on content regions using deterministic dwell budget and page archetype",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "content_kind",
+        "duration_ms",
+        "seed",
+        "status"
+      ],
+      "failureStates": [
+        "content_region_missing",
+        "budget_clipped",
+        "timer_interrupted"
+      ],
+      "recoveryBehavior": "skip dwell or clip to remaining budget while preserving audit warning"
+    },
+    {
+      "id": "session_persist",
+      "targetCount": 30,
+      "currentEvidence": "persist_session_state primitive",
+      "evidenceStatus": "primitive_backed_taxonomy_defined",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan and SessionBundle contract",
+      "replaySemantics": "persist session state at deterministic checkpoints after navigation or form phases",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "profile_id",
+        "cookie_count",
+        "local_storage_count",
+        "status"
+      ],
+      "failureStates": [
+        "profile_missing",
+        "storage_unavailable",
+        "write_failed"
+      ],
+      "recoveryBehavior": "record persistence failure and continue only when task policy allows degraded session continuity"
+    },
+    {
+      "id": "budget_recovery",
+      "targetCount": 40,
+      "currentEvidence": "soft_abort_if_budget_exceeded primitive",
+      "evidenceStatus": "primitive_backed_taxonomy_defined",
+      "runtimePath": "src/behavior/mod.rs build_behavior_plan",
+      "replaySemantics": "evaluate remaining time/action budget and soft-abort low value phases deterministically",
+      "auditPayload": [
+        "phase",
+        "primitive",
+        "remaining_budget_ms",
+        "skipped_steps",
+        "status"
+      ],
+      "failureStates": [
+        "budget_exhausted",
+        "recovery_policy_missing"
+      ],
+      "recoveryBehavior": "soft abort, emit skipped step list, and preserve task-level recovery reason"
+    },
+    {
+      "id": "manual_gate",
+      "targetCount": 42,
+      "currentEvidence": "operator commands and manual gate confirm/reject runtime surface are wired for local replay audit",
+      "evidenceStatus": "primitive_backed_local_runtime",
+      "runtimePath": "src/desktop/mod.rs confirm_manual_gate/reject_manual_gate and task run detail operator surface",
+      "localRuntimeBacking": {
+        "status": "implemented",
+        "sourcePaths": [
+          "src/desktop/mod.rs",
+          "src/services/desktop.ts"
+        ],
+        "boundary": "local operator gate only; no external provider account is required"
+      },
+      "replaySemantics": "pause replay at declared manual gate and wait for operator decision or timeout",
+      "auditPayload": [
+        "phase",
+        "gate_id",
+        "operator_action",
+        "timeout_ms",
+        "status"
+      ],
+      "failureStates": [
+        "operator_timeout",
+        "operator_rejected",
+        "gate_context_missing"
+      ],
+      "recoveryBehavior": "resume, abort, or retry according to explicit operator decision"
+    },
+    {
+      "id": "debug_audit",
+      "targetCount": 48,
+      "currentEvidence": "BehaviorTraceSummary and run detail audit artifacts are wired for local replay audit",
+      "evidenceStatus": "primitive_backed_local_runtime",
+      "runtimePath": "src/desktop/mod.rs read_desktop_behavior_audit_contract and run detail artifacts",
+      "localRuntimeBacking": {
+        "status": "implemented",
+        "sourcePaths": [
+          "src/desktop/mod.rs",
+          "src/services/desktop.ts"
+        ],
+        "boundary": "local audit/runtime trace only"
+      },
+      "replaySemantics": "emit deterministic trace events around each planned/executed/skipped primitive",
+      "auditPayload": [
+        "trace_id",
+        "phase",
+        "primitive",
+        "input",
+        "output",
+        "status",
+        "duration_ms"
+      ],
+      "failureStates": [
+        "trace_write_failed",
+        "missing_step_context"
+      ],
+      "recoveryBehavior": "keep task result but mark audit as degraded when trace persistence fails"
+    },
+    {
+      "id": "provider_assist",
+      "targetCount": 42,
+      "currentEvidence": "CAPTCHA/SMS/Email readiness, dry-run, failure taxonomy and operator surface are wired; real credential smoke remains separate",
+      "evidenceStatus": "primitive_backed_local_runtime",
+      "runtimePath": "scripts/provider_acceptance_preflight.ps1 and Settings provider readiness surface",
+      "localRuntimeBacking": {
+        "status": "implemented",
+        "sourcePaths": [
+          "scripts/provider_acceptance_preflight.ps1",
+          "src/modules/settings/SettingsPage.tsx",
+          "src/desktop/mod.rs"
+        ],
+        "boundary": "local dry-run and operator readiness only; CAPTCHA/SMS/Email real account credentials are not verified"
+      },
+      "replaySemantics": "delegate provider challenge/code steps to manager, then detect/fill through browser automation when wired",
+      "auditPayload": [
+        "provider_domain",
+        "provider_name",
+        "manager_status",
+        "cdp_detect_status",
+        "cdp_fill_status",
+        "smoke_status"
+      ],
+      "failureStates": [
+        "missing_credentials",
+        "manager_not_wired",
+        "cdp_detect_failed",
+        "cdp_fill_failed",
+        "provider_timeout"
+      ],
+      "recoveryBehavior": "surface operator gate or fail with provider-level failure reason"
+    }
+  ]
+}

@@ -1,0 +1,381 @@
+{
+  "schema": "capability_scenario_manifest_v2",
+  "updated": "2026-06-30",
+  "docRef": "docs/43-capability-scenario-test-suite.md v4",
+  "dimensions": [
+    "network_stealth",
+    "fingerprint",
+    "behavior_humanize",
+    "account_cadence",
+    "cdp_capture",
+    "asymmetric_cost",
+    "platform_xhs",
+    "platform_scrape",
+    "platform_auth_api",
+    "data_collection_pipeline",
+    "state_monitoring",
+    "fingerprint_portrait",
+    "ip_stability_telemetry",
+    "fingerprint_data_continuity",
+    "event_taxonomy_monitoring",
+    "telemetry_dashboard",
+    "cross_signal_correlation"
+  ],
+  "radarAxes": [
+    "data_collection",
+    "state_monitoring",
+    "fingerprint_portrait",
+    "ip_stability",
+    "fingerprint_data",
+    "event_taxonomy",
+    "cross_correlation",
+    "platform_business"
+  ],
+  "scenarios": [
+    {
+      "id": "S-A01-backend-unit",
+      "docIds": ["P01-001"],
+      "tier": "T0",
+      "name": "后端全量单测",
+      "dimensions": ["network_stealth", "fingerprint", "behavior_humanize", "cdp_capture", "event_taxonomy_monitoring"],
+      "runner": "go_test",
+      "command": "go test ./backend/... -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-A02-user-requirements-gate",
+      "docIds": ["P01-002"],
+      "tier": "T0",
+      "name": "用户需求六维验收门禁",
+      "dimensions": ["network_stealth", "fingerprint", "account_cadence", "cdp_capture"],
+      "runner": "powershell",
+      "command": "scripts/user_requirements_acceptance_gate.ps1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-A03-asymmetric-stealth-gate",
+      "docIds": ["P06-001"],
+      "tier": "T0",
+      "name": "不对称隐身矩阵 99+ 单测",
+      "dimensions": ["asymmetric_cost"],
+      "runner": "powershell",
+      "command": "scripts/asymmetric_stealth_gate.ps1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-A04-autopilot-gate",
+      "docIds": ["P06-015"],
+      "tier": "T0",
+      "name": "零人工 Autopilot 编排单测",
+      "dimensions": ["asymmetric_cost", "cross_signal_correlation"],
+      "runner": "powershell",
+      "command": "scripts/asymmetric_autopilot_gate.ps1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-A05-xhs-nurture-mock",
+      "docIds": ["P08-001"],
+      "tier": "T0",
+      "name": "小红书养号 mock 录制 + 50 方向偏移",
+      "dimensions": ["platform_xhs", "behavior_humanize"],
+      "runner": "go_run",
+      "command": "go run ./cmd/xhs-nurture-demo mock",
+      "cwd": "backend",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-A06-primitive-registry",
+      "docIds": ["P04-001"],
+      "tier": "T0",
+      "name": "34 个 behavior primitive 注册完整性",
+      "dimensions": ["behavior_humanize", "cdp_capture"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/behavior/... -run TestShipped -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O01-observed-fingerprint",
+      "docIds": ["P22-002"],
+      "tier": "T0",
+      "name": "450/450 observed fingerprint coverage",
+      "dimensions": ["fingerprint_portrait", "fingerprint"],
+      "runner": "powershell",
+      "command": "scripts/observed_fingerprint_coverage_gate.ps1",
+      "pass": { "exitCode": 0, "outputContains": ["passed_full_observed_fingerprint_coverage"] }
+    },
+    {
+      "id": "S-O02-live-replay",
+      "docIds": ["P24-002", "P22-022"],
+      "tier": "T0",
+      "name": "450 event live replay runtime",
+      "dimensions": ["event_taxonomy_monitoring", "behavior_humanize"],
+      "runner": "powershell",
+      "command": "scripts/live_replay_runtime_gate.ps1",
+      "pass": { "exitCode": 0, "outputContains": ["passed_full_local_replay_runtime"] }
+    },
+    {
+      "id": "S-O03-taxonomy-audit",
+      "docIds": ["P22-001", "P24-001"],
+      "tier": "T0",
+      "name": "Fingerprint + behavior taxonomy audit",
+      "dimensions": ["fingerprint_portrait", "event_taxonomy_monitoring"],
+      "runner": "powershell",
+      "command": "scripts/taxonomy_audit.ps1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O04-live-truth-guard",
+      "docIds": ["P25-010"],
+      "tier": "T0",
+      "name": "Live truth guard 聚合门禁",
+      "dimensions": ["telemetry_dashboard", "state_monitoring"],
+      "runner": "powershell",
+      "command": "scripts/live_truth_guard.ps1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O05-full-observed-probe",
+      "docIds": ["P22-003"],
+      "tier": "T0",
+      "name": "Full observed fingerprint CDP probe",
+      "dimensions": ["fingerprint_portrait", "data_collection_pipeline"],
+      "runner": "node",
+      "command": "node scripts/full_observed_fingerprint_probe.mjs",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O06-events-registry",
+      "docIds": ["P24-017"],
+      "tier": "T0",
+      "name": "Event registry + gen_constants 一致",
+      "dimensions": ["event_taxonomy_monitoring"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/events/... -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O07-event-log-dao",
+      "docIds": ["P24-003", "P24-004", "P24-006"],
+      "tier": "T0",
+      "name": "EventLog SQLite CRUD",
+      "dimensions": ["event_taxonomy_monitoring", "state_monitoring"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/events/... -run TestSQLiteEventLogStore -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O08-proxy-parser",
+      "docIds": ["P02-001", "P23-001"],
+      "tier": "T0",
+      "name": "代理解析 + sticky 单测",
+      "dimensions": ["network_stealth", "ip_stability_telemetry"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/proxy/... -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O09-scenario-manifest",
+      "docIds": ["P01-003"],
+      "tier": "T0",
+      "name": "场景 manifest + plan 校验",
+      "dimensions": ["telemetry_dashboard"],
+      "runner": "go_test",
+      "command": "go test ./backend/... -run TestCapabilityScenario -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O10-session-bundle",
+      "docIds": ["P13-011", "P22-013"],
+      "tier": "T0",
+      "name": "SessionBundle 指纹数据连续",
+      "dimensions": ["fingerprint_data_continuity", "session_portability"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/session/... -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O11-identity-fingerprint",
+      "docIds": ["P22-007", "P22-013"],
+      "tier": "T0",
+      "name": "IdentityReport + FingerprintHealth 单测",
+      "dimensions": ["fingerprint_portrait", "fingerprint_data_continuity"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/browser/... -run \"Identity|FingerprintHealth|ProxyIPMonitor\" -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O12-asymmetric-gate",
+      "docIds": ["P06-010", "P25-007", "X-COR-005"],
+      "tier": "T0",
+      "name": "AsymmetricShouldExecute + 跨信号",
+      "dimensions": ["asymmetric_cost", "state_monitoring", "cross_signal_correlation", "platform_auth_api"],
+      "runner": "go_test",
+      "command": "go test ./backend/... -run TestAsymmetricShouldExecute -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O13-scrape-plans",
+      "docIds": ["P21-007", "P08-011"],
+      "tier": "T0",
+      "name": "抓取 plan primitive 校验",
+      "dimensions": ["platform_scrape", "data_collection_pipeline", "platform_xhs"],
+      "runner": "go_test",
+      "command": "go test ./backend/... -run \"Test.*ScrapePlan\" -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-O14-proxy-telemetry",
+      "docIds": ["P23-015", "P23-001"],
+      "tier": "T0",
+      "name": "IP 监控 + 代理解析单测",
+      "dimensions": ["ip_stability_telemetry", "network_stealth"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/browser/... -run ProxyIPMonitor -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-B01-detection-auto-score",
+      "docIds": ["P03-005"],
+      "tier": "T1",
+      "name": "检测自动评分逻辑",
+      "dimensions": ["fingerprint", "network_stealth"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/detection/... -run Detection -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-B02-trust-harvest",
+      "docIds": ["P10-003"],
+      "tier": "T1",
+      "name": "Trust/Cookie/MSAL harvest 解析",
+      "dimensions": ["asymmetric_cost", "platform_auth_api"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/trust/... -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-B03-entropy-cadence",
+      "docIds": ["P05-003"],
+      "tier": "T1",
+      "name": "Shannon 熵 + 账号 cadence 校验",
+      "dimensions": ["account_cadence", "behavior_humanize"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/asymmetric/... ./backend/internal/behavior/lifecycle/... -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-B04-recording-analyze",
+      "docIds": ["P21-006", "P04-008"],
+      "tier": "T1",
+      "name": "行为录制 analyze/diff/merge",
+      "dimensions": ["cdp_capture", "data_collection_pipeline", "behavior_humanize"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/behavior/... -run Recording -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-C01-detector-sites-proxy",
+      "docIds": ["P03-001", "P23-015"],
+      "tier": "T2",
+      "name": "IP 遥测单测（T2 层）",
+      "dimensions": ["network_stealth", "fingerprint", "ip_stability_telemetry"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/proxy/... ./backend/internal/browser/... -run \"ProxyIP|Sticky\" -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-C02-observability-t2",
+      "docIds": ["P21-003", "P22-007", "P24-003", "P25-001", "P23-015"],
+      "tier": "T2",
+      "name": "可观测 T2  sweep（core RPC + 代理出口）",
+      "dimensions": ["data_collection_pipeline", "state_monitoring", "fingerprint_portrait", "event_taxonomy_monitoring", "ip_stability_telemetry", "cross_signal_correlation"],
+      "runner": "powershell",
+      "command": "scripts/capability_observability_t2.ps1 -SpawnCore",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-C03-headed-stability",
+      "docIds": ["P12-003"],
+      "tier": "T2",
+      "name": "指纹连续 + Identity 单测（T2 层）",
+      "dimensions": ["fingerprint_data_continuity", "behavior_humanize"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/browser/... -run \"Identity|FingerprintHealth\" -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-C04-profile-browser-comparison",
+      "docIds": ["P22-016", "P21-015"],
+      "tier": "T2",
+      "name": "Desktop vs profile browser comparison",
+      "dimensions": ["fingerprint_portrait", "data_collection_pipeline"],
+      "runner": "powershell",
+      "command": "scripts/profile_browser_comparison_gate.ps1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-C05-session-handoff",
+      "docIds": ["P13-011", "P22-013"],
+      "tier": "T2",
+      "name": "Session 便携 + 指纹连续（T2 层）",
+      "dimensions": ["fingerprint_data_continuity", "session_portability", "behavior_humanize"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/session/... -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-C06-collection-smoke",
+      "docIds": ["P21-002", "P21-003"],
+      "tier": "T2",
+      "name": "采集管线单测（T2 层）",
+      "dimensions": ["data_collection_pipeline", "cdp_capture"],
+      "runner": "go_test",
+      "command": "go test ./backend/internal/behavior/... -run Recording -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-D01-generic-multi-scrape",
+      "docIds": ["P21-007", "P21-009", "S-F01"],
+      "tier": "T3",
+      "name": "多页抓取 plan 校验",
+      "dimensions": ["platform_scrape", "data_collection_pipeline"],
+      "runner": "go_test",
+      "command": "go test ./backend/... -run TestMultiPageScrapePlan -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-D02-xhs-feed-scrape",
+      "docIds": ["P08-011", "P21-007"],
+      "tier": "T3",
+      "name": "小红书 Feed plan 校验",
+      "dimensions": ["platform_xhs", "platform_scrape", "data_collection_pipeline"],
+      "runner": "go_test",
+      "command": "go test ./backend/... -run TestXHSFeedScrapePlan -count=1",
+      "pass": { "exitCode": 0 }
+    },
+    {
+      "id": "S-D03-asymmetric-should-execute",
+      "docIds": ["P06-010", "P25-007"],
+      "tier": "T3",
+      "name": "AsymmetricShouldExecute 运行态",
+      "dimensions": ["asymmetric_cost", "state_monitoring"],
+      "runner": "core_rpc",
+      "rpc": "AsymmetricShouldExecute",
+      "rpcArgs": ["{profileId}"],
+      "requires": { "profileId": true, "spawnCore": true },
+      "pass": { "rpcField": "allowed" }
+    },
+    {
+      "id": "S-D04-eventlog-export",
+      "docIds": ["P24-005"],
+      "tier": "T3",
+      "name": "EventLogExport JSON",
+      "dimensions": ["event_taxonomy_monitoring"],
+      "runner": "core_rpc",
+      "rpc": "EventLogExport",
+      "rpcArgs": [{ "namespace": "browser", "limit": 10 }],
+      "requires": { "spawnCore": true },
+      "pass": { "outputMinLength": 2 }
+    }
+  ]
+}

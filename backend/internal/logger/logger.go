@@ -404,13 +404,13 @@ func (l *Logger) Error(msg string, fields ...Field) {
 // log 内部日志记录方法
 func (l *Logger) log(level Level, msg string, fields ...Field) {
 	// 创建日志条目
-	entry := NewLogEntry(level, l.component, msg)
+	entry := NewLogEntry(level, l.component, RedactText(msg))
 
 	// 添加字段
 	if len(fields) > 0 {
 		fieldMap := make(map[string]interface{}, len(fields))
 		for _, field := range fields {
-			fieldMap[field.Key] = field.Value
+			fieldMap[field.Key] = RedactValueForKey(field.Key, field.Value)
 		}
 		entry.WithFields(fieldMap)
 	}
@@ -421,6 +421,11 @@ func (l *Logger) log(level Level, msg string, fields ...Field) {
 
 // writeEntry 写入日志条目到所有写入器
 func (l *Logger) writeEntry(entry *LogEntry) {
+	entry = RedactLogEntry(entry)
+	if entry == nil {
+		return
+	}
+
 	l.mu.RLock()
 	writers := l.writers
 	fileWriter := l.fileWriter

@@ -1,0 +1,289 @@
+{
+  "project": "PersonaPilot",
+  "loop_enabled": false,
+  "loop_iteration": 49,
+  "stage": "summarize",
+  "bug_cycle_interval": 3,
+  "completed_since_bug_cycle": 4,
+  "consecutive_failures": 0,
+  "current_focus": "local self-use closed; provider credential smoke pending",
+  "current_objective": "本机自用能力已闭环，只保留 CAPTCHA/SMS/Email 服务商真实账号凭证 smoke 为未验项",
+  "last_result_summary": "最终本机 gate 已复跑：observed fingerprint passed_full_observed_fingerprint_coverage、replay 461/450 contractOnly=0、M10 stability、M15 process/pool、本机 TLS、runtime adapter local self-use、M4 passed_with_expected_external_blockers passed=25 expectedBlocked=1 failed=0；release performance、外部分发、第二机、AdsPower 和远程代理账号均取消为当前目标。",
+  "next_action_hint": "等待用户提供 CAPTCHA/SMS/Email 真实账号、余额、API key 和允许消耗额度的测试目标后再跑 credential-backed smoke",
+  "next_suggestions": [
+    {
+      "title": "Run provider credential smoke",
+      "priority": 1,
+      "rationale": "当前唯一未验项是 CAPTCHA/SMS/Email 真实账号凭证 smoke",
+      "kind": "verify"
+    },
+    {
+      "title": "Keep local gates green",
+      "priority": 2,
+      "rationale": "代码改动后复跑 observed/replay/M10/M15/runtime/M4 gates 防止口径回退",
+      "kind": "verify"
+    },
+    {
+      "title": "Do not reopen cancelled scope",
+      "priority": 3,
+      "rationale": "release performance、外部分发、第二机、AdsPower 和远程代理账号不是当前本机目标",
+      "kind": "docs"
+    }
+  ],
+  "last_executed_actions": [
+    {
+      "title": "Multi-Agent Mainline Closeout",
+      "kind": "build",
+      "status": "success",
+      "note": "4 worktree × (impl + review) + fixes + merge. 3 P0 items closed."
+    },
+    {
+      "title": "Release gate evidence",
+      "kind": "verify",
+      "status": "success",
+      "note": "windows_local_verify -SkipContinuityTest passed: typecheck, build, Win11 baseline, Rust tests, Tauri release."
+    },
+    {
+      "title": "Validation Board MVP",
+      "kind": "feature",
+      "status": "success",
+      "note": "Validation route/page/model landed with declared/applied/observed evidence split and Playwright viewport checks."
+    },
+    {
+      "title": "Validation observed collectors v1",
+      "kind": "feature",
+      "status": "success",
+      "note": "DNS/transport observed collectors and local JSON report persistence landed through Tauri desktop service."
+    },
+    {
+      "title": "Validation report history/export",
+      "kind": "feature",
+      "status": "success",
+      "note": "Local validation report list and profile-level evidence export landed through Tauri desktop service."
+    },
+    {
+      "title": "Validation WebRTC/leak contract signals",
+      "kind": "feature",
+      "status": "success",
+      "note": "Validation reports now include WebRTC/leak warning signals without overstating browser-scoped probe closure."
+    },
+    {
+      "title": "Validation desktop WebView observed probes",
+      "kind": "feature",
+      "status": "success",
+      "note": "Collect evidence now records desktop WebView scoped WebRTC/canvas/audio/storage signals while preserving target-profile-browser=false scope."
+    },
+    {
+      "title": "Validation profile runtime probe action",
+      "kind": "feature",
+      "status": "success",
+      "note": "Runner validation_probe action now returns profile browser runtime scoped WebRTC/canvas/audio/storage signals through Lightpanda/CDP, with FakeRunner warning stub."
+    },
+    {
+      "title": "Fingerprint runtime projection depth",
+      "kind": "feature",
+      "status": "success",
+      "note": "Lightpanda runtime projection expanded from 12 to 26 env-backed fields while preserving 25 control-supported + derived platform accounting."
+    },
+    {
+      "title": "SessionBundle export contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "Profile-scoped SessionBundle JSON export writes to local export queue, defaults to redacted evidence counts, and can explicitly include local sensitive payloads."
+    },
+    {
+      "title": "SessionBundle import preflight and restore contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "Import preflight checks schema/reference/conflict state and restore returns a non-destructive contract with writePerformed=false."
+    },
+    {
+      "title": "Provider production readiness contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "CAPTCHA/SMS/Email readiness now reports credential, manager wiring, CDP automation, operator UI blockers without claiming production closure."
+    },
+    {
+      "title": "Runtime adapter and release smoke contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "Release smoke API now reports adapter boundaries, installer presence, Win11 baseline status, and performance target contracts without claiming real headed runtime closure."
+    },
+    {
+      "title": "P4 truth-source cleanup",
+      "kind": "docs",
+      "status": "success",
+      "note": "Root README, RUN_STATE, final progress breakdown, and phase scorecard now report 26 projected fields, landed validation/session contracts, and remaining real-smoke gaps without overstating closure."
+    },
+    {
+      "title": "P5 Lightpanda/CDP validation smoke gate",
+      "kind": "verify",
+      "status": "success",
+      "note": "WSL2 Lightpanda 1.0.0-nightly.6394+93d2e968 produced a repeatable status=passed profile-browser runtime evidence report through validation_lightpanda_smoke --use-wsl-lightpanda."
+    },
+    {
+      "title": "P6 validation evidence schema convergence",
+      "kind": "feature",
+      "status": "success",
+      "note": "Validation signals now expose collectorScope, runtimeAdapter, targetProfileBrowser, and failureReason while preserving backward compatibility with legacy detail strings."
+    },
+    {
+      "title": "P7 fingerprint observed coverage audit",
+      "kind": "feature",
+      "status": "success",
+      "note": "Validation Board now summarizes fingerprint observed proof from real WebRTC/canvas/audio/leak report signals without counting declared controls or runtime projections as observed evidence."
+    },
+    {
+      "title": "P8 SessionBundle confirmed restore path",
+      "kind": "feature",
+      "status": "success",
+      "note": "SessionBundle restore now supports preflight, dry-run, and confirmed local DB restore for target profiles and proxy_session_bindings, with a regression test covering write behavior."
+    },
+    {
+      "title": "P9 provider production readiness operator closure",
+      "kind": "feature",
+      "status": "success",
+      "note": "CAPTCHA/SMS/Email readiness now exposes acceptance checklists and Settings operator visibility while preserving real provider smoke as blocked without credentials and wiring evidence."
+    },
+    {
+      "title": "P10 behavior taxonomy and workflow audit",
+      "kind": "feature",
+      "status": "success",
+      "note": "Automation now exposes a behavior audit contract for shipped primitives, page archetypes, workflow/debug/manual-gate/recovery coverage, and target-only 450+ taxonomy boundaries."
+    },
+    {
+      "title": "P11 runtime adapter and release measurement contract",
+      "kind": "feature",
+      "status": "success",
+      "note": "Release smoke contract now separates performance targets from pending measurements and exposes adapter boundary in Overview without claiming headed runtime implementation or browser fork hosting."
+    },
+    {
+      "title": "P12 AdsPower boundary refresh guard",
+      "kind": "docs",
+      "status": "success",
+      "note": "Historical: AdsPower score refresh was once deferred by B1-B5 evidence. Current local-only scope cancels AdsPower refresh as a goal."
+    },
+    {
+      "title": "P13 external distribution readiness",
+      "kind": "docs",
+      "status": "success",
+      "note": "External distribution readiness now has a canonical Chinese doc covering known limitations, manual operator smoke, and release-note boundaries before any external handoff."
+    },
+    {
+      "title": "P14 overall 40/60 evidence infrastructure",
+      "kind": "feature",
+      "status": "success",
+      "note": "Release/provider/session/taxonomy evidence entrypoints and 450 taxonomy seeds move Overall to 40/60/yellow without claiming real provider closure, cross-machine portability, full observed fingerprint coverage, or full replay runtime."
+    },
+    {
+      "title": "P15 prioritized remaining-work gates",
+      "kind": "planning",
+      "status": "success",
+      "note": "First five priority items now have corrected live-truth docs, mitigation/runbook gates, stricter provider/session scripts, evidence-backed taxonomy family seeds, and a remaining-work register."
+    },
+    {
+      "title": "P16 batch 1 evidence history surface",
+      "kind": "feature",
+      "status": "success",
+      "note": "Overview can now load local smoke/audit evidence report history for release, provider, portability, taxonomy, and distribution reports through the desktop service boundary."
+    },
+    {
+      "title": "P17 batch 2 fingerprint observed coverage",
+      "kind": "feature",
+      "status": "success",
+      "note": "Desktop WebView validation probes now collect timezone/locale, hardware/OS, screen/display, navigator hints, and permissions/media-device capability signals without claiming profile-browser proof."
+    },
+    {
+      "title": "P18 batch 3 behavior replay semantics",
+      "kind": "feature",
+      "status": "success",
+      "note": "The first five behavior taxonomy families now define replay semantics, audit payloads, failure states, and recovery behavior, while full 450 replay runtime remains pending."
+    },
+    {
+      "title": "P19 batch 4 provider closure gates",
+      "kind": "feature",
+      "status": "success",
+      "note": "Provider production readiness now exposes closure gates, separate CDP detect/fill statuses, real smoke status, failure reason, and latest acceptance report path without claiming real provider acceptance."
+    },
+    {
+      "title": "P20 batch 5 external condition gates",
+      "kind": "feature",
+      "status": "success",
+      "note": "External distribution and SessionBundle portability smokes now produce explicit external gate results and failure reasons without claiming manual or cross-machine acceptance."
+    },
+    {
+      "title": "P21 batch 6 runtime adapter evidence gate",
+      "kind": "feature",
+      "status": "success",
+      "note": "Runtime adapter evidence gate now reports Fake/Lightpanda/headed capabilities and local self-use proof; AdsPower refresh is not applicable in current local-only scope."
+    },
+    {
+      "title": "P22 release measurement ingestion",
+      "note": "Release smoke contract now reads latest release-smoke report values instead of always showing pending.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P23 portability report viewer",
+      "note": "Settings Import/Export surface now shows latest SessionBundle portability report summary, failure reason, and path.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P24 fingerprint WebGL/font probes",
+      "note": "Desktop WebView validation signals now include WebGL renderer and font/text metrics observed probes without claiming profile-browser proof.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P25 fingerprint taxonomy metadata",
+      "note": "Fingerprint taxonomy families now include collector/layer/adapter/failure/repeatability/evidence schema metadata and audit counters.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P26 behavior taxonomy semantics",
+      "note": "All behavior taxonomy families now define replay semantics, audit payload, failure states, and recovery behavior while full replay runtime remains pending.",
+      "status": "success",
+      "kind": "feature"
+    },
+    {
+      "title": "P27 live-truth guard",
+      "note": "live_truth_guard script prevents historical ratios and taxonomy target claims from becoming live truth.",
+      "status": "success",
+      "kind": "verify"
+    },
+    {
+      "status": "success",
+      "title": "P28 release performance smoke mitigation",
+      "note": "Release smoke now polls readiness, can clean existing instances, and records process breakdown.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P29 fingerprint observed audit expansion",
+      "note": "Fingerprint audit now counts fingerprint category signals such as WebGL and font/text metrics.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P30 behavior graph contract",
+      "note": "Behavior audit now exposes workflow graph nodes/edges and replay evidence statuses.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P31 provider manager gate",
+      "note": "Provider manager/CDP contract gate added without real provider calls.",
+      "kind": "feature"
+    },
+    {
+      "status": "success",
+      "title": "P32 profile browser comparison gate",
+      "note": "Comparison gate reports whether desktop WebView and profile-browser evidence are both present.",
+      "kind": "feature"
+    }
+  ],
+  "blocked_reason": "",
+  "cooldown_seconds": 30
+}
