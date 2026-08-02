@@ -94,10 +94,11 @@ type App struct {
 	recMu               sync.Mutex
 	playMu              sync.Mutex
 
-	lifecycleStore *lifecycle.Store
-	proxyIPMonitor *browser.ProxyIPMonitor
-	stickySessions *proxy.StickySessionTracker
-	verifyStreaks  map[string]*proxy.VerifyV2Streak
+	lifecycleStore  *lifecycle.Store
+	proxyIPMonitor  *browser.ProxyIPMonitor
+	stickySessions  *proxy.StickySessionTracker
+	verifyStreaksMu sync.RWMutex
+	verifyStreaks   map[string]*proxy.VerifyV2Streak
 }
 
 // NewApp 创建新的应用实例

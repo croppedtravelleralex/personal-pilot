@@ -220,13 +220,16 @@ foreach ($family in @($taxonomy.families)) {
   $successCount = @($familySignals | Where-Object { $_.status -eq "succeeded" }).Count
   $warningCount = @($familySignals | Where-Object { $_.status -eq "warning" }).Count
   $failedCount = @($familySignals | Where-Object { $_.status -eq "failed" }).Count
+  # Coverage counts only signals that actually backed their claim (succeeded/warning).
+  # A failed observation must not inflate coverage toward the target.
+  $effectiveCount = $successCount + $warningCount
   $adapters = @($familySignals | ForEach-Object { $_.runtimeAdapter } | Sort-Object -Unique)
   $scopes = @($familySignals | ForEach-Object { $_.collectorScope } | Sort-Object -Unique)
   $profileBrowserObserved = @($familySignals | Where-Object { $_.targetProfileBrowser -eq $true }).Count -gt 0
   $familyCoverage += [ordered]@{
     familyId = $familyId
     targetCount = $targetCount
-    observedSignalCount = $familySignals.Count
+    observedSignalCount = $effectiveCount
     successCount = $successCount
     warningCount = $warningCount
     failedCount = $failedCount
@@ -234,17 +237,21 @@ foreach ($family in @($taxonomy.families)) {
     desktopWebViewObserved = @($familySignals | Where-Object { $_.collectorScope -match "desktop" }).Count -gt 0
     runtimeAdapters = $adapters
     collectorScopes = $scopes
-    coverageRatio = if ($targetCount -gt 0) { [math]::Round($familySignals.Count / $targetCount, 4) } else { 0 }
-    status = if ($familySignals.Count -ge $targetCount) { "covered" } elseif ($familySignals.Count -gt 0) { "partial" } else { "missing" }
+    coverageRatio = if ($targetCount -gt 0) { [math]::Round($effectiveCount / $targetCount, 4) } else { 0 }
+    status = if ($effectiveCount -ge $targetCount) { "covered" } elseif ($effectiveCount -gt 0) { "partial" } else { "missing" }
   }
 }
 
 $targetTotal = [int]$taxonomy.targetSignalCount
 $familyTargetTotal = 0
 foreach ($family in @($taxonomy.families)) { $familyTargetTotal += [int]$family.targetCount }
-$fullCoverage = $observedSignals.Count -ge $targetTotal -and @($familyCoverage | Where-Object { $_.status -ne "covered" }).Count -eq 0
+# Full coverage now requires every family to actually meet its target AND no failed observations anywhere.
+$anyFailed = @($observedSignals | Where-Object { $_.status -eq "failed" }).Count -gt 0
+$fullCoverage = -not $anyFailed -and $observedSignals.Count -ge $targetTotal -and @($familyCoverage | Where-Object { $_.status -ne "covered" }).Count -eq 0
 $status = if ($observedSignals.Count -eq 0) {
   "blocked_missing_observed_fingerprint_reports"
+} elseif ($anyFailed) {
+  "failed_observed_fingerprint_coverage"
 } elseif ($fullCoverage) {
   "passed_full_observed_fingerprint_coverage"
 } else {
@@ -262,6 +269,8 @@ $failureReason = if ($status -eq "passed_full_observed_fingerprint_coverage") {
   ""
 } elseif ($status -eq "blocked_missing_observed_fingerprint_reports") {
   "no validation report contained layer=observed signals with complete collector metadata"
+} elseif ($status -eq "failed_observed_fingerprint_coverage") {
+  "one or more observed fingerprint signals reported status=failed; failures must not count toward coverage"
 } else {
   "observed signal coverage is partial; taxonomy/materialized contracts were intentionally excluded"
 }
@@ -270,8 +279,10 @@ $nextAction = if ($status -eq "passed_full_observed_fingerprint_coverage") {
   "Keep this full observed coverage report attached and rerun after changing validation collectors."
 } elseif ($status -eq "blocked_missing_observed_fingerprint_reports") {
   "Run a real profile-browser validation probe that emits layer=observed signals with collectorScope/runtimeAdapter/targetProfileBrowser/failureReason metadata."
+} elseif ($status -eq "failed_observed_fingerprint_coverage") {
+  "Track down the observed signals that reported status=failed and fix the collectors; failed observations do not satisfy coverage."
 } else {
-  "Expand real collectors until every fingerprint taxonomy family reaches its target count with layer=observed metadata; do not count taxonomy seeds or materialized contracts."
+  "Expand real collectors until every fingerprint taxonomy family reaches its target count with observed metadata; do not count taxonomy seeds or materialized contracts."
 }
 
 $report = [ordered]@{
@@ -320,4 +331,6 @@ Write-Host "Observed signals: $($observedSignals.Count) / $targetTotal"
 if ($failureReason) { Write-Host "Failure reason: $failureReason" }
 
 if ($status -eq "blocked_missing_observed_fingerprint_reports") { exit 2 }
+if ($status -eq "failed_observed_fingerprint_coverage") { exit 2 }
+if ($status -ne "passed_full_observed_fingerprint_coverage") { exit 1 }
 exit 0
