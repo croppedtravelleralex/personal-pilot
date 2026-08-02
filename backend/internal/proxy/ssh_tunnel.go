@@ -38,9 +38,15 @@ func ParseSSHTunnelDirective(proxyConfig string) (SSHTunnelDirective, bool, erro
 	if strings.TrimSpace(src) == "" {
 		return SSHTunnelDirective{}, false, nil
 	}
+	// Clash YAML / multi-line node blobs are not proxy URLs. Treat them as
+	// "no SSH directive" instead of failing url.Parse on control characters.
+	if strings.ContainsAny(src, "\r\n") || strings.Contains(src, "type:") || strings.HasPrefix(strings.TrimSpace(src), "- ") {
+		return SSHTunnelDirective{}, false, nil
+	}
 	u, err := url.Parse(src)
 	if err != nil {
-		return SSHTunnelDirective{}, false, err
+		// Non-URL proxy configs (vmess://, raw host:port, etc.) are not SSH directives.
+		return SSHTunnelDirective{}, false, nil
 	}
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" && scheme != "socks5" {

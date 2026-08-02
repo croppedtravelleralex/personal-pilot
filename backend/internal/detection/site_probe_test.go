@@ -6,15 +6,54 @@ import (
 	"testing"
 )
 
+func TestParseCreepJSProbePayloadStructuredTrustScore(t *testing.T) {
+	trust := 92.5
+	raw, err := json.Marshal(map[string]interface{}{
+		"webdriver":      false,
+		"bodySnippet":    "Trust Score 92.5\nGrade: A\nFP ID: abcdef123456\nplatform lie\n",
+		"trustScore":     trust,
+		"grade":          "A",
+		"fingerprintId":  "abcdef123456",
+		"lies":           1,
+		"lieLines":       []string{"platform lie"},
+		"headlessHints":  []string{},
+		"workerMismatch": false,
+		"structured":     true,
+		"computing":      false,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := ParseCreepJSProbePayload(raw)
+	if !got.ParseOK {
+		t.Fatalf("ParseOK=false msg=%q", got.Message)
+	}
+	if got.Source != "structured" {
+		t.Fatalf("Source=%q want structured", got.Source)
+	}
+	if got.TrustScore != 92.5 {
+		t.Fatalf("TrustScore=%v", got.TrustScore)
+	}
+	if got.Grade != "A" {
+		t.Fatalf("Grade=%q", got.Grade)
+	}
+	if got.FingerprintID != "abcdef123456" {
+		t.Fatalf("FingerprintID=%q", got.FingerprintID)
+	}
+	if got.LiesDetected != 1 || len(got.Lies) == 0 {
+		t.Fatalf("lies=%d lines=%v", got.LiesDetected, got.Lies)
+	}
+}
+
 func TestParseCreepJSProbePayloadParsedTrustScoreWithLies(t *testing.T) {
 	body := "Fingerprint\nTrust Score: 65.5\nLies detected: 2\nplatform lie detected\n"
 	raw, err := json.Marshal(map[string]interface{}{
-		"webdriver":       false,
-		"bodySnippet":     body,
-		"lies":            2,
-		"lieLines":        []string{"platform lie detected"},
-		"headlessHints":   []string{},
-		"workerMismatch":  false,
+		"webdriver":      false,
+		"bodySnippet":    body,
+		"lies":           2,
+		"lieLines":       []string{"platform lie detected"},
+		"headlessHints":  []string{},
+		"workerMismatch": false,
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
@@ -61,8 +100,9 @@ func TestParseCreepJSProbePayloadHeuristicFallback(t *testing.T) {
 	if !got.ParseOK {
 		t.Fatalf("ParseOK = false")
 	}
-	if got.TrustScore != 51 {
-		t.Fatalf("TrustScore = %v, want 51", got.TrustScore)
+	// 100 - 40(webdriver) - 9(lies*3) - 8(headless) = 43
+	if got.TrustScore != 43 {
+		t.Fatalf("TrustScore = %v, want 43", got.TrustScore)
 	}
 	if got.WorkerConsistent == nil || *got.WorkerConsistent {
 		t.Fatalf("WorkerConsistent = %v, want false", got.WorkerConsistent)
@@ -74,7 +114,7 @@ func TestParseCreepJSProbePayloadHeuristicFallback(t *testing.T) {
 
 func TestCreepJSProbeJSIncludesStructuredFields(t *testing.T) {
 	js := CreepJSProbeJS()
-	for _, needle := range []string{"lieLines", "headlessHints", "workerMismatch"} {
+	for _, needle := range []string{"lieLines", "headlessHints", "workerMismatch", "trustScore", "structured", "fingerprintId", "grade"} {
 		if !strings.Contains(js, needle) {
 			t.Fatalf("probe JS missing %q", needle)
 		}

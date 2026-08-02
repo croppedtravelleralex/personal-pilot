@@ -69,3 +69,47 @@ func TestIPBudgetHeadroom(t *testing.T) {
 		t.Fatal("5 visits should exhaust cap")
 	}
 }
+
+func TestStealthMatrix99PlusWithoutResidentialWhenTrustFull(t *testing.T) {
+	// Local self-use can still reach S+ without residential if DNS policy is consistent
+	// and trust/session inheritance is complete.
+	matrix := EvaluateStealthMatrix(StealthMatrixInput{
+		WebRTCClean: true, DNSConsistent: true, DNSObserved: true,
+		ResidentialProxy: false, VerifyV2Passed: true, IPBudgetHeadroom: true,
+		Runtime80of80: true, GeoLocaleMatch: true, WebdriverHidden: true,
+		CreepJSTrust: 100, DetectionScore: 90,
+		EntropyHumanLike: true, CadenceScore: 90, BioNoiseActive: true,
+		TrustBundleValid: true, GraphTokenFresh: true, CookiesInjected: true, APIFirstReady: true,
+		InHumanWindow: true, AccountSuccess: 90, ChallengeRatePct: 0,
+	})
+	if matrix.TotalScore < 99 {
+		t.Fatalf("expected >=99 without residential when trust full, got %.1f dims=%+v gaps=%v", matrix.TotalScore, matrix.Dimensions, matrix.Gaps)
+	}
+	if matrix.DisplayGrade != "S+" {
+		t.Fatalf("expected S+ got %s score=%.1f", matrix.DisplayGrade, matrix.TotalScore)
+	}
+}
+
+func TestNetworkDNSInconclusiveIsNeutral(t *testing.T) {
+	withClean := EvaluateStealthMatrix(StealthMatrixInput{
+		WebRTCClean: true, DNSConsistent: false, DNSObserved: false, DNSLeakSuspect: false,
+		ResidentialProxy: false, VerifyV2Passed: true, IPBudgetHeadroom: true,
+	})
+	withSuspect := EvaluateStealthMatrix(StealthMatrixInput{
+		WebRTCClean: true, DNSConsistent: false, DNSObserved: true, DNSLeakSuspect: true,
+		ResidentialProxy: false, VerifyV2Passed: true, IPBudgetHeadroom: true,
+	})
+	// Inconclusive DNS should not be worse than a clean-but-unknown baseline by DNS alone.
+	// Suspect DNS should not score higher than inconclusive.
+	if withSuspect.TotalScore > withClean.TotalScore {
+		t.Fatalf("suspect DNS scored higher (%.1f) than inconclusive (%.1f)", withSuspect.TotalScore, withClean.TotalScore)
+	}
+	// Explicit consistent observation should raise score.
+	withConsistent := EvaluateStealthMatrix(StealthMatrixInput{
+		WebRTCClean: true, DNSConsistent: true, DNSObserved: true, DNSLeakSuspect: false,
+		ResidentialProxy: false, VerifyV2Passed: true, IPBudgetHeadroom: true,
+	})
+	if withConsistent.TotalScore <= withClean.TotalScore {
+		t.Fatalf("consistent DNS should raise score: clean=%.1f consistent=%.1f", withClean.TotalScore, withConsistent.TotalScore)
+	}
+}

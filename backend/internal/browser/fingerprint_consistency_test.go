@@ -266,3 +266,72 @@ func TestParseCoherenceEnforceMode(t *testing.T) {
 		t.Fatal("expected default warn")
 	}
 }
+
+func TestCheckProxyVsExitRegion_MatchAndMismatch(t *testing.T) {
+	match := AssessFingerprintConsistency(&FingerprintConsistencyInput{
+		ProxyRegion: "JP",
+		ExitRegion:  "Japan",
+	})
+	for _, ch := range match.CheckItems {
+		if ch.Dimension == "proxy_vs_exit_region" {
+			if !ch.Passed {
+				t.Fatalf("expected proxy/exit match, detail=%s", ch.Detail)
+			}
+		}
+	}
+
+	mismatch := AssessFingerprintConsistency(&FingerprintConsistencyInput{
+		ProxyRegion: "US",
+		ExitRegion:  "JP",
+	})
+	foundFail := false
+	for _, ch := range mismatch.CheckItems {
+		if ch.Dimension == "proxy_vs_exit_region" && !ch.Passed {
+			foundFail = true
+		}
+	}
+	if !foundFail {
+		t.Fatal("expected proxy_vs_exit_region hard mismatch")
+	}
+	if mismatch.HardFailures == 0 {
+		t.Fatal("expected hard failure count > 0")
+	}
+}
+
+func TestCheckProxyVsExitRegion_SkipWhenMissing(t *testing.T) {
+	result := AssessFingerprintConsistency(&FingerprintConsistencyInput{
+		ProxyRegion: "US",
+	})
+	for _, ch := range result.CheckItems {
+		if ch.Dimension == "proxy_vs_exit_region" {
+			if !ch.Passed {
+				t.Fatalf("missing exit should skip, detail=%s", ch.Detail)
+			}
+			if ch.Detail == "" || ch.Detail == "deferred (requires IP geolocation)" {
+				t.Fatalf("unexpected deferred placeholder detail: %q", ch.Detail)
+			}
+		}
+	}
+}
+
+func TestInferRegionFromProxyMeta(t *testing.T) {
+	if got := InferRegionFromProxyMeta("clash-jp-01", "airport"); got != "JP" {
+		t.Fatalf("got %q want JP", got)
+	}
+	if got := InferRegionFromProxyMeta("住宅节点", "美国"); got != "US" {
+		t.Fatalf("got %q want US", got)
+	}
+	if got := InferRegionFromProxyMeta("node", "misc"); got != "" {
+		t.Fatalf("got %q want empty", got)
+	}
+}
+
+func TestNormalizeRegionCode(t *testing.T) {
+	if got := NormalizeRegionCode("Japan"); got != "JP" {
+		t.Fatalf("got %q", got)
+	}
+	if got := NormalizeRegionCode("us"); got != "US" {
+		t.Fatalf("got %q", got)
+	}
+}
+

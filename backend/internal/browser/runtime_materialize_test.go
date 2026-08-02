@@ -21,6 +21,18 @@ func TestMaterializeRuntimeArgsDropsIneffectiveFingerprintFlags(t *testing.T) {
 	if !strings.Contains(joined, "--fingerprint=seed123") {
 		t.Fatalf("effective fingerprint flag missing:\n%s", joined)
 	}
+	// --fingerprint-device-memory is seed-ineffective for Chromium flags and is
+	// dropped by DropIneffectiveFingerprintFlags; deviceMemory is applied via JS injection.
+}
+
+func TestFullRuntimeProjectionReportDirectModeIs80(t *testing.T) {
+	report := FullRuntimeProjectionReport(&Profile{
+		ProfileId:    "direct-demo",
+		HumanizeSeed: "seed-direct",
+	}, nil, nil)
+	if report.AppliedCount != 80 {
+		t.Fatalf("applied=%d missing=%v", report.AppliedCount, report.MissingControls)
+	}
 }
 
 func TestMaterializeRuntimeArgsFullCoverage(t *testing.T) {

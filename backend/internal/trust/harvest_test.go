@@ -34,4 +34,15 @@ func TestBundleHasValidTrust(t *testing.T) {
 	if !b2.HasValidTrust(time.Now()) {
 		t.Fatal("session cookies should be valid trust")
 	}
+	b3 := Bundle{
+		Provider:     ProviderLocalSession,
+		LocalStorage: map[string]string{"pp.session.continuity": "p1"},
+		CookiesJSON:  `[{"name":"pp_local_session","value":"p1","domain":"localhost"}]`,
+	}
+	if !b3.HasValidTrust(time.Now()) {
+		t.Fatal("local session continuity should be valid trust")
+	}
+	if !b3.HasLocalContinuity() {
+		t.Fatal("expected HasLocalContinuity")
+	}
 }

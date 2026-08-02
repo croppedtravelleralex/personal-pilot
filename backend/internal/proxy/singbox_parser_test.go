@@ -181,3 +181,44 @@ func TestParseSSHTunnelDirectiveRejectsUnsafeTarget(t *testing.T) {
 		t.Fatalf("expected unsafe SSH target to be rejected")
 	}
 }
+
+func TestParseSSHTunnelDirectiveIgnoresClashYAML(t *testing.T) {
+	yamlNode := "- name: 'tw-node'\n  type: anytls\n  server: example.com\n  port: 11881\n  password: secret\n  sni: example.com\n  skip-cert-verify: true"
+	directive, ok, err := ParseSSHTunnelDirective(yamlNode)
+	if err != nil {
+		t.Fatalf("ParseSSHTunnelDirective returned error for YAML: %v", err)
+	}
+	if ok {
+		t.Fatalf("ok = true for YAML node, want false; directive=%+v", directive)
+	}
+}
+
+func TestBuildSingBoxOutboundAnytlsClashYAML(t *testing.T) {
+	yamlNode := "- name: 'tw-node'\n  type: anytls\n  server: ttt627.ly123.edu.kg\n  port: 11881\n  password: 9516f0c6-6408-45a6-b899-23406a379128\n  udp: true\n  sni: ttt627.ly123.edu.kg\n  skip-cert-verify: true"
+	out, err := BuildSingBoxOutbound(yamlNode)
+	if err != nil {
+		t.Fatalf("BuildSingBoxOutbound returned error: %v", err)
+	}
+	if out["type"] != "anytls" {
+		t.Fatalf("type = %v, want anytls", out["type"])
+	}
+	if out["server"] != "ttt627.ly123.edu.kg" {
+		t.Fatalf("server = %v", out["server"])
+	}
+	if out["server_port"] != 11881 {
+		t.Fatalf("server_port = %v, want 11881", out["server_port"])
+	}
+	if out["password"] != "9516f0c6-6408-45a6-b899-23406a379128" {
+		t.Fatalf("password missing/unexpected")
+	}
+}
+
+func TestIsSingBoxProtocolAnytlsYAML(t *testing.T) {
+	yamlNode := "type: anytls\nserver: example.com\nport: 443\npassword: x"
+	if !IsSingBoxProtocol(yamlNode) {
+		t.Fatal("IsSingBoxProtocol should accept Clash anytls YAML")
+	}
+	if HasSSHTunnelDirective(yamlNode) {
+		t.Fatal("HasSSHTunnelDirective should be false for Clash YAML")
+	}
+}

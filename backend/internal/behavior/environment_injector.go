@@ -364,19 +364,85 @@ func CompileEnvironmentInjectionScript(profile EnvironmentInjectionProfile) (Env
       });
     }
 
-    // docs/51 S9 — userAgentData high-entropy brands from profile.
-    if (nav && nav.userAgentData && nav.userAgentData.getHighEntropyValues) {
-      replaceMethod(nav.userAgentData, 'getHighEntropyValues', (originalGetHighEntropyValues) => async function getHighEntropyValues(hints) {
-        const values = await originalGetHighEntropyValues.call(this, hints);
-        if (!profile.brandVersion) return values;
-        const version = String(profile.brandVersion);
-        const brands = [
-          { brand: 'Google Chrome', version },
-          { brand: 'Chromium', version },
+    // docs/51 S9 — userAgentData brands + high-entropy values from profile.
+    // Some fingerprint cores omit userAgentData entirely; polyfill when brandVersion is known.
+    if (nav) {
+      const fullVersion = String(profile.brandVersion || '').trim();
+      const majorVersion = fullVersion ? fullVersion.split('.')[0] : '';
+      if (majorVersion) {
+        const brandList = Object.freeze([
+          { brand: 'Google Chrome', version: majorVersion },
+          { brand: 'Chromium', version: majorVersion },
           { brand: 'Not_A Brand', version: '24' }
-        ];
-        return Object.assign({}, values, { brands, fullVersionList: brands });
-      });
+        ]);
+        const fullBrandList = Object.freeze([
+          { brand: 'Google Chrome', version: fullVersion },
+          { brand: 'Chromium', version: fullVersion },
+          { brand: 'Not_A Brand', version: '10.0.0.0' }
+        ]);
+        const platformName = String(profile.platform || '').toLowerCase().includes('mac') ? 'macOS' : 'Windows';
+        const highEntropy = async function getHighEntropyValues(hints) {
+          const wanted = Array.isArray(hints) ? hints : [];
+          const base = {
+            brands: brandList,
+            fullVersionList: fullBrandList,
+            mobile: false,
+            platform: platformName,
+            platformVersion: platformName === 'Windows' ? '15.0.0' : '14.0.0',
+            architecture: 'x86',
+            bitness: '64',
+            model: '',
+            uaFullVersion: fullVersion
+          };
+          if (!wanted.length) return base;
+          const out = {};
+          for (const hint of wanted) {
+            if (Object.prototype.hasOwnProperty.call(base, hint)) out[hint] = base[hint];
+          }
+          return out;
+        };
+        if (!nav.userAgentData) {
+          try {
+            defineGetter(nav, 'userAgentData', Object.freeze({
+              brands: brandList,
+              mobile: false,
+              platform: platformName,
+              getHighEntropyValues: makeNative(highEntropy)
+            }));
+          } catch (_) {}
+        } else {
+          try {
+            defineGetter(nav.userAgentData, 'brands', brandList);
+            defineGetter(nav.userAgentData, 'mobile', false);
+            defineGetter(nav.userAgentData, 'platform', platformName);
+          } catch (_) {}
+          if (nav.userAgentData.getHighEntropyValues) {
+            replaceMethod(nav.userAgentData, 'getHighEntropyValues', (originalGetHighEntropyValues) => async function getHighEntropyValues(hints) {
+              let values = {};
+              try {
+                values = await originalGetHighEntropyValues.call(this, hints);
+              } catch (_) {
+                values = {};
+              }
+              return Object.assign({}, values, {
+                brands: brandList,
+                fullVersionList: fullBrandList,
+                mobile: false,
+                platform: values.platform || platformName,
+                platformVersion: values.platformVersion || (platformName === 'Windows' ? '15.0.0' : '14.0.0'),
+                architecture: values.architecture || 'x86',
+                bitness: values.bitness || '64',
+                model: values.model || '',
+                uaFullVersion: fullVersion
+              });
+            });
+          } else {
+            try {
+              nav.userAgentData.getHighEntropyValues = makeNative(highEntropy);
+            } catch (_) {}
+          }
+        }
+      }
     }
 
     // docs/51 S13 — screen / devicePixelRatio geometry from profile.

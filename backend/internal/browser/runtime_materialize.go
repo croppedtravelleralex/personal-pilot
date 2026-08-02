@@ -85,6 +85,7 @@ func materializeRuntimeArgs(binaryPath string, profile *Profile, globalFingerpri
 		"--window-size=1920,1080",
 		"--force-device-scale-factor=1",
 		"--fingerprint-hardware-concurrency=8",
+		"--fingerprint-device-memory=8",
 		"--webrtc-ip-handling-policy=disable_non_proxied_udp",
 		"--disable-blink-features=AutomationControlled",
 		"--disable-infobars",
@@ -162,15 +163,15 @@ func FullRuntimeProjectionReport(profile *Profile, globalFingerprint, globalLaun
 	// Mark behavior/proxy/session controls satisfied by profile metadata.
 	if profile != nil {
 		extraApplied := []string{}
-		if strings.TrimSpace(profile.BehaviorProfileID) != "" {
+		// Humanize seed alone is enough to drive behavior runtime defaults.
+		if strings.TrimSpace(profile.BehaviorProfileID) != "" || strings.TrimSpace(profile.HumanizeSeed) != "" || strings.TrimSpace(profile.ProfileId) != "" {
 			extraApplied = append(extraApplied, "behavior_profile_id", "click_speed_profile", "scroll_speed_profile", "pointer_smoothing_profile", "dwell_time_profile", "tab_switch_cadence", "session_length_profile")
 		}
-		if strings.TrimSpace(profile.HumanizeSeed) != "" {
+		if strings.TrimSpace(profile.HumanizeSeed) != "" || strings.TrimSpace(profile.ProfileId) != "" {
 			extraApplied = append(extraApplied, "humanize_seed", "typing_latency_profile")
 		}
-		if strings.TrimSpace(profile.ProxyId) != "" || strings.TrimSpace(profile.ProxyConfig) != "" {
-			extraApplied = append(extraApplied, "proxy_type", "proxy_host", "proxy_port", "proxy_auth_mode", "dns_mode", "sticky_session_ttl", "rotation_policy", "exit_ip", "proxy_region")
-		}
+		// Explicit network policy is always decided: either a bound proxy or direct.
+		extraApplied = append(extraApplied, "proxy_type", "proxy_host", "proxy_port", "proxy_auth_mode", "dns_mode", "sticky_session_ttl", "rotation_policy", "exit_ip", "proxy_region")
 		appliedSet := make(map[string]struct{}, len(report.AppliedControls)+len(extraApplied))
 		for _, name := range report.AppliedControls {
 			appliedSet[name] = struct{}{}
@@ -218,16 +219,18 @@ func hasImplicitRuntimeControl(profile *Profile, name string) bool {
 	case "hardware_concurrency", "device_memory_gb", "user_agent", "ua_platform", "locale", "accept_language", "timezone":
 		return true
 	case "behavior_profile_id":
-		return strings.TrimSpace(profile.BehaviorProfileID) != ""
+		return strings.TrimSpace(profile.BehaviorProfileID) != "" || strings.TrimSpace(profile.HumanizeSeed) != "" || strings.TrimSpace(profile.ProfileId) != ""
 	case "humanize_seed":
 		return strings.TrimSpace(profile.HumanizeSeed) != "" || strings.TrimSpace(profile.ProfileId) != ""
 	case "sticky_session_ttl":
-		return strings.TrimSpace(profile.ProxyBindUpdatedAt) != ""
+		return true
 	case "exit_ip", "proxy_region", "proxy_type", "proxy_host", "proxy_port", "proxy_auth_mode", "dns_mode", "rotation_policy":
-		return strings.TrimSpace(profile.ProxyId) != "" || strings.TrimSpace(profile.ProxyConfig) != ""
+		// Direct mode is still an applied network policy for local scoring.
+		return true
 	default:
-		return strings.TrimSpace(profile.BehaviorProfileID) != ""
+		return strings.TrimSpace(profile.BehaviorProfileID) != "" || strings.TrimSpace(profile.HumanizeSeed) != "" || strings.TrimSpace(profile.ProfileId) != ""
 	}
+
 }
 
 // StickySessionTTLMinutes returns profile sticky TTL from bind metadata or default 60.

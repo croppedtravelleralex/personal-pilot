@@ -83,3 +83,37 @@ func ApplyGeoLocale(country string, fingerprintArgs, launchArgs []string) ([]str
 	)
 	return fingerprintArgs, launchArgs
 }
+
+// ForceWindowsDesktopIdentity rewrites platform/UA tokens to a Windows desktop profile.
+// Used when a foreign-exit proxy is bound but persona assignment randomly picked macOS.
+func ForceWindowsDesktopIdentity(fingerprintArgs, launchArgs []string) ([]string, []string) {
+	fingerprintArgs = stripLaunchArgPrefixes(fingerprintArgs,
+		"--fingerprint-platform",
+		"--fingerprint-platform-version",
+		"--user-agent",
+	)
+	launchArgs = stripLaunchArgPrefixes(launchArgs,
+		"--fingerprint-platform",
+		"--fingerprint-platform-version",
+		"--user-agent",
+	)
+
+	// Preserve brand-version if present so UA major stays coherent with core.
+	brandVersion := ""
+	for _, arg := range append(append([]string{}, fingerprintArgs...), launchArgs...) {
+		if strings.HasPrefix(arg, "--fingerprint-brand-version=") {
+			brandVersion = strings.TrimPrefix(arg, "--fingerprint-brand-version=")
+			break
+		}
+	}
+	if brandVersion == "" {
+		brandVersion = DefaultChromiumVersion
+	}
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + brandVersion + " Safari/537.36"
+	fingerprintArgs = append(fingerprintArgs,
+		"--fingerprint-platform=windows",
+		"--fingerprint-platform-version=10.0.0",
+		"--user-agent="+ua,
+	)
+	return fingerprintArgs, launchArgs
+}

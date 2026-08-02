@@ -26,6 +26,9 @@ func (p *DevicePersona) MaterializeFingerprintArgs(chromeFullVersion, userAgent 
 		fmt.Sprintf("--force-device-scale-factor=%g", p.DevicePixelRatio),
 		fmt.Sprintf("--fingerprint-hardware-concurrency=%d", p.HardwareConcurrency),
 	}
+	if p.DeviceMemoryGB > 0 {
+		args = append(args, fmt.Sprintf("--fingerprint-device-memory=%d", p.DeviceMemoryGB))
+	}
 	if p.AcceptLang != "" {
 		args = append(args, "--accept-lang="+p.AcceptLang)
 		lang := strings.Split(p.AcceptLang, ",")[0]

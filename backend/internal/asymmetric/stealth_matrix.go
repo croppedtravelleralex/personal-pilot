@@ -18,6 +18,8 @@ type StealthMatrixInput struct {
 	// Network layer
 	WebRTCClean      bool
 	DNSConsistent    bool
+	DNSObserved      bool // true only when a real consistent/suspect observation exists
+	DNSLeakSuspect   bool
 	ResidentialProxy bool
 	VerifyV2Passed   bool
 	IPBudgetHeadroom bool // visits today under cap
@@ -144,13 +146,22 @@ func evalNetwork(in StealthMatrixInput) StealthDimension {
 	} else {
 		notes = append(notes, "webrtc leak suspect")
 	}
-	if in.DNSConsistent {
+	// Only reward proven consistency; only penalize proven suspects.
+	// System-resolver inconclusive probes must stay neutral.
+	switch {
+	case in.DNSConsistent && in.DNSObserved:
 		score += 15
-	} else {
-		notes = append(notes, "dns inconsistent with exit IP")
+	case in.DNSLeakSuspect:
+		notes = append(notes, "dns leak suspect vs exit IP")
+	case in.DNSObserved:
+		notes = append(notes, "dns observation inconclusive")
+	default:
+		// no DNS evidence yet — neutral
 	}
 	if in.ResidentialProxy {
 		score += 15
+	} else {
+		notes = append(notes, "non-residential or unknown proxy class")
 	}
 	if in.VerifyV2Passed {
 		score += 10

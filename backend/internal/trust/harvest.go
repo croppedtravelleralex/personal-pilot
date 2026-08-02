@@ -118,7 +118,7 @@ func HasMicrosoftSessionCookies(cookies []CookieEntry) bool {
 	return false
 }
 
-// HasValidTrust reports OAuth tokens or durable session cookies.
+// HasValidTrust reports OAuth tokens, durable provider cookies, or local session continuity.
 func (b *Bundle) HasValidTrust(now time.Time) bool {
 	if b == nil {
 		return false
@@ -133,7 +133,34 @@ func (b *Bundle) HasValidTrust(now time.Time) bool {
 	if err == nil && HasMicrosoftSessionCookies(cookies) {
 		return true
 	}
+	// Local self-use continuity: durable profile storage counts as inherited trust.
+	if b.Provider == ProviderLocalSession || b.Provider == ProviderGeneric {
+		if len(b.LocalStorage) > 0 || len(b.SessionStorage) > 0 {
+			return true
+		}
+		if err == nil && len(cookies) > 0 {
+			return true
+		}
+		if strings.TrimSpace(b.Notes) != "" && (b.HasRefreshToken() || b.ValidAccessToken(now) || len(cookies) > 0) {
+			return true
+		}
+	}
 	return false
+}
+
+// HasLocalContinuity reports profile-scoped durable session markers without OAuth.
+func (b *Bundle) HasLocalContinuity() bool {
+	if b == nil {
+		return false
+	}
+	if b.Provider != ProviderLocalSession && b.Provider != ProviderGeneric {
+		return false
+	}
+	if len(b.LocalStorage) > 0 || len(b.SessionStorage) > 0 {
+		return true
+	}
+	cookies, err := ParseCookiesJSON(b.CookiesJSON)
+	return err == nil && len(cookies) > 0
 }
 
 // BundleFromHarvest builds a trust bundle from harvested session data.

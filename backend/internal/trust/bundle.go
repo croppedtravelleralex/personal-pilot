@@ -11,9 +11,10 @@ import (
 type Provider string
 
 const (
-	ProviderMicrosoft Provider = "microsoft"
-	ProviderGoogle    Provider = "google"
-	ProviderGeneric   Provider = "generic"
+	ProviderMicrosoft   Provider = "microsoft"
+	ProviderGoogle      Provider = "google"
+	ProviderGeneric     Provider = "generic"
+	ProviderLocalSession Provider = "local_session"
 )
 
 // Bundle is a persisted trust inheritance payload for API-first automation.

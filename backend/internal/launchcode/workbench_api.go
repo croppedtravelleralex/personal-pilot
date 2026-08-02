@@ -19,6 +19,7 @@ type workbenchProfileRequest struct {
 type workbenchNavigateRequest struct {
 	ProfileID string `json:"profileId"`
 	URL       string `json:"url"`
+	TabID     string `json:"tabId,omitempty"`
 }
 
 type workbenchArrangeRequest struct {
@@ -29,17 +30,20 @@ type workbenchArrangeRequest struct {
 type workbenchClickRequest struct {
 	ProfileID string `json:"profileId"`
 	Selector  string `json:"selector"`
+	TabID     string `json:"tabId,omitempty"`
 }
 
 type workbenchTypeRequest struct {
 	ProfileID string `json:"profileId"`
 	Selector  string `json:"selector"`
 	Text      string `json:"text"`
+	TabID     string `json:"tabId,omitempty"`
 }
 
 type workbenchScrollRequest struct {
 	ProfileID string `json:"profileId"`
 	Distance  uint32 `json:"distance"`
+	TabID     string `json:"tabId,omitempty"`
 }
 
 func (s *LaunchServer) handleWorkbenchNavigate(w http.ResponseWriter, r *http.Request) {
@@ -63,11 +67,13 @@ func (s *LaunchServer) handleWorkbenchNavigate(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and url are required"})
 		return
 	}
+	tabID := strings.TrimSpace(req.TabID)
 	results, err := operator.WorkbenchExecuteActions(profileID, []ActionRequest{{
 		Type:              "navigate",
 		URL:               targetURL,
 		PostWaitMs:        2500,
 		HumanizationLevel: "high",
+		TabID:             tabID,
 	}})
 	if err != nil {
 		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
@@ -85,13 +91,13 @@ func (s *LaunchServer) handleWorkbenchNavigate(w http.ResponseWriter, r *http.Re
 	}
 	if !okNav {
 		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
-			"ok": false, "profileId": profileID, "url": targetURL,
+			"ok": false, "profileId": profileID, "url": targetURL, "tabId": tabID,
 			"pageUrl": pageURL, "pageTitle": pageTitle, "error": errMsg,
 		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok": true, "profileId": profileID, "url": targetURL,
+		"ok": true, "profileId": profileID, "url": targetURL, "tabId": tabID,
 		"pageUrl": pageURL, "pageTitle": pageTitle,
 	})
 }
@@ -372,11 +378,28 @@ func (s *LaunchServer) handleWorkbenchClick(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and selector are required"})
 		return
 	}
-	if err := operator.WorkbenchClickElement(profileID, selector); err != nil {
+	tabID := strings.TrimSpace(req.TabID)
+	if tabID != "" {
+		results, err := operator.WorkbenchExecuteActions(profileID, []ActionRequest{{
+			Type: "click", Selector: selector, TabID: tabID, HumanizationLevel: "high",
+		}})
+		if err != nil {
+			writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "tabId": tabID, "error": err.Error()})
+			return
+		}
+		if len(results) == 0 || !results[0].OK {
+			errMsg := "click failed"
+			if len(results) > 0 && results[0].Error != "" {
+				errMsg = results[0].Error
+			}
+			writeJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "profileId": profileID, "tabId": tabID, "error": errMsg})
+			return
+		}
+	} else if err := operator.WorkbenchClickElement(profileID, selector); err != nil {
 		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "selector": selector, "clicked": true})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "selector": selector, "tabId": tabID, "clicked": true})
 }
 
 func (s *LaunchServer) handleWorkbenchType(w http.ResponseWriter, r *http.Request) {
@@ -401,11 +424,28 @@ func (s *LaunchServer) handleWorkbenchType(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "profileId and selector are required"})
 		return
 	}
-	if err := operator.WorkbenchTypeText(profileID, selector, text); err != nil {
+	tabID := strings.TrimSpace(req.TabID)
+	if tabID != "" {
+		results, err := operator.WorkbenchExecuteActions(profileID, []ActionRequest{{
+			Type: "type", Selector: selector, Text: text, TabID: tabID, HumanizationLevel: "high",
+		}})
+		if err != nil {
+			writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "tabId": tabID, "error": err.Error()})
+			return
+		}
+		if len(results) == 0 || !results[0].OK {
+			errMsg := "type failed"
+			if len(results) > 0 && results[0].Error != "" {
+				errMsg = results[0].Error
+			}
+			writeJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "profileId": profileID, "tabId": tabID, "error": errMsg})
+			return
+		}
+	} else if err := operator.WorkbenchTypeText(profileID, selector, text); err != nil {
 		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "selector": selector, "typed": true})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "selector": selector, "tabId": tabID, "typed": true})
 }
 
 func (s *LaunchServer) handleWorkbenchScroll(w http.ResponseWriter, r *http.Request) {
@@ -432,18 +472,35 @@ func (s *LaunchServer) handleWorkbenchScroll(w http.ResponseWriter, r *http.Requ
 	if distance == 0 {
 		distance = 500
 	}
-	if err := operator.WorkbenchScrollPage(profileID, distance); err != nil {
+	tabID := strings.TrimSpace(req.TabID)
+	if tabID != "" {
+		results, err := operator.WorkbenchExecuteActions(profileID, []ActionRequest{{
+			Type: "scroll", Distance: distance, TabID: tabID, HumanizationLevel: "low",
+		}})
+		if err != nil {
+			writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "tabId": tabID, "error": err.Error()})
+			return
+		}
+		if len(results) == 0 || !results[0].OK {
+			errMsg := "scroll failed"
+			if len(results) > 0 && results[0].Error != "" {
+				errMsg = results[0].Error
+			}
+			writeJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "profileId": profileID, "tabId": tabID, "error": errMsg})
+			return
+		}
+	} else if err := operator.WorkbenchScrollPage(profileID, distance); err != nil {
 		writeJSON(w, mapInstanceOperationErrorStatus(err), map[string]interface{}{"ok": false, "profileId": profileID, "error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "distance": distance, "scrolled": true})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "profileId": profileID, "distance": distance, "tabId": tabID, "scrolled": true})
 }
 
 // ─── New enhanced action endpoints (use unified ActionRequest) ────────────────
 
 type workbenchSingleActionRequest struct {
-	ProfileID string       `json:"profileId"`
-	Action    ActionRequest `json:"action"`
+	ProfileID string          `json:"profileId"`
+	Action    ActionRequest   `json:"action"`
 	Actions   []ActionRequest `json:"actions"`
 }
 
