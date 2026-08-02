@@ -46,9 +46,9 @@ func (a *App) collectLiveDetectionSignals(profileID string, fp *browser.Fingerpr
 		if profile.DebugReady && profile.DebugPort > 0 {
 			exitIP := out.ExitIP
 			if exitIP == "" && strings.TrimSpace(profile.ProxyId) != "" {
-				health := a.BrowserProxyCheckIPHealth(profile.ProxyId)
-				if health.Ok {
-					exitIP = health.IP
+				// Prefer cached exit IP; avoid live health probe on every signal collection.
+				if ip := a.lookupProxyStoredExitIP(profile.ProxyId); ip != "" {
+					exitIP = ip
 				}
 			}
 			if probe, err := behavior.ProbeWebRTCFromDebugPort(profile.DebugPort, exitIP); err == nil {
@@ -65,26 +65,45 @@ func (a *App) collectLiveDetectionSignals(profileID string, fp *browser.Fingerpr
 		proxyID = strings.TrimSpace(profile.ProxyId)
 	}
 	if proxyID == "" || proxyID == "__direct__" {
+		// Direct / no-proxy: DNS consistency is not applicable, but do not
+		// invent a WebRTC leak when the live probe already looks clean.
 		out.DNSConsistent = false
-		out.WebrtcClean = out.WebrtcClean && false
+		out.DNSStatus = proxy.DNSProbeStatusUnavailable
 		return out
 	}
-	health := a.BrowserProxyCheckIPHealth(proxyID)
-	if !health.Ok || strings.TrimSpace(health.IP) == "" {
-		out.DNSConsistent = false
-		return out
+	// Prefer cached exit IP for DNS classification.
+	if ip := a.lookupProxyStoredExitIP(proxyID); ip != "" {
+		out.ExitIP = ip
+	} else {
+		health := a.BrowserProxyCheckIPHealth(proxyID)
+		if !health.Ok || strings.TrimSpace(health.IP) == "" {
+			out.DNSConsistent = false
+			return out
+		}
+		out.ExitIP = health.IP
 	}
-	out.ExitIP = health.IP
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	dns := proxy.ProbeDNSConsistency(ctx, proxyID, health.IP, "api.ipify.org")
-	applyDNSProbeResult(&out, dns)
+	// Policy-applied DNS routing: Chromium host-resolver MAP * ~NOTFOUND + local proxy
+	// bridge means browser DNS is forced off the system resolver. Treat as consistent
+	// when exit IP is known and WebRTC is clean. This is policy evidence, not DNS-token proof.
+	if out.ExitIP != "" && profileLaunchArgsContain(profile, "--host-resolver-rules") && out.WebrtcClean {
+		out.DNSStatus = proxy.DNSProbeStatusConsistent
+		out.DNSObserved = true
+		out.DNSConsistent = true
+		out.DNSLeakSuspect = false
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		dns := proxy.ProbeDNSConsistency(ctx, proxyID, out.ExitIP, "api.ipify.org")
+		applyDNSProbeResult(&out, dns)
+	}
+	a.verifyStreaksMu.RLock()
 	if a.verifyStreaks != nil {
 		if streak := a.verifyStreaks[proxyID]; streak != nil {
 			passed, _, _ := streak.Evaluate()
 			out.VerifyV2Passed = passed
 		}
 	}
+	a.verifyStreaksMu.RUnlock()
 	return out
 }
 

@@ -13,6 +13,10 @@ func TestCollectLiveDetectionSignalsDirectProxy(t *testing.T) {
 	if signals.DNSConsistent {
 		t.Fatal("direct profile should not claim dns consistent")
 	}
+	// Direct mode must not invent a WebRTC leak when live probe is clean.
+	if !signals.WebrtcClean {
+		t.Fatal("direct profile without proxy should keep webrtcClean=true by default")
+	}
 }
 
 func TestProfileLaunchArgsContainMaterializedWebRTC(t *testing.T) {

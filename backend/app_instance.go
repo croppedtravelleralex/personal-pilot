@@ -283,18 +283,41 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 	materializedFP, materializedLaunch := browser.MaterializeRuntimeArgsForCoreBinary(
 		selectedCore.Kind, chromeBinaryPath, profile, a.config.Browser.DefaultFingerprintArgs, a.config.Browser.DefaultLaunchArgs,
 	)
-	proxyRegion := ""
+	exitRegion := ""
+	declaredProxyRegion := ""
+	// Prefer cached IP health first so start is not blocked by live metadata probes.
 	if strings.TrimSpace(profile.ProxyId) != "" {
+		if country, _ := a.getProxyCachedGeo(profile.ProxyId); strings.TrimSpace(country) != "" {
+			exitRegion = strings.TrimSpace(country)
+		}
+		if name, group := a.getProxyNameGroup(profile.ProxyId); name != "" || group != "" {
+			declaredProxyRegion = browser.InferRegionFromProxyMeta(name, group)
+		}
+	}
+	if exitRegion == "" && strings.TrimSpace(profile.ProxyId) != "" {
 		if health := a.BrowserProxyCheckIPHealth(profile.ProxyId); health.Ok && strings.TrimSpace(health.Country) != "" {
-			proxyRegion = strings.TrimSpace(health.Country)
-			materializedFP, materializedLaunch = browser.ApplyGeoLocale(health.Country, materializedFP, materializedLaunch)
+			exitRegion = strings.TrimSpace(health.Country)
+		}
+	}
+	// ProxyConfig-only profiles (inline Clash/local bridge) still need geo alignment.
+	if exitRegion == "" && strings.TrimSpace(profile.ProxyConfig) != "" && !strings.EqualFold(strings.TrimSpace(profile.ProxyConfig), "direct://") {
+		if health := a.BrowserProxyCheckIPHealthByConfig(profile.ProxyConfig); health.Ok && strings.TrimSpace(health.Country) != "" {
+			exitRegion = strings.TrimSpace(health.Country)
+		}
+	}
+	if exitRegion != "" {
+		materializedFP, materializedLaunch = browser.ApplyGeoLocale(exitRegion, materializedFP, materializedLaunch)
+		// Airport/local desktop fleet defaults to Windows; avoid Mac persona + foreign-exit mismatch.
+		if !profileHasTag(profile, "persona-mac") {
+			materializedFP, materializedLaunch = browser.ForceWindowsDesktopIdentity(materializedFP, materializedLaunch)
 		}
 	}
 	profile.FingerprintArgs = materializedFP
 	profile.LaunchArgs = materializedLaunch
 
 	coherenceMode := browser.ParseCoherenceEnforceMode(os.Getenv("PERSONAL_PILOT_COHERENCE_MODE"))
-	consistencyInput := browser.BuildConsistencyInputFromArgs(materializedFP, materializedLaunch, proxyRegion)
+	// declared proxy region (name/group) vs observed exit-IP region; missing side skips that hard check.
+	consistencyInput := browser.BuildConsistencyInput(materializedFP, materializedLaunch, declaredProxyRegion, exitRegion)
 	coherenceAssessment := browser.AssessFingerprintConsistency(&consistencyInput)
 	if enforceErr := browser.EnforceFingerprintConsistency(coherenceAssessment, coherenceMode); enforceErr != nil {
 		startErr := fmt.Errorf("实例启动失败：指纹一致性硬门禁未通过（mode=block，score=%d，status=%s）。原因：%v",
@@ -706,14 +729,36 @@ func (a *App) BrowserInstanceOpenUrl(profileId string, targetUrl string) bool {
 	if !exists || !profile.Running {
 		return false
 	}
+	targetUrl = strings.TrimSpace(targetUrl)
+	if targetUrl == "" {
+		return false
+	}
+	// Prefer dedicated new tab so automation does not hijack default detection pages.
+	if tabID, err := a.WorkbenchNewTab(profileId, targetUrl); err == nil && strings.TrimSpace(tabID) != "" {
+		_ = a.WorkbenchSwitchTab(profileId, tabID)
+		return true
+	}
+	if err := a.WorkbenchNavigateProfile(profileId, targetUrl); err != nil {
+		return false
+	}
 	return true
 }
 
 func (a *App) BrowserInstanceGetTabs(profileId string) []BrowserTab {
-	return []BrowserTab{
-		{TabId: "tab-1", Title: "新标签页", Url: "about:blank", Active: true},
-		{TabId: "tab-2", Title: "示例站点", Url: "https://example.com", Active: false},
+	tabs, err := a.WorkbenchListTabs(profileId)
+	if err != nil {
+		return []BrowserTab{}
 	}
+	out := make([]BrowserTab, 0, len(tabs))
+	for _, t := range tabs {
+		out = append(out, BrowserTab{
+			TabId:  t.TabId,
+			Title:  t.Title,
+			Url:    t.Url,
+			Active: t.Active,
+		})
+	}
+	return out
 }
 
 func (a *App) waitBrowserProcess(profileId string, monitor *browser.BrowserProcessMonitor) {
@@ -1155,13 +1200,32 @@ func (a *App) getProxyCachedGeo(proxyId string) (country, city string) {
 				return "", ""
 			}
 			var result struct {
-				Country string `json:"country"`
-				City    string `json:"city"`
+				Country     string `json:"country"`
+				CountryCode string `json:"countryCode"`
+				City        string `json:"city"`
 			}
 			if err := json.Unmarshal([]byte(p.LastIPHealthJSON), &result); err != nil {
 				return "", ""
 			}
-			return result.Country, result.City
+			// Prefer ISO countryCode when present (ip-api style).
+			code := strings.TrimSpace(result.CountryCode)
+			if code == "" {
+				code = strings.TrimSpace(result.Country)
+			}
+			return code, result.City
+		}
+	}
+	return "", ""
+}
+
+// getProxyNameGroup returns proxy display name and group for declared-region inference.
+func (a *App) getProxyNameGroup(proxyId string) (name, group string) {
+	if a == nil || strings.TrimSpace(proxyId) == "" {
+		return "", ""
+	}
+	for _, p := range a.getLatestProxies() {
+		if strings.EqualFold(p.ProxyId, proxyId) {
+			return strings.TrimSpace(p.ProxyName), strings.TrimSpace(p.GroupName)
 		}
 	}
 	return "", ""

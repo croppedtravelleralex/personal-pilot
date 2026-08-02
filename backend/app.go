@@ -1056,6 +1056,26 @@ func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
 	return result
 }
 
+// BrowserProxyCheckIPHealthByConfig checks an inline proxy URL/config without requiring a stored proxyId.
+// Used for ProxyConfig-only profile launches (Clash local mixed port, temporary bridges).
+func (a *App) BrowserProxyCheckIPHealthByConfig(proxyConfig string) ProxyIPHealthResult {
+	proxyConfig = strings.TrimSpace(proxyConfig)
+	if proxyConfig == "" || strings.EqualFold(proxyConfig, "direct://") {
+		return ProxyIPHealthResult{Ok: false, Error: "empty or direct proxy config"}
+	}
+	tempID := "__inline_proxy_config__"
+	proxies := []BrowserProxy{{
+		ProxyId:     tempID,
+		ProxyName:   "inline-proxy-config",
+		ProxyConfig: proxyConfig,
+	}}
+	data, err := proxy.FetchProxyIPInfo(a.ctx, tempID, proxies, a.bridgeManagers())
+	result := buildProxyIPHealthResult(tempID, data, err)
+	result = a.withProxyHTTPSConnectivity(result, proxies)
+	// Do not persist temporary inline probes into the durable proxy table.
+	return result
+}
+
 // BrowserProxyBatchCheckIPHealth 批量并发检测代理出口 IP 健康信息
 func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int) []ProxyIPHealthResult {
 	if len(proxyIds) == 0 {

@@ -12,6 +12,7 @@ const (
 	workbenchDetectionKindFingerprint = "fingerprint_health"
 	workbenchDetectionKindIdentity    = "identity_report"
 	workbenchDetectionKindDetector    = "detector_site_run"
+	workbenchDetectionKindOutcome     = "account_outcome"
 	workbenchDefaultStateKey          = "default"
 	workbenchDetectionRetention       = 50
 )
@@ -295,7 +296,7 @@ func normalizeWorkbenchDetectionResult(result WorkbenchDetectionResult) (Workben
 
 func validWorkbenchDetectionKind(kind string) bool {
 	switch kind {
-	case workbenchDetectionKindFingerprint, workbenchDetectionKindIdentity, workbenchDetectionKindDetector:
+	case workbenchDetectionKindFingerprint, workbenchDetectionKindIdentity, workbenchDetectionKindDetector, workbenchDetectionKindOutcome:
 		return true
 	default:
 		return false

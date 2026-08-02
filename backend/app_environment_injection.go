@@ -230,6 +230,8 @@ func buildEnvironmentInjectionProfile(profile *BrowserProfile) behavior.Environm
 			injection.HardwareConcurrency = parsePositiveInt(value)
 		case "--fingerprint-device-memory":
 			injection.DeviceMemory = parsePositiveInt(value)
+		case "--fingerprint-brand-version":
+			injection.BrandVersion = value
 		case "--timezone", "--timezone-for-testing":
 			injection.Timezone = value
 			if offset, ok := timezoneOffsetMinutes(value); ok {
@@ -270,6 +272,17 @@ func buildEnvironmentInjectionProfile(profile *BrowserProfile) behavior.Environm
 	}
 	if injection.AcceptLanguage == "" {
 		injection.AcceptLanguage = "zh-CN,zh;q=0.9,en;q=0.8"
+	}
+	if injection.DeviceMemory <= 0 {
+		injection.DeviceMemory = 8
+	}
+	if injection.HardwareConcurrency <= 0 {
+		injection.HardwareConcurrency = 8
+	}
+	if strings.TrimSpace(injection.BrandVersion) == "" {
+		if ver := browser.ResolveChromiumVersion(nil, "", profile); strings.TrimSpace(ver.Full) != "" {
+			injection.BrandVersion = ver.Full
+		}
 	}
 	if injection.WebGLVendor == "" {
 		injection.WebGLVendor = "Google Inc."

@@ -63,10 +63,10 @@ const (
 type bizCodeAction int
 
 const (
-	bizRetrySame    bizCodeAction = iota // retry with same config
-	bizSwitchEmail                       // generate new email
-	bizSwitchProxy                       // switch proxy and retry
-	bizAbandon                           // unrecoverable, skip round
+	bizRetrySame   bizCodeAction = iota // retry with same config
+	bizSwitchEmail                      // generate new email
+	bizSwitchProxy                      // switch proxy and retry
+	bizAbandon                          // unrecoverable, skip round
 )
 
 // bizCodeMap maps known DeepSeek business error codes to actions.
@@ -320,14 +320,14 @@ func runSingleRegistration(ctx context.Context, deps RegisterDeps, profileID, pa
 	_ = executor.MoveMouseRandom()
 	sleepCtx(ctx, 800+time.Duration(rand.Intn(1200))*time.Millisecond)
 
-		pageInfo, _ := executor.EvaluateJS("(function() { var btns = document.querySelectorAll(\"button\"); var r = \"BUTTONS:\"; for (var i = 0; i < btns.length; i++) { var b = btns[i]; r += \"[\" + i + \"] txt=\" + (b.textContent||\"\").trim().substring(0,30) + \" vis=\"+ (b.offsetParent!==null) + \";\"; } var inp = document.querySelectorAll(\"input\"); r += \" | INP:\"; for (var j = 0; j < inp.length; j++) { r += inp[j].type + \"/\" + (inp[j].name||\"\") + \"/\" + (inp[j].placeholder||\"\") + \";\"; } var ts = document.querySelector(\"[name=cf-turnstile-response]\"); r += \" | TS:\" + (ts?(ts.value?\"has-tok\":\"no-tok\"):\"absent\"); var cf = document.querySelector(\"iframe[src*=challenges]\"); r += \" | CF_iframe:\" + (cf?\"yes\":\"no\"); return r; })()")
-		deps.Log.Info("page diag", logger.F("info", pageInfo))
+	pageInfo, _ := executor.EvaluateJS("(function() { var btns = document.querySelectorAll(\"button\"); var r = \"BUTTONS:\"; for (var i = 0; i < btns.length; i++) { var b = btns[i]; r += \"[\" + i + \"] txt=\" + (b.textContent||\"\").trim().substring(0,30) + \" vis=\"+ (b.offsetParent!==null) + \";\"; } var inp = document.querySelectorAll(\"input\"); r += \" | INP:\"; for (var j = 0; j < inp.length; j++) { r += inp[j].type + \"/\" + (inp[j].name||\"\") + \"/\" + (inp[j].placeholder||\"\") + \";\"; } var ts = document.querySelector(\"[name=cf-turnstile-response]\"); r += \" | TS:\" + (ts?(ts.value?\"has-tok\":\"no-tok\"):\"absent\"); var cf = document.querySelector(\"iframe[src*=challenges]\"); r += \" | CF_iframe:\" + (cf?\"yes\":\"no\"); return r; })()")
+	deps.Log.Info("page diag", logger.F("info", pageInfo))
 
-		// Click the primary form button to trigger Turnstile + send verification code.
-		if err := clickFormButton(executor); err != nil {
-			deps.Log.Warn("click form button", logger.F("error", err))
-		}
-		sleepCtx(ctx, 1*time.Second)
+	// Click the primary form button to trigger Turnstile + send verification code.
+	if err := clickFormButton(executor); err != nil {
+		deps.Log.Warn("click form button", logger.F("error", err))
+	}
+	sleepCtx(ctx, 1*time.Second)
 
 	// Phase 5: Handle Turnstile
 	state("captcha", "Handling Turnstile captcha...")
@@ -355,34 +355,34 @@ func runSingleRegistration(ctx context.Context, deps RegisterDeps, profileID, pa
 		deps.Log.Warn("check email code", logger.F("error", err))
 	}
 
-		// Phase 8: Complete registration — fill password, code, then submit.
-		state("verify", "Entering password and verification code...")
-		if err := executor.ExecuteHumanizedType("input[type=password]", password); err != nil {
-			deps.Log.Warn("type password", logger.F("error", err))
-		}
-		time.Sleep(300 + time.Duration(rand.Intn(500))*time.Millisecond)
+	// Phase 8: Complete registration — fill password, code, then submit.
+	state("verify", "Entering password and verification code...")
+	if err := executor.ExecuteHumanizedType("input[type=password]", password); err != nil {
+		deps.Log.Warn("type password", logger.F("error", err))
+	}
+	time.Sleep(300 + time.Duration(rand.Intn(500))*time.Millisecond)
 
-		if err := executor.ExecuteHumanizedType("input[placeholder*='code' i], input[name*='code' i]", otp); err != nil {
-			deps.Log.Warn("type code", logger.F("error", err))
-		}
-		time.Sleep(300 + time.Duration(rand.Intn(500))*time.Millisecond)
+	if err := executor.ExecuteHumanizedType("input[placeholder*='code' i], input[name*='code' i]", otp); err != nil {
+		deps.Log.Warn("type code", logger.F("error", err))
+	}
+	time.Sleep(300 + time.Duration(rand.Intn(500))*time.Millisecond)
 
-		// Click the final Sign Up / Register button
-		if err := clickFormButton(executor); err != nil {
-			deps.Log.Warn("click signup button", logger.F("error", err))
-		}
-		_ = waitForNavigation(executor, 20*time.Second)
+	// Click the final Sign Up / Register button
+	if err := clickFormButton(executor); err != nil {
+		deps.Log.Warn("click signup button", logger.F("error", err))
+	}
+	_ = waitForNavigation(executor, 20*time.Second)
 
-		// Also call the register API as fallback
-		if err := registerUser(executor, emailAddr, password, otp); err != nil {
-			go func() {
-				webhook.Send(context.Background(), "deepseek.register.failed", map[string]interface{}{
-					"email": emailAddr,
-					"error": err.Error(),
-				})
-			}()
-			return RoundResult{Error: fmt.Sprintf("register: %v", err), ErrorType: FailureAPI, Email: emailAddr}
-		}
+	// Also call the register API as fallback
+	if err := registerUser(executor, emailAddr, password, otp); err != nil {
+		go func() {
+			webhook.Send(context.Background(), "deepseek.register.failed", map[string]interface{}{
+				"email": emailAddr,
+				"error": err.Error(),
+			})
+		}()
+		return RoundResult{Error: fmt.Sprintf("register: %v", err), ErrorType: FailureAPI, Email: emailAddr}
+	}
 	time.Sleep(1 * time.Second)
 
 	// Phase 9: Extract API key — browse naturally before navigating
@@ -583,7 +583,11 @@ func cleanupProfile(mgr *browser.Manager, profile *browser.Profile) {
 // ─── CDP helpers ────────────────────────────────────────────────────────────────
 
 func connectCDPExecutor(debugPort int) (*behavior.CDPExecutor, error) {
-	ws, err := behavior.ConnectPageCDP(debugPort)
+	return connectCDPExecutorForTarget(debugPort, "")
+}
+
+func connectCDPExecutorForTarget(debugPort int, tabID string) (*behavior.CDPExecutor, error) {
+	ws, err := behavior.ConnectPageCDPForTarget(debugPort, tabID)
 	if err != nil {
 		return nil, err
 	}

@@ -74,11 +74,17 @@ func (a *App) CopyProfile(profileId string, newName string) (*browser.Profile, e
 }
 
 func (a *App) WorkbenchNavigateProfile(profileId string, rawURL string) error {
+	return a.WorkbenchNavigateProfileOnTab(profileId, rawURL, "")
+}
+
+// WorkbenchNavigateProfileOnTab navigates a specific tab when tabID is non-empty.
+func (a *App) WorkbenchNavigateProfileOnTab(profileId string, rawURL string, tabID string) error {
 	results, err := a.WorkbenchExecuteActions(profileId, []launchcode.ActionRequest{{
 		Type:              "navigate",
 		URL:               rawURL,
 		PostWaitMs:        2500,
 		HumanizationLevel: "high",
+		TabID:             strings.TrimSpace(tabID),
 	}})
 	if err != nil {
 		return err
@@ -148,11 +154,16 @@ func (a *App) WorkbenchActivateProfile(profileId string) error {
 }
 
 func (a *App) WorkbenchClickElement(profileID string, selector string) error {
+	return a.WorkbenchClickElementOnTab(profileID, selector, "")
+}
+
+// WorkbenchClickElementOnTab clicks on a specific tab target when tabID is set.
+func (a *App) WorkbenchClickElementOnTab(profileID string, selector string, tabID string) error {
 	profile, err := a.runningProfileForWorkbench(profileID)
 	if err != nil {
 		return err
 	}
-	executor, err := connectCDPExecutor(profile.DebugPort)
+	executor, err := connectCDPExecutorForTarget(profile.DebugPort, tabID)
 	if err != nil {
 		return err
 	}
@@ -161,11 +172,16 @@ func (a *App) WorkbenchClickElement(profileID string, selector string) error {
 }
 
 func (a *App) WorkbenchTypeText(profileID string, selector string, text string) error {
+	return a.WorkbenchTypeTextOnTab(profileID, selector, "", text)
+}
+
+// WorkbenchTypeTextOnTab types into a specific tab target when tabID is set.
+func (a *App) WorkbenchTypeTextOnTab(profileID string, selector string, tabID string, text string) error {
 	profile, err := a.runningProfileForWorkbench(profileID)
 	if err != nil {
 		return err
 	}
-	executor, err := connectCDPExecutor(profile.DebugPort)
+	executor, err := connectCDPExecutorForTarget(profile.DebugPort, tabID)
 	if err != nil {
 		return err
 	}
@@ -174,11 +190,16 @@ func (a *App) WorkbenchTypeText(profileID string, selector string, text string) 
 }
 
 func (a *App) WorkbenchScrollPage(profileID string, distance uint32) error {
+	return a.WorkbenchScrollPageOnTab(profileID, distance, "")
+}
+
+// WorkbenchScrollPageOnTab scrolls a specific tab target when tabID is set.
+func (a *App) WorkbenchScrollPageOnTab(profileID string, distance uint32, tabID string) error {
 	profile, err := a.runningProfileForWorkbench(profileID)
 	if err != nil {
 		return err
 	}
-	executor, err := connectCDPExecutor(profile.DebugPort)
+	executor, err := connectCDPExecutorForTarget(profile.DebugPort, tabID)
 	if err != nil {
 		return err
 	}
@@ -746,9 +767,9 @@ func (a *App) WorkbenchProxySpeedtest(profileID string) (map[string]interface{},
 	}
 
 	result := map[string]interface{}{
-		"profileId":     profileID,
-		"proxyConfig":   profile.ProxyConfig,
-		"tested":        false,
+		"profileId":   profileID,
+		"proxyConfig": profile.ProxyConfig,
+		"tested":      false,
 	}
 
 	// If there's no proxy configured, skip test
@@ -833,7 +854,7 @@ type cdpExecutorEntry struct {
 }
 
 var (
-	cdpExecutorPool     sync.Map
+	cdpExecutorPool    sync.Map
 	cdpPoolCleanupOnce sync.Once
 )
 
