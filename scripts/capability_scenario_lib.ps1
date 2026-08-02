@@ -63,7 +63,8 @@ function Invoke-CapabilityCoreRpc {
     [string]$BridgeUrl,
     [string]$BridgeToken,
     [string]$Method,
-    [object[]]$RpcArgList = @()
+    [object[]]$RpcArgList = @(),
+    [int]$TimeoutSec = 120
   )
   $encodedArgs = @()
   foreach ($item in $RpcArgList) {
@@ -79,7 +80,7 @@ function Invoke-CapabilityCoreRpc {
     "Content-Type" = "application/json"
     "X-Personal-Pilot-Bridge-Token" = $BridgeToken
   }
-  $resp = Invoke-RestMethod -Uri "$($BridgeUrl.TrimEnd('/'))/rpc" -Method Post -Headers $headers -Body $body -TimeoutSec 120
+  $resp = Invoke-RestMethod -Uri "$($BridgeUrl.TrimEnd('/'))/rpc" -Method Post -Headers $headers -Body $body -TimeoutSec $TimeoutSec
   if (-not $resp.ok) {
     throw "RPC $Method failed: $($resp.error)"
   }
